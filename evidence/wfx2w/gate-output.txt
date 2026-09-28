@@ -1,0 +1,133 @@
+=== WFX2-W GATE RUN — 2026-09-28T23:27:56Z ===
+
+--- bun run lint ---
+$ eslint .
+lint exit: 0
+
+--- tsc --noEmit ---
+tsc exit: 0
+
+--- bun run test ---
+$ DATABASE_URL=file:../db/watch-test.db bun test
+bun test v1.3.14 (0d9b296a)
+
+tests/progress-transcript.test.ts:
+Seeding WFX2-W watch domain…
+  users: 9
+  channels: 3
+  videos: 13 (+ transcript cues)
+  comments: 28
+Done. Demo viewer: @demo (fixed demo identity — see src/lib/watch/session.ts)
+(pass) progress + resume > saveProgress upserts; resume returns lastPositionSec [10.35ms]
+(pass) progress + resume > getVideoDetail exposes resumeSec for the viewer (the resume-on-load payload) [8.89ms]
+(pass) transcript > cues are ordered by start time [4.03ms]
+(pass) transcript > active cue mapping follows the playhead (gaps keep the previous cue) [3.29ms]
+(pass) transcript > cue click maps to its start second (seek mapping) [26.67ms]
+(pass) transcript > empty transcript is honest (empty array, not an error) [3.36ms]
+(pass) chapters (seek-bar segments source) > BBB description parses 8 chapters with a 0:00 start [4.07ms]
+(pass) chapters (seek-bar segments source) > active chapter index + descriptions without 0:00 don't activate [2.96ms]
+
+tests/views.test.ts:
+Seeding WFX2-W watch domain…
+  users: 9
+  channels: 3
+  videos: 13 (+ transcript cues)
+  comments: 28
+Done. Demo viewer: @demo (fixed demo identity — see src/lib/watch/session.ts)
+(pass) view counting (deduped per user+video per hour) > first view counts and creates the ViewEvent [6.55ms]
+(pass) view counting (deduped per user+video per hour) > second view within the hour does NOT increment [4.14ms]
+(pass) view counting (deduped per user+video per hour) > view after the 1h window increments again; progress saves don't extend the window [8.34ms]
+(pass) view counting (deduped per user+video per hour) > different users each get their own view [5.34ms]
+
+tests/comments.test.ts:
+Seeding WFX2-W watch domain…
+  users: 9
+  channels: 3
+  videos: 13 (+ transcript cues)
+  comments: 28
+Done. Demo viewer: @demo (fixed demo identity — see src/lib/watch/session.ts)
+(pass) comment sort orders > top comments: pinned first, then likes desc [4.54ms]
+(pass) comment sort orders > newest first: pinned first, then createdAt desc [5.21ms]
+(pass) comment sort orders > header total counts all approved comments incl. replies [3.89ms]
+(pass) reply thread shape > two-level reply thread with deeper collapse: direct vs total counts [3.04ms]
+(pass) reply thread shape > reply page (parentId) lists children oldest-first [5.95ms]
+(pass) reply thread shape > pagination: 10 per page via cursor [28.02ms]
+(pass) composer + edit/delete > empty body rejected; valid body persists approved [26.29ms]
+(pass) composer + edit/delete > reply requires a parent on the same video [6.71ms]
+(pass) composer + edit/delete > edit own comment; editing someone else's is forbidden [16.86ms]
+(pass) composer + edit/delete > delete is soft (restorable) and disappears from the default view [9.08ms]
+
+tests/likes.test.ts:
+Seeding WFX2-W watch domain…
+  users: 9
+  channels: 3
+  videos: 13 (+ transcript cues)
+  comments: 28
+Done. Demo viewer: @demo (fixed demo identity — see src/lib/watch/session.ts)
+(pass) video like toggle semantics > first like sets state and increments the aggregate [8.50ms]
+(pass) video like toggle semantics > like → like unsets (toggle off) [14.24ms]
+(pass) video like toggle semantics > like → dislike swaps (one or the other, never both) [7.42ms]
+(pass) video like toggle semantics > dislike → dislike unsets [10.52ms]
+(pass) video like toggle semantics > two users keep independent states; aggregates are honest [7.25ms]
+(pass) comment like semantics > like increments; unlike decrements; swap removes the like [9.68ms]
+
+tests/related-share.test.ts:
+Seeding WFX2-W watch domain…
+  users: 9
+  channels: 3
+  videos: 13 (+ transcript cues)
+  comments: 28
+Done. Demo viewer: @demo (fixed demo identity — see src/lib/watch/session.ts)
+(pass) related rail > excludes the current video; same category first, then views desc [5.36ms]
+(pass) related rail > cursor pagination serves the second page (12+ items total) [5.52ms]
+(pass) related rail > autoplay-next head = first item of the first page [6.25ms]
+(pass) related rail > 'not interested' hides the video from the viewer's rail only [8.25ms]
+(pass) related rail > unknown video → 404 [1.89ms]
+(pass) share timestamp parsing (?t=) > t=90 → 90 seconds [0.19ms]
+(pass) share timestamp parsing (?t=) > t=90s → 90 seconds
+(pass) share timestamp parsing (?t=) > t=1m30s → 90 seconds
+(pass) share timestamp parsing (?t=) > t=1h2m3s → 3723 seconds
+(pass) share timestamp parsing (?t=) > t=1:30 → 90 seconds [0.01ms]
+(pass) share timestamp parsing (?t=) > t=1:02:03 → 3723 seconds [0.01ms]
+(pass) share timestamp parsing (?t=) > t=0 → 0 seconds
+(pass) share timestamp parsing (?t=) > t=abc → null (invalid) [0.04ms]
+(pass) share timestamp parsing (?t=) > t= → null (invalid)
+(pass) share timestamp parsing (?t=) > t=%s → null (invalid)
+(pass) share timestamp parsing (?t=) > t=%s → null (invalid)
+(pass) share timestamp parsing (?t=) > t=1x2 → null (invalid)
+(pass) share timestamp parsing (?t=) > format → parse round-trips [0.10ms]
+
+tests/moderation.test.ts:
+Seeding WFX2-W watch domain…
+  users: 9
+  channels: 3
+  videos: 13 (+ transcript cues)
+  comments: 28
+Done. Demo viewer: @demo (fixed demo identity — see src/lib/watch/session.ts)
+(pass) creator heart > only the video channel's owner can heart; toggling flips state [5.36ms]
+(pass) creator heart > hearted badge surfaces on the comment DTO [6.30ms]
+(pass) creator pin > pin toggles; pinned stays first in both sort modes [33.03ms]
+(pass) creator pin > non-owner cannot pin [6.20ms]
+(pass) report > reporting flags the comment → disappears from the default view [15.69ms]
+(pass) delete → undo (restore) > full state transition: deleted → invisible → restored → visible [19.94ms]
+(pass) delete → undo (restore) > restore only works on deleted comments [4.11ms]
+
+tests/subscription-session.test.ts:
+Seeding WFX2-W watch domain…
+  users: 9
+  channels: 3
+  videos: 13 (+ transcript cues)
+  comments: 28
+Done. Demo viewer: @demo (fixed demo identity — see src/lib/watch/session.ts)
+(pass) subscription state machine > subscribe → bell update → unsubscribe with honest counts [10.31ms]
+(pass) subscription state machine > getVideoDetail reflects subscribe state (persisted per channel) [3.71ms]
+(pass) demo-user identity (user-aware API shape) > header overrides identity; fallback is the demo user [3.32ms]
+(pass) demo-user identity (user-aware API shape) > cookie identity resolves too [2.07ms]
+(pass) playlists (Save dialog backend) > list shows Watch later first + containsVideo; toggle + create are real [10.00ms]
+(pass) playlists (Save dialog backend) > duplicate playlist names are rejected honestly [1.73ms]
+
+ 59 pass
+ 0 fail
+ 209 expect() calls
+Ran 59 tests across 7 files. [1155.00ms]
+test exit: 0

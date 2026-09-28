@@ -1,0 +1,215 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ─── WFX2-W watch vertical domain ───────────────────────────────────────────
+// NOTE (SCHEMA-MERGE): authored on the docs-only base (main @ 6b992aa) as a
+// self-contained lane schema. If the boot lane (wfx2/boot-shell) lands a
+// fuller schema, the lead should merge by taking the union: all models below
+// are watch-domain and additive. Documented in evidence/wfx2w/SCHEMA-MERGE.md.
+
+model Channel {
+  id             String   @id @default(cuid())
+  handle         String   @unique
+  name           String
+  avatarUrl      String
+  bannerUrl      String?
+  subscriberCount Int     @default(0)
+  verified       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  videos         Video[]
+  subscriptions  Subscription[]
+  memberships    Membership[]
+  ownerUserId    String?  @unique
+  owner          User?    @relation("ChannelOwner", fields: [ownerUserId], references: [id])
+}
+
+model User {
+  id            String   @id @default(cuid())
+  handle        String   @unique
+  name          String
+  avatarUrl     String
+  createdAt     DateTime @default(now())
+  videoLikes    VideoLike[]
+  commentLikes  CommentLike[]
+  comments      Comment[]
+  viewEvents    ViewEvent[]
+  subscriptions Subscription[]
+  memberships   Membership[]
+  playlists     Playlist[]
+  videoReports  VideoReport[]
+  videoSignals  VideoSignal[]
+  ownedChannels Channel[] @relation("ChannelOwner")
+}
+
+model Video {
+  id           String   @id @default(cuid())
+  channelId    String
+  channel      Channel  @relation(fields: [channelId], references: [id])
+  title        String
+  description  String
+  videoUrl     String
+  thumbnailUrl String
+  durationSec  Int      @default(0)
+  views        Int      @default(0)
+  likes        Int      @default(0) // honest aggregate; toggled transactionally with VideoLike rows
+  dislikes     Int      @default(0) // honest aggregate; toggled transactionally with VideoLike rows
+  visibility   String   @default("public") // public | unlisted | private | members
+  category     String   @default("Film & Animation")
+  moderation   String   @default("clear") // clear | flagged (report queue)
+  createdAt    DateTime @default(now())
+  videoLikes   VideoLike[]
+  comments     Comment[]
+  viewEvents   ViewEvent[]
+  transcript   TranscriptCue[]
+  reports      VideoReport[]
+  signals      VideoSignal[]
+  playlistItems PlaylistItem[]
+}
+
+model VideoLike {
+  id        String   @id @default(cuid())
+  videoId   String
+  video     Video    @relation(fields: [videoId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  value     String // like | dislike
+  createdAt DateTime @default(now())
+
+  @@unique([videoId, userId])
+}
+
+model ViewEvent {
+  id              String   @id @default(cuid())
+  videoId         String
+  video           Video    @relation(fields: [videoId], references: [id])
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  watchedSec      Int      @default(0)
+  lastPositionSec Int      @default(0)
+  at              DateTime @default(now())
+
+  @@unique([videoId, userId])
+  @@index([videoId, userId, at])
+}
+
+model Comment {
+  id               String    @id @default(cuid())
+  videoId          String
+  video            Video     @relation(fields: [videoId], references: [id])
+  parentId         String?
+  parent           Comment?  @relation("CommentThread", fields: [parentId], references: [id])
+  replies          Comment[] @relation("CommentThread")
+  userId           String
+  user             User      @relation(fields: [userId], references: [id])
+  body             String
+  likes            Int       @default(0)
+  heartedByCreator Boolean   @default(false)
+  pinned           Boolean   @default(false)
+  moderation       String    @default("approved") // approved | flagged | deleted
+  edited           Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  commentLikes     CommentLike[]
+
+  @@index([videoId, moderation, createdAt])
+}
+
+model CommentLike {
+  id        String   @id @default(cuid())
+  commentId String
+  comment   Comment  @relation(fields: [commentId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  value     String // like | dislike
+  createdAt DateTime @default(now())
+
+  @@unique([commentId, userId])
+}
+
+model Subscription {
+  id        String   @id @default(cuid())
+  channelId String
+  channel   Channel  @relation(fields: [channelId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  bell      String   @default("personalized") // all | personalized | none
+  createdAt DateTime @default(now())
+
+  @@unique([channelId, userId])
+}
+
+model Membership {
+  id        String   @id @default(cuid())
+  channelId String
+  channel   Channel  @relation(fields: [channelId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  level     Int      @default(1)
+  createdAt DateTime @default(now())
+
+  @@unique([channelId, userId])
+}
+
+model TranscriptCue {
+  id       String @id @default(cuid())
+  videoId  String
+  video    Video  @relation(fields: [videoId], references: [id])
+  startSec Int
+  endSec   Int
+  text     String
+
+  @@index([videoId, startSec])
+}
+
+model Playlist {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  name         String
+  isWatchLater Boolean  @default(false)
+  visibility   String   @default("private") // private | public | unlisted
+  createdAt    DateTime @default(now())
+  items        PlaylistItem[]
+
+  @@unique([userId, name])
+}
+
+model PlaylistItem {
+  id         String   @id @default(cuid())
+  playlistId String
+  playlist   Playlist @relation(fields: [playlistId], references: [id])
+  videoId    String
+  video      Video    @relation(fields: [videoId], references: [id])
+  addedAt    DateTime @default(now())
+
+  @@unique([playlistId, videoId])
+}
+
+model VideoReport {
+  id        String   @id @default(cuid())
+  videoId   String
+  video     Video    @relation(fields: [videoId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  reason    String
+  createdAt DateTime @default(now())
+
+  @@unique([videoId, userId])
+}
+
+model VideoSignal {
+  id     String @id @default(cuid())
+  videoId String
+  video   Video  @relation(fields: [videoId], references: [id])
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+  kind   String // not_interested | dont_recommend_channel
+  createdAt DateTime @default(now())
+
+  @@unique([videoId, userId])
+}
