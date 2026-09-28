@@ -1,0 +1,284 @@
+// WebFlix 2.0 — full domain schema (boot lane WFX2-B).
+// Designed for the whole roadmap; later lanes extend additively.
+// NOTE: SQLite does not support Prisma enums — enumerated fields are String
+// with the allowed values documented here and union-typed in src/lib/types.ts.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  // Relative path resolves from prisma/schema.prisma → db/webflix2.db
+  url      = "file:../db/webflix2.db"
+}
+
+model User {
+  id          String   @id @default(cuid())
+  handle      String   @unique
+  name        String
+  avatarUrl   String
+  bannerUrl   String?
+  description String?
+  createdAt   DateTime @default(now())
+
+  subscriptions  Subscribe[]
+  videoLikes     VideoLike[]
+  commentLikes   CommentLike[]
+  playlists      Playlist[]
+  notifications  Notification[]
+  memberships    Membership[]
+  viewEvents     ViewEvent[]
+  comments       Comment[]
+  notInterested  NotInterested[]
+  liveChat       LiveChatMessage[]
+  ownedChannels  Channel[]    @relation("ChannelOwner")
+}
+
+model Channel {
+  id              String   @id @default(cuid())
+  handle          String   @unique
+  name            String
+  avatarUrl       String
+  bannerUrl       String?
+  description     String?
+  verified        Boolean  @default(false)
+  subscriberCount Int      @default(0)
+  ownerId         String?
+  createdAt       DateTime @default(now())
+
+  owner           User?            @relation("ChannelOwner", fields: [ownerId], references: [id])
+  videos          Video[]
+  subscribers     Subscribe[]
+  membershipTiers MembershipTier[]
+  notifications   Notification[]   @relation("NotificationSourceChannel")
+}
+
+model Subscribe {
+  userId    String
+  channelId String
+  // "off" | "personalized" | "all"
+  bell      String   @default("personalized")
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@id([userId, channelId])
+  @@index([userId])
+}
+
+model Video {
+  id            String    @id @default(cuid())
+  channelId     String
+  title         String
+  description   String    @default("")
+  thumbnailUrl  String
+  videoUrl      String
+  durationSec   Int       @default(0)
+  views         Int       @default(0)
+  likes         Int       @default(0)
+  dislikes      Int       @default(0)
+  // "public" | "unlisted" | "private"
+  visibility    String    @default("public")
+  isMembersOnly Boolean   @default(false)
+  membersTier   String?
+  category      String    @default("Misc")
+  isShort       Boolean   @default(false)
+  isLive        Boolean   @default(false)
+  premieredAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  channel        Channel          @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  videoLikes     VideoLike[]
+  viewEvents     ViewEvent[]
+  comments       Comment[]
+  playlistItems  PlaylistItem[]
+  notifications  Notification[]
+  liveChat       LiveChatMessage[]
+  thumbnailTests ThumbnailTest[]
+  notInterested  NotInterested[]
+
+  @@index([channelId])
+  @@index([category])
+  @@index([isShort])
+  @@index([isLive])
+  @@index([views])
+  @@index([createdAt])
+}
+
+model VideoLike {
+  userId    String
+  videoId   String
+  // "like" | "dislike"
+  value     String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@id([userId, videoId])
+  @@index([userId])
+}
+
+model ViewEvent {
+  id         String   @id @default(cuid())
+  userId     String
+  videoId    String
+  watchedSec Int      @default(0)
+  at         DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@index([userId, at])
+  @@index([videoId])
+}
+
+model Comment {
+  id              String   @id @default(cuid())
+  videoId         String
+  userId          String
+  parentId        String?
+  body            String
+  likes           Int      @default(0)
+  heartedByCreator Boolean @default(false)
+  pinned          Boolean  @default(false)
+  // "approved" | "held" | "flagged" | "rejected"
+  moderation      String   @default("approved")
+  reportedBy      Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  video      Video        @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent     Comment?     @relation("CommentThread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies    Comment[]    @relation("CommentThread")
+  commentLikes CommentLike[]
+
+  @@index([videoId])
+  @@index([userId])
+}
+
+model CommentLike {
+  userId    String
+  commentId String
+  // "like" | "dislike"
+  value     String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@id([userId, commentId])
+}
+
+model Playlist {
+  id           String   @id @default(cuid())
+  userId       String
+  title        String
+  // "public" | "unlisted" | "private"
+  visibility   String   @default("private")
+  isWatchLater Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  user  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items PlaylistItem[]
+
+  @@index([userId])
+}
+
+model PlaylistItem {
+  playlistId String
+  videoId    String
+  position   Int      @default(0)
+  addedAt    DateTime @default(now())
+
+  playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  video    Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@id([playlistId, videoId])
+  @@index([videoId])
+}
+
+model Notification {
+  id              String   @id @default(cuid())
+  userId          String
+  sourceChannelId String
+  // "video" | "live" | "post" | "reply"
+  kind            String   @default("video")
+  title           String
+  body            String
+  videoId         String?
+  read            Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceChannel Channel @relation("NotificationSourceChannel", fields: [sourceChannelId], references: [id], onDelete: Cascade)
+  video         Video?  @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+}
+
+model MembershipTier {
+  id         String   @id @default(cuid())
+  channelId  String
+  name       String
+  priceCents Int
+  perks      String   @default("")
+
+  channel      Channel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  memberships  Membership[]
+
+  @@unique([channelId, name])
+}
+
+model Membership {
+  userId  String
+  tierId  String
+  since   DateTime @default(now())
+
+  user User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tier MembershipTier @relation(fields: [tierId], references: [id], onDelete: Cascade)
+
+  @@id([userId, tierId])
+}
+
+model LiveChatMessage {
+  id      String   @id @default(cuid())
+  videoId String
+  userId  String
+  body    String
+  at      DateTime @default(now())
+
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([videoId, at])
+}
+
+model ThumbnailTest {
+  id          String   @id @default(cuid())
+  videoId     String
+  // JSON string: [{ url, impressions, clicks }]
+  variants    String
+  winnerIdx   Int      @default(0)
+  impressions Int      @default(0)
+  clicks      Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@index([videoId])
+}
+
+// Session-level "Not interested" signals (feeds recommendation tuning).
+model NotInterested {
+  userId    String
+  videoId   String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@id([userId, videoId])
+}

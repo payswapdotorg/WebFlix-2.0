@@ -1,0 +1,176 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-yt-red: var(--yt-red);
+  --color-yt-badge: var(--yt-badge);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* Light theme — YouTube/ZTube light */
+:root {
+  --radius: 0.75rem;
+  --background: #ffffff;
+  --foreground: #0f0f0f;
+  --card: #ffffff;
+  --card-foreground: #0f0f0f;
+  --popover: #ffffff;
+  --popover-foreground: #0f0f0f;
+  --primary: #ff0000;
+  --primary-foreground: #ffffff;
+  --secondary: #f2f2f2;
+  --secondary-foreground: #0f0f0f;
+  --muted: #f2f2f2;
+  --muted-foreground: #606060;
+  --accent: #e5e5e5;
+  --accent-foreground: #0f0f0f;
+  --destructive: #cc0000;
+  --destructive-foreground: #ffffff;
+  --border: #e5e5e5;
+  --input: #e5e5e5;
+  --ring: #ff0000;
+  --chart-1: #ff0000;
+  --chart-2: #065fd4;
+  --chart-3: #00aa00;
+  --chart-4: #aa0000;
+  --chart-5: #f1f1f1;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0f0f0f;
+  --sidebar-primary: #ff0000;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f2f2f2;
+  --sidebar-accent-foreground: #0f0f0f;
+  --sidebar-border: #e5e5e5;
+  --sidebar-ring: #ff0000;
+  --yt-red: #ff0000;
+  --yt-badge: rgba(0, 0, 0, 0.8);
+}
+
+/* Dark theme (ZTube default) — measured from the reference */
+.dark {
+  --background: #0f0f0f;
+  --foreground: #f1f1f1;
+  --card: #0f0f0f;
+  --card-foreground: #f1f1f1;
+  --popover: #282828;
+  --popover-foreground: #f1f1f1;
+  --primary: #ff0000;
+  --primary-foreground: #ffffff;
+  --secondary: #272727;
+  --secondary-foreground: #f1f1f1;
+  --muted: #272727;
+  --muted-foreground: #aaaaaa;
+  --accent: #3f3f3f;
+  --accent-foreground: #f1f1f1;
+  --destructive: #cc0000;
+  --destructive-foreground: #ffffff;
+  --border: #303030;
+  --input: #303030;
+  --ring: #ff0000;
+  --chart-1: #ff0000;
+  --chart-2: #3ea6ff;
+  --chart-3: #2ba640;
+  --chart-4: #ff4e45;
+  --chart-5: #fc7512;
+  --sidebar: #0f0f0f;
+  --sidebar-foreground: #f1f1f1;
+  --sidebar-primary: #ff0000;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #272727;
+  --sidebar-accent-foreground: #f1f1f1;
+  --sidebar-border: #303030;
+  --sidebar-ring: #ff0000;
+  --yt-red: #ff0000;
+  --yt-badge: rgba(0, 0, 0, 0.8);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+}
+
+/* Horizontal rails + chips: hide the scrollbar (ZTube pattern) */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Custom slim scrollbar for the scrollable lists (sidebar, menus) */
+.slim-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #5a5a5a transparent;
+}
+.slim-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+.slim-scrollbar::-webkit-scrollbar-thumb {
+  background: #5a5a5a;
+  border-radius: 9999px;
+}
+.dark .slim-scrollbar::-webkit-scrollbar-thumb {
+  background: #4d4d4d;
+}
+
+/* Duration / LIVE badge on thumbnails */
+.duration-badge {
+  background: var(--yt-badge);
+  color: #ffffff;
+}
+
+/* Hero gradient overlay (trending #1 card) */
+.hero-scrim {
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.9) 0%,
+    rgba(0, 0, 0, 0.45) 45%,
+    rgba(0, 0, 0, 0) 75%
+  );
+}
