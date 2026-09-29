@@ -47,3 +47,17 @@ The post-reset lead (replay re-deployed 16:44Z, operator re-login 16:56Z) re-dis
 - **Morning dispatches VOID** (pre-reset lead, prompts ~08:05–08:39Z: chats `ffefe16a` B-B / `8a786301` B-W / `b418ad85` B-S): assistant turns empty, 0-message trees server-side, workspace pods never bound (`last_seen 0001`). Nothing salvageable; the stale workspaces hold no active jobs and do not block the cap.
 - Gate battery at the re-dispatch base: lint 0 / typecheck 0 / **305/305 tests** (the `--isolate` repair was required on bun ≥ 1.3 — `mock.module` in action-routes.test.ts is process-global and poisoned sibling files).
 - Deadline: midnight UTC 2026-09-30 (operator directive). Wave C (R44) queued behind B merges.
+
+## 2026-09-29 18:05Z — WAVE B LANDED (2 of 3 lanes, via the morning bundles) + Wave C dispatch
+
+**Correction to the 17:05Z entry**: the morning dispatches were NOT all stillborn — the "0 messages in tree" diagnostic was an index-lag artifact. The DOM + workspaces held full deliveries: WFX2-B-B (chat ffefe16a, bundle wfx2/waveB-personal @ ee67aaa) and WFX2-B-W (chat 8a786301, bundle wfx2/waveB-discovery @ 0782a9f) both completed at ~08:26-08:37Z with RELAY-MANIFESTs (sha256-verified at harvest). Only WFX2-B-S (chat b418ad85) was stillborn (empty turn, reset workspace, no bundle).
+
+| Lane | Outcome |
+|---|---|
+| B-B personal | **MERGED** `wfx2/waveB-personal` (44 new tests; standalone gates 350 green) — history/watch-later/playlists/liked/notifications/subscriptions live from real youtube.com, honest public degradation, broker writes additive |
+| B-W discovery | **MERGED** `wfx2/waveB-discovery` (54 new tests + 2 integration fixes: probe scripts module-scoped, test literals typed) — search filters (real semantics + verbatim + live-scoped), trending categories, in-channel search, playlist pages |
+| B-S comments | re-dispatched as r43w2 (chat bada20b0, sent 16:57:31Z; queued server-side) |
+
+- r43w1/r43w3 VOIDED (duplicate lanes retired after the morning bundles merged).
+- **Merged main @ 5e2a67e: lint 0 / typecheck 0 / 404 tests green** (240 boot + 106 watch + 58 liveshorts) — auto-deployed to production.
+- **WAVE C dispatched from inside the replay @ base 5e2a67e**: r44w1 studio+upload (chat 136ed21d), r44w2 replay-polish (chat 1a4393c0) — both SENT 18:00Z, no capacity fight. R44-W3 cutover queued behind a free slot.
