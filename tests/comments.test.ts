@@ -28,8 +28,8 @@ describe("comment sort orders", () => {
     expect(page.items[0].pinned).toBe(true);
     const rest = page.items.slice(1);
     for (let i = 1; i < rest.length; i++) {
-      expect(new Date(rest[i - 1].createdAt).getTime()).toBeGreaterThan(
-        new Date(rest[i].createdAt).getTime()
+      expect(new Date(rest[i - 1].createdAt as string).getTime()).toBeGreaterThan(
+        new Date(rest[i].createdAt as string).getTime()
       );
     }
   });
@@ -65,8 +65,8 @@ describe("reply thread shape", () => {
     const pinned = page.items[0];
     const replyPage = await listComments(bbb.id, demo.id, "top", undefined, pinned.id);
     expect(replyPage.items.length).toBe(2);
-    expect(new Date(replyPage.items[0].createdAt).getTime()).toBeLessThan(
-      new Date(replyPage.items[1].createdAt).getTime()
+    expect(new Date(replyPage.items[0].createdAt as string).getTime()).toBeLessThan(
+      new Date(replyPage.items[1].createdAt as string).getTime()
     );
     // nested level-3 children of the sintelfan reply are fetched separately
     const nested = await listComments(bbb.id, demo.id, "top", undefined, replyPage.items[0].id);

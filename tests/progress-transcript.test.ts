@@ -78,19 +78,19 @@ describe("transcript", () => {
 describe("chapters (seek-bar segments source)", () => {
   test("BBB description parses 8 chapters with a 0:00 start", async () => {
     const { bbb } = await fixtures();
-    const chapters = parseChapters(bbb.description, bbb.durationSec);
+    const chapters = parseChapters(bbb.description, bbb.durationSec as number);
     expect(chapters.length).toBe(8);
     expect(chapters[0].startSec).toBe(0);
     expect(chapters[0].title).toBe("Intro");
     expect(chapters.at(-1)!.endSec).toBe(bbb.durationSec);
     for (let i = 1; i < chapters.length; i++) {
-      expect(chapters[i].startSec).toBe(chapters[i - 1].endSec);
+      expect(chapters[i].startSec).toBe(chapters[i - 1].endSec as number);
     }
   });
 
   test("active chapter index + descriptions without 0:00 don't activate", async () => {
     const { bbb } = await fixtures();
-    const chapters = parseChapters(bbb.description, bbb.durationSec);
+    const chapters = parseChapters(bbb.description, bbb.durationSec as number);
     expect(activeChapterIndex(chapters, 0)).toBe(0);
     expect(activeChapterIndex(chapters, 200)).toBe(3);
     expect(activeChapterIndex([], 5)).toBe(-1);
