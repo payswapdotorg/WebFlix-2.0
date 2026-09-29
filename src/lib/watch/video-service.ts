@@ -29,6 +29,11 @@ function toVideoDto(v: {
   visibility: string;
   category: string;
   createdAt: Date;
+  isMembersOnly: boolean;
+  membersTier: string | null;
+  isShort: boolean;
+  isLive: boolean;
+  premieredAt: Date | null;
   channel: {
     id: string;
     handle: string;
@@ -40,6 +45,8 @@ function toVideoDto(v: {
 }): VideoDto {
   return {
     ...v,
+    visibility: v.visibility as VideoDto["visibility"],
+    premieredAt: v.premieredAt ? v.premieredAt.toISOString() : null,
     createdAt: v.createdAt.toISOString(),
     channel: { ...v.channel },
   };

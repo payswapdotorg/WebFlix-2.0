@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Flame, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { formatViews, formatRelativeDate } from "@/lib/format";
+import { displayViews, displayPublished } from "@/lib/format";
 import type { VideoDTO } from "@/lib/types";
 
 /** Trending #1 hero — big card with gradient scrim + red pill (WebFlix pattern). */
@@ -30,8 +30,8 @@ export function HeroCard({ video }: { video: VideoDTO }) {
               {video.title}
             </h2>
             <p className="mt-2 text-sm text-white/90 drop-shadow-sm">
-              {video.channel.name} · {formatViews(video.views)} ·{" "}
-              {formatRelativeDate(video.createdAt)}
+              {video.channel.name} · {displayViews(video)}
+              {displayPublished(video) ? ` · ${displayPublished(video)}` : ""}
             </p>
             <span className="mt-3 inline-flex">
               <Button

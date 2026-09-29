@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { SquarePlay } from "lucide-react";
-import { formatViews } from "@/lib/format";
+import { displayViews } from "@/lib/format";
 import type { VideoDTO } from "@/lib/types";
 
 /** Shorts shelf — vertical cards in a horizontal rail (WebFlix pattern). */
@@ -33,7 +33,7 @@ export function ShortsShelf({ shorts }: { shorts: VideoDTO[] }) {
               {short.title}
             </p>
             <p className="-mt-1 text-[13px] text-muted-foreground">
-              {formatViews(short.views)}
+              {displayViews(short)}
             </p>
           </Link>
         ))}

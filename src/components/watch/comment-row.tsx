@@ -244,8 +244,8 @@ export function CommentRow({
               Member
             </span>
           )}
-          <time className="text-xs text-muted-foreground" dateTime={comment.createdAt}>
-            {relativeTime(comment.createdAt)}
+          <time className="text-xs text-muted-foreground" dateTime={comment.createdAt ?? undefined}>
+            {comment.publishedText ?? relativeTime(comment.createdAt)}
             {comment.edited && <span className="ml-1">(edited)</span>}
           </time>
         </div>

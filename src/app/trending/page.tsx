@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Flame } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
-import { formatViews, formatRelativeDate, formatDuration } from "@/lib/format";
+import { displayViews, displayPublished, formatDuration } from "@/lib/format";
 import { CategoryChips } from "@/components/home/category-chips";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VerifiedBadge } from "@/components/app/verified-badge";
@@ -84,7 +84,7 @@ function TrendingContent() {
                   {video.channel.verified && <VerifiedBadge />}
                 </p>
                 <p className="text-[13px] text-muted-foreground">
-                  {formatViews(video.views)} · {formatRelativeDate(video.createdAt)}
+                  {displayViews(video)} · {displayPublished(video)}
                   {video.category !== "All" && ` · ${video.category}`}
                 </p>
                 {video.isMembersOnly && (

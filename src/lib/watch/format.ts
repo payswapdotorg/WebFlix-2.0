@@ -19,8 +19,9 @@ export function compactCount(n: number): string {
   return `${v.toFixed(1).replace(/\.0$/, "")}B`;
 }
 
-/** "12:14" or "1:02:03". */
-export function formatDuration(totalSec: number): string {
+/** "12:14" or "1:02:03"; null (live/unknown) → "". */
+export function formatDuration(totalSec: number | null): string {
+  if (totalSec === null || totalSec === undefined) return "";
   const sec = Math.max(0, Math.floor(totalSec));
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
@@ -30,8 +31,9 @@ export function formatDuration(totalSec: number): string {
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
-/** "3 minutes ago" / "15 years ago" — YouTube relative ages. */
-export function relativeTime(iso: string | Date, now: Date = new Date()): string {
+/** "3 minutes ago" / "15 years ago" — YouTube relative ages; null → "". */
+export function relativeTime(iso: string | Date | null, now: Date = new Date()): string {
+  if (iso === null || iso === undefined) return "";
   const then = typeof iso === "string" ? new Date(iso) : iso;
   const sec = Math.max(1, Math.floor((now.getTime() - then.getTime()) / 1000));
   const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? "" : "s"} ago`;
@@ -50,8 +52,9 @@ export function relativeTime(iso: string | Date, now: Date = new Date()): string
   return plural(year, "year");
 }
 
-/** "Nov 10, 2014" */
-export function fullDate(iso: string | Date): string {
+/** "Nov 10, 2014"; null → "". */
+export function fullDate(iso: string | Date | null): string {
+  if (iso === null || iso === undefined) return "";
   const d = typeof iso === "string" ? new Date(iso) : iso;
   return new Intl.DateTimeFormat("en-US", {
     month: "short",

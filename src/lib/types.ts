@@ -2,11 +2,15 @@
 
 export type ChannelLite = {
   id: string;
+  /** "@handle" or "UC…" — both resolve through /api/channel/[handle] */
   handle: string;
   name: string;
   avatarUrl: string;
   verified: boolean;
+  /** parsed from the real subscriber text (approx when abbreviated, e.g. "4.55M") */
   subscriberCount: number;
+  /** live passthrough, e.g. "4.55M subscribers" */
+  subscriberCountText?: string | null;
 };
 
 export type VideoDTO = {
@@ -15,8 +19,13 @@ export type VideoDTO = {
   description: string;
   thumbnailUrl: string;
   videoUrl: string;
-  durationSec: number;
+  /** null when the upstream response carries no duration (live streams, shorts cards) */
+  durationSec: number | null;
   views: number;
+  /** live passthrough, e.g. "1,821,187,782 views" / "1.8B views" */
+  viewsText?: string | null;
+  /** live passthrough, e.g. "16 years ago" */
+  publishedText?: string | null;
   likes: number;
   dislikes: number;
   visibility: "public" | "unlisted" | "private";
@@ -26,7 +35,10 @@ export type VideoDTO = {
   isShort: boolean;
   isLive: boolean;
   premieredAt: string | null;
-  createdAt: string;
+  /** null when the upstream response carries no publish date (approx from publishedText otherwise) */
+  createdAt: string | null;
+  /** live badge passthrough, e.g. ["verified_artist"] */
+  badges?: string[];
   channel: ChannelLite;
 };
 
@@ -91,9 +103,11 @@ export type CommentDTO = {
   id: string;
   body: string;
   likes: number;
+  likesText?: string | null;
   heartedByCreator: boolean;
   pinned: boolean;
-  createdAt: string;
+  createdAt: string | null;
+  publishedText?: string | null;
   author: { handle: string; name: string; avatarUrl: string };
   replyCount: number;
 };
@@ -102,7 +116,8 @@ export type ChannelPageDTO = {
   channel: ChannelLite & {
     bannerUrl: string | null;
     description: string | null;
-    createdAt: string;
+    /** live channel responses carry no join date (about tab — Wave B) */
+    createdAt: string | null;
     isSubscribed: boolean;
     isOwner: boolean;
     videoCount: number;

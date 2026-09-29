@@ -21,14 +21,26 @@ export interface VideoDto {
   description: string;
   videoUrl: string;
   thumbnailUrl: string;
-  durationSec: number;
+  /** null when upstream carries no duration (watch metadata comes from `next`, which has none) */
+  durationSec: number | null;
   views: number;
+  /** live passthroughs */
+  viewsText?: string | null;
+  publishedText?: string | null;
+  likeCountText?: string | null;
+  badges?: string[];
   likes: number;
   dislikes: number;
-  visibility: string;
+  visibility: "public" | "unlisted" | "private";
   category: string;
-  createdAt: string;
-  channel: ChannelDto;
+  /** approx date derived from the real relative-age text */
+  createdAt: string | null;
+  isMembersOnly: boolean;
+  membersTier: string | null;
+  isShort: boolean;
+  isLive: boolean;
+  premieredAt: string | null;
+  channel: ChannelDto & { subscriberCountText?: string | null };
 }
 
 export interface ViewerVideoState {
@@ -54,9 +66,11 @@ export interface RelatedVideoDto {
   id: string;
   title: string;
   thumbnailUrl: string;
-  durationSec: number;
+  durationSec: number | null;
   views: number;
-  createdAt: string;
+  viewsText?: string | null;
+  publishedText?: string | null;
+  createdAt: string | null;
   channel: { id: string; handle: string; name: string; avatarUrl: string; verified: boolean };
 }
 
@@ -81,11 +95,15 @@ export interface CommentDto {
   parentId: string | null;
   body: string;
   likes: number;
+  /** live like-count passthrough, e.g. "321K" */
+  likesText?: string | null;
   heartedByCreator: boolean;
   pinned: boolean;
   edited: boolean;
   moderation: string;
-  createdAt: string;
+  createdAt: string | null;
+  /** live passthrough, e.g. "1 year ago" / "6 years ago (edited)" */
+  publishedText?: string | null;
   author: CommentAuthorDto;
   yourLike: LikeValue | null;
   isOwn: boolean;
@@ -96,6 +114,8 @@ export interface CommentDto {
   /** first page of direct replies (only on top-level payloads) */
   replies?: CommentDto[];
   replyNextCursor?: string | null;
+  /** live: continuation token for this thread's replies */
+  repliesToken?: string | null;
 }
 
 export interface CommentsPageDto extends PageDto<CommentDto> {

@@ -95,7 +95,7 @@ function SearchContent() {
         <div className="px-4 py-16 text-center sm:px-6">
           <p className="text-lg font-medium">No results for “{q}”</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Try different keywords — the demo index covers 27 seeded videos and 5 channels.
+            Try different keywords — WebFlix searches all of YouTube.
           </p>
         </div>
       )}
@@ -116,7 +116,7 @@ function SearchContent() {
                   {ch.verified && <VerifiedBadge />}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  @/{ch.handle} · {formatSubscribers(ch.subscriberCount)}
+                  {ch.handle.startsWith("@") ? ch.handle : `@/${ch.handle}`} · {formatSubscribers(ch.subscriberCount)}
                 </p>
               </div>
             </Link>
