@@ -2,8 +2,26 @@
  * WFX2-A-W tests — action routes with the broker client + direct path
  * MOCKED (no network, no live CDP): the ok path, the direct-first path,
  * the broker fallback, and the honest 502 offline mapping.
+ *
+ * WFX2-B-B note (pre-existing flake fixed here): bun's `mock.module` is
+ * PROCESS-wide and is not restored between test files, so the alphabetical
+ * run order (action-routes < broker-client < youtube-direct) leaked these
+ * mocks into the sibling contract tests (17 spurious failures on `bun test`).
+ * The real modules are captured up front and re-installed in `afterAll`,
+ * making this file's mocks effectively file-scoped again.
  */
-import { beforeEach, describe, expect, test, mock } from "bun:test";
+import { afterAll, beforeEach, describe, expect, test, mock } from "bun:test";
+
+/* ------------------------------------------------------------------ */
+/* capture the REAL modules before the mocks replace them (restore)    */
+/*                                                                      */
+/* NOTE: a plain `const real = require(...)` snapshot is NOT enough —   */
+/* bun mutates the captured namespace in place when mock.module swaps   */
+/* the registry, so the values must be copied into a fresh object.      */
+/* ------------------------------------------------------------------ */
+
+const realBroker = { ...require("@/lib/broker") } as Record<string, unknown>;
+const realDirect = { ...require("@/lib/youtube-direct") } as Record<string, unknown>;
 
 /* ------------------------------------------------------------------ */
 /* mock the broker client + direct module BEFORE the routes load       */
@@ -79,6 +97,14 @@ beforeEach(() => {
   directResponse = { ok: true };
   directConfigured = true;
   subscribedState = null;
+});
+
+/* bun's mock.module is process-wide — restore the real modules so the
+ * later-loaded contract tests (broker-client, youtube-direct) exercise
+ * the real implementations again. */
+afterAll(() => {
+  mock.module("@/lib/broker", () => realBroker);
+  mock.module("@/lib/youtube-direct", () => realDirect);
 });
 
 import type { NextRequest } from "next/server";
