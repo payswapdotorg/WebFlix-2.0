@@ -1,47 +1,41 @@
-import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { getDemoUser } from "@/lib/session";
-import { z } from "zod";
+import { NextRequest } from "next/server";
+import { json, errorResponse } from "@/lib/watch/api";
+import { proxyPlaylistAdd } from "@/lib/watch/action-proxy";
 
 export const dynamic = "force-dynamic";
 
-const schema = z.object({
-  playlistId: z.string().min(1),
-  videoId: z.string().min(1),
-});
-
-/** POST /api/playlists/items { playlistId, videoId } — add a video to a playlist. */
-export async function POST(req: Request) {
+/**
+ * POST /api/playlists/items {playlistId, videoId, title?} — LIVE Tier-2
+ * write (broker playlist-add: the Save dialog row / edit_playlist).
+ *
+ * Adds the video to the playlist (ensure-added — already there →
+ * {added:false, reason:"already-saved"} like the previous contract).
+ * `title` (the playlist's label) lets the broker use the Save-dialog UI
+ * path; real YouTube playlist ids (PL…/VL…) also work via the fetch
+ * fallback. Response: {ok, effect, added, reason?}.
+ */
+export async function POST(req: NextRequest) {
   try {
-    const parsed = schema.safeParse(await req.json());
-    if (!parsed.success) {
-      return NextResponse.json({ error: "playlistId and videoId are required" }, { status: 400 });
+    let body: Record<string, unknown> = {};
+    try {
+      body = (await req.json()) as Record<string, unknown>;
+    } catch {
+      return json({ error: "body must be JSON" }, 400);
     }
-    const user = await getDemoUser();
-    const { playlistId, videoId } = parsed.data;
-    const playlist = await db.playlist.findFirst({
-      where: { id: playlistId, userId: user.id },
+    const playlistId = typeof body.playlistId === "string" ? body.playlistId : "";
+    const videoId = typeof body.videoId === "string" ? body.videoId : "";
+    if (!playlistId || !videoId) {
+      return json({ error: "playlistId and videoId are required" }, 400);
+    }
+    const title = typeof body.title === "string" ? body.title : undefined;
+    const result = await proxyPlaylistAdd(playlistId, videoId, { mode: "add", title });
+    return json({
+      ok: result.ok,
+      effect: result.effect,
+      added: result.added,
+      ...(result.already ? { reason: "already-saved" } : {}),
     });
-    if (!playlist) {
-      return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
-    }
-    const video = await db.video.findUnique({ where: { id: videoId } });
-    if (!video) {
-      return NextResponse.json({ error: "Video not found" }, { status: 404 });
-    }
-    const existing = await db.playlistItem.findUnique({
-      where: { playlistId_videoId: { playlistId, videoId } },
-    });
-    if (existing) {
-      return NextResponse.json({ added: false, reason: "already-saved" });
-    }
-    const count = await db.playlistItem.count({ where: { playlistId } });
-    await db.playlistItem.create({
-      data: { playlistId, videoId, position: count },
-    });
-    return NextResponse.json({ added: true });
-  } catch (err) {
-    console.error("POST /api/playlists/items failed", err);
-    return NextResponse.json({ error: "Failed to save to playlist" }, { status: 500 });
+  } catch (e) {
+    return errorResponse(e);
   }
 }

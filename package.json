@@ -2,7 +2,7 @@
   "name": "webflix-2.0",
   "version": "2.0.0",
   "private": true,
-  "description": "WebFlix 2.0 \u2014 a complete YouTube clone (ZTube interface baseline). Boot lane WFX2-B.",
+  "description": "WebFlix 2.0 — a complete YouTube clone (ZTube interface baseline). Boot lane WFX2-B.",
   "scripts": {
     "dev": "DATABASE_URL=file:../db/webflix2.db next dev -p 3000 2>&1 | tee dev.log",
     "build": "next build",
@@ -17,7 +17,7 @@
     "db:reset": "prisma migrate reset",
     "db:seed:watch": "DATABASE_URL=file:../db/webflix2.db bun prisma/seed-watch.ts",
     "test:boot": "DATABASE_URL=file:../db/boot-test.db prisma db push --accept-data-loss --skip-generate && DATABASE_URL=file:../db/boot-test.db bun prisma/seed.ts && DATABASE_URL=file:../db/boot-test.db bun test tests/categories.test.ts tests/format.test.ts tests/home-api.test.ts tests/sidebar-store.test.ts",
-    "test:watch": "DATABASE_URL=file:../db/watch-test.db bun test tests/comments.test.ts tests/likes.test.ts tests/moderation.test.ts tests/progress-transcript.test.ts tests/related-share.test.ts tests/subscription-session.test.ts tests/views.test.ts"
+    "test:watch": "DATABASE_URL=file:../db/watch-test.db bun test tests/comments.test.ts tests/likes.test.ts tests/moderation.test.ts tests/progress-transcript.test.ts tests/related-share.test.ts tests/subscription-session.test.ts tests/views.test.ts tests/broker-client.test.ts tests/youtube-direct.test.ts tests/youtube-player.test.tsx tests/action-routes.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "6.3.1",
@@ -93,6 +93,7 @@
     "bun-types": "1.3.6",
     "eslint": "9.39.2",
     "eslint-config-next": "16.1.3",
+    "happy-dom": "^20.14.5",
     "tailwindcss": "4.1.18",
     "tw-animate-css": "1.4.0",
     "typescript": "5.9.3"

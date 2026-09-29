@@ -1,52 +1,32 @@
-import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { getDemoUser } from "@/lib/session";
-import { z } from "zod";
+import { NextRequest } from "next/server";
+import { json, errorResponse } from "@/lib/watch/api";
+import { proxyWatchLater } from "@/lib/watch/action-proxy";
 
 export const dynamic = "force-dynamic";
 
-const schema = z.object({
-  videoId: z.string().min(1),
-  add: z.boolean().optional(), // default: toggle
-});
-
-/** POST /api/playlists/watch-later { videoId, add? } — toggle Watch later. */
-export async function POST(req: Request) {
+/**
+ * POST /api/playlists/watch-later {videoId, add?} — LIVE Tier-2 write
+ * (broker watch-later: YouTube's own WL playlist).
+ *
+ * `add` omitted → toggle (the video-card contract); true/false → ensure.
+ * Response: {ok, effect, added, playlistId} — the previous contract plus
+ * ok/effect.
+ */
+export async function POST(req: NextRequest) {
   try {
-    const parsed = schema.safeParse(await req.json());
-    if (!parsed.success) {
-      return NextResponse.json({ error: "videoId is required" }, { status: 400 });
+    let body: Record<string, unknown> = {};
+    try {
+      body = (await req.json()) as Record<string, unknown>;
+    } catch {
+      return json({ error: "body must be JSON" }, 400);
     }
-    const user = await getDemoUser();
-    const { videoId, add } = parsed.data;
-
-    let playlist = await db.playlist.findFirst({
-      where: { userId: user.id, isWatchLater: true },
-    });
-    if (!playlist) {
-      playlist = await db.playlist.create({
-        data: { userId: user.id, title: "Watch Later", isWatchLater: true, visibility: "private" },
-      });
-    }
-
-    const existing = await db.playlistItem.findUnique({
-      where: { playlistId_videoId: { playlistId: playlist.id, videoId } },
-    });
-    const shouldAdd = add ?? !existing;
-
-    if (shouldAdd && !existing) {
-      const count = await db.playlistItem.count({ where: { playlistId: playlist.id } });
-      await db.playlistItem.create({
-        data: { playlistId: playlist.id, videoId, position: count },
-      });
-    } else if (!shouldAdd && existing) {
-      await db.playlistItem.delete({
-        where: { playlistId_videoId: { playlistId: playlist.id, videoId } },
-      });
-    }
-    return NextResponse.json({ added: shouldAdd, playlistId: playlist.id });
-  } catch (err) {
-    console.error("POST /api/playlists/watch-later failed", err);
-    return NextResponse.json({ error: "Failed to update Watch later" }, { status: 500 });
+    const videoId = typeof body.videoId === "string" ? body.videoId : "";
+    if (!videoId) return json({ error: "videoId is required" }, 400);
+    const add =
+      body.add === true ? true : body.add === false ? false : undefined;
+    const result = await proxyWatchLater(videoId, add);
+    return json(result);
+  } catch (e) {
+    return errorResponse(e);
   }
 }

@@ -4,14 +4,23 @@
  * WFX2-W watch page orchestrator — primary column + related rail, theater
  * mode, ?t= seek-on-load, resume, transcript panel, dialogs, sticky mobile
  * player. Data via /api/watch/session + /api/videos/[id].
+ *
+ * WFX2-A-W: the demo player is swapped for the REAL YouTube player
+ * (IFrame Player API — live streams included). Native player UI (captions/
+ * quality/speed/fullscreen); autoplay-next on ENDED; theater CSS toggle;
+ * the player docks bottom-right (miniplayer) once scrolled past on
+ * desktop. Progress memory + view ping live inside the player component.
+ * (A-S adds the conditional LiveChatPanel below the player.)
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { BadgeCheck } from "lucide-react";
-import { toast } from "sonner";
+import { useRouter } from "next/navigation";
+import { BadgeCheck, Maximize2, Minimize2, SkipForward } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/watch/client";
-import { compactCount, exactCount, relativeTime } from "@/lib/watch/format";
+import { compactCount } from "@/lib/watch/format";
 import { parseChapters } from "@/lib/watch/chapters";
 import type {
   RelatedVideoDto,
@@ -19,7 +28,11 @@ import type {
   VideoDetailDto,
   ViewerDto,
 } from "@/lib/watch/types";
-import { VideoPlayer, type PlayerHandle } from "./video-player";
+import {
+  YoutubePlayer,
+  type YoutubePlayerHandle,
+  type YoutubePlayerState,
+} from "./youtube-player";
 import { SubscribeButton } from "./subscribe-button";
 import { ActionRow } from "./action-row";
 import { ShareDialog } from "./share-dialog";
@@ -30,11 +43,15 @@ import { TranscriptPanel } from "./transcript-panel";
 import { CommentsSection } from "./comments-section";
 import { RelatedRail } from "./related-rail";
 
+const AUTOPLAY_KEY = "wfx2-autoplay";
+
 export function WatchPage({ videoId, startAt }: { videoId: string; startAt: number | null }) {
+  const router = useRouter();
   const [detail, setDetail] = useState<VideoDetailDto | null>(null);
   const [viewer, setViewer] = useState<ViewerDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [theater, setTheater] = useState(false);
+  const [autoplay, setAutoplay] = useState(true);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [transcriptQuery, setTranscriptQuery] = useState("");
   const [cues, setCues] = useState<TranscriptCueDto[]>([]);
@@ -45,10 +62,12 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
   const [reportOpen, setReportOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [subCount, setSubCount] = useState<number | null>(null);
+  const [docked, setDocked] = useState(false);
 
-  const playerRef = useRef<PlayerHandle>(null);
+  const playerRef = useRef<YoutubePlayerHandle>(null);
   const timeRef = useRef(0);
   const transcriptFetchedRef = useRef(false);
+  const anchorRef = useRef<HTMLDivElement>(null);
 
   // bootstrap: session cookie + video detail (fresh mount per video via key)
   useEffect(() => {
@@ -74,8 +93,23 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
     };
   }, [videoId]);
 
-  const openTranscript = useCallback(() => {
-    setTranscriptOpen((o) => !o);
+  // autoplay preference (the Wave-1 key, default on)
+  useEffect(() => {
+    try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- hydration of a persisted pref (SSR renders the default)
+      setAutoplay(localStorage.getItem(AUTOPLAY_KEY) !== "0");
+    } catch {
+      /* private mode */
+    }
+  }, []);
+
+  const setAutoplayPref = useCallback((on: boolean) => {
+    setAutoplay(on);
+    try {
+      localStorage.setItem(AUTOPLAY_KEY, on ? "1" : "0");
+    } catch {
+      /* private mode */
+    }
   }, []);
 
   // fetch transcript once the page is live (captions + panel share the cues)
@@ -97,6 +131,42 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
       alive = false;
     };
   }, [detail, videoId]);
+
+  // miniplayer: dock the player bottom-right once scrolled past it. The app
+  // shell scrolls an inner container (not the window) — find the player's
+  // real scroll parent and listen there.
+  useEffect(() => {
+    const anchor = anchorRef.current;
+    let scrollEl: HTMLElement | Window = window;
+    if (anchor) {
+      let node: HTMLElement | null = anchor.parentElement;
+      while (node && node !== document.body) {
+        const style = window.getComputedStyle(node);
+        if (/(auto|scroll|overlay)/.test(style.overflowY)) {
+          scrollEl = node;
+          break;
+        }
+        node = node.parentElement;
+      }
+    }
+    const onScroll = () => {
+      const el = anchorRef.current;
+      if (!el) {
+        setDocked(false);
+        return;
+      }
+      const rect = el.getBoundingClientRect();
+      setDocked((d) => (d === rect.bottom < 80 ? d : rect.bottom < 80));
+    };
+    scrollEl.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => scrollEl.removeEventListener("scroll", onScroll);
+  }, [theater, detail]);
+
+  const undock = useCallback(() => {
+    setDocked(false);
+    anchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
 
   const seek = useCallback((sec: number) => {
     playerRef.current?.seekTo(sec);
@@ -136,24 +206,23 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
   }
 
   const { video, state } = detail;
+  const isLive = video.durationSec === 0;
+
   const player = (
-    <VideoPlayer
-      ref={playerRef}
+    <YoutubePlayer
+      handleRef={playerRef}
       videoId={videoId}
-      src={video.videoUrl}
-      poster={video.thumbnailUrl}
-      durationSec={video.durationSec}
-      resumeSec={state.resumeSec}
-      startAt={startAt}
-      chapters={chapters}
-      cues={cues}
-      cuesReady={cuesLoaded}
-      theater={theater}
-      onToggleTheater={() => setTheater((t) => !t)}
-      nextVideo={nextVideo}
-      onOpenTranscript={openTranscript}
-      onTimeUpdate={(t) => {
-        timeRef.current = t;
+      startSec={startAt ?? state.resumeSec}
+      onProgress={(sec) => {
+        timeRef.current = sec;
+      }}
+      onStateChange={(_s: YoutubePlayerState) => {
+        /* native player UI owns the controls */
+      }}
+      onEnded={() => {
+        // autoplay-next: the related rail's first item (A-B's autoplay set
+        // lands in the same DTO shape)
+        if (autoplay && nextVideo) router.push(`/watch/${nextVideo.id}`);
       }}
     />
   );
@@ -177,14 +246,86 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
         <div className="min-w-0">
           {!theater && (
             <div className="sm:rounded-xl">
-              <div className="sticky top-0 z-30 -mx-0 bg-black sm:static sm:mx-0 sm:bg-transparent">
-                {player}
+              <div
+                ref={anchorRef}
+                className={cn(
+                  "w-full",
+                  !docked && "sticky top-0 z-30 bg-black sm:static sm:rounded-xl"
+                )}
+              >
+                {/* aspect keeper: holds the layout slot while the player docks */}
+                <div className="relative aspect-video w-full overflow-hidden">
+                  <div
+                    className={
+                      docked
+                        ? "fixed bottom-4 right-4 z-50 aspect-video w-80 overflow-hidden rounded-xl bg-black shadow-2xl ring-1 ring-border"
+                        : "absolute inset-0"
+                    }
+                  >
+                    {player}
+                    {docked && (
+                      <button
+                        type="button"
+                        onClick={undock}
+                        aria-label="Expand player back into the page"
+                        className="absolute left-1 top-1 z-10 rounded-full bg-black/70 p-1.5 text-white opacity-80 transition hover:opacity-100"
+                      >
+                        <Maximize2 className="size-4" aria-hidden="true" />
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           )}
 
           <div className={theater ? "" : "px-3 sm:px-0"}>
-            <h1 className="mt-3 text-lg font-bold leading-snug sm:text-xl">{video.title}</h1>
+            {/* player control row: theater toggle + autoplay-next toggle */}
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <h1 className="min-w-0 text-lg font-bold leading-snug sm:text-xl">
+                {video.title}
+                {isLive && (
+                  <span className="ml-2 inline-flex items-center rounded bg-destructive px-1.5 py-0.5 align-middle text-[10px] font-semibold uppercase text-white">
+                    Live
+                  </span>
+                )}
+              </h1>
+              <div className="flex shrink-0 items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setTheater((t) => !t)}
+                  aria-pressed={theater}
+                  aria-label={theater ? "Default view" : "Theater mode"}
+                  title={theater ? "Default view (t)" : "Theater mode (t)"}
+                  className="flex size-9 items-center justify-center rounded-full bg-secondary text-secondary-foreground transition hover:bg-secondary/70 sm:size-10"
+                >
+                  {theater ? (
+                    <Minimize2 className="size-4" aria-hidden="true" />
+                  ) : (
+                    <Maximize2 className="size-4" aria-hidden="true" />
+                  )}
+                </button>
+                {nextVideo && (
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/watch/${nextVideo.id}`)}
+                    aria-label="Play next video"
+                    title="Play next"
+                    className="flex size-9 items-center justify-center rounded-full bg-secondary text-secondary-foreground transition hover:bg-secondary/70 sm:size-10"
+                  >
+                    <SkipForward className="size-4" aria-hidden="true" />
+                  </button>
+                )}
+                <div className="flex items-center gap-1.5" title="Autoplay next video">
+                  <Switch
+                    checked={autoplay}
+                    onCheckedChange={setAutoplayPref}
+                    aria-label="Autoplay next video"
+                  />
+                  <span className="hidden text-xs text-muted-foreground sm:inline">Autoplay</span>
+                </div>
+              </div>
+            </div>
 
             {/* channel row + actions */}
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
@@ -214,6 +355,7 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
                   channelName={video.channel.name}
                   initialSubscribed={state.subscribed}
                   initialBell={state.bell}
+                  subscriberCount={subCount ?? video.channel.subscriberCount}
                   onCountChange={setSubCount}
                 />
               </div>
@@ -314,4 +456,8 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
       {reportOpen && <ReportDialog open onOpenChange={setReportOpen} videoId={videoId} />}
     </main>
   );
+
+  function openTranscript() {
+    setTranscriptOpen((o) => !o);
+  }
 }

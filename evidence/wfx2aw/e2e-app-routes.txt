@@ -1,0 +1,40 @@
+WFX2-A-W end-to-end verification (this sandbox): app dev server (Next 16, port 3100)
+with BROKER_URL=http://127.0.0.1:3055 BROKER_SECRET=demo-broker-secret, the REAL
+broker service running (no mock). The CDP browser is absent in THIS sandbox (it is
+the lead's infrastructure) — every action answers with the broker's honest error.
+
+Broker UP + CDP dead (honest pass-through of the executor's state):
+POST /api/videos/dQw4w9WgXcQ/like {"value":"like","baseline":{"likes":5,"dislikes":0,"yourLike":null}}
+  -> 502 {"error":"cdp-execution-failed: Unable to connect. Is the computer able to access the url?"}
+POST /api/subscribe {"channelId":"UCuAXFkgsw1L7xaCfnd5JJOw","on":true}   (direct not configured -> broker)
+  -> 502 {"error":"cdp-execution-failed: ..."}
+POST /api/videos/<id>/comments {"body":"e2e check"}
+  -> 502 {"error":"cdp-execution-failed: ..."}
+POST /api/subscriptions {"channelId":"UCuAXFkgsw1L7xaCfnd5JJOw","bell":"all","subscriberCount":4200}
+  -> 502 {"error":"cdp-execution-failed: ..."}
+POST /api/playlists/watch-later {"videoId":"dQw4w9WgXcQ"}
+  -> 502 {"error":"cdp-execution-failed: ..."}
+POST /api/not-interested {"videoId":"dQw4w9WgXcQ"}
+  -> 502 {"error":"cdp-execution-failed: ..."}
+POST /api/subscribe/bell {"channelId":"UCuAXFkgsw1L7xaCfnd5JJOw","pref":"all"}
+  -> 502 {"error":"cdp-execution-failed: ..."}
+POST /api/videos/x/like {} (bad body)
+  -> 400 {"error":"value (like|dislike) or action (like|dislike|none) is required"}
+
+Broker DOWN (killed) — the offline honest message:
+POST /api/videos/dQw4w9WgXcQ/like {"value":"like"}
+  -> 502 {"error":"action backend offline — the lead's broker must be running"}
+
+Watch page browser verification (agent-browser, port 3100):
+- /watch/<seed-id> renders: region "YouTube video player" + the YT iframe
+  (class "absolute inset-0 h-full w-full" — YT.Player replaced the mount node;
+  the old demo player rendered a <video> element, count now 0).
+- Theater toggle works (aria-label "Theater mode" / "Default view" flips the layout).
+- Autoplay switch + "Play next video" button render.
+- Miniplayer: scrolling the app shell's inner scroll container past the player
+  docks it bottom-right (fixed, same DOM node — the iframe keeps playing);
+  the expand button undocks and scrolls back.
+- Like button click -> optimistic UI + the honest 502 toast
+  ("cdp-execution-failed: ...") — the full app -> broker -> CDP chain, no mock.
+- POST /api/videos/<id>/comments 502 in the dev log (comment composer path).
+- No page errors, no hydration errors (agent-browser errors: none).

@@ -105,7 +105,13 @@ export function CommentRow({
     try {
       const result = await post<{ likes: number; yourLike: LikeValue | null }>(
         `/api/comments/${comment.id}/like`,
-        { value }
+        {
+          value,
+          // baseline + locator keep the broker path honest (WFX2-A-W)
+          baseline: { likes: like.likes, yourLike: like.yourLike },
+          commentText: comment.body,
+          videoId,
+        }
       );
       setLike(result); // server truth
     } catch (e) {
@@ -437,6 +443,7 @@ export function CommentRow({
             <CommentComposer
               videoId={videoId}
               parentId={comment.id}
+              parentText={comment.body}
               viewer={viewer}
               placeholder="Add a reply..."
               submitLabel="Reply"

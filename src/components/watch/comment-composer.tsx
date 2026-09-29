@@ -17,6 +17,7 @@ import type { CommentDto, ViewerDto } from "@/lib/watch/types";
 export function CommentComposer({
   videoId,
   parentId,
+  parentText,
   viewer,
   placeholder = "Add a comment...",
   submitLabel = "Comment",
@@ -27,6 +28,9 @@ export function CommentComposer({
 }: {
   videoId: string;
   parentId?: string;
+  /** the parent comment's text — lets the broker locate it in the YouTube
+   * DOM for the reply's UI path (WFX2-A-W) */
+  parentText?: string;
   viewer: ViewerDto;
   placeholder?: string;
   submitLabel?: string;
@@ -71,6 +75,7 @@ export function CommentComposer({
       const created = await post<CommentDto>(`/api/videos/${videoId}/comments`, {
         body: trimmed,
         parentId,
+        parentText,
       });
       onSubmitted(created);
       setBody("");
