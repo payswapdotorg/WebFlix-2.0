@@ -1,0 +1,40 @@
+# dependencies
+node_modules
+/.pnp
+.pnp.*
+
+# next.js
+/.next/
+/out/
+next-env.d.ts
+
+# production
+/build
+
+# database (seed via: bun run db:push && bun run db:seed)
+db/*.db
+db/*.db-journal
+
+# env
+.env
+.env.*
+
+# misc
+.DS_Store
+*.pem
+*.log
+dev.log
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# typescript
+*.tsbuildinfo
+
+# testing
+/coverage
+
+# vercel
+.vercel
