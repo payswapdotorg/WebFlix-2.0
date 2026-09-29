@@ -1,0 +1,6 @@
+[
+  {"case": "POST /broker/action without x-broker-secret", "status": 401, "body": {"error": "unauthorized"}},
+  {"case": "POST /broker/action with wrong secret", "status": 401, "body": {"error": "unauthorized"}},
+  {"case": "POST /broker/action unknown kind", "status": 400, "body": {"error": "unknown kind (expected one of like, dislike, remove-rating, subscribe, unsubscribe, bell, comment-create, comment-reply, comment-like, playlist-add, watch-later, not-interested)"}},
+  {"case": "POST /broker/action valid (CDP dead in this sandbox — the browser lives on the lead sandbox)", "status": 502, "body": {"ok": false, "error": "cdp-execution-failed: Unable to connect. Is the computer able to access the url?"}}
+]

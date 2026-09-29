@@ -19,12 +19,16 @@ export function SubscribeButton({
   channelName,
   initialSubscribed,
   initialBell,
+  subscriberCount,
   onCountChange,
 }: {
   channelId: string;
   channelName: string;
   initialSubscribed: boolean;
   initialBell: "all" | "personalized" | "none" | null;
+  /** the currently displayed count — the live route echoes it ± 1; when
+   * unknown it answers -1 and the count display stays untouched (WFX2-A-W) */
+  subscriberCount?: number;
   onCountChange?: (n: number) => void;
 }) {
   const [subscribed, setSubscribed] = useState(initialSubscribed);
@@ -40,10 +44,13 @@ export function SubscribeButton({
       const result = await post<SubscriptionResultDto>("/api/subscriptions", {
         channelId,
         bell: bellValue,
+        ...(typeof subscriberCount === "number" ? { subscriberCount } : {}),
       });
       setSubscribed(result.subscribed);
       setBell(result.bell);
-      onCountChange?.(result.subscriberCount);
+      if (typeof result.subscriberCount === "number" && result.subscriberCount >= 0) {
+        onCountChange?.(result.subscriberCount);
+      }
       if (result.subscribed && bellValue !== "off") {
         toast.success(`Subscribed to ${channelName}`);
       }

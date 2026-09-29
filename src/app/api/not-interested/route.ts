@@ -1,33 +1,28 @@
-import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { getDemoUser } from "@/lib/session";
-import { z } from "zod";
+import { NextRequest } from "next/server";
+import { json, errorResponse } from "@/lib/watch/api";
+import { proxyNotInterested } from "@/lib/watch/action-proxy";
 
 export const dynamic = "force-dynamic";
 
-const schema = z.object({ videoId: z.string().min(1) });
-
-/** POST /api/not-interested { videoId } — hides from recommendations. */
-export async function POST(req: Request) {
+/**
+ * POST /api/not-interested {videoId} — LIVE Tier-2 write (broker): hides
+ * the video from recommendations — the real home-feed "Not interested"
+ * action on youtube.com. Response keeps the {hidden: true} contract the
+ * video-card kebab consumes (+ok/effect).
+ */
+export async function POST(req: NextRequest) {
   try {
-    const parsed = schema.safeParse(await req.json());
-    if (!parsed.success) {
-      return NextResponse.json({ error: "videoId is required" }, { status: 400 });
+    let body: Record<string, unknown> = {};
+    try {
+      body = (await req.json()) as Record<string, unknown>;
+    } catch {
+      return json({ error: "body must be JSON" }, 400);
     }
-    const user = await getDemoUser();
-    const { videoId } = parsed.data;
-    const video = await db.video.findUnique({ where: { id: videoId } });
-    if (!video) {
-      return NextResponse.json({ error: "Video not found" }, { status: 404 });
-    }
-    await db.videoSignal.upsert({
-      where: { videoId_userId: { videoId, userId: user.id } },
-      update: { kind: "not_interested" },
-      create: { videoId, userId: user.id, kind: "not_interested" },
-    });
-    return NextResponse.json({ hidden: true });
-  } catch (err) {
-    console.error("POST /api/not-interested failed", err);
-    return NextResponse.json({ error: "Failed to hide video" }, { status: 500 });
+    const videoId = typeof body.videoId === "string" ? body.videoId : "";
+    if (!videoId) return json({ error: "videoId is required" }, 400);
+    const result = await proxyNotInterested(videoId);
+    return json(result);
+  } catch (e) {
+    return errorResponse(e);
   }
 }

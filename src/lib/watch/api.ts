@@ -16,8 +16,8 @@ export const notFound = (what: string) => new ApiError(404, `${what} not found`)
 export const forbidden = (msg = "Not allowed") => new ApiError(403, msg);
 export const badRequest = (msg: string) => new ApiError(400, msg);
 
-export function json(data: unknown, init?: ResponseInit) {
-  return NextResponse.json(data, init);
+export function json(data: unknown, init?: ResponseInit | number) {
+  return NextResponse.json(data, typeof init === "number" ? { status: init } : init);
 }
 
 export function errorResponse(e: unknown) {

@@ -1,0 +1,12 @@
+{
+  "name": "youtube-broker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "WebFlix Session Broker — executes authenticated YouTube actions with same-exact-effect by driving the logged-in YouTube tab over CDP.",
+  "scripts": {
+    "dev": "bun --hot index.ts",
+    "start": "bun index.ts",
+    "test": "bun test"
+  }
+}

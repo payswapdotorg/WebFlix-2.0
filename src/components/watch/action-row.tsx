@@ -96,7 +96,11 @@ export function ActionRow({
     try {
       const result = await post<{ likes: number; dislikes: number; yourLike: LikeValue | null }>(
         `/api/videos/${videoId}/like`,
-        { value }
+        {
+          value,
+          // the UI's current counts — keeps the response honest (WFX2-A-W)
+          baseline: { likes: state.likes, dislikes: state.dislikes, yourLike: state.yourLike },
+        }
       );
       // reconcile with server truth
       setState(result);

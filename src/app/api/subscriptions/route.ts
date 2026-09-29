@@ -2,14 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getDemoUser } from "@/lib/session";
 import { toChannelLite, toVideoDTO } from "@/lib/dto";
-import { setSubscription } from "@/lib/watch/subscription-service";
-import { subscriptionBodySchema } from "@/lib/watch/validators";
-import { resolveViewer } from "@/lib/watch/session";
+import { errorResponse, json } from "@/lib/watch/api";
+import { proxySubscriptionStateMachine } from "@/lib/watch/action-proxy";
 import type { SubscriptionsPageDTO } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/subscriptions — subscribed channels + their latest videos (boot lane). */
+/** GET /api/subscriptions — subscribed channels + their latest videos (read
+ * lane swaps this to live SSR data; unchanged here). */
 export async function GET() {
   try {
     const user = await getDemoUser();
@@ -37,18 +37,40 @@ export async function GET() {
 }
 
 /**
- * POST /api/subscriptions {channelId, bell} — the subscribe state machine
- * (watch lane). bell: "all" | "personalized" | "none" subscribes (or updates);
- * bell "off" (or omitted) unsubscribes. Counts stay honest (transactional).
+ * POST /api/subscriptions { channelId, bell, subscriberCount? } — LIVE
+ * Tier-2 write (the watch page subscribe state machine).
+ *
+ * bell "off" (or omitted) → unsubscribe (direct-first, broker fallback);
+ * bell all|personalized|none → subscribe (direct-first) + bell pref
+ * (broker). Response keeps the SubscriptionResultDto shape; subscriberCount
+ * is the UI's baseline ± 1, or -1 when unknown (the UI then leaves the
+ * displayed count alone). Plus ok/effect/path.
  */
 export async function POST(req: NextRequest) {
   try {
-    const viewer = await resolveViewer(req.headers);
-    const body = subscriptionBodySchema.parse(await req.json());
-    const result = await setSubscription(body.channelId, viewer.id, body.bell);
-    return NextResponse.json(result);
-  } catch (err) {
-    console.error("POST /api/subscriptions failed", err);
-    return NextResponse.json({ error: "Failed to update subscription" }, { status: 500 });
+    let body: Record<string, unknown> = {};
+    try {
+      body = (await req.json()) as Record<string, unknown>;
+    } catch {
+      return json({ error: "body must be JSON" }, 400);
+    }
+    const channelId = typeof body.channelId === "string" ? body.channelId : "";
+    if (!channelId) return json({ error: "channelId is required" }, 400);
+    const bellRaw = typeof body.bell === "string" ? body.bell : undefined;
+    if (bellRaw && !["all", "personalized", "none", "off"].includes(bellRaw)) {
+      return json({ error: "bell must be all|personalized|none|off" }, 400);
+    }
+    const countBaseline =
+      typeof body.subscriberCount === "number" && Number.isFinite(body.subscriberCount)
+        ? body.subscriberCount
+        : null;
+    const result = await proxySubscriptionStateMachine(
+      channelId,
+      bellRaw as "all" | "personalized" | "none" | "off" | undefined,
+      countBaseline
+    );
+    return json(result);
+  } catch (e) {
+    return errorResponse(e);
   }
 }

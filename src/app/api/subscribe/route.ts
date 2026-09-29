@@ -1,49 +1,37 @@
-import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { getDemoUser } from "@/lib/session";
-import { z } from "zod";
+import { NextRequest } from "next/server";
+import { json, errorResponse } from "@/lib/watch/api";
+import { proxySubscribe } from "@/lib/watch/action-proxy";
 
 export const dynamic = "force-dynamic";
 
-const schema = z.object({ channelId: z.string().min(1) });
-
-/** POST /api/subscribe { channelId } — toggle subscription (count kept honest). */
-export async function POST(req: Request) {
+/**
+ * POST /api/subscribe { channelId, on? } — LIVE Tier-2 write.
+ *
+ * Direct-first (subscription/subscribe|unsubscribe with SAPISIDHASH —
+ * verified server-side, log §16/§17), broker fallback (the logged-in
+ * browser tab over CDP). `on` omitted → toggle (state read, then direct;
+ * broker toggle as the fallback) — the channel page's contract.
+ *
+ * Response: { ok, effect, subscribed, path } — plus `subscribed` for the
+ * channel page toast. Broker+direct both unreachable → 502 honest.
+ */
+export async function POST(req: NextRequest) {
   try {
-    const parsed = schema.safeParse(await req.json());
-    if (!parsed.success) {
-      return NextResponse.json({ error: "channelId is required" }, { status: 400 });
+    let body: Record<string, unknown> = {};
+    try {
+      body = (await req.json()) as Record<string, unknown>;
+    } catch {
+      return json({ error: "body must be JSON" }, 400);
     }
-    const user = await getDemoUser();
-    const { channelId } = parsed.data;
-    const channel = await db.channel.findUnique({ where: { id: channelId } });
-    if (!channel) {
-      return NextResponse.json({ error: "Channel not found" }, { status: 404 });
+    const channelId = typeof body.channelId === "string" ? body.channelId : "";
+    if (!channelId) return json({ error: "channelId is required" }, 400);
+    const on = body.on === undefined ? null : body.on === true;
+    if (body.on !== undefined && body.on !== true && body.on !== false) {
+      return json({ error: "on must be a boolean" }, 400);
     }
-    if (channel.ownerId === user.id) {
-      return NextResponse.json({ error: "You can't subscribe to your own channel" }, { status: 400 });
-    }
-    const existing = await db.subscribe.findUnique({
-      where: { userId_channelId: { userId: user.id, channelId } },
-    });
-    if (existing) {
-      await db.subscribe.delete({ where: { userId_channelId: { userId: user.id, channelId } } });
-      await db.channel.update({
-        where: { id: channelId },
-        data: { subscriberCount: Math.max(0, channel.subscriberCount - 1) },
-      });
-      return NextResponse.json({ subscribed: false });
-    }
-    await db.subscribe.create({
-      data: { userId: user.id, channelId, bell: "personalized" },
-    });
-    await db.channel.update({
-      where: { id: channelId },
-      data: { subscriberCount: channel.subscriberCount + 1 },
-    });
-    return NextResponse.json({ subscribed: true });
-  } catch (err) {
-    console.error("POST /api/subscribe failed", err);
-    return NextResponse.json({ error: "Failed to toggle subscription" }, { status: 500 });
+    const result = await proxySubscribe(channelId, on);
+    return json({ ...result, subscribed: result.subscribed });
+  } catch (e) {
+    return errorResponse(e);
   }
 }
