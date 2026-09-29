@@ -1,0 +1,39 @@
+{
+ "url": "/api/search?q=news&type=video&date=hour",
+ "http": 200,
+ "query": "news",
+ "filters": "type=video + date=hour",
+ "count": 20,
+ "videos": [
+  {
+   "id": "IhZei5HgTO0",
+   "title": "LIVE: Impeachment Trial of VP Sara Duterte | ABS-CBN News Sp",
+   "viewsText": "256,781 views",
+   "publishedText": "Streamed 46 minutes ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "ANC 24/7",
+   "durationSec": 30485
+  },
+  {
+   "id": "e6f3yex3JSw",
+   "title": "LIVE | Kannada News | 01:00 PM | 29.09.2026 | DD Chandana",
+   "viewsText": "546 views",
+   "publishedText": "Streamed 16 minutes ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "ದೂರದರ್ಶನ ಚಂದನ - Doordarshan Chandana",
+   "durationSec": 1811
+  },
+  {
+   "id": "3rBBFRM1vVo",
+   "title": "News Headlines 5 Minutes 21 Headlines | 29-09-2026 | @newsfi",
+   "viewsText": "193 views",
+   "publishedText": "21 minutes ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "NewsFirst Kannada",
+   "durationSec": 312
+  }
+ ]
+}

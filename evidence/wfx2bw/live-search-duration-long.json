@@ -1,0 +1,40 @@
+{
+ "url": "/api/search?q=lofi&duration=long",
+ "http": 200,
+ "query": "lofi",
+ "filters": "duration=long (Over 20 minutes)",
+ "count": 20,
+ "allOver20min": false,
+ "videos": [
+  {
+   "id": "sF80I-TQiW0",
+   "title": "90's Chill Lofi ☕️ Study Music Lofi Rain Chillhop Beats ☔️ L",
+   "viewsText": "29,558,695 views",
+   "publishedText": "Streamed 2 years ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "The Japanese Town",
+   "durationSec": 42825
+  },
+  {
+   "id": "SS8WHsX06iE",
+   "title": "Quiet Waves 🌤️ Tranquil Morning at Seaside Cafe 🌼 Lofi Hip",
+   "viewsText": "397,594 views",
+   "publishedText": "Streamed 3 months ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "LOFI KEEP YOU SAFE",
+   "durationSec": 13964
+  },
+  {
+   "id": "VUQfT3gNT3g",
+   "title": "𝙻𝚘𝚏𝚒 𝚁𝚘𝚘𝚖 / 𝙶𝚞𝚒𝚝𝚊𝚛 𝙻𝚘𝚏𝚒 / 𝙲𝚊𝚏𝚎 𝙼𝚞𝚜\ud835",
+   "viewsText": "9,700,247 views",
+   "publishedText": "1 year ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "Myour Music",
+   "durationSec": 10949
+  }
+ ]
+}

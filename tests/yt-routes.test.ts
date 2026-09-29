@@ -218,7 +218,10 @@ describe("GET /api/trending — SSR parse", () => {
     const res = await trendingRoute(new Request("http://localhost/api/trending"));
     expect(res.status).toBe(200);
     const data = (await res.json()) as any;
-    expect(data.category).toBe("All");
+    // WFX2-B-W: the trending category set is the real youtube.com one —
+    // the default chip is "Now" (was the WebFlix-local "All" pre-B-W)
+    expect(data.category).toBe("Now");
+    expect(data.source).toBe("trending");
     expect(data.videos.length).toBeGreaterThan(0);
     const mj = data.videos.find((v: any) => v.id === "h_D3VFfhvs4");
     expect(mj).toBeDefined();

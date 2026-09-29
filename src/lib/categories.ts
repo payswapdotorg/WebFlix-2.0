@@ -37,6 +37,24 @@ export function normalizeCategory(value: string | null | undefined): string {
   return isCategory(value) ? value : ALL_CHIP;
 }
 
+/**
+ * The real destination for a sidebar EXPLORE / explore-hub category link
+ * (WFX2-B-W): every link lands on a real-data page with the category
+ * pre-applied —
+ *  - Music / Gaming → the real youtube.com trending category pages
+ *    (/trending?category=…, SSR category pages + search-backed fallback);
+ *  - Live → the Live surface (/explore/live — the Features→Live filter
+ *    search, real live streams);
+ *  - the rest → scoped search (/search?q=<Category>&type=video).
+ */
+export function categoryDestination(category: string): string {
+  if (category === "Music" || category === "Gaming") {
+    return `/trending?category=${encodeURIComponent(category)}`;
+  }
+  if (category === "Live") return "/explore/live";
+  return `/search?q=${encodeURIComponent(category)}&type=video`;
+}
+
 /** Pure chip-filter used by the home feed and the tests. */
 export function filterVideosByCategory(
   videos: VideoDTO[],

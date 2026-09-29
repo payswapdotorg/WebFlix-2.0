@@ -1,0 +1,39 @@
+{
+ "url": "/api/trending?category=Music",
+ "http": 200,
+ "category": "Music",
+ "source": "search",
+ "count": 20,
+ "videos": [
+  {
+   "id": "Pd1yGW_g2T8",
+   "title": "Ashke (Music Video) Karan Aujla  | Mxrci  | Aujla Szn 1",
+   "viewsText": "12,724,636 views",
+   "publishedText": "4 days ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "Karan Aujla",
+   "durationSec": 218
+  },
+  {
+   "id": "zoBTw-1vzyY",
+   "title": "Endhayya Saami | Ranabaali | Full Song | Vijay Deverakonda, ",
+   "viewsText": "30,327,442 views",
+   "publishedText": "7 days ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "T-Series Telugu",
+   "durationSec": 330
+  },
+  {
+   "id": "1P2Cin0qTI4",
+   "title": "Bessan Ismail - 3AL 3EIN (Official Music Video) | بيسان اسما",
+   "viewsText": "9,846,468 views",
+   "publishedText": "3 days ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "Bessan Ismail Music",
+   "durationSec": 163
+  }
+ ]
+}

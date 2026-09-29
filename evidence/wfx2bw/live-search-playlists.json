@@ -1,0 +1,30 @@
+{
+ "url": "/api/search?q=lofi&type=playlist",
+ "http": 200,
+ "query": "lofi",
+ "filters": "type=playlist",
+ "playlists": [
+  {
+   "id": "PLKF4F4n54F99H4YEa9bBmNC-xCXmNaW5B",
+   "title": "Japanese Lofi for Coding 💻✨ Deep Focus & Flow-Sta",
+   "videoCountText": "52 videos",
+   "channel": "Sorameji Lofi",
+   "isMix": false
+  },
+  {
+   "id": "RDCLAK5uy_kb7EBi6y3GrtJri4_ZH56Ms786DFEimbM",
+   "title": "Lofi Loft",
+   "videoCountText": "86 videos",
+   "channel": "YouTube Music",
+   "isMix": true
+  },
+  {
+   "id": "PLOzDu-MXXLlj7croDcwz33c-a5rpNEBNe",
+   "title": "Chill Lofi Beats 🍃",
+   "videoCountText": "43 videos",
+   "channel": "the bootleg boy",
+   "isMix": false
+  }
+ ],
+ "playlistCount": 12
+}

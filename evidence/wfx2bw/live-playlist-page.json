@@ -1,0 +1,45 @@
+{
+ "url": "/api/playlist/PLKF4F4n54F99H4YEa9bBmNC-xCXmNaW5B",
+ "http": 200,
+ "playlist": {
+  "id": "PLKF4F4n54F99H4YEa9bBmNC-xCXmNaW5B",
+  "title": "Japanese Lofi for Coding 💻✨ Deep Focus & Flow-State",
+  "channelName": "Sorameji Lofi",
+  "videoCountText": "52 videos",
+  "viewsText": "44,726 views",
+  "description": "💻✨ Long coding sessions feel different when the music finally lets your mind breathe.  \nThis playlist is crafted for deep focus, clean thinking, and immersive flow-state — especially for programmers, developers, and creators who need calm environments to stay productive.\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n🍃 What you’ll find here:  \n• lofi beats with stable rhythm for uninterrupted coding  \n• Japanese ambience for clarity & emotional calm  \n• soft melodies that reduce noise in your mind  \n• no-vocal, distraction-free background  \n• perfect for deep work, debugging, and late-night programming\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n💡 Ideal for:  \n• coding & software development  \n• UI/UX design  \n• studying computer science  \n• problem-solving & flow-state  \n• writing, reading, and analytical work  \n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nEvery track is selected to help you stay grounded, focused, and emotionally steady while your brain works its hardest.  \nA quiet space. A clean mind. Smooth beats.  \nThat’s the Sorameji promise.\n\nStay if you want to stay calm 🤍  \n— Sorameji"
+ },
+ "count": 48,
+ "videos": [
+  {
+   "id": "rcWcqUPznvk",
+   "title": "Japanese Lofi for Relaxation — Peaceful Lakeside Morning in ",
+   "viewsText": null,
+   "publishedText": "3 days ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "Sorameji Lofi",
+   "durationSec": 14507
+  },
+  {
+   "id": "4oDVcRGs8xo",
+   "title": "Peaceful Japanese Forest — Gentle Lofi for Reading & Slow Mo",
+   "viewsText": null,
+   "publishedText": "6 days ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "Sorameji Lofi",
+   "durationSec": 14462
+  },
+  {
+   "id": "4GJxNVLbmaE",
+   "title": "Japanese Lofi for Relaxation — Quiet Riverside Ryokan & Even",
+   "viewsText": null,
+   "publishedText": "10 days ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "Sorameji Lofi",
+   "durationSec": 21631
+  }
+ ]
+}

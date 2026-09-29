@@ -1,0 +1,39 @@
+{
+ "url": "/api/search?q=news",
+ "http": 200,
+ "query": "news",
+ "resultCountText": "About 1,327,192,495 results",
+ "count": 29,
+ "videos": [
+  {
+   "id": "2XBC8GoVbcw",
+   "title": "ABC World News Tonight with David Muir Full Broadcast - Sept",
+   "viewsText": "465,694 views",
+   "publishedText": "5 hours ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "ABC News",
+   "durationSec": 1213
+  },
+  {
+   "id": "I46RYXNdI8g",
+   "title": "Iranian embassy rejects link to RAF Fairford arrests | BBC N",
+   "viewsText": "106,592 views",
+   "publishedText": "10 hours ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "BBC News",
+   "durationSec": 1201
+  },
+  {
+   "id": "J_Tz6Aig1AI",
+   "title": "US NEWS LIVE: Trump Stuns Everyone With Urgent 24-Hour Annou",
+   "viewsText": "27 watching",
+   "publishedText": null,
+   "isLive": true,
+   "isShort": false,
+   "channel": "MIRROR NOW",
+   "durationSec": null
+  }
+ ]
+}

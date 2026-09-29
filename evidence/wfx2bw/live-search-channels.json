@@ -1,0 +1,33 @@
+{
+ "url": "/api/search?q=lofi&type=channel",
+ "http": 200,
+ "query": "lofi",
+ "filters": "type=channel",
+ "channels": [
+  {
+   "id": "UCSJ4gkVC6NrvII8umztf0Ow",
+   "name": "Lofi Girl",
+   "handle": "@LofiGirl",
+   "subs": "15.8M subscribers",
+   "videoCountText": null,
+   "description": "Lofi House is now available!"
+  },
+  {
+   "id": "UCi5YpRRZmwegT235crEZ2YQ",
+   "name": "Lofi Girl - Topic",
+   "handle": "UCi5YpRRZmwegT235crEZ2YQ",
+   "subs": "1 video",
+   "videoCountText": null,
+   "description": "Connecting people through music 🌎\n\n🎧 | Listen on Spotify, Apple music and more"
+  },
+  {
+   "id": "UCobPjRtt9GQBh9YCt8LVCZA",
+   "name": "Cantopop Lofi",
+   "handle": "@CantopopLofi",
+   "subs": "2.56K subscribers",
+   "videoCountText": null,
+   "description": "廣東歌× Lo-fi 音樂| 粵語經典重新詮釋本頻道以Lo-fi Chill Beats 為基調，重新演繹經典廣東流行曲，為你呈現一種全新的Cantopop ."
+  }
+ ],
+ "channelCount": 20
+}

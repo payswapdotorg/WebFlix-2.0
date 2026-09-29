@@ -1,0 +1,39 @@
+{
+ "url": "/api/trending?category=Gaming",
+ "http": 200,
+ "category": "Gaming",
+ "source": "search",
+ "count": 20,
+ "videos": [
+  {
+   "id": "HMBs1kVyYHE",
+   "title": "GTA 5 Live Parkour | MRRAJAPLAY #gtalive #gtaonline #gta5 #g",
+   "viewsText": "20,357,453 views",
+   "publishedText": "Streamed 2 days ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "MR RAJA PLAYZONE",
+   "durationSec": 2614
+  },
+  {
+   "id": "9XZ3R3T1Guk",
+   "title": "GTA 5 Live Parkour | MRRAJAPLAY #gtalive #gtaonline #gta5 #g",
+   "viewsText": "13,632,369 views",
+   "publishedText": "Streamed 2 days ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "MR RAJA PLAYZONE",
+   "durationSec": 1958
+  },
+  {
+   "id": "Eh92bBgM354",
+   "title": "EXPORT ESCAPE THE KEYBOARD 4K #1",
+   "viewsText": "5,079,584 views",
+   "publishedText": "5 days ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "FedeGames",
+   "durationSec": 1062
+  }
+ ]
+}
