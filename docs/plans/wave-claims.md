@@ -61,3 +61,23 @@ The post-reset lead (replay re-deployed 16:44Z, operator re-login 16:56Z) re-dis
 - r43w1/r43w3 VOIDED (duplicate lanes retired after the morning bundles merged).
 - **Merged main @ 5e2a67e: lint 0 / typecheck 0 / 404 tests green** (240 boot + 106 watch + 58 liveshorts) — auto-deployed to production.
 - **WAVE C dispatched from inside the replay @ base 5e2a67e**: r44w1 studio+upload (chat 136ed21d), r44w2 replay-polish (chat 1a4393c0) — both SENT 18:00Z, no capacity fight. R44-W3 cutover queued behind a free slot.
+
+## 2026-09-29 23:15Z — MIDNIGHT CHECKPOINT (operator deadline)
+
+**Landed today (main @ 23e8a8d, all auto-deployed to production):**
+| Merge | Content | Tests |
+|---|---|---|
+| 2db5d04 | gate repair — `bun test --isolate` (action-routes' process-global mock.module poisoned sibling files on bun ≥ 1.3) | 305 green |
+| 5e2a67e | **WFX2-B-B** personal surfaces (morning bundle recovered + harvested: history/watch-later/playlists/liked/notifications/subscriptions live; broker writes additive) + **WFX2-B-W** discovery (search filters w/ real semantics, trending categories, in-channel search, playlist pages) | 404 green |
+| 23e8a8d | **WFX2-C-B** studio + upload (operator channel resolution, Studio SSR analytics honest-degrade, channel customization read, upload hand-off to the real youtube.com/upload) | 430 green |
+
+**Production acceptance (23:10Z): ALL PASS** — 12 pages + 16 live-data API checks + honest personal/broker degradation (lead sweep; the cutover lane's acceptance.sh will supersede when it lands).
+
+**Still queued at the deadline (dispatched, accepted, awaiting GLM-5.3 generation capacity — the platform's evening peak held from ~19:06Z):**
+- WFX2-B-S comments-write (r43w2c · chat 0778e195) — the only Wave B lane outstanding (the morning attempt was stillborn; 2 evening re-sends rolled home; the current send is queued since 19:55Z)
+- WFX2-C-S replay-polish (r44w2c · chat 4b3cac08)
+- WFX2-C-W cutover hardening (r44w3b · chat 06f47a00) — Upstash adapter, rate limits, DATABASE_URL resolver, purge sweep, in-repo acceptance script
+
+The sessions persist server-side; watchers + supervisor keep fighting. Harvest → gates → merge continues as each lands (the resident loop).
+
+**Test battery: 305 → 430 today. Zero placeholder assets in any production code path (live InnerTube/SSR data everywhere; personal surfaces honestly degrade without the operator session).**
