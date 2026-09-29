@@ -201,6 +201,16 @@ describe("playlists mapping", () => {
     expect(page.nextCursor).toBeNull(); // the synth page is the last page
   });
 
+  test("continuation page (REAL LIVE capture: appendContinuationItemsAction variant) maps", () => {
+    // captured live from this sandbox: the current wire form answers
+    // appendContinuationItemsAction with 2 items + the next trickle token
+    const page = mapPlaylistItemsPage(load("browse_vl_continuation_live"), "PLfvAqoENo7embtefW2ac_8zISVwgvg_Vi");
+    expect(page.videos.length).toBe(2);
+    expect(page.videos[0].id).toBe("IYLDF2-PvFg");
+    expect(page.videos[1].id).toBe("hl1reTcMDko");
+    expect(typeof page.nextCursor).toBe("string");
+  });
+
   test("special list without auth (REAL capture: browse_vl_ll_public.json) is honestly login-required", () => {
     const page = mapPlaylistItemsPage(load("browse_vl_ll_public"), "LL");
     expect(page.loginRequired).toBe(true);

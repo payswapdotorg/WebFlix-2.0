@@ -136,7 +136,13 @@ export function mapHistoryPage(response: unknown): HistoryFeed {
   // .continuationItems (the standard browse continuation shape)
   const sections: any[] = walkTree(response, "itemSectionRenderer");
   const appended: any[] = [];
+  // both live wire variants exist: appendContinuationItemsCommand (classic)
+  // and appendContinuationItemsAction (the current playlist/feed continuations
+  // — verified live: the browse VL continuation answers the Action variant)
   for (const cmd of walkTree(response, "appendContinuationItemsCommand")) {
+    appended.push(...(cmd?.continuationItems ?? []));
+  }
+  for (const cmd of walkTree(response, "appendContinuationItemsAction")) {
     appended.push(...(cmd?.continuationItems ?? []));
   }
   for (const cmd of walkTree(response, "appendContinuationItemsEndpoint")) {
