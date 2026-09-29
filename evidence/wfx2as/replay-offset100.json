@@ -1,0 +1,78 @@
+{
+ "chatAvailable": true,
+ "messages": [
+  {
+   "id": "ChwKGkNKLXdwT0dxNUpNREZaMXFUQWdkOHNnMlh3",
+   "author": {
+    "id": "UC_smK1X9BbucXYygc9G4eOw",
+    "name": "@Eu_fariasOficias",
+    "avatarUrl": "https://yt4.ggpht.com/y9uuwWY2NdmyHooyK4b94Vs4S4TIVaQLMDxeMLLYkUYiYuqa7dgplr8ZdFxu8bUPTgentaZe4Zs=s64-c-k-c0x00ffffff-no-rj",
+    "badges": [],
+    "memberSinceText": null
+   },
+   "body": "oi ",
+   "timestampUsec": "1775860196123506",
+   "kind": "text",
+   "isSuperChat": false,
+   "superChat": null,
+   "isMember": false,
+   "isMemberMilestone": false,
+   "memberMilestoneText": null,
+   "offsetMsec": 100117
+  },
+  {
+   "id": "ChwKGkNJbmRzZUdxNUpNREZTSU4xZ0FkUFhZRUl3",
+   "author": {
+    "id": "UCU_AsmuuMSyBlT26lk8d51Q",
+    "name": "@Rafagaz17",
+    "avatarUrl": "https://yt4.ggpht.com/ytc/AIdro_lMQQ586fi4NKZZzw9PvFMsD2lL1iasfLHCa9K5-xEfjVs=s64-c-k-c0x00ffffff-no-rj",
+    "badges": [],
+    "memberSinceText": null
+   },
+   "body": "",
+   "timestampUsec": "1775860196343777",
+   "kind": "text",
+   "isSuperChat": false,
+   "superChat": null,
+   "isMember": false,
+   "isMemberMilestone": false,
+   "memberMilestoneText": null,
+   "offsetMsec": 100259
+  },
+  {
+   "id": "ChwKGkNKZVN1T0dxNUpNREZkelBsQWtkVS1JRmN3",
+   "author": {
+    "id": "UCdaCfnLGwtMMDBsPL8rcbtA",
+    "name": "@rosynelacosta",
+    "avatarUrl": "https://yt4.ggpht.com/74TGc7KG-z-9-23koZB4ta_Qm4J92bZM7qaWXpMSc-tmO4mTtbdCIPVcugam-9CmUmKZE9Dr=s64-c-k-c0x00ffffff-no-rj",
+    "badges": [],
+    "memberSinceText": null
+   },
+   "body": "Hi Word ",
+   "timestampUsec": "1775860196449604",
+   "kind": "text",
+   "isSuperChat": false,
+   "superChat": null,
+   "isMember": false,
+   "isMemberMilestone": false,
+   "memberMilestoneText": null,
+   "offsetMsec": 100376
+  },
+  {
+   "_trimmed": "[TRIMMED for relay: 13 total, first 3 kept]"
+  }
+ ],
+ "nextToken": "op2w0wR9Gl5DaWtxSndvWVZVTk1RVjlFYVZJeFJtWkxUblpxZFZWd1FraHRlV3hSRWd0dVptaEVkVTlJVFhBd1FSb1Q2cWpkdVFFTkNndHVabWhFZFU5SVRYQXdRU0FCTUFBJTNEKPDy7TBAAEgDUgggALABAPgBAHIGCAQYATAAeAA%3D",
+ "pollMs": 0,
+ "mode": "replay",
+ "participants": null,
+ "skippedActions": 0,
+ "skippedKinds": [],
+ "isReplay": true,
+ "seek": {
+  "mode": "offset",
+  "requestedOffsetSec": 100,
+  "calls": 30,
+  "reached": true
+ }
+}

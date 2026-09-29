@@ -1,0 +1,38 @@
+{
+  "_synthetic": "SYNTHETIC-BUT-SHAPED-FROM-REAL — ended-live variant (dateText 'Streamed live on …', isLive dropped, replay continuation token family op2w0…). For replay session-discovery tests.",
+  "contents": {
+    "twoColumnWatchNextResults": {
+      "conversationBar": {
+        "liveChatRenderer": {
+          "continuations": [
+            {
+              "reloadContinuationData": {
+                "continuation": "op2w0wRyGl5DaWtxSndvWVZVTk1RVjlFYVZJeFJtWkxUblpxZFZWd1FraHRlV3hSRWd0dVptaEVkVTlJVFhBd1FSb1U2cWpkdVFFTkNndHVabWhFZFU5SVRYQXdRU0FCTUFBJTNEQAFyDAgEGAIgACgAMAA4AHgB"
+              }
+            }
+          ],
+          "header": { "liveChatHeaderRenderer": { "trackingParams": "SYNTH" } }
+        }
+      },
+      "results": {
+        "results": {
+          "contents": [
+            {
+              "videoPrimaryInfoRenderer": {
+                "title": { "runs": [{ "text": "NASA Ended Broadcast" }] },
+                "viewCount": {
+                  "videoViewCountRenderer": {
+                    "viewCount": { "simpleText": "27,477,008 views" },
+                    "originalViewCount": "0"
+                  }
+                },
+                "dateText": { "simpleText": "Streamed live on Apr 10, 2026" }
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "responseContext": { "visitorData": "SYNTH" }
+}

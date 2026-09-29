@@ -1,0 +1,74 @@
+{
+ "chatAvailable": true,
+ "messages": [
+  {
+   "id": "CiMKIVJFUExBWV9WRU0yMDI2LzA5LzI4LTIyOjM0OjI2LjQyOQ%3D%3D",
+   "author": {
+    "id": "",
+    "name": "system",
+    "avatarUrl": null,
+    "badges": [],
+    "memberSinceText": null
+   },
+   "body": "Live chat replay is on. Messages that appeared when the stream was live will show up here.",
+   "timestampUsec": "1790660066429173",
+   "kind": "system",
+   "isSuperChat": false,
+   "superChat": null,
+   "isMember": false,
+   "isMemberMilestone": false,
+   "memberMilestoneText": null,
+   "offsetMsec": 0
+  },
+  {
+   "id": "ChwKGkNQYnZ3YktxNUpNREZRQ1A1UWNkSHlzek9n",
+   "author": {
+    "id": "",
+    "name": "system",
+    "avatarUrl": null,
+    "badges": [
+     "moderator"
+    ],
+    "memberSinceText": null
+   },
+   "body": "Slow mode is on",
+   "timestampUsec": "1775860098037798",
+   "kind": "system",
+   "isSuperChat": false,
+   "superChat": null,
+   "isMember": false,
+   "isMemberMilestone": false,
+   "memberMilestoneText": null,
+   "offsetMsec": 1997
+  },
+  {
+   "id": "ChwKGkNKaXJ2N1dxNUpNREZVRElQd1FkX2tJR2Fn",
+   "author": {
+    "id": "UCOs_5invgLn3XbE8P3arsGg",
+    "name": "@flavio6776",
+    "avatarUrl": "https://yt4.ggpht.com/-j6KVRScIrEZVoPk6mrq-JeUqujmKy_tOHCQSGphMIuqOId3thXL4IEnERs7Cch_Hh1bBq3zmw=s64-c-k-c0x00ffffff-no-rj",
+    "badges": [],
+    "memberSinceText": null
+   },
+   "body": "hey",
+   "timestampUsec": "1775860104288718",
+   "kind": "text",
+   "isSuperChat": false,
+   "superChat": null,
+   "isMember": false,
+   "isMemberMilestone": false,
+   "memberMilestoneText": null,
+   "offsetMsec": 8228
+  },
+  {
+   "_trimmed": "[TRIMMED for relay: 45 total, first 3 kept]"
+  }
+ ],
+ "nextToken": "op2w0wR9Gl5DaWtxSndvWVZVTk1RVjlFYVZJeFJtWkxUblpxZFZWd1FraHRlV3hSRWd0dVptaEVkVTlJVFhBd1FSb1Q2cWpkdVFFTkNndHVabWhFZFU5SVRYQXdRU0FCTUFBJTNEKO70twdAAEgDUgggALABAPgBAHIGCAQYATAAeAA%3D",
+ "pollMs": 0,
+ "mode": "replay",
+ "participants": null,
+ "skippedActions": 0,
+ "skippedKinds": [],
+ "isReplay": true
+}

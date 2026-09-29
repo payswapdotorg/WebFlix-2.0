@@ -1,0 +1,39 @@
+{
+  "_synthetic": "SYNTHETIC-BUT-SHAPED-FROM-REAL — WFX2-A-S test fixture. Minimal POST /youtubei/v1/next response shape with a live-chat conversationBar (structure mirrors real captures: live gCNeDWCI0vo and the ended NASA stream nfhDuOHMp0A; token from tests/fixtures/yt/livechat_session_aljazeera_meta.json). For session-discovery unit tests.",
+  "contents": {
+    "twoColumnWatchNextResults": {
+      "conversationBar": {
+        "liveChatRenderer": {
+          "continuations": [
+            {
+              "reloadContinuationData": {
+                "continuation": "0ofMyAOEARpeQ2lrcUp3b1lWVU5PZVdVdGQwNUNjVTVNTlZwNlNGTkthak5zT0VKbkVndG5RMDVsUkZkRFNUQjJieG9UNnFqZHVRRU5DZ3RuUTA1bFJGZERTVEIyYnlBQk1BQSUzRA=="
+              }
+            }
+          ],
+          "header": { "liveChatHeaderRenderer": { "trackingParams": "SYNTH" } }
+        }
+      },
+      "results": {
+        "results": {
+          "contents": [
+            {
+              "videoPrimaryInfoRenderer": {
+                "title": { "runs": [{ "text": "Al Jazeera English Live" }] },
+                "viewCount": {
+                  "videoViewCountRenderer": {
+                    "viewCount": { "runs": [{ "text": "6,027" }, { "text": " watching now" }] },
+                    "isLive": true,
+                    "originalViewCount": "6027"
+                  }
+                },
+                "dateText": { "simpleText": "Started streaming on Mar 9, 2023" }
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "responseContext": { "visitorData": "SYNTH" }
+}

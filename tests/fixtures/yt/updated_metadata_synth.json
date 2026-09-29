@@ -1,0 +1,453 @@
+{
+ "_synthetic": "SYNTHETIC-BUT-SHAPED-FROM-REAL \u2014 WFX2-A-S test fixture. Mirrors a real POST /youtubei/v1/updated_metadata response for gCNeDWCI0vo (live Al Jazeera stream, captured 2026-09-29): actions[].updateViewershipAction.viewCount.videoViewCountRenderer + frameworkUpdates likeCountEntity + continuation.timedContinuationData. Values are real-captured.",
+ "responseContext": {
+  "visitorData": "SYNTH"
+ },
+ "continuation": {
+  "timedContinuationData": {
+   "timeoutMs": 5000,
+   "continuation": "-of5rQMZGgtnQ05lRFdDSTB2byCpgO3VBjgBQAFaAA%3D%3D"
+  }
+ },
+ "actions": [
+  {
+   "updateViewershipAction": {
+    "viewCount": {
+     "videoViewCountRenderer": {
+      "viewCount": {
+       "simpleText": "6,027 watching now"
+      },
+      "isLive": true,
+      "extraShortViewCount": {
+       "accessibility": {
+        "accessibilityData": {
+         "label": "6K"
+        }
+       },
+       "simpleText": "6K"
+      },
+      "unlabeledViewCountValue": {
+       "simpleText": "6,027"
+      },
+      "originalViewCount": "6027"
+     }
+    }
+   }
+  },
+  {
+   "updateDateTextAction": {
+    "dateText": {
+     "simpleText": "Started streaming on Mar 9, 2023"
+    }
+   }
+  },
+  {
+   "updateTitleAction": {
+    "title": {
+     "runs": [
+      {
+       "text": "\ud83d\udd34 Al Jazeera English | Live"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "updateDescriptionAction": {
+    "description": {
+     "runs": [
+      {
+       "text": "When Al Jazeera launched from the Qatari capital, Doha, on Friday, November 1, 1996, it was the first independent news channel in the Arab world. Media in the Arab world, till then, was characterised by state-controlled narratives that denied audiences the right to know and the right to be heard.\nAl Jazeera pioneered a new paradigm for in-depth journalism that was relevant to its audience, giving them a broad and deep perspective on regional and international affairs, putting the human being directly at the centre of the news agenda. The Channel\u2019s founding tagline, \u201cThe Opinion and the Other Opinion\u201d, encapsulated bringing multiple angles to a story, informing and empowering its audiences, championing their stories, while maintaining the spirit of journalistic integrity.\nAl Jazeera introduced what came to be known as the \u201cAl Jazeera Phenomena\u201d. It was a turning point in the history of Arab and global media that inspired academics and researchers to study and analyse this phenomena for years to come. Al Jazeera is now one of the largest and most influential international news networks in the world.\nThe road to success, however, has not been without its challenges. The Network and its journalists have been in the crossfire, and at times paid a heavy price for seeking to bring the truth to its audiences.\nIn the face of these pressures on the Network, and its journalists, Al Jazeera continued on its journalistic mission and garnered international recognition and awards for its in-depth and uncompromising journalism.\nOver the years, Al Jazeera\u2019s expansion into new channels, subsidiaries and digital content is a testament to its constant determination to evolve and deliver unmatched professional journalism to its audiences. The Network presents impartial news, programmes, current affairs, and in-depth investigations that push the boundaries of traditional media.\nAl Jazeera is also continuing to pioneer new and emerging storytelling techniques that cater to a new generation, presenting an ever-innovative portfolio of digital products that inform, empower, and educate, whilst maintaining its founding principles.\nAl Jazeera Media Network is ideally placed on the world stage with its headquarters in the Arab world, with over 70 bureaus around the globe, and more than 3,000 employees from more than 95 countries. Al Jazeera has extensive reach across the globe and is available in over 150 countries and territories in more than 430 million homes.\n\n\nSubscribe to our channel: "
+      },
+      {
+       "text": "http://bit.ly/AJSubscribe",
+       "navigationEndpoint": {
+        "clickTrackingParams": "SPqlo4TWwdeRgAE=",
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUZZTVljRXdEZC1VYURXcnJObXpnSmZ6VHo2cHxBTl9pYzRlX1hrMjRlQU5vWHR1TVJaM05lYU1Wd3A0NGEwZlB2RGxvUDlZeG1uczFFY21FTVNsZm9FV0VaUzI5TmdJU3M4aWV1aGlzUFVXMkYtS2hzZDF3SXN6YVhkZHZpWE5J&q=http%3A%2F%2Fbit.ly%2FAJSubscribe&v=gCNeDWCI0vo",
+          "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+          "rootVe": 83769
+         }
+        },
+        "urlEndpoint": {
+         "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUZZTVljRXdEZC1VYURXcnJObXpnSmZ6VHo2cHxBTl9pYzRlX1hrMjRlQU5vWHR1TVJaM05lYU1Wd3A0NGEwZlB2RGxvUDlZeG1uczFFY21FTVNsZm9FV0VaUzI5TmdJU3M4aWV1aGlzUFVXMkYtS2hzZDF3SXN6YVhkZHZpWE5J&q=http%3A%2F%2Fbit.ly%2FAJSubscribe&v=gCNeDWCI0vo",
+         "target": "TARGET_NEW_WINDOW",
+         "nofollow": true
+        }
+       }
+      },
+      {
+       "text": "\nFollow us on Twitter: "
+      },
+      {
+       "text": "https://twitter.com/AJEnglish",
+       "navigationEndpoint": {
+        "clickTrackingParams": "SPqlo4TWwdeRgAE=",
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUZZTVljSEhleEtUeWV3UmplTFgtUTJoNDhGd3xBTl9pYzRkYXJUUEZfei11TlRkZXdWWFlBbDZyYldwZXh5aGlXM1VjWmRnUmtVdF8xWWNQdXNZZS1hcEt0THlpM3d5aHlpUFlYbUNneHg2UXNtR3JZV1hmcldhRnhva1VPODhT&q=https%3A%2F%2Ftwitter.com%2FAJEnglish&v=gCNeDWCI0vo",
+          "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+          "rootVe": 83769
+         }
+        },
+        "urlEndpoint": {
+         "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUZZTVljSEhleEtUeWV3UmplTFgtUTJoNDhGd3xBTl9pYzRkYXJUUEZfei11TlRkZXdWWFlBbDZyYldwZXh5aGlXM1VjWmRnUmtVdF8xWWNQdXNZZS1hcEt0THlpM3d5aHlpUFlYbUNneHg2UXNtR3JZV1hmcldhRnhva1VPODhT&q=https%3A%2F%2Ftwitter.com%2FAJEnglish&v=gCNeDWCI0vo",
+         "target": "TARGET_NEW_WINDOW",
+         "nofollow": true
+        }
+       }
+      },
+      {
+       "text": "\nFind us on Facebook: "
+      },
+      {
+       "text": "https://www.facebook.com/aljazeera",
+       "navigationEndpoint": {
+        "clickTrackingParams": "SPqlo4TWwdeRgAE=",
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUZZTVljRngyeUE0dWRRWDFwRlZ0dXVUb1k5c3xBTl9pYzRkOExpZlhMNGdmZ0g1LUJnT29GZlNSNzN0YkNsNjh6YWZ5RjJhWEpwUDRIeWN0SWxFbXgwbEpvUlBacUVkelpyMDFtNE56UWVHa2EyOFFlOEk4ZlFsUWJpVW54dVRm&q=https%3A%2F%2Fwww.facebook.com%2Faljazeera&v=gCNeDWCI0vo",
+          "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+          "rootVe": 83769
+         }
+        },
+        "urlEndpoint": {
+         "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUZZTVljRngyeUE0dWRRWDFwRlZ0dXVUb1k5c3xBTl9pYzRkOExpZlhMNGdmZ0g1LUJnT29GZlNSNzN0YkNsNjh6YWZ5RjJhWEpwUDRIeWN0SWxFbXgwbEpvUlBacUVkelpyMDFtNE56UWVHa2EyOFFlOEk4ZlFsUWJpVW54dVRm&q=https%3A%2F%2Fwww.facebook.com%2Faljazeera&v=gCNeDWCI0vo",
+         "target": "TARGET_NEW_WINDOW",
+         "nofollow": true
+        }
+       }
+      },
+      {
+       "text": "\nCheck our website: "
+      },
+      {
+       "text": "http://www.aljazeera.com/",
+       "navigationEndpoint": {
+        "clickTrackingParams": "SPqlo4TWwdeRgAE=",
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUZZTVljRl91YXNKb0t1d2pUT0FPQm5vNW44VnxBTl9pYzRjbjVtTHBfZTl5bkVHWEZscS1JUlEtTWpteXlxZUlKdHRRVXdnQlNSV1dQWkdweGtpVldmbmJkMVBYR2hlRVY0WU1ZSmkxUjIyRzFMZEFFeHk1LXJqUzVUTUhYSGc0&q=http%3A%2F%2Fwww.aljazeera.com%2F&v=gCNeDWCI0vo",
+          "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+          "rootVe": 83769
+         }
+        },
+        "urlEndpoint": {
+         "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUZZTVljRl91YXNKb0t1d2pUT0FPQm5vNW44VnxBTl9pYzRjbjVtTHBfZTl5bkVHWEZscS1JUlEtTWpteXlxZUlKdHRRVXdnQlNSV1dQWkdweGtpVldmbmJkMVBYR2hlRVY0WU1ZSmkxUjIyRzFMZEFFeHk1LXJqUzVUTUhYSGc0&q=http%3A%2F%2Fwww.aljazeera.com%2F&v=gCNeDWCI0vo",
+         "target": "TARGET_NEW_WINDOW",
+         "nofollow": true
+        }
+       }
+      },
+      {
+       "text": "\nCheck out our Instagram page: "
+      },
+      {
+       "text": "https://www.instagram.com/aljazeeraen...",
+       "navigationEndpoint": {
+        "clickTrackingParams": "SPqlo4TWwdeRgAE=",
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUZZTVljRld4aFJoMktrblFWemlfbkhKS1MzZnxBTl9pYzRjZl95TDlCd1I4cVNhc0l5eUx2Z1d3SWpXNVdvdWVtV3NPX3VVTGNqUTdNd0F2Z3hCWGtiSkZrTEQ3bTg5Mks5ak1sTExXNnR3bXlVOThMVDVmeEFDOWhnb09MdzNE&q=https%3A%2F%2Fwww.instagram.com%2Faljazeeraenglish%2F&v=gCNeDWCI0vo",
+          "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+          "rootVe": 83769
+         }
+        },
+        "urlEndpoint": {
+         "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUZZTVljRld4aFJoMktrblFWemlfbkhKS1MzZnxBTl9pYzRjZl95TDlCd1I4cVNhc0l5eUx2Z1d3SWpXNVdvdWVtV3NPX3VVTGNqUTdNd0F2Z3hCWGtiSkZrTEQ3bTg5Mks5ak1sTExXNnR3bXlVOThMVDVmeEFDOWhnb09MdzNE&q=https%3A%2F%2Fwww.instagram.com%2Faljazeeraenglish%2F&v=gCNeDWCI0vo",
+         "target": "TARGET_NEW_WINDOW",
+         "nofollow": true
+        }
+       }
+      },
+      {
+       "text": "\nDownload AJE Mobile App: "
+      },
+      {
+       "text": "https://aje.io/AJEMobile",
+       "navigationEndpoint": {
+        "clickTrackingParams": "SPqlo4TWwdeRgAE=",
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUZZTVljRXJtZER0Smk3SVN1bDFucy1zejdyMHxBTl9pYzRjWWFDVG83VHZIOWl5cDc1b09Hak1iWWlVb0FUUWN3WXFOWld3Q1BEbzZjWnRXXzlEWkNtMk1xOGJqUnN2a2NyRDk4SkpfN2pDam9LQ0hYdUt2UmpENTFoY2I0Q0tD&q=https%3A%2F%2Faje.io%2FAJEMobile&v=gCNeDWCI0vo",
+          "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+          "rootVe": 83769
+         }
+        },
+        "urlEndpoint": {
+         "url": "https://www.youtube.com/redirect?event=video_description&redir_token=QUZZTVljRXJtZER0Smk3SVN1bDFucy1zejdyMHxBTl9pYzRjWWFDVG83VHZIOWl5cDc1b09Hak1iWWlVb0FUUWN3WXFOWld3Q1BEbzZjWnRXXzlEWkNtMk1xOGJqUnN2a2NyRDk4SkpfN2pDam9LQ0hYdUt2UmpENTFoY2I0Q0tD&q=https%3A%2F%2Faje.io%2FAJEMobile&v=gCNeDWCI0vo",
+         "target": "TARGET_NEW_WINDOW",
+         "nofollow": true
+        }
+       }
+      },
+      {
+       "text": "\n\n"
+      },
+      {
+       "text": "#aljazeeraenglish",
+       "navigationEndpoint": {
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "url": "/hashtag/aljazeeraenglish",
+          "webPageType": "WEB_PAGE_TYPE_BROWSE",
+          "rootVe": 6827,
+          "apiUrl": "/youtubei/v1/browse"
+         }
+        },
+        "browseEndpoint": {
+         "browseId": "FEhashtag",
+         "params": "6gUUChBhbGphemVlcmFlbmdsaXNoGAE%3D"
+        }
+       },
+       "loggingDirectives": {}
+      },
+      {
+       "text": " "
+      },
+      {
+       "text": "#BreakingNews",
+       "navigationEndpoint": {
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "url": "/hashtag/breakingnews",
+          "webPageType": "WEB_PAGE_TYPE_BROWSE",
+          "rootVe": 6827,
+          "apiUrl": "/youtubei/v1/browse"
+         }
+        },
+        "browseEndpoint": {
+         "browseId": "FEhashtag",
+         "params": "6gUQCgxicmVha2luZ25ld3MYAQ%3D%3D"
+        }
+       },
+       "loggingDirectives": {}
+      },
+      {
+       "text": " "
+      },
+      {
+       "text": "#aljazeeralivenews",
+       "navigationEndpoint": {
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "url": "/hashtag/aljazeeralivenews",
+          "webPageType": "WEB_PAGE_TYPE_BROWSE",
+          "rootVe": 6827,
+          "apiUrl": "/youtubei/v1/browse"
+         }
+        },
+        "browseEndpoint": {
+         "browseId": "FEhashtag",
+         "params": "6gUVChFhbGphemVlcmFsaXZlbmV3cxgB"
+        }
+       },
+       "loggingDirectives": {}
+      },
+      {
+       "text": " "
+      },
+      {
+       "text": "#aljazeeraenglish",
+       "navigationEndpoint": {
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "url": "/hashtag/aljazeeraenglish",
+          "webPageType": "WEB_PAGE_TYPE_BROWSE",
+          "rootVe": 6827,
+          "apiUrl": "/youtubei/v1/browse"
+         }
+        },
+        "browseEndpoint": {
+         "browseId": "FEhashtag",
+         "params": "6gUUChBhbGphemVlcmFlbmdsaXNoGAE%3D"
+        }
+       },
+       "loggingDirectives": {}
+      },
+      {
+       "text": "   "
+      },
+      {
+       "text": "#newsfeed",
+       "navigationEndpoint": {
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "url": "/hashtag/newsfeed",
+          "webPageType": "WEB_PAGE_TYPE_BROWSE",
+          "rootVe": 6827,
+          "apiUrl": "/youtubei/v1/browse"
+         }
+        },
+        "browseEndpoint": {
+         "browseId": "FEhashtag",
+         "params": "6gUMCghuZXdzZmVlZBgB"
+        }
+       },
+       "loggingDirectives": {}
+      },
+      {
+       "text": " "
+      },
+      {
+       "text": "#news",
+       "navigationEndpoint": {
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "url": "/hashtag/news",
+          "webPageType": "WEB_PAGE_TYPE_BROWSE",
+          "rootVe": 6827,
+          "apiUrl": "/youtubei/v1/browse"
+         }
+        },
+        "browseEndpoint": {
+         "browseId": "FEhashtag",
+         "params": "6gUICgRuZXdzGAE%3D"
+        }
+       },
+       "loggingDirectives": {}
+      },
+      {
+       "text": " "
+      },
+      {
+       "text": "#aljazera",
+       "navigationEndpoint": {
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "url": "/hashtag/aljazera",
+          "webPageType": "WEB_PAGE_TYPE_BROWSE",
+          "rootVe": 6827,
+          "apiUrl": "/youtubei/v1/browse"
+         }
+        },
+        "browseEndpoint": {
+         "browseId": "FEhashtag",
+         "params": "6gUMCghhbGphemVyYRgB"
+        }
+       },
+       "loggingDirectives": {}
+      },
+      {
+       "text": " "
+      },
+      {
+       "text": "#latestnews",
+       "navigationEndpoint": {
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "url": "/hashtag/latestnews",
+          "webPageType": "WEB_PAGE_TYPE_BROWSE",
+          "rootVe": 6827,
+          "apiUrl": "/youtubei/v1/browse"
+         }
+        },
+        "browseEndpoint": {
+         "browseId": "FEhashtag",
+         "params": "6gUOCgpsYXRlc3RuZXdzGAE%3D"
+        }
+       },
+       "loggingDirectives": {}
+      },
+      {
+       "text": " "
+      },
+      {
+       "text": "#BreakingNews",
+       "navigationEndpoint": {
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "url": "/hashtag/breakingnews",
+          "webPageType": "WEB_PAGE_TYPE_BROWSE",
+          "rootVe": 6827,
+          "apiUrl": "/youtubei/v1/browse"
+         }
+        },
+        "browseEndpoint": {
+         "browseId": "FEhashtag",
+         "params": "6gUQCgxicmVha2luZ25ld3MYAQ%3D%3D"
+        }
+       },
+       "loggingDirectives": {}
+      },
+      {
+       "text": " "
+      },
+      {
+       "text": "#news",
+       "navigationEndpoint": {
+        "commandMetadata": {
+         "webCommandMetadata": {
+          "url": "/hashtag/news",
+          "webPageType": "WEB_PAGE_TYPE_BROWSE",
+          "rootVe": 6827,
+          "apiUrl": "/youtubei/v1/browse"
+         }
+        },
+        "browseEndpoint": {
+         "browseId": "FEhashtag",
+         "params": "6gUICgRuZXdzGAE%3D"
+        }
+       },
+       "loggingDirectives": {}
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "frameworkUpdates": {
+  "entityBatchUpdate": {
+   "mutations": [
+    {
+     "entityKey": "EgtnQ05lRFdDSTB2byC9AygB",
+     "type": "ENTITY_MUTATION_TYPE_REPLACE",
+     "payload": {
+      "likeCountEntity": {
+       "key": "EgtnQ05lRFdDSTB2byC9AygB",
+       "likeCountIfLiked": {
+        "content": "768K"
+       },
+       "likeCountIfDisliked": {
+        "content": "768K"
+       },
+       "likeCountIfIndifferent": {
+        "content": "768K"
+       },
+       "expandedLikeCountIfLiked": {
+        "content": "768,654"
+       },
+       "expandedLikeCountIfDisliked": {
+        "content": "768,653"
+       },
+       "expandedLikeCountIfIndifferent": {
+        "content": "768,653"
+       },
+       "likeCountLabel": {
+        "content": "Likes"
+       },
+       "likeButtonA11yText": {
+        "content": "like this video along with 768,653 other people"
+       },
+       "likeCountIfLikedNumber": "768654",
+       "likeCountIfDislikedNumber": "768653",
+       "likeCountIfIndifferentNumber": "768653",
+       "shouldExpandLikeCount": false,
+       "sentimentFactoidA11yTextIfLiked": {
+        "content": "768,654 likes"
+       },
+       "sentimentFactoidA11yTextIfDisliked": {
+        "content": "768,653 likes"
+       }
+      }
+     }
+    }
+   ],
+   "timestamp": {
+    "seconds": "1790656553",
+    "nanos": 51299760
+   }
+  }
+ }
+}
