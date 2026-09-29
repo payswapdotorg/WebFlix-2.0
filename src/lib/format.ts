@@ -1,5 +1,5 @@
 /**
- * Pure display formatters — ZTube style. All functions are pure and testable
+ * Pure display formatters — WebFlix style. All functions are pure and testable
  * (optional `now` parameter for deterministic tests).
  */
 

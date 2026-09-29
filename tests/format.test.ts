@@ -43,7 +43,7 @@ describe("compact view counts (formatCount / formatViews)", () => {
     expect(formatCount(89_412)).toBe("89.4K");
     expect(formatCount(2000)).toBe("2K");
   });
-  test("millions → M (ZTube style 12.8M)", () => {
+  test("millions → M (WebFlix style 12.8M)", () => {
     expect(formatCount(12_845_390)).toBe("12.8M");
     expect(formatCount(8_237_604)).toBe("8.2M");
     expect(formatViews(12_845_390)).toBe("12.8M views");
@@ -80,7 +80,7 @@ describe("relative date (formatRelativeDate)", () => {
     expect(formatRelativeDate(days(7), NOW)).toBe("1 week ago");
     expect(formatRelativeDate(days(20), NOW)).toBe("2 weeks ago");
   });
-  test("months (ZTube: 3 months ago)", () => {
+  test("months (WebFlix: 3 months ago)", () => {
     expect(formatRelativeDate(days(92), NOW)).toBe("3 months ago");
     expect(formatRelativeDate(days(30), NOW)).toBe("1 month ago");
   });

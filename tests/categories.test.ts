@@ -40,8 +40,8 @@ function fakeVideo(overrides: Partial<VideoDTO>): VideoDTO {
   };
 }
 
-describe("home chips (All + the 14 ZTube categories)", () => {
-  test("chips row = All + 14 categories, ZTube order", () => {
+describe("home chips (All + the 14 WebFlix categories)", () => {
+  test("chips row = All + 14 categories, WebFlix order", () => {
     expect(HOME_CHIPS).toEqual([
       "All",
       "Music",

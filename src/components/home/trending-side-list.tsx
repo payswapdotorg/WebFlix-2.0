@@ -5,7 +5,7 @@ import { formatViews, formatRelativeDate } from "@/lib/format";
 import { VerifiedBadge } from "@/components/app/verified-badge";
 import type { VideoDTO } from "@/lib/types";
 
-/** Compact "Trending now" list beside the hero (ZTube right rail). */
+/** Compact "Trending now" list beside the hero (WebFlix right rail). */
 export function TrendingSideList({ videos }: { videos: VideoDTO[] }) {
   if (videos.length === 0) return null;
   return (

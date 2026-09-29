@@ -1,6 +1,6 @@
 # WebFlix 2.0
 
-A complete YouTube clone. **Interface baseline: ZTube** (the deployed reference at https://d1ezj447xe91-deploy.space-z.ai/). **Functionality: cloned feature-for-feature from youtube.com** — every feature visible on the interface gets its complete real-YouTube behavior plus a complete backend.
+A complete YouTube clone. **Interface baseline: WebFlix** (the deployed reference at https://d1ezj447xe91-deploy.space-z.ai/). **Functionality: cloned feature-for-feature from youtube.com** — every feature visible on the interface gets its complete real-YouTube behavior plus a complete backend.
 
 ## Stack (binding)
 
@@ -20,7 +20,7 @@ Workers: one lane = one branch = one relay bundle (git bundle + evidence + RELAY
 
 ## Feature inventory (the interface contract)
 
-From the ZTube reference (sidebar + topbar + views):
+From the WebFlix reference (sidebar + topbar + views):
 
 1. App shell — collapsible sidebar; topbar (search, voice search, upload, trending, notifications bell, theme toggle, account menu); category chips
 2. Home feed — trending hero #1, Trending now rail, Continue watching, Because-you-watched, Shorts shelf, Recommended grid, infinite scroll, hover previews

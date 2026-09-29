@@ -13,7 +13,7 @@ import { HOME_CHIPS, normalizeCategory } from "@/lib/categories";
 import type { TrendingPageDTO } from "@/lib/types";
 
 /**
- * Trending — the ranked list (views desc) with category chips (ZTube tabs).
+ * Trending — the ranked list (views desc) with category chips (WebFlix tabs).
  * Full tabs + windows arrive with WFX2-D (Wave 3).
  */
 export default function TrendingPage() {

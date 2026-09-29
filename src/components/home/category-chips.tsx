@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
-/** ZTube chips row — All + the 14 categories, filters the feed via query param. */
+/** WebFlix chips row — All + the 14 categories, filters the feed via query param. */
 export function CategoryChips({
   chips,
   active,

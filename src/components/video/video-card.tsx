@@ -38,7 +38,7 @@ type VideoCardProps = {
   className?: string;
 };
 
-/** ZTube video card: thumbnail + duration badge, 2-line title, meta, kebab. */
+/** WebFlix video card: thumbnail + duration badge, 2-line title, meta, kebab. */
 export function VideoCard({ video, progress, variant = "grid", className }: VideoCardProps) {
   const [hidden, setHidden] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);

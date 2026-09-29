@@ -1,4 +1,4 @@
-import { ZTubeLogo } from "./logo";
+import { WebFlixLogo } from "./logo";
 
 const FOOTER_LINKS = [
   "About",
@@ -21,8 +21,8 @@ export function SiteFooter() {
   return (
     <footer className="mt-auto border-t border-border/60 bg-background px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 text-muted-foreground sm:px-6">
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
-        <ZTubeLogo showWord={false} className="translate-y-[2px]" />
-        <span className="font-medium text-foreground/80">ZTube</span>
+        <WebFlixLogo showWord={false} className="translate-y-[2px]" />
+        <span className="font-medium text-foreground/80">WebFlix</span>
         <span className="text-muted-foreground/80">— a YouTube-clone interface by WebFlix 2.0</span>
       </div>
       <nav aria-label="Footer" className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[13px]">
@@ -33,7 +33,7 @@ export function SiteFooter() {
         ))}
       </nav>
       <p className="mt-3 text-xs text-muted-foreground/70">
-        © 2026 WebFlix 2.0 · demo data from SQLite · interface baseline: ZTube
+        © 2026 WebFlix 2.0 · demo data from SQLite · interface baseline: WebFlix
       </p>
     </footer>
   );

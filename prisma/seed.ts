@@ -1,5 +1,5 @@
 /**
- * WebFlix 2.0 seed — ZTube-style demo dataset.
+ * WebFlix 2.0 seed — WebFlix-style demo dataset.
  * Run: bun prisma/seed.ts   (or: bun run db:seed)
  *
  * Media: real playable mp4s from Google's public demo bucket +

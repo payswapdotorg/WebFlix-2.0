@@ -28,7 +28,7 @@ function videoInclude() {
 }
 
 /**
- * The full home payload (ZTube layout): hero, trending rail, continue
+ * The full home payload (WebFlix layout): hero, trending rail, continue
  * watching, because-you-watched, shorts shelf, recommended grid + cursor.
  * With a category set, every rail is filtered to that category.
  */
@@ -51,7 +51,7 @@ export async function getHomeFeed(rawCategory: string | null): Promise<HomeFeedD
 
   // ---- hero: trending #1 by views in the last 120-day window -------------
   // (category mode has no hero — chips swap the feed to a flat grid, the
-  // ZTube/YouTube chip pattern)
+  // WebFlix/YouTube chip pattern)
   const heroCandidates = filtered
     ? []
     : await db.video.findMany({

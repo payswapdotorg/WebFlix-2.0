@@ -5,7 +5,7 @@ import { SquarePlay } from "lucide-react";
 import { formatViews } from "@/lib/format";
 import type { VideoDTO } from "@/lib/types";
 
-/** Shorts shelf — vertical cards in a horizontal rail (ZTube pattern). */
+/** Shorts shelf — vertical cards in a horizontal rail (WebFlix pattern). */
 export function ShortsShelf({ shorts }: { shorts: VideoDTO[] }) {
   if (shorts.length === 0) return null;
   return (

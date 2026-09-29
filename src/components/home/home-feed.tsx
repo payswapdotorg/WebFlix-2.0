@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { normalizeCategory } from "@/lib/categories";
 import type { HomeFeedDTO } from "@/lib/types";
 
-/** The ZTube home feed — every rail comes from GET /api/home (real DB). */
+/** The WebFlix home feed — every rail comes from GET /api/home (real DB). */
 export function HomeFeed() {
   const params = useSearchParams();
   const category = normalizeCategory(params.get("category"));

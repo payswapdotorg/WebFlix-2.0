@@ -45,7 +45,7 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* Light theme — YouTube/ZTube light */
+/* Light theme — YouTube/WebFlix light */
 :root {
   --radius: 0.75rem;
   --background: #ffffff;
@@ -84,7 +84,7 @@
   --yt-badge: rgba(0, 0, 0, 0.8);
 }
 
-/* Dark theme (ZTube default) — measured from the reference */
+/* Dark theme (WebFlix default) — measured from the reference */
 .dark {
   --background: #0f0f0f;
   --foreground: #f1f1f1;
@@ -134,7 +134,7 @@
   }
 }
 
-/* Horizontal rails + chips: hide the scrollbar (ZTube pattern) */
+/* Horizontal rails + chips: hide the scrollbar (WebFlix pattern) */
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { formatViews, formatRelativeDate } from "@/lib/format";
 import type { VideoDTO } from "@/lib/types";
 
-/** Trending #1 hero — big card with gradient scrim + red pill (ZTube pattern). */
+/** Trending #1 hero — big card with gradient scrim + red pill (WebFlix pattern). */
 export function HeroCard({ video }: { video: VideoDTO }) {
   return (
     <section aria-label="Trending #1" className="px-4 pt-1 sm:px-6">

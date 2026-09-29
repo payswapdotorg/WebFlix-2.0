@@ -5,11 +5,11 @@ import { Toaster } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
   title: {
-    default: "ZTube — Watch & Share Videos",
-    template: "%s · ZTube",
+    default: "WebFlix — Watch & Share Videos",
+    template: "%s · WebFlix",
   },
   description:
-    "ZTube — a complete video platform: home feed, shorts, trending, subscriptions, watch, upload and creator studio. WebFlix 2.0.",
+    "WebFlix — a complete video platform: home feed, shorts, trending, subscriptions, watch, upload and creator studio. WebFlix 2.0.",
   icons: {
     icon: "/favicon.svg",
   },

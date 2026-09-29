@@ -1,7 +1,7 @@
 import type { VideoDTO } from "./types";
 
 /**
- * The 14 explore categories from the ZTube reference sidebar,
+ * The 14 explore categories from the WebFlix reference sidebar,
  * plus "All" for the home chips row.
  */
 export const CATEGORY_ICONS: Record<string, string> = {
@@ -25,7 +25,7 @@ export const CATEGORIES = Object.keys(CATEGORY_ICONS);
 
 export const ALL_CHIP = "All";
 
-/** Chips row: All + the 14 categories (ZTube order). */
+/** Chips row: All + the 14 categories (WebFlix order). */
 export const HOME_CHIPS: string[] = [ALL_CHIP, ...CATEGORIES];
 
 export function isCategory(value: string | null | undefined): value is string {

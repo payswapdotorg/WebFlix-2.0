@@ -5,7 +5,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
 /**
- * Sidebar collapse state (persisted to localStorage — ZTube remembers it).
+ * Sidebar collapse state (persisted to localStorage — WebFlix remembers it).
  * `createSidebarStore(storage)` factory is used by the tests to verify
  * persistence without a DOM.
  */

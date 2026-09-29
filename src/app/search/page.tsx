@@ -43,8 +43,8 @@ function SearchContent() {
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Search ZTube"
-            aria-label="Search ZTube"
+            placeholder="Search WebFlix"
+            aria-label="Search WebFlix"
             className="rounded-full pl-10"
             autoFocus
           />
@@ -66,7 +66,7 @@ function SearchContent() {
 
       {!q && (
         <div className="px-4 py-16 text-center sm:px-6">
-          <p className="text-lg font-medium">Search ZTube</p>
+          <p className="text-lg font-medium">Search WebFlix</p>
           <p className="mt-1 text-sm text-muted-foreground">
             Find videos and channels — try “blender”, “elden ring” or “travel”.
           </p>

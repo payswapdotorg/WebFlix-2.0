@@ -7,7 +7,7 @@ import { Flame, Menu, Mic, Search, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { ZTubeLogo } from "./logo";
+import { WebFlixLogo } from "./logo";
 import { ThemeToggle } from "./theme-toggle";
 import { NotificationsBell } from "./notifications-bell";
 import { AccountMenu } from "./account-menu";
@@ -65,8 +65,8 @@ export function Topbar() {
         >
           <Menu className="size-5" />
         </Button>
-        <Link href="/" aria-label="ZTube Home" className="px-1">
-          <ZTubeLogo />
+        <Link href="/" aria-label="WebFlix Home" className="px-1">
+          <WebFlixLogo />
         </Link>
       </div>
 

@@ -1,9 +1,9 @@
 import { cn } from "@/lib/utils";
 
-/** ZTube logo — red play mark + wordmark (matches the reference). */
-export function ZTubeLogo({ className, showWord = true }: { className?: string; showWord?: boolean }) {
+/** WebFlix logo — red play mark + wordmark (matches the reference). */
+export function WebFlixLogo({ className, showWord = true }: { className?: string; showWord?: boolean }) {
   return (
-    <span className={cn("flex select-none items-center gap-1", className)} aria-label="ZTube Home">
+    <span className={cn("flex select-none items-center gap-1", className)} aria-label="WebFlix Home">
       <svg
         viewBox="0 0 28 20"
         className="h-[20px] w-[28px] shrink-0"
@@ -14,7 +14,7 @@ export function ZTubeLogo({ className, showWord = true }: { className?: string; 
         <path d="M11 6.2 11 13.8 17.5 10Z" fill="#fff" />
       </svg>
       {showWord && (
-        <span className="text-lg font-bold tracking-tight text-foreground">ZTube</span>
+        <span className="text-lg font-bold tracking-tight text-foreground">WebFlix</span>
       )}
     </span>
   );

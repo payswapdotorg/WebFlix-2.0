@@ -9,7 +9,7 @@ import { useSidebar } from "@/lib/sidebar-store";
 import { VideoHoverPreviewLayer } from "@/components/video/video-hover-preview";
 
 /**
- * ZTube app shell: fixed topbar, collapsible sidebar, scrollable main column.
+ * WebFlix app shell: fixed topbar, collapsible sidebar, scrollable main column.
  * The site footer sticks to the bottom of the main scroll container — it sits
  * at the viewport bottom on short pages and is pushed down naturally on long
  * ones (the sticky-footer law).

@@ -46,7 +46,7 @@ export function toContinueVideoDTO(
   return { ...toVideoDTO(v), watchedSec, watchedAt: watchedAt.toISOString() };
 }
 
-/** Continue-watching rule: >30s watched and not nearly finished (ZTube/YouTube rule). */
+/** Continue-watching rule: >30s watched and not nearly finished (WebFlix/YouTube rule). */
 export function isUnfinishedWatch(watchedSec: number, durationSec: number): boolean {
   if (watchedSec <= 0 || durationSec <= 0) return false;
   return watchedSec > 30 && watchedSec < Math.max(31, durationSec - 5);

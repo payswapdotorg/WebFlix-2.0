@@ -61,7 +61,7 @@ const YOU_NAV: NavItem[] = [
 
 const MORE_NAV: { label: string; icon: LucideIcon; toast: string }[] = [
   { label: "Settings", icon: Settings, toast: "Settings ships in Wave 4 (WFX2-P)" },
-  { label: "ZTube Premium", icon: Crown, toast: "ZTube Premium ships in Wave 4 (WFX2-P)" },
+  { label: "WebFlix Premium", icon: Crown, toast: "WebFlix Premium ships in Wave 4 (WFX2-P)" },
   { label: "Report history", icon: Flag, toast: "Report history ships in Wave 4 (WFX2-P)" },
   { label: "Help", icon: HelpCircle, toast: "Help ships in Wave 4 (WFX2-P)" },
   { label: "Send feedback", icon: MessageSquarePlus, toast: "Feedback ships in Wave 4 (WFX2-P)" },
@@ -209,7 +209,7 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
       })}
 
       <Divider />
-      <SectionHeader>More from ZTube</SectionHeader>
+      <SectionHeader>More from WebFlix</SectionHeader>
       {MORE_NAV.map((item) => {
         const Icon = item.icon;
         return (

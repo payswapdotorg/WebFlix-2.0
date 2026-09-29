@@ -11,7 +11,7 @@ import type { ContinueVideoDTO, HomeFeedDTO, VideoDTO, VideoPageDTO } from "@/li
  * the seeded SQLite database (bun test boots the same Prisma client).
  */
 describe("GET /api/home — shape (every rail present + typed)", () => {
-  test("responds 200 with every ZTube rail in the payload", async () => {
+  test("responds 200 with every WebFlix rail in the payload", async () => {
     const res = await getHome(new Request("http://localhost/api/home"));
     expect(res.status).toBe(200);
     const feed = (await res.json()) as HomeFeedDTO;
