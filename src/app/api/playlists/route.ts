@@ -1,12 +1,13 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getDemoUser } from "@/lib/session";
+import { resolveViewer } from "@/lib/watch/session";
+import { listPlaylists, createPlaylist } from "@/lib/watch/playlist-service";
 import { toVideoDTO } from "@/lib/dto";
-import { z } from "zod";
 import type { PlaylistDTO } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
+/** Boot-lane page shape: the full playlists tree with videos, ordered. */
 async function loadPlaylists(userId: string): Promise<PlaylistDTO[]> {
   const playlists = await db.playlist.findMany({
     where: { userId },
@@ -27,35 +28,45 @@ async function loadPlaylists(userId: string): Promise<PlaylistDTO[]> {
   }));
 }
 
-export async function GET() {
+/**
+ * GET /api/playlists — two shapes, one route:
+ *  - no query: the playlists page's bare array (boot lane)
+ *  - ?videoId=: the Save dialog's { playlists } with containsVideo flags (watch lane)
+ */
+export async function GET(req: NextRequest) {
   try {
-    const user = await getDemoUser();
-    return NextResponse.json(await loadPlaylists(user.id));
+    const viewer = await resolveViewer(req.headers);
+    const videoId = new URL(req.url).searchParams.get("videoId");
+    if (videoId) {
+      const playlists = await listPlaylists(videoId, viewer.id);
+      return NextResponse.json({ playlists });
+    }
+    return NextResponse.json(await loadPlaylists(viewer.id));
   } catch (err) {
     console.error("GET /api/playlists failed", err);
     return NextResponse.json({ error: "Failed to load playlists" }, { status: 500 });
   }
 }
 
-const createSchema = z.object({
-  title: z.string().trim().min(1).max(100),
-  visibility: z.enum(["public", "unlisted", "private"]).default("private"),
-});
-
-/** POST /api/playlists { title, visibility } — create a new playlist. */
-export async function POST(req: Request) {
+/**
+ * POST /api/playlists { name, visibility } — create from the Save dialog
+ * (watch-lane service: reserved-name + duplicate validation). The playlists
+ * page uses the same endpoint and reloads its list after.
+ */
+export async function POST(req: NextRequest) {
   try {
-    const parsed = createSchema.safeParse(await req.json());
-    if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.issues[0]?.message }, { status: 400 });
+    const viewer = await resolveViewer(req.headers);
+    const body = (await req.json()) as { name?: string; title?: string; visibility?: string };
+    const name = (body.name ?? body.title ?? "").trim();
+    if (!name) {
+      return NextResponse.json({ error: "Playlist name cannot be empty" }, { status: 400 });
     }
-    const user = await getDemoUser();
-    await db.playlist.create({
-      data: { userId: user.id, title: parsed.data.title, visibility: parsed.data.visibility },
-    });
-    return NextResponse.json(await loadPlaylists(user.id), { status: 201 });
+    const playlist = await createPlaylist(viewer.id, name, body.visibility ?? "private");
+    return NextResponse.json({ playlist }, { status: 201 });
   } catch (err) {
+    const status = (err as { status?: number }).status ?? 500;
+    const message = err instanceof Error ? err.message : "Failed to create playlist";
     console.error("POST /api/playlists failed", err);
-    return NextResponse.json({ error: "Failed to create playlist" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status });
   }
 }

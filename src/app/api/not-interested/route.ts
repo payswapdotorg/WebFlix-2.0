@@ -20,10 +20,10 @@ export async function POST(req: Request) {
     if (!video) {
       return NextResponse.json({ error: "Video not found" }, { status: 404 });
     }
-    await db.notInterested.upsert({
-      where: { userId_videoId: { userId: user.id, videoId } },
-      update: { createdAt: new Date() },
-      create: { userId: user.id, videoId },
+    await db.videoSignal.upsert({
+      where: { videoId_userId: { videoId, userId: user.id } },
+      update: { kind: "not_interested" },
+      create: { videoId, userId: user.id, kind: "not_interested" },
     });
     return NextResponse.json({ hidden: true });
   } catch (err) {

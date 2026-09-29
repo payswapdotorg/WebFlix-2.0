@@ -41,7 +41,7 @@ export async function getHomeFeed(rawCategory: string | null): Promise<HomeFeedD
     include: { subscriptions: true },
   });
   const notInterestedIds = user
-    ? (await db.notInterested.findMany({ where: { userId: user.id } })).map((n) => n.videoId)
+    ? (await db.videoSignal.findMany({ where: { userId: user.id, kind: "not_interested" } })).map((n) => n.videoId)
     : [];
 
   const baseWhere = {

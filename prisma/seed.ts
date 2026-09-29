@@ -9,7 +9,23 @@ import { PrismaClient } from "@prisma/client";
 
 const db = new PrismaClient();
 
-const GTV = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample";
+// Verified playable public sources (the gtv-videos-bucket is 403-ACL-locked since
+// 2026-09-28 — durations below are ffprobe-verified; see evidence/wfx2w/SCHEMA-MERGE.md).
+const MEDIA = {
+  bunny: "https://media.w3.org/2010/05/bunny/movie.mp4", // 596s — full film
+  ed: "https://download.blender.org/ED/elephantsdream-720-h264-st-aac.mov", // 658s — full film
+  sintelTrailer: "https://download.blender.org/durian/trailer/sintel_trailer-720p.mp4", // 52s
+  reel2013: "https://download.blender.org/demo/movies/Blender_reel_2013.mov", // 200s
+  cycles: "https://download.blender.org/demo/movies/Cycles_Demoreel_2015.mov", // 85s
+  peach: "https://download.blender.org/peach/trailer/trailer_iphone.m4v", // 33s
+  oceans: "https://vjs.zencdn.net/v/oceans.mp4", // 47s
+  flower: "https://mdn.github.io/shared-assets/videos/flower.mp4", // 5s
+  jelly1: "https://test-videos.co.uk/vids/jellyfish/mp4/h264/720/Jellyfish_720_10s_1MB.mp4", // 10s
+  jelly5: "https://test-videos.co.uk/vids/jellyfish/mp4/h264/720/Jellyfish_720_10s_5MB.mp4", // 10s
+  bbb10: "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_5MB.mp4", // 10s
+  bbb1080: "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_5MB.mp4", // 10s
+  sintel10: "https://test-videos.co.uk/vids/sintel/mp4/h264/360/Sintel_360_10s_1MB.mp4", // 10s
+} as const;
 const pic = (seed: string, w: number, h: number) =>
   `https://picsum.photos/seed/${seed}/${w}/${h}`;
 
@@ -39,7 +55,7 @@ type SeededVideo = {
 
 async function main() {
   // ---- wipe (FK-safe order) -----------------------------------------------
-  await db.notInterested.deleteMany();
+  await db.videoSignal.deleteMany();
   await db.thumbnailTest.deleteMany()
   await db.liveChatMessage.deleteMany()
   await db.membership.deleteMany()
@@ -172,7 +188,7 @@ async function main() {
       likes: 892_000,
       dislikes: 4_100,
       durationSec: 596,
-      mp4: `${GTV}/BigBuckBunny.mp4`,
+      mp4: MEDIA.bunny,
       createdAt: daysAgo(92),
       description:
         "A giant rabbit with a heart bigger than himself follows three rodents to their comeuppance. The classic Blender open movie, remastered in 4K.\n\nChapters:\n00:00 Intro\n00:45 Meet Big Buck Bunny\n08:00 The rodent gang\n11:00 Revenge",
@@ -186,38 +202,38 @@ async function main() {
       views: 8_237_604,
       likes: 511_000,
       dislikes: 3_200,
-      durationSec: 653,
-      mp4: `${GTV}/ElephantsDream.mp4`,
+      durationSec: 658,
+      mp4: MEDIA.ed,
       createdAt: daysAgo(245),
       description: "Emo and Proog wander a surreal machine world. The world's first open movie, remastered.",
     },
     {
       key: "sintel",
       slug: "sintel-short-film",
-      title: "Sintel — Fantasy Short Film (Full)",
+      title: "Sintel — Official Trailer (Blender Foundation)",
       channel: pixel.handle,
       category: "Education",
       views: 6_412_300,
       likes: 398_000,
       dislikes: 2_100,
-      durationSec: 888,
-      mp4: `${GTV}/Sintel.mp4`,
+      durationSec: 52,
+      mp4: MEDIA.sintelTrailer,
       createdAt: daysAgo(365),
-      description: "A lonely girl searches for the dragon she once befriended. Blender Foundation's third open movie.",
+      description: "A lonely girl searches for the dragon she once befriended — the official trailer for Blender Foundation's third open movie.",
     },
     {
       key: "tears",
       slug: "tears-of-steel-vfx",
-      title: "Tears of Steel — Sci-Fi Short Film (Hollywood VFX)",
+      title: "Blender Studio — 2013 Showreel (Tears of Steel VFX)",
       channel: pixel.handle,
       category: "Tech",
       views: 5_120_488,
       likes: 341_000,
       dislikes: 1_800,
-      durationSec: 734,
-      mp4: `${GTV}/TearsOfSteel.mp4`,
+      durationSec: 200,
+      mp4: MEDIA.reel2013,
       createdAt: daysAgo(152),
-      description: "Sci-fi live-action VFX: a group of warriors and scientists gather at the Oude Kerk to stop a robot uprising.",
+      description: "The Blender Institute 2013 showreel — visual-effects and animation highlights, featuring work from Tears of Steel.",
     },
     {
       key: "members-studio",
@@ -228,8 +244,8 @@ async function main() {
       views: 89_412,
       likes: 9_800,
       dislikes: 120,
-      durationSec: 653,
-      mp4: `${GTV}/ElephantsDream.mp4`,
+      durationSec: 658,
+      mp4: MEDIA.ed,
       createdAt: daysAgo(14),
       isMembersOnly: true,
       membersTier: "Studio Insider",
@@ -244,8 +260,8 @@ async function main() {
       views: 3_240_900,
       likes: 204_000,
       dislikes: 1_100,
-      durationSec: 594,
-      mp4: `${GTV}/SubaruOutbackOnStreetAndDirt.mp4`,
+      durationSec: 10,
+      mp4: MEDIA.jelly5,
       createdAt: daysAgo(120),
       description: "Ring road, black sand, glaciers and hidden hot springs — 14 days across Iceland in 4K.",
     },
@@ -259,7 +275,7 @@ async function main() {
       likes: 372_000,
       dislikes: 2_400,
       durationSec: 47,
-      mp4: `${GTV}/WeAreGoingOnBullrun.mp4`,
+      mp4: MEDIA.oceans,
       createdAt: daysAgo(180),
       description: "From standing sushi to taiyaki — 12 essential bites across Shibuya and Asakusa.",
     },
@@ -272,8 +288,8 @@ async function main() {
       views: 2_904_700,
       likes: 187_000,
       dislikes: 980,
-      durationSec: 594,
-      mp4: `${GTV}/SubaruOutbackOnStreetAndDirt.mp4`,
+      durationSec: 10,
+      mp4: MEDIA.jelly1,
       createdAt: daysAgo(45),
       description: "A 12-hour tonkotsu broth, noodles from scratch, and the chashu that ties it all together.",
     },
@@ -286,8 +302,8 @@ async function main() {
       views: 4_112_800,
       likes: 262_000,
       dislikes: 1_500,
-      durationSec: 132,
-      mp4: `${GTV}/WhatCarCanYouGetForAGrand.mp4`,
+      durationSec: 33,
+      mp4: MEDIA.peach,
       createdAt: daysAgo(70),
       description: "Mango sticky rice, boat noodles and the legendary pad thai lady of Ratchada night market.",
     },
@@ -300,8 +316,8 @@ async function main() {
       views: 11_230_600,
       likes: 610_000,
       dislikes: 12_000,
-      durationSec: 888,
-      mp4: `${GTV}/Sintel.mp4`,
+      durationSec: 10,
+      mp4: MEDIA.sintel10,
       createdAt: daysAgo(400),
       description: "Follow along, no equipment, no excuses. Warm-up, 7 rounds, cool-down.",
     },
@@ -314,8 +330,8 @@ async function main() {
       views: 9_634_000,
       likes: 528_000,
       dislikes: 3_300,
-      durationSec: 734,
-      mp4: `${GTV}/TearsOfSteel.mp4`,
+      durationSec: 200,
+      mp4: MEDIA.reel2013,
       createdAt: daysAgo(13),
       description: "No damage taken, no summons, pure reflexes. Strategy notes in the pinned comment.",
     },
@@ -328,8 +344,8 @@ async function main() {
       views: 4_204_700,
       likes: 288_000,
       dislikes: 4_100,
-      durationSec: 60,
-      mp4: `${GTV}/ForBiggerFun.mp4`,
+      durationSec: 10,
+      mp4: MEDIA.bbb1080,
       createdAt: daysAgo(31),
       description: "Frame-by-frame on the trailer: physics, wildlife, weather system and the new map.",
     },
@@ -342,8 +358,8 @@ async function main() {
       views: 1_532_800,
       likes: 96_400,
       dislikes: 870,
-      durationSec: 132,
-      mp4: `${GTV}/WhatCarCanYouGetForAGrand.mp4`,
+      durationSec: 10,
+      mp4: MEDIA.jelly5,
       createdAt: daysAgo(21),
       description: "New regulations, new engines, same chaos. We rank all 10 constructors.",
     },
@@ -356,8 +372,8 @@ async function main() {
       views: 4_412_600,
       likes: 301_000,
       dislikes: 1_200,
-      durationSec: 60,
-      mp4: `${GTV}/ForBiggerFun.mp4`,
+      durationSec: 10,
+      mp4: MEDIA.jelly1,
       createdAt: daysAgo(33),
       description: "Neon grids, analog warmth, one hour of retrowave. Track list in the description.",
     },
@@ -370,8 +386,8 @@ async function main() {
       views: 2_014_900,
       likes: 143_000,
       dislikes: 620,
-      durationSec: 653,
-      mp4: `${GTV}/ElephantsDream.mp4`,
+      durationSec: 658,
+      mp4: MEDIA.ed,
       createdAt: daysAgo(210),
       description: "Long-form ambient textures for deep work sessions.",
     },
@@ -384,8 +400,8 @@ async function main() {
       views: 7_730_400,
       likes: 445_000,
       dislikes: 8_800,
-      durationSec: 118,
-      mp4: `${GTV}/VolkswagenGTIReview.mp4`,
+      durationSec: 33,
+      mp4: MEDIA.peach,
       createdAt: daysAgo(7),
       description: "Cameras, thermals, battery and 3 years of updates — a fair fight, finally.",
     },
@@ -398,8 +414,8 @@ async function main() {
       views: 3_901_200,
       likes: 276_000,
       dislikes: 1_900,
-      durationSec: 118,
-      mp4: `${GTV}/VolkswagenGTIReview.mp4`,
+      durationSec: 33,
+      mp4: MEDIA.peach,
       createdAt: daysAgo(182),
       description: "RTX 6090, 64GB DDR6 and a case that hides cables like a magician.",
     },
@@ -412,8 +428,8 @@ async function main() {
       views: 1_823_400,
       likes: 141_000,
       dislikes: 720,
-      durationSec: 888,
-      mp4: `${GTV}/Sintel.mp4`,
+      durationSec: 10,
+      mp4: MEDIA.sintel10,
       createdAt: daysAgo(20),
       description: "Six months, 40k lines, one blog post everyone argued about. Numbers inside.",
     },
@@ -426,8 +442,8 @@ async function main() {
       views: 2_312_700,
       likes: 158_000,
       dislikes: 1_100,
-      durationSec: 47,
-      mp4: `${GTV}/WeAreGoingOnBullrun.mp4`,
+      durationSec: 10,
+      mp4: MEDIA.bbb10,
       createdAt: daysAgo(4),
       description: "All the model drops, the chips, the drama — 47 seconds per item, no fluff.",
     },
@@ -440,8 +456,8 @@ async function main() {
       views: 384_900,
       likes: 31_200,
       dislikes: 140,
-      durationSec: 594,
-      mp4: `${GTV}/SubaruOutbackOnStreetAndDirt.mp4`,
+      durationSec: 10,
+      mp4: MEDIA.jelly1,
       createdAt: daysAgo(5),
       description: "Deploying on Fridays, trunk-based development and the psychology of the green build.",
     },
@@ -454,8 +470,8 @@ async function main() {
       views: 14_208,
       likes: 2_914,
       dislikes: 41,
-      durationSec: 60,
-      mp4: `${GTV}/ForBiggerFun.mp4`,
+      durationSec: 47,
+      mp4: MEDIA.oceans,
       createdAt: daysAgo(1),
       isLive: true,
       premieredAt: hoursAgo(2),
@@ -471,8 +487,8 @@ async function main() {
       views: 2_904_100,
       likes: 240_000,
       dislikes: 900,
-      durationSec: 15,
-      mp4: `${GTV}/ForBiggerBlazes.mp4`,
+      durationSec: 10,
+      mp4: MEDIA.sintel10,
       createdAt: daysAgo(60),
       isShort: true,
     },
@@ -485,8 +501,8 @@ async function main() {
       views: 8_412_300,
       likes: 705_000,
       dislikes: 2_800,
-      durationSec: 15,
-      mp4: `${GTV}/ForBiggerBlazes.mp4`,
+      durationSec: 10,
+      mp4: MEDIA.jelly5,
       createdAt: daysAgo(9),
       isShort: true,
     },
@@ -499,8 +515,8 @@ async function main() {
       views: 5_230_700,
       likes: 431_000,
       dislikes: 1_300,
-      durationSec: 15,
-      mp4: `${GTV}/ForBiggerBlazes.mp4`,
+      durationSec: 10,
+      mp4: MEDIA.jelly1,
       createdAt: daysAgo(22),
       isShort: true,
     },
@@ -513,8 +529,8 @@ async function main() {
       views: 3_120_400,
       likes: 288_000,
       dislikes: 710,
-      durationSec: 60,
-      mp4: `${GTV}/ForBiggerFun.mp4`,
+      durationSec: 10,
+      mp4: MEDIA.jelly1,
       createdAt: daysAgo(14),
       isShort: true,
     },
@@ -527,8 +543,8 @@ async function main() {
       views: 1_204_800,
       likes: 112_000,
       dislikes: 240,
-      durationSec: 15,
-      mp4: `${GTV}/ForBiggerBlazes.mp4`,
+      durationSec: 10,
+      mp4: MEDIA.bbb1080,
       createdAt: daysAgo(4),
       isShort: true,
     },
@@ -541,8 +557,8 @@ async function main() {
       views: 6_014_200,
       likes: 542_000,
       dislikes: 1_600,
-      durationSec: 60,
-      mp4: `${GTV}/ForBiggerFun.mp4`,
+      durationSec: 10,
+      mp4: MEDIA.bbb10,
       createdAt: daysAgo(34),
       isShort: true,
     },
@@ -606,10 +622,10 @@ async function main() {
   const views: Array<[string, number, Date]> = [
     ["tokyo", 32, daysAgo(1)],      // unfinished → continue watching (most recent)
     ["bbb", 312, daysAgo(5)],       // unfinished → continue watching
-    ["sintel", 90, daysAgo(14)],    // unfinished → continue watching
+    ["sintel", 24, daysAgo(14)],    // unfinished → continue watching
     ["elden", 734, daysAgo(13)],    // finished
     ["gta6", 60, daysAgo(31)],      // finished
-    ["elephants", 653, daysAgo(21)],// finished
+    ["elephants", 658, daysAgo(21)],// finished
     ["tears", 734, daysAgo(60)],    // finished
     ["iceland", 594, daysAgo(120)], // finished
     ["hiit", 888, daysAgo(400)],    // finished

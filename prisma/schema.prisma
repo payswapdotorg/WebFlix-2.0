@@ -1,7 +1,11 @@
-// WebFlix 2.0 — full domain schema (boot lane WFX2-B).
-// Designed for the whole roadmap; later lanes extend additively.
+// WebFlix 2.0 — unified domain schema (WFX2-B boot ∪ WFX2-W watch, lead merge).
+// Canonical model names from the boot lane; watch-lane additive fields/models
+// merged per evidence/wfx2w/SCHEMA-MERGE.md (union law).
 // NOTE: SQLite does not support Prisma enums — enumerated fields are String
-// with the allowed values documented here and union-typed in src/lib/types.ts.
+// with allowed values documented here and union-typed in src/lib/types.ts.
+// NOTE: NotInterested (boot) was unified into VideoSignal (watch) — the
+// extensible kind field covers "not_interested"; one signal store for the
+// same kebab action on every surface.
 
 generator client {
   provider = "prisma-client-js"
@@ -9,8 +13,9 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  // Relative path resolves from prisma/schema.prisma → db/webflix2.db
-  url      = "file:../db/webflix2.db"
+  // Set by every script (env-drift protection): dev/test/seeds each pin
+  // their own db file. Defaults documented in .env.example.
+  url = env("DATABASE_URL")
 }
 
 model User {
@@ -30,7 +35,8 @@ model User {
   memberships    Membership[]
   viewEvents     ViewEvent[]
   comments       Comment[]
-  notInterested  NotInterested[]
+  videoReports   VideoReport[]
+  videoSignals   VideoSignal[]
   liveChat       LiveChatMessage[]
   ownedChannels  Channel[]    @relation("ChannelOwner")
 }
@@ -44,7 +50,7 @@ model Channel {
   description     String?
   verified        Boolean  @default(false)
   subscriberCount Int      @default(0)
-  ownerId         String?
+  ownerId         String?  @unique
   createdAt       DateTime @default(now())
 
   owner           User?            @relation("ChannelOwner", fields: [ownerId], references: [id])
@@ -87,6 +93,8 @@ model Video {
   isShort       Boolean   @default(false)
   isLive        Boolean   @default(false)
   premieredAt   DateTime?
+  // "clear" | "flagged" (report queue state; the studio moderation lane builds on this)
+  moderation    String    @default("clear")
   createdAt     DateTime  @default(now())
 
   channel        Channel          @relation(fields: [channelId], references: [id], onDelete: Cascade)
@@ -97,7 +105,9 @@ model Video {
   notifications  Notification[]
   liveChat       LiveChatMessage[]
   thumbnailTests ThumbnailTest[]
-  notInterested  NotInterested[]
+  transcript     TranscriptCue[]
+  reports        VideoReport[]
+  signals        VideoSignal[]
 
   @@index([channelId])
   @@index([category])
@@ -122,32 +132,39 @@ model VideoLike {
 }
 
 model ViewEvent {
-  id         String   @id @default(cuid())
-  userId     String
-  videoId    String
-  watchedSec Int      @default(0)
-  at         DateTime @default(now())
+  id              String   @id @default(cuid())
+  userId          String
+  videoId         String
+  watchedSec      Int      @default(0)
+  lastPositionSec Int      @default(0)
+  at              DateTime @default(now())
+  // `at` is the view-dedupe anchor (1h window) — never bumped by progress saves.
+  // One progress row per user+video (upsert in the progress route).
 
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
 
+  @@unique([videoId, userId])
   @@index([userId, at])
   @@index([videoId])
+  @@index([videoId, userId, at])
 }
 
 model Comment {
-  id              String   @id @default(cuid())
-  videoId         String
-  userId          String
-  parentId        String?
-  body            String
-  likes           Int      @default(0)
-  heartedByCreator Boolean @default(false)
-  pinned          Boolean  @default(false)
-  // "approved" | "held" | "flagged" | "rejected"
-  moderation      String   @default("approved")
-  reportedBy      Int      @default(0)
-  createdAt       DateTime @default(now())
+  id               String   @id @default(cuid())
+  videoId          String
+  userId           String
+  parentId         String?
+  body             String
+  likes            Int      @default(0)
+  heartedByCreator Boolean  @default(false)
+  pinned           Boolean  @default(false)
+  // "approved" | "held" | "flagged" | "rejected" | "deleted"
+  // ("deleted" is the soft state that powers the delete-undo toast)
+  moderation       String   @default("approved")
+  reportedBy       Int      @default(0)
+  edited           Boolean  @default(false)
+  createdAt        DateTime @default(now())
 
   video      Video        @relation(fields: [videoId], references: [id], onDelete: Cascade)
   user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -157,6 +174,7 @@ model Comment {
 
   @@index([videoId])
   @@index([userId])
+  @@index([videoId, moderation, createdAt])
 }
 
 model CommentLike {
@@ -271,14 +289,39 @@ model ThumbnailTest {
   @@index([videoId])
 }
 
-// Session-level "Not interested" signals (feeds recommendation tuning).
-model NotInterested {
-  userId    String
+model TranscriptCue {
+  id       String @id @default(cuid())
+  videoId  String
+  video    Video  @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  startSec Int
+  endSec   Int
+  text     String
+
+  @@index([videoId, startSec])
+}
+
+model VideoReport {
+  id        String   @id @default(cuid())
   videoId   String
+  video     Video   @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reason    String
   createdAt DateTime @default(now())
 
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  @@unique([videoId, userId])
+}
 
-  @@id([userId, videoId])
+// Personalization / moderation signals — the single kebab-action store.
+model VideoSignal {
+  id        String   @id @default(cuid())
+  videoId   String
+  video     Video   @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // "not_interested" | "dont_recommend_channel"
+  kind      String
+  createdAt DateTime @default(now())
+
+  @@unique([videoId, userId])
 }
