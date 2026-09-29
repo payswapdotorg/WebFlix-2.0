@@ -10,7 +10,7 @@
 import { db } from "@/lib/db";
 import type { ViewerDto } from "./types";
 
-const DEMO_HANDLE = "demo";
+const DEMO_HANDLES = ["demo", "you"]; // seed-watch's @demo, boot-seed's @you — one canonical fallback chain
 export const VIEWER_COOKIE = "wfx2_uid";
 export const VIEWER_HEADER = "x-wfx2-user";
 
@@ -50,11 +50,11 @@ export async function resolveViewerFromHeaders(
 export async function resolveViewer(headers: Headers): Promise<ViewerDto> {
   const resolved = await resolveViewerFromHeaders(headers);
   if (resolved) return resolved;
-  const demo = await db.user.findUnique({ where: { handle: DEMO_HANDLE } });
-  if (!demo) {
-    throw new Error("Demo user missing — run `bun run db:seed` (prisma/seed-watch.ts)");
+  for (const handle of DEMO_HANDLES) {
+    const demo = await db.user.findUnique({ where: { handle } });
+    if (demo) return toViewerDto(demo);
   }
-  return toViewerDto(demo);
+  throw new Error("Demo user missing — run `bun run db:seed` or `bun run db:seed:watch`");
 }
 
 export function toViewerDto(u: {
