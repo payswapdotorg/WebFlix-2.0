@@ -1,38 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { getDemoUser } from "@/lib/session";
-import { toChannelLite, toVideoDTO } from "@/lib/dto";
+import { getSubscriptionsFeed } from "@/lib/youtube/subscriptions";
+import { hasSession } from "@/lib/youtube/session";
+import { rateLimit } from "@/lib/youtube/cache";
 import { errorResponse, json } from "@/lib/watch/api";
 import { proxySubscriptionStateMachine } from "@/lib/watch/action-proxy";
-import type { SubscriptionsPageDTO } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/subscriptions — subscribed channels + their latest videos (read
- * lane swaps this to live SSR data; unchanged here). */
-export async function GET() {
+/**
+ * GET /api/subscriptions?cursor= — the operator's REAL subscriptions feed
+ * (SSR /feed/subscriptions — the 95-item real capture is the fixture; browse
+ * continuations page it). The channel rail lists the feed's own distinct
+ * channels (subscribed channels with recent uploads). Public mode (no
+ * YT_COOKIES): the SSR page answers the "Don't miss new videos" sign-in
+ * promo → { channels: [], videos: [], loginRequired: true } — honest.
+ */
+export async function GET(req: NextRequest) {
   try {
-    const user = await getDemoUser();
-    const subs = await db.subscribe.findMany({
-      where: { userId: user.id },
-      include: { channel: true },
-      orderBy: { createdAt: "asc" },
+    if (!rateLimit(`subscriptions:${req.headers.get("x-forwarded-for") ?? "local"}`)) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    }
+    const cursor = new URL(req.url).searchParams.get("cursor") ?? undefined;
+    const feed = await getSubscriptionsFeed(cursor || undefined);
+    return NextResponse.json({
+      channels: feed.channels,
+      videos: feed.videos,
+      nextCursor: feed.nextCursor,
+      loginRequired: feed.loginRequired,
+      session: hasSession(),
     });
-    const channelIds = subs.map((s) => s.channelId);
-    const videos = await db.video.findMany({
-      where: { channelId: { in: channelIds }, visibility: "public" },
-      include: { channel: true },
-      orderBy: { createdAt: "desc" },
-      take: 24,
-    });
-    const data: SubscriptionsPageDTO = {
-      channels: subs.map((s) => toChannelLite(s.channel)),
-      videos: videos.map(toVideoDTO),
-    };
-    return NextResponse.json(data);
   } catch (err) {
     console.error("GET /api/subscriptions failed", err);
-    return NextResponse.json({ error: "Failed to load subscriptions" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to load subscriptions" }, { status: 502 });
   }
 }
 

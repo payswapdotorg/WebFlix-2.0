@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ListVideo, Play, Plus, Lock, Globe, EyeOff } from "lucide-react";
+import { ListVideo, Loader2, Play, Plus, Lock, Globe, EyeOff, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useApi, postJson } from "@/hooks/use-api";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,14 +16,30 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { formatDuration } from "@/lib/format";
-import type { PlaylistDTO } from "@/lib/types";
+import type { PlaylistDTO, VideoDTO } from "@/lib/types";
 
-/** Playlists — your playlists (real rows), watch later pinned first. */
+type PlaylistsPayload = {
+  playlists: PlaylistDTO[];
+  loginRequired: boolean;
+  session: boolean;
+};
+
+type PlaylistItemsPayload = {
+  playlist: PlaylistDTO | null;
+  videos: VideoDTO[];
+  nextCursor: string | null;
+  loginRequired: boolean;
+  special: boolean;
+};
+
+/** Playlists — the operator's REAL YouTube playlists (SSR /feed/playlists). */
 export default function PlaylistsPage() {
-  const { data, loading, error, reload } = useApi<PlaylistDTO[]>("/api/playlists");
+  const { data, loading, error, reload } = useApi<PlaylistsPayload>("/api/playlists");
   const [newTitle, setNewTitle] = useState("");
   const [creating, setCreating] = useState(false);
   const [openPlaylist, setOpenPlaylist] = useState<PlaylistDTO | null>(null);
+
+  const playlists = data?.playlists ?? [];
 
   async function createPlaylist(e: React.FormEvent) {
     e.preventDefault();
@@ -31,14 +47,39 @@ export default function PlaylistsPage() {
     if (!title) return;
     setCreating(true);
     try {
-      await postJson("/api/playlists", { title, visibility: "private" });
-      toast.success(`Created “${title}”`);
+      const res = await postJson<{ ok?: boolean; note?: string; playlist?: PlaylistDTO }>(
+        "/api/playlists",
+        { title, visibility: "private" }
+      );
+      if (res.note) {
+        toast.info(`${title} created on the WebFlix mirror — the YouTube broker is offline`);
+      } else {
+        toast.success(`Created “${title}” on the YouTube account`);
+      }
       setNewTitle("");
       reload();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create playlist");
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function deletePlaylist(playlist: PlaylistDTO) {
+    if (!window.confirm(`Delete “${playlist.title}” from the YouTube account? This cannot be undone.`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/playlists/${encodeURIComponent(playlist.id)}`, {
+        method: "DELETE",
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+      toast.success(`Deleted “${playlist.title}”`);
+      setOpenPlaylist(null);
+      reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete playlist");
     }
   }
 
@@ -79,18 +120,28 @@ export default function PlaylistsPage() {
           {error}
         </p>
       )}
-      {data && data.length === 0 && (
+      {data && data.loginRequired && (
+        <div className="px-4 py-16 text-center sm:px-6">
+          <p className="text-lg font-medium">Sign in to see your playlists</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Playlists are personal — they read from the YouTube account this WebFlix session
+            rides (single-tenant live mode). No session is configured right now.
+          </p>
+        </div>
+      )}
+      {data && !data.loginRequired && playlists.length === 0 && (
         <div className="px-4 py-16 text-center sm:px-6">
           <p className="text-lg font-medium">No playlists yet</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Create one above, or use “Save to playlist” in any video's menu.
+            Create one above, or use “Save to playlist” in any video&apos;s menu — it saves to
+            the real YouTube account.
           </p>
         </div>
       )}
 
-      {data && data.length > 0 && (
+      {playlists.length > 0 && (
         <div className="grid grid-cols-1 gap-6 px-4 py-2 sm:grid-cols-2 sm:px-6 lg:grid-cols-3 xl:grid-cols-4">
-          {data.map((playlist) => (
+          {playlists.map((playlist) => (
             <button
               key={playlist.id}
               type="button"
@@ -140,6 +191,7 @@ export default function PlaylistsPage() {
       <PlaylistDetailsDialog
         playlist={openPlaylist}
         onClose={() => setOpenPlaylist(null)}
+        onDelete={deletePlaylist}
       />
     </div>
   );
@@ -148,10 +200,18 @@ export default function PlaylistsPage() {
 function PlaylistDetailsDialog({
   playlist,
   onClose,
+  onDelete,
 }: {
   playlist: PlaylistDTO | null;
   onClose: () => void;
+  onDelete: (playlist: PlaylistDTO) => void;
 }) {
+  const { data, loading, error } = useApi<PlaylistItemsPayload>(
+    playlist ? `/api/playlists/${encodeURIComponent(playlist.id)}` : null
+  );
+  const videos = data?.videos ?? [];
+  const special = playlist ? playlist.id === "WL" || playlist.id === "LL" : false;
+
   return (
     <Dialog open={!!playlist} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[85vh] max-w-md overflow-hidden p-0">
@@ -159,23 +219,39 @@ function PlaylistDetailsDialog({
           <>
             <DialogHeader className="px-6 pt-6">
               <DialogTitle className="flex items-center gap-2">
-                {playlist.isWatchLater && <span>Watch later</span>}
-                {!playlist.isWatchLater && <span>{playlist.title}</span>}
+                {playlist.isWatchLater ? <span>Watch later</span> : <span>{playlist.title}</span>}
               </DialogTitle>
               <DialogDescription>
-                {playlist.videoCount} video{playlist.videoCount === 1 ? "" : "s"} ·{" "}
-                {playlist.visibility}
+                {data?.playlist?.videoCount ?? playlist.videoCount} video
+                {(data?.playlist?.videoCount ?? playlist.videoCount) === 1 ? "" : "s"} ·{" "}
+                {playlist.visibility} · YouTube
               </DialogDescription>
             </DialogHeader>
             <div className="max-h-[55vh] overflow-y-auto slim-scrollbar py-2">
-              {playlist.videos.length === 0 && (
+              {loading && (
+                <div className="flex justify-center py-8" aria-label="Loading playlist videos">
+                  <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                </div>
+              )}
+              {error && (
+                <p className="px-6 py-6 text-center text-sm text-muted-foreground" role="alert">
+                  {error}
+                </p>
+              )}
+              {data?.loginRequired && (
+                <p className="px-6 py-6 text-center text-sm text-muted-foreground">
+                  This list is private to the YouTube account — sign in (configure the
+                  session) to read it.
+                </p>
+              )}
+              {!loading && !error && !data?.loginRequired && videos.length === 0 && (
                 <p className="px-6 py-6 text-center text-sm text-muted-foreground">
                   Empty playlist — add videos via the kebab menu on any card.
                 </p>
               )}
-              {playlist.videos.map((video, i) => (
+              {videos.map((video, i) => (
                 <Link
-                  key={video.id}
+                  key={`${video.id}-${i}`}
                   href={`/watch/${video.id}`}
                   className="flex items-center gap-3 px-6 py-2.5 transition-colors hover:bg-accent/50"
                 >
@@ -197,6 +273,18 @@ function PlaylistDetailsDialog({
                 </Link>
               ))}
             </div>
+            {!special && (
+              <div className="flex justify-end border-t border-border/60 px-6 py-3">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-full text-destructive hover:text-destructive"
+                  onClick={() => onDelete(playlist)}
+                >
+                  <Trash2 className="mr-2 size-4" /> Delete playlist
+                </Button>
+              </div>
+            )}
           </>
         )}
       </DialogContent>

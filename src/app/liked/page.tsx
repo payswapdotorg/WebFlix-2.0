@@ -7,9 +7,17 @@ import { VideoCard } from "@/components/video/video-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { VideoDTO } from "@/lib/types";
 
-/** Liked videos — the demo user's VideoLikes (real rows, newest first). */
+type LikedPayload = {
+  videos: VideoDTO[];
+  nextCursor: string | null;
+  loginRequired: boolean;
+  session: boolean;
+};
+
+/** Liked videos — the operator's REAL Liked playlist (YouTube's own `LL`). */
 export default function LikedPage() {
-  const { data, loading, error } = useApi<VideoDTO[]>("/api/liked");
+  const { data, loading, error } = useApi<LikedPayload>("/api/liked");
+  const videos = data?.videos ?? [];
 
   return (
     <div className="pb-6">
@@ -33,11 +41,20 @@ export default function LikedPage() {
           {error}
         </p>
       )}
-      {data && data.length === 0 && (
+      {data && data.loginRequired && (
+        <div className="px-4 py-16 text-center sm:px-6">
+          <p className="text-lg font-medium">Sign in to see your liked videos</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Liked videos are personal — they read from the YouTube account this WebFlix
+            session rides (single-tenant live mode). No session is configured right now.
+          </p>
+        </div>
+      )}
+      {data && !data.loginRequired && videos.length === 0 && (
         <div className="px-4 py-16 text-center sm:px-6">
           <p className="text-lg font-medium">No liked videos yet</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Videos you like are stored in the database —{" "}
+            Likes live on the YouTube account —{" "}
             <Link href="/" className="text-foreground underline underline-offset-2">
               watch something
             </Link>{" "}
@@ -45,9 +62,9 @@ export default function LikedPage() {
           </p>
         </div>
       )}
-      {data && data.length > 0 && (
+      {videos.length > 0 && (
         <div className="grid grid-cols-1 gap-x-4 gap-y-8 px-4 sm:grid-cols-2 sm:px-6 lg:grid-cols-3 2xl:grid-cols-4">
-          {data.map((video) => (
+          {videos.map((video) => (
             <VideoCard key={video.id} video={video} />
           ))}
         </div>

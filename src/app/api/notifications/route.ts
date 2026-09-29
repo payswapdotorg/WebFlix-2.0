@@ -1,38 +1,33 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { getDemoUser } from "@/lib/session";
-import { toChannelLite } from "@/lib/dto";
-import type { NotificationDTO } from "@/lib/types";
+import { getNotificationsFeed } from "@/lib/youtube/notifications";
+import { hasSession } from "@/lib/youtube/session";
+import { rateLimit } from "@/lib/youtube/cache";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/notifications — items (newest first) + live unread count. */
-export async function GET() {
+/**
+ * GET /api/notifications — the operator's REAL notification menu
+ * (notification/get_notification_menu + get_unseen_count — both verified
+ * endpoints, research log §12). Empty is VALID (the account simply has
+ * none; the public menu answers the "Your notifications live here" promo).
+ * Response keeps the bell's { unread, items } contract, plus pollIntervalMs
+ * (the upstream's own cadence) and the honest loginRequired flag.
+ */
+export async function GET(req: Request) {
   try {
-    const user = await getDemoUser();
-    const rows = await db.notification.findMany({
-      where: { userId: user.id },
-      include: {
-        sourceChannel: true,
-        video: { select: { thumbnailUrl: true } },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 30,
+    if (!rateLimit(`notifications:${req.headers.get("x-forwarded-for") ?? "local"}`)) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    }
+    const feed = await getNotificationsFeed();
+    return NextResponse.json({
+      unread: feed.unread,
+      items: feed.items,
+      pollIntervalMs: feed.pollIntervalMs,
+      loginRequired: feed.loginRequired,
+      session: hasSession(),
     });
-    const items: NotificationDTO[] = rows.map((n) => ({
-      id: n.id,
-      kind: n.kind as NotificationDTO["kind"],
-      title: n.title,
-      body: n.body,
-      read: n.read,
-      createdAt: n.createdAt.toISOString(),
-      videoId: n.videoId,
-      videoThumbnailUrl: n.video?.thumbnailUrl ?? null,
-      channel: toChannelLite(n.sourceChannel),
-    }));
-    return NextResponse.json({ unread: items.filter((i) => !i.read).length, items });
   } catch (err) {
     console.error("GET /api/notifications failed", err);
-    return NextResponse.json({ error: "Failed to load notifications" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to load notifications" }, { status: 502 });
   }
 }

@@ -1,56 +1,107 @@
-import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { getDemoUser } from "@/lib/session";
-import { toContinueVideoDTO } from "@/lib/dto";
-import { historyGroupLabel } from "@/lib/format";
-import type { ContinueVideoDTO, HistoryGroupDTO } from "@/lib/types";
+import { NextRequest, NextResponse } from "next/server";
+import { getHistoryFeed } from "@/lib/youtube/history";
+import { hasSession } from "@/lib/youtube/session";
+import { rateLimit } from "@/lib/youtube/cache";
+import { brokerAction, brokerOk, BrokerError } from "@/lib/broker";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/history — view events, latest-per-video, grouped by day. */
-export async function GET() {
+/**
+ * GET /api/history?cursor= — the operator's REAL YouTube watch history
+ * (SSR /feed/history + browse continuations), grouped by the page's own day
+ * headers. Public mode (no YT_COOKIES): the SSR page answers the sign-in
+ * promo → { groups: [], loginRequired: true } — honest, never fake rows.
+ */
+export async function GET(req: NextRequest) {
   try {
-    const user = await getDemoUser();
-    const events = await db.viewEvent.findMany({
-      where: { userId: user.id },
-      include: { video: { include: { channel: true } } },
-      orderBy: { at: "desc" },
+    if (!rateLimit(`history:${req.headers.get("x-forwarded-for") ?? "local"}`)) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    }
+    const cursor = new URL(req.url).searchParams.get("cursor") ?? undefined;
+    const feed = await getHistoryFeed(cursor || undefined);
+    return NextResponse.json({
+      groups: feed.groups,
+      nextCursor: feed.nextCursor,
+      loginRequired: feed.loginRequired,
+      watchHistoryPaused: feed.watchHistoryPaused,
+      searchHistoryPaused: feed.searchHistoryPaused,
+      total: feed.total,
+      session: hasSession(),
     });
-    const latestPerVideo = new Map<string, ContinueVideoDTO>();
-    for (const e of events) {
-      if (latestPerVideo.has(e.videoId)) continue;
-      latestPerVideo.set(
-        e.videoId,
-        toContinueVideoDTO(e.video, e.watchedSec, e.at)
-      );
-    }
-    const items = [...latestPerVideo.values()];
-    const groups = new Map<string, ContinueVideoDTO[]>();
-    for (const item of items) {
-      const label = historyGroupLabel(item.watchedAt);
-      const list = groups.get(label) ?? [];
-      list.push(item);
-      groups.set(label, list);
-    }
-    const data: HistoryGroupDTO[] = [...groups.entries()].map(([label, list]) => ({
-      label,
-      items: list,
-    }));
-    return NextResponse.json(data);
   } catch (err) {
     console.error("GET /api/history failed", err);
-    return NextResponse.json({ error: "Failed to load history" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to load history" }, { status: 502 });
   }
 }
 
-/** DELETE /api/history — clear all watch history for the demo user. */
-export async function DELETE() {
+/** Map a broker failure to the honest HTTP response. */
+function brokerErrorResponse(err: BrokerError): NextResponse {
+  if (err.kind === "bad-request") {
+    return NextResponse.json({ error: err.message }, { status: 400 });
+  }
+  return NextResponse.json({ error: err.message }, { status: 502 });
+}
+
+/**
+ * DELETE /api/history?videoId= — remove ONE video from the real watch
+ * history (broker kind `history-remove`, Tier-2). Without a videoId: clear
+ * ALL watch history (broker kind `history-clear-all`).
+ */
+export async function DELETE(req: NextRequest) {
   try {
-    const user = await getDemoUser();
-    const result = await db.viewEvent.deleteMany({ where: { userId: user.id } });
-    return NextResponse.json({ deleted: result.count });
+    const videoId = new URL(req.url).searchParams.get("videoId") ?? "";
+    if (videoId && !/^[\w-]{6,20}$/.test(videoId)) {
+      return NextResponse.json({ error: "videoId is invalid" }, { status: 400 });
+    }
+    const result = videoId
+      ? await brokerAction("history-remove", { videoId })
+      : await brokerAction("history-clear-all", {});
+    if (!brokerOk(result)) return brokerErrorResponse(result as BrokerError);
+    const r = result as { ok: true; verified?: boolean; already?: boolean; path?: string };
+    return NextResponse.json({
+      ok: true,
+      effect: videoId ? "removed-from-history" : "history-cleared",
+      verified: r.verified ?? false,
+      path: r.path ?? null,
+    });
   } catch (err) {
     console.error("DELETE /api/history failed", err);
-    return NextResponse.json({ error: "Failed to clear history" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to update history" }, { status: 500 });
+  }
+}
+
+/**
+ * PATCH /api/history {paused: boolean, type?: "watch"|"search"} — the
+ * pause/resume toggles on the real account (broker kinds `history-pause` /
+ * `search-history-pause`, Tier-2).
+ */
+export async function PATCH(req: NextRequest) {
+  try {
+    let body: Record<string, unknown> = {};
+    try {
+      body = (await req.json()) as Record<string, unknown>;
+    } catch {
+      return NextResponse.json({ error: "body must be JSON" }, { status: 400 });
+    }
+    const paused = body.paused === true;
+    const type = body.type === "search" ? "search" : "watch";
+    const result =
+      type === "search"
+        ? await brokerAction("search-history-pause", {}, { paused })
+        : await brokerAction("history-pause", {}, { paused });
+    if (!brokerOk(result)) return brokerErrorResponse(result as BrokerError);
+    const r = result as { ok: true; verified?: boolean; already?: boolean; path?: string };
+    return NextResponse.json({
+      ok: true,
+      type,
+      paused,
+      effect: paused ? "paused" : "resumed",
+      verified: r.verified ?? false,
+      already: r.already ?? false,
+      path: r.path ?? null,
+    });
+  } catch (err) {
+    console.error("PATCH /api/history failed", err);
+    return NextResponse.json({ error: "Failed to toggle history" }, { status: 500 });
   }
 }

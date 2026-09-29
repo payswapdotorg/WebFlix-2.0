@@ -363,6 +363,207 @@ return {ok:false,verified:false,error:'card-still-present',path:'ui'};
 }
 
 /* ------------------------------------------------------------------ */
+/* WFX2-B-B personal surfaces (additive kinds)                         */
+/* ------------------------------------------------------------------ */
+
+const CONFIRM_SEL =
+  "'yt-confirm-dialog-renderer #confirm-button, tp-yt-paper-dialog #confirm-button, dialog #confirm-button, #confirm-button'";
+
+/** Find a history/playlist card by videoId on the current feed page. */
+const FIND_CARD_BY_VIDEO = (videoId: string) => `
+const findCard=()=>qa("ytd-rich-item-renderer, ytd-video-renderer, ytd-grid-video-renderer, ytd-compact-video-renderer, ytd-playlist-video-renderer, ytd-rich-grid-row, [data-testid]").find(n=>{
+  const a=n.querySelector("a#thumbnail, a#video-title, a[href*='v=']");
+  return a&&(a.href||'').includes('v=' + ${j(videoId)});
+});`;
+
+/** history-remove — /feed/history card kebab → "Remove from watch history". */
+function historyRemoveScript(videoId: string): string {
+  return script(`
+${FIND_CARD_BY_VIDEO(videoId)}
+const card=await until(findCard,12000);
+if(!card) return {ok:false,error:'video-not-in-history',path:'ui',dom:${domState()}};
+card.dispatchEvent(new MouseEvent('mouseover',{bubbles:true}));
+card.dispatchEvent(new MouseEvent('mousemove',{bubbles:true}));
+await S(400);
+const kebab=card.querySelector("ytd-menu-renderer yt-icon-button#button button, ytd-menu-renderer button, button[aria-label*='Actions'], button[aria-label*='actions'], button[aria-label*='more'], button[aria-label*='More']");
+if(!kebab) return {ok:false,error:'kebab-not-found',path:'ui'};
+kebab.click();
+const item=await until(()=>qa("ytd-menu-service-item-renderer, yt-list-item-view-model, [role='menuitem'], tp-yt-paper-item").find(el=>/remove from watch history|remove from history/i.test(textOf(el))),6000);
+if(!item) return {ok:false,error:'remove-menu-item-not-found',path:'ui',dom:{menu:qa("ytd-menu-service-item-renderer, yt-list-item-view-model, [role='menuitem']").map(textOf).filter(Boolean).slice(0,12)}};
+item.click();
+const gone=await until(()=>!document.contains(card),8000);
+const undoToast=!!q("yt-notification-action-renderer, #toast, tp-yt-paper-toast");
+if(gone||undoToast) return {ok:true,verified:!!gone,path:'ui'};
+return {ok:false,verified:false,error:'card-still-present',path:'ui'};
+`);
+}
+
+/** history-clear-all — the right-rail control button + confirm dialog. */
+function historyClearAllScript(): string {
+  return script(`
+const clearBtn=await until(()=>qa("button, a, yt-button-shape button").find(b=>/^clear all watch history$/i.test(textOf(b))),12000);
+if(!clearBtn) return {ok:false,error:'clear-all-button-not-found',path:'ui',dom:${domState()}};
+clearBtn.click();
+const confirmBtn=await until(()=>q(${CONFIRM_SEL}),6000);
+if(confirmBtn){confirmBtn.click();}
+const toast=await until(()=>q("yt-notification-action-renderer, #toast, tp-yt-paper-toast"),8000);
+const anyCard=qa("ytd-rich-item-renderer, ytd-video-renderer").length>0;
+if(toast||!anyCard) return {ok:true,verified:!anyCard,path:'ui'};
+return {ok:false,verified:false,error:'cards-still-present',path:'ui',dom:{cards:qa("ytd-rich-item-renderer, ytd-video-renderer").length}};
+`);
+}
+
+/** history-pause — the right-rail Pause/Resume control (confirm dialog on pause). */
+function historyPauseScript(paused: boolean): string {
+  const wantLabel = paused ? "resume watch history" : "pause watch history";
+  return script(`
+const findControl=()=>qa("button, a, yt-button-shape button").find(b=>/^(pause|resume) watch history$/i.test(textOf(b)));
+const btn=await until(findControl,12000);
+if(!btn) return {ok:false,error:'pause-button-not-found',path:'ui',dom:${domState()}};
+const labelBefore=textOf(btn);
+if(norm(labelBefore)===norm(${j(wantLabel)})) return {ok:true,verified:true,already:true,paused:${j(paused)},path:'ui'};
+btn.click();
+const confirmBtn=await until(()=>q(${CONFIRM_SEL}),5000);
+if(confirmBtn) confirmBtn.click();
+const flipped=await until(()=>{
+  const b=findControl();
+  return b?norm(textOf(b)):null;
+},8000);
+const ok=flipped===norm(${j(wantLabel)});
+return {ok,verified:ok,paused:!ok?null:${j(paused)},path:'ui',error:ok?undefined:'pause-state-unchanged',dom:{labelBefore,labelAfter:flipped}};
+`);
+}
+
+/** search-history-pause — the history page kebab → Pause/Resume search history. */
+function searchHistoryPauseScript(paused: boolean): string {
+  const wantLabel = paused ? "resume search history" : "pause search history";
+  return script(`
+const kebab=await until(()=>qa("button").find(b=>{
+  const a=(b.getAttribute('aria-label')||'')+' '+textOf(b);
+  return /controls|options|more actions/i.test(a)&&!/pause|resume|clear|manage/i.test(a);
+})||q("ytd-browse[page-subtype='history'] #secondary button, #list-container ytd-button-renderer + ytd-button-renderer button"),12000);
+if(!kebab) return {ok:false,error:'history-controls-kebab-not-found',path:'ui',dom:${domState()}};
+kebab.click();
+const items=()=>qa("ytd-menu-service-item-renderer, yt-list-item-view-model, [role='menuitem'], tp-yt-paper-item");
+const item=await until(()=>items().find(el=>/^(pause|resume) search history$/i.test(textOf(el))),6000);
+if(!item) return {ok:false,error:'search-history-menu-item-not-found',path:'ui',dom:{menu:items().map(textOf).filter(Boolean).slice(0,12),url:location.href}};
+const labelBefore=textOf(item);
+if(norm(labelBefore)===norm(${j(wantLabel)})) return {ok:true,verified:true,already:true,paused:${j(paused)},path:'ui'};
+item.click();
+const confirmBtn=await until(()=>q(${CONFIRM_SEL}),5000);
+if(confirmBtn) confirmBtn.click();
+const done=await until(()=>!/pause|resume/i.test(textOf(q("yt-notification-action-renderer"))||'')?true:null,3000).catch(()=>null);
+document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+return {ok:true,verified:false,paused:${j(paused)},path:'ui',detail:{note:'clicked ' + labelBefore + '; verification of search-history state is not readable from this page (myactivity owns it)'}};
+`);
+}
+
+/** playlist-remove-item — /playlist?list=<id> row kebab → Remove. */
+function playlistRemoveItemScript(playlistId: string, videoId: string): string {
+  return script(`
+${FIND_CARD_BY_VIDEO(videoId)}
+const card=await until(findCard,12000);
+if(card){
+  card.dispatchEvent(new MouseEvent('mouseover',{bubbles:true}));
+  card.dispatchEvent(new MouseEvent('mousemove',{bubbles:true}));
+  await S(400);
+  const kebab=card.querySelector("ytd-menu-renderer yt-icon-button#button button, ytd-menu-renderer button, button[aria-label*='Actions'], button[aria-label*='actions'], button[aria-label*='more'], button[aria-label*='More'], yt-icon-button button");
+  if(kebab){
+    kebab.click();
+    const item=await until(()=>qa("ytd-menu-service-item-renderer, yt-list-item-view-model, [role='menuitem'], tp-yt-paper-item").find(el=>/remove from/i.test(textOf(el))),6000);
+    if(item){
+      item.click();
+      const gone=await until(()=>!document.contains(card),8000);
+      if(gone) return {ok:true,verified:true,path:'ui'};
+      const toast=!!q("yt-notification-action-renderer, #toast, tp-yt-paper-toast");
+      if(toast) return {ok:true,verified:false,path:'ui',detail:{note:'toast shown'}};
+      return {ok:false,verified:false,error:'card-still-present',path:'ui'};
+    }
+    document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+    return {ok:false,error:'remove-menu-item-not-found',path:'ui',dom:{menu:qa("ytd-menu-service-item-renderer, yt-list-item-view-model, [role='menuitem']").map(textOf).filter(Boolean).slice(0,12)}};
+  }
+}
+// fetch fallback: browse/edit_playlist ACTION_REMOVE_VIDEO (the verified wire shape)
+const res=await post('browse/edit_playlist',{context:CTX(),playlistId:${j(playlistId)},actions:[{action:'ACTION_REMOVE_VIDEO',removedVideoId:${j(videoId)},videoId:${j(videoId)}}]});
+return {ok:res.ok,verified:res.ok,path:'fetch',status:res.status,body:res.text};
+`);
+}
+
+/** playlist-create — /feed/playlists "New playlist" dialog. */
+function playlistCreateScript(title: string, visibility: string): string {
+  return script(`
+const createBtn=await until(()=>qa("button, a, ytd-button-renderer button").find(b=>/new playlist/i.test(textOf(b))),12000);
+if(!createBtn){
+  // fetch fallback: playlist/create (the web client's own endpoint)
+  const res=await post('playlist/create',{context:CTX(),title:${j(title)},privacyStatus:${j(visibility)}});
+  return {ok:res.ok,verified:res.ok,path:'fetch',status:res.status,body:res.text,note:'create button not found on this page; used the endpoint directly'};
+}
+createBtn.click();
+const nameInput=await until(()=>q("tp-yt-paper-input #input, input[aria-label*='name' i], #input input"),8000);
+if(!nameInput) return {ok:false,error:'name-input-not-found',path:'ui',dom:${domState()}};
+nameInput.focus();
+nameInput.value=${j(title)};
+nameInput.dispatchEvent(new Event('input',{bubbles:true}));
+// visibility select when present
+const visSelect=q("tp-yt-paper-dropdown-menu, select, yt-select-renderer");
+if(visSelect){
+  const opt=qa("tp-yt-item, tp-yt-paper-item, option, [role='option']").find(el=>norm(textOf(el))===norm(${j(visibility)}));
+  if(opt){visSelect.click();await S(300);opt.click();}
+}
+const create2=await until(()=>qa("button").find(b=>/^create$/i.test(textOf(b))&&!b.hasAttribute('disabled')),6000);
+if(!create2) return {ok:false,error:'dialog-create-button-not-ready',path:'ui'};
+create2.click();
+const created=await until(()=>/playlist created/i.test(document.body.innerText)||qa("ytd-notification-action-renderer, #toast").length>0,8000);
+if(created) return {ok:true,verified:false,path:'ui',detail:{note:'create flow submitted'}};
+const res=await post('playlist/create',{context:CTX(),title:${j(title)},privacyStatus:${j(visibility)}});
+return {ok:res.ok,verified:res.ok,path:'fetch',status:res.status,body:res.text};
+`);
+}
+
+/** playlist-delete — /playlist?list=<id> ⋮ menu → Delete playlist (+confirm). */
+function playlistDeleteScript(playlistId: string): string {
+  return script(`
+const kebab=await until(()=>qa("button").find(b=>{
+  const a=(b.getAttribute('aria-label')||'')+' '+textOf(b);
+  return /more actions|playlist options/i.test(a);
+}),12000);
+if(kebab){
+  kebab.click();
+  const item=await until(()=>qa("ytd-menu-service-item-renderer, yt-list-item-view-model, [role='menuitem'], tp-yt-paper-item").find(el=>/delete playlist/i.test(textOf(el))),6000);
+  if(item){
+    item.click();
+    const confirmBtn=await until(()=>q(${CONFIRM_SEL}),6000);
+    if(confirmBtn) confirmBtn.click();
+    const gone=await until(()=>/deleted/i.test(document.body.innerText)||!q("ytd-playlist-header-renderer, ytd-playlist-video-list-renderer"),8000);
+    if(gone) return {ok:true,verified:true,path:'ui'};
+    return {ok:true,verified:false,path:'ui',detail:{note:'delete submitted; page state unclear'}};
+  }
+  document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+  return {ok:false,error:'delete-menu-item-not-found',path:'ui',dom:{menu:qa("ytd-menu-service-item-renderer, yt-list-item-view-model, [role='menuitem']").map(textOf).filter(Boolean).slice(0,12)}};
+}
+// fetch fallback: browse/delete_playlist (the web client's own endpoint)
+const res=await post('browse/delete_playlist',{context:CTX(),playlistId:${j(playlistId)}});
+return {ok:res.ok,verified:res.ok,path:'fetch',status:res.status,body:res.text};
+`);
+}
+
+/** notifications-mark-read — open the bell menu (the real client marks seen
+ * on open), then re-read the unseen count from the page's own context. */
+function notificationsMarkReadScript(): string {
+  return script(`
+const bellBtn=await until(()=>q("ytd-notification-topbar-button-renderer button, #notification-button button, button[aria-label*='notification' i]"),12000);
+if(!bellBtn) return {ok:false,error:'bell-button-not-found',path:'ui',dom:${domState()}};
+bellBtn.click();
+const menu=await until(()=>q("ytd-multi-page-menu-renderer, tp-yt-paper-listbox, ytd-notification-renderer"),6000);
+await S(1500);
+const before=await post('notification/get_unseen_count',{context:CTX()}).then(r=>r.text).catch(()=>null);
+document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+document.body.click();
+return {ok:!!menu,verified:false,path:'ui',detail:{menuOpened:!!menu,unseenAfter:before}};
+`);
+}
+
+/* ------------------------------------------------------------------ */
 /* executor entry point                                                */
 /* ------------------------------------------------------------------ */
 
@@ -388,6 +589,21 @@ export function requiredUrl(req: BrokerActionRequest): string | null {
     case "bell":
       return target.channelId ? `https://www.youtube.com/channel/${target.channelId}` : null;
     case "not-interested":
+      return "https://www.youtube.com/";
+    // WFX2-B-B personal surfaces — additive
+    case "history-remove":
+    case "history-clear-all":
+    case "history-pause":
+    case "search-history-pause":
+      return "https://www.youtube.com/feed/history";
+    case "playlist-remove-item":
+    case "playlist-delete":
+      return target.playlistId
+        ? `https://www.youtube.com/playlist?list=${target.playlistId}`
+        : null;
+    case "playlist-create":
+      return "https://www.youtube.com/feed/playlists";
+    case "notifications-mark-read":
       return "https://www.youtube.com/";
     default:
       return null;
@@ -449,6 +665,32 @@ export function buildScript(req: BrokerActionRequest): { script: string; timeout
     }
     case "not-interested":
       return { script: notInterestedScript(target.videoId!), timeoutMs: 30000 };
+    // WFX2-B-B personal surfaces — additive
+    case "history-remove":
+      return { script: historyRemoveScript(target.videoId!), timeoutMs: 30000 };
+    case "history-clear-all":
+      return { script: historyClearAllScript(), timeoutMs: 30000 };
+    case "history-pause":
+      return { script: historyPauseScript(payload?.paused !== false), timeoutMs: 30000 };
+    case "search-history-pause":
+      return { script: searchHistoryPauseScript(payload?.paused !== false), timeoutMs: 30000 };
+    case "playlist-remove-item":
+      return {
+        script: playlistRemoveItemScript(target.playlistId!, payload?.videoId ?? target.videoId!),
+        timeoutMs: 30000,
+      };
+    case "playlist-create": {
+      const title = (payload?.title ?? "").trim();
+      if (!title) return null;
+      const visibility = ["private", "unlisted", "public"].includes(payload?.visibility ?? "")
+        ? (payload!.visibility as string)
+        : "private";
+      return { script: playlistCreateScript(title, visibility), timeoutMs: 45000 };
+    }
+    case "playlist-delete":
+      return { script: playlistDeleteScript(target.playlistId!), timeoutMs: 30000 };
+    case "notifications-mark-read":
+      return { script: notificationsMarkReadScript(), timeoutMs: 30000 };
     default:
       return null;
   }

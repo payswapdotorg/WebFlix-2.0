@@ -17,23 +17,29 @@ import { formatRelativeDate } from "@/lib/format";
 import type { NotificationDTO } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type NotificationsPayload = { unread: number; items: NotificationDTO[] };
+type NotificationsPayload = {
+  unread: number;
+  items: NotificationDTO[];
+  pollIntervalMs?: number | null;
+  loginRequired?: boolean;
+  session?: boolean;
+};
 
 /** Notifications bell — live unread badge from the API, menu, mark-all-read. */
 export function NotificationsBell() {
   const { data, reload } = useApi<NotificationsPayload>("/api/notifications");
   const unread = data?.unread ?? 0;
 
-  // Live badge: poll every 60s and refresh on window focus.
+  // Live badge: poll on the upstream's own cadence (default 60s) + on focus.
   useEffect(() => {
-    const interval = setInterval(reload, 60_000);
+    const interval = setInterval(reload, Math.max(30_000, data?.pollIntervalMs ?? 60_000));
     const onFocus = () => reload();
     window.addEventListener("focus", onFocus);
     return () => {
       clearInterval(interval);
       window.removeEventListener("focus", onFocus);
     };
-  }, [reload]);
+  }, [reload, data?.pollIntervalMs]);
 
   async function markAllRead() {
     try {
@@ -78,7 +84,13 @@ export function NotificationsBell() {
           </button>
         </div>
         <div className="max-h-96 overflow-y-auto slim-scrollbar">
-          {(data?.items ?? []).length === 0 && (
+          {data?.loginRequired && (
+            <p className="px-4 py-6 text-center text-sm text-muted-foreground">
+              Notifications are personal — sign in (configure the YouTube session) to read
+              them. Empty is also valid when the account has none.
+            </p>
+          )}
+          {!data?.loginRequired && (data?.items ?? []).length === 0 && (
             <p className="px-4 py-6 text-center text-sm text-muted-foreground">
               No notifications yet.
             </p>
