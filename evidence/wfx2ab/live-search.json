@@ -1,0 +1,119 @@
+{
+ "query": "lofi",
+ "videos": [
+  {
+   "id": "nI725iVsyoQ",
+   "title": "24/7 deep sleep music 🌌 calm ambient to sleep & dream to",
+   "description": "",
+   "thumbnailUrl": "https://i.ytimg.com/vi/nI725iVsyoQ/hqdefault.jpg",
+   "videoUrl": "https://www.youtube.com/watch?v=nI725iVsyoQ",
+   "durationSec": null,
+   "views": 0,
+   "viewsText": "1,771 watching",
+   "publishedText": null,
+   "likes": 0,
+   "dislikes": 0,
+   "visibility": "public",
+   "isMembersOnly": false,
+   "membersTier": null,
+   "category": "All",
+   "isShort": false,
+   "isLive": true,
+   "premieredAt": null,
+   "createdAt": null,
+   "badges": [
+    "verified_artist",
+    "live_now",
+    "simple"
+   ],
+   "channel": {
+    "id": "UCSJ4gkVC6NrvII8umztf0Ow",
+    "handle": "channel/UCSJ4gkVC6NrvII8umztf0Ow",
+    "name": "Lofi Girl",
+    "avatarUrl": "",
+    "verified": true,
+    "subscriberCount": 0
+   }
+  },
+  {
+   "id": "O_97HkFMhFk",
+   "title": "lofi house vol.1 🌆 chill music to vibe to",
+   "description": "",
+   "thumbnailUrl": "https://i.ytimg.com/vi/O_97HkFMhFk/hqdefault.jpg",
+   "videoUrl": "https://www.youtube.com/watch?v=O_97HkFMhFk",
+   "durationSec": 5456,
+   "views": 255287,
+   "viewsText": "255,287 views",
+   "publishedText": "7 days ago",
+   "likes": 0,
+   "dislikes": 0,
+   "visibility": "public",
+   "isMembersOnly": false,
+   "membersTier": null,
+   "category": "All",
+   "isShort": false,
+   "isLive": false,
+   "premieredAt": null,
+   "createdAt": "2026-09-22T06:51:44.837Z",
+   "badges": [
+    "verified_artist"
+   ],
+   "channel": {
+    "id": "UCSJ4gkVC6NrvII8umztf0Ow",
+    "handle": "channel/UCSJ4gkVC6NrvII8umztf0Ow",
+    "name": "Lofi Girl",
+    "avatarUrl": "",
+    "verified": true,
+    "subscriberCount": 0
+   }
+  },
+  {
+   "id": "3PFJ9SETS4M",
+   "title": "lofi house radio 🌅  lounge music to vibe/chill to",
+   "description": "",
+   "thumbnailUrl": "https://i.ytimg.com/vi/3PFJ9SETS4M/hqdefault.jpg",
+   "videoUrl": "https://www.youtube.com/watch?v=3PFJ9SETS4M",
+   "durationSec": null,
+   "views": 0,
+   "viewsText": "992 watching",
+   "publishedText": null,
+   "likes": 0,
+   "dislikes": 0,
+   "visibility": "public",
+   "isMembersOnly": false,
+   "membersTier": null,
+   "category": "All",
+   "isShort": false,
+   "isLive": true,
+   "premieredAt": null,
+   "createdAt": null,
+   "badges": [
+    "verified_artist",
+    "live_now",
+    "simple"
+   ],
+   "channel": {
+    "id": "UCSJ4gkVC6NrvII8umztf0Ow",
+    "handle": "channel/UCSJ4gkVC6NrvII8umztf0Ow",
+    "name": "Lofi Girl",
+    "avatarUrl": "",
+    "verified": true,
+    "subscriberCount": 0
+   }
+  },
+  "...(+37 more, trimmed for evidence)"
+ ],
+ "channels": [
+  {
+   "id": "UCSJ4gkVC6NrvII8umztf0Ow",
+   "handle": "@LofiGirl",
+   "name": "Lofi Girl",
+   "avatarUrl": "https://yt3.ggpht.com/GyVPysrx-cVIWIQDfi2MkaYr7oRIxuOgGeZihnw-hgTv6E5LBQ67v5yXTFvqP2Bl7BB_S-0L-A=s176-c-k-c0x00ffffff-no-rj-mo",
+   "verified": true,
+   "subscriberCount": 15800000,
+   "subscriberCountText": "15.8M subscribers",
+   "videoCountText": null,
+   "description": "Lofi House is now available!"
+  }
+ ]
+}

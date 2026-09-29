@@ -403,8 +403,10 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
               videoId={videoId}
               description={video.description}
               views={video.views}
+              viewsText={video.viewsText ?? null}
               createdAt={video.createdAt}
-              durationSec={video.durationSec}
+              publishedText={video.publishedText ?? null}
+              durationSec={video.durationSec ?? 0}
               thumbnailUrl={video.thumbnailUrl}
               onSeek={seek}
             />

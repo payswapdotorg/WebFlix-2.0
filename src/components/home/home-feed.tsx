@@ -91,9 +91,9 @@ function CategoryEmptyState({ category }: { category: string }) {
   if (category === "All") {
     return (
       <div className="px-4 py-16 text-center sm:px-6">
-        <p className="text-lg font-medium">No videos yet</p>
+        <p className="text-lg font-medium">No feed yet</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          The database is empty — run <code className="rounded bg-secondary px-1">bun run db:seed</code>.
+          YouTube&apos;s home feed needs a session — search for anything in the meantime.
         </p>
       </div>
     );

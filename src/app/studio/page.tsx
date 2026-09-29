@@ -121,7 +121,7 @@ export default function StudioPage() {
                         <td className="px-4 py-3 text-right tabular-nums">{formatCount(v.likes)}</td>
                         <td className="px-4 py-3 text-right tabular-nums">{v.commentCount}</td>
                         <td className="px-4 py-3 text-right text-muted-foreground">
-                          {formatRelativeDate(v.createdAt)}
+                          {v.createdAt ? formatRelativeDate(v.createdAt) : ""}
                         </td>
                       </tr>
                     ))}

@@ -226,15 +226,17 @@ export default function ChannelPage() {
                     <dt className="text-muted-foreground">Videos</dt>
                     <dd className="font-medium">{formatCount(data.channel.videoCount)}</dd>
                   </div>
-                  <div>
-                    <dt className="text-muted-foreground">Joined</dt>
-                    <dd className="font-medium">
-                      {new Date(data.channel.createdAt).toLocaleDateString("en-US", {
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </dd>
-                  </div>
+                  {data.channel.createdAt && (
+                    <div>
+                      <dt className="text-muted-foreground">Joined</dt>
+                      <dd className="font-medium">
+                        {new Date(data.channel.createdAt).toLocaleDateString("en-US", {
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </dd>
+                    </div>
+                  )}
                 </dl>
               </div>
             </TabsContent>

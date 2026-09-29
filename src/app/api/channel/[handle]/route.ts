@@ -1,59 +1,30 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { getDemoUser } from "@/lib/session";
-import { toVideoDTO } from "@/lib/dto";
-import type { ChannelPageDTO } from "@/lib/types";
+import { getChannelPage } from "@/lib/youtube/channels";
+import { rateLimit } from "@/lib/youtube/cache";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/channel/[handle] — banner, tabs data (videos / shorts / about). */
+/**
+ * GET /api/channel/[handle] — the live channel page. `handle` accepts
+ * "@name" or "UC…" (video cards link whichever the response carried);
+ * resolution: SSR channel page → browse UC… → header + videos tab + shorts.
+ */
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ handle: string }> }
 ) {
   try {
+    if (!rateLimit(`channel:${_req.headers.get("x-forwarded-for") ?? "local"}`)) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    }
     const { handle } = await params;
-    const channel = await db.channel.findUnique({ where: { handle } });
-    if (!channel) {
+    const page = await getChannelPage(handle);
+    if (!page) {
       return NextResponse.json({ error: "Channel not found" }, { status: 404 });
     }
-    const user = await getDemoUser().catch(() => null);
-    const sub = user
-      ? await db.subscribe.findUnique({
-          where: { userId_channelId: { userId: user.id, channelId: channel.id } },
-        })
-      : null;
-    const videos = await db.video.findMany({
-      where: { channelId: channel.id, visibility: "public", isShort: false },
-      include: { channel: true },
-      orderBy: { createdAt: "desc" },
-    });
-    const shorts = await db.video.findMany({
-      where: { channelId: channel.id, visibility: "public", isShort: true },
-      include: { channel: true },
-      orderBy: { views: "desc" },
-    });
-    const data: ChannelPageDTO = {
-      channel: {
-        id: channel.id,
-        handle: channel.handle,
-        name: channel.name,
-        avatarUrl: channel.avatarUrl,
-        verified: channel.verified,
-        subscriberCount: channel.subscriberCount,
-        bannerUrl: channel.bannerUrl,
-        description: channel.description,
-        createdAt: channel.createdAt.toISOString(),
-        isSubscribed: !!sub,
-        isOwner: channel.ownerId === user?.id,
-        videoCount: videos.length,
-      },
-      videos: videos.map(toVideoDTO),
-      shorts: shorts.map(toVideoDTO),
-    };
-    return NextResponse.json(data);
+    return NextResponse.json(page);
   } catch (err) {
     console.error("GET /api/channel/[handle] failed", err);
-    return NextResponse.json({ error: "Failed to load channel" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to load channel" }, { status: 502 });
   }
 }

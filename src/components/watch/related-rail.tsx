@@ -117,7 +117,7 @@ function RelatedCard({ video }: { video: RelatedVideoDto }) {
     <Link
       href={`/watch/${video.id}`}
       className="group flex gap-2 rounded-lg p-1 transition hover:bg-secondary/40 focus-visible:bg-secondary/40 focus-visible:outline-none"
-      aria-label={`${video.title} by ${video.channel.name}, ${compactCount(video.views)} views, ${relativeTime(video.createdAt)}`}
+      aria-label={`${video.title} by ${video.channel.name}, ${video.viewsText ?? `${compactCount(video.views)} views`}, ${video.publishedText ?? relativeTime(video.createdAt)}`}
     >
       <div className="relative aspect-video w-40 shrink-0 overflow-hidden rounded-md bg-secondary">
         <img
@@ -137,7 +137,7 @@ function RelatedCard({ video }: { video: RelatedVideoDto }) {
           {video.channel.verified && <BadgeCheck className="size-3.5 shrink-0" aria-label="Verified channel" />}
         </p>
         <p className="truncate text-xs text-muted-foreground">
-          {compactCount(video.views)} views · {relativeTime(video.createdAt)}
+          {video.viewsText ?? `${compactCount(video.views)} views`}{video.publishedText ?? relativeTime(video.createdAt) ? ` · ${video.publishedText ?? relativeTime(video.createdAt)}` : ""}
         </p>
       </div>
     </Link>

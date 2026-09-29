@@ -1,30 +1,40 @@
 import { NextRequest } from "next/server";
 import { json, errorResponse } from "@/lib/watch/api";
 import { resolveViewer } from "@/lib/watch/session";
-import { listComments } from "@/lib/watch/comment-service";
 import { proxyCommentCreate, proxyCommentReply } from "@/lib/watch/action-proxy";
-import { commentsQuerySchema } from "@/lib/watch/validators";
+import { listLiveComments, attachInlineReplies } from "@/lib/youtube/comments";
+import { rateLimit } from "@/lib/youtube/cache";
 
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/videos/[id]/comments?sort=top|new&cursor=&parentId=
- * — read lane unchanged (seed-backed until the InnerTube swap merges).
+ * GET /api/videos/[id]/comments?sort=top|new&cursor=&parentId= — LIVE
+ * comments via InnerTube continuation walking (20/page; sort tokens from the
+ * response's own sort menu). `parentId` serves the UI's reply threads; the
+ * dedicated nested replies route serves the same data for later waves.
  */
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
-    const viewer = await resolveViewer(req.headers);
+    if (!rateLimit(`comments:${req.headers.get("x-forwarded-for") ?? "local"}`, { limit: 240 })) {
+      return json({ error: "Too many requests" }, { status: 429 });
+    }
     const url = new URL(req.url);
-    const query = commentsQuerySchema.parse({
-      sort: url.searchParams.get("sort") ?? undefined,
-      cursor: url.searchParams.get("cursor") ?? undefined,
-      parentId: url.searchParams.get("parentId") ?? undefined,
-    });
-    const page = query.parentId
-      ? await listComments(id, viewer.id, query.sort, query.cursor, query.parentId)
-      : await listComments(id, viewer.id, query.sort, query.cursor);
-    return json(page);
+    const sort = url.searchParams.get("sort") === "new" ? "new" : "top";
+    const cursor = url.searchParams.get("cursor") ?? undefined;
+    const parentId = url.searchParams.get("parentId") ?? undefined;
+
+    if (parentId) {
+      // reply page under one comment (existing UI thread expander)
+      const { listLiveReplies } = await import("@/lib/youtube/comments");
+      const page = await listLiveReplies(id, parentId, cursor);
+      const withInline = await attachInlineReplies(id, page.items);
+      return json({ items: withInline, nextCursor: page.nextCursor });
+    }
+
+    const page = await listLiveComments(id, sort, cursor);
+    const items = await attachInlineReplies(id, page.items);
+    return json({ items, nextCursor: page.nextCursor, total: page.total });
   } catch (e) {
     return errorResponse(e);
   }

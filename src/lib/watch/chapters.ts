@@ -4,7 +4,8 @@
 
 export interface Chapter {
   startSec: number;
-  endSec: number;
+  /** null when the total duration is unknown (`next` carries no length) */
+  endSec: number | null;
   title: string;
 }
 
@@ -28,7 +29,7 @@ export function parseClockTime(s: string): number | null {
  * - chapters only activate with ≥ 2 valid timestamps and a 0:00 entry;
  * - each chapter ends where the next begins (last ends at duration).
  */
-export function parseChapters(description: string, durationSec: number): Chapter[] {
+export function parseChapters(description: string, durationSec: number | null): Chapter[] {
   const lines = description.split(/\r?\n/);
   const found: { start: number; title: string }[] = [];
   for (const line of lines) {
@@ -42,12 +43,12 @@ export function parseChapters(description: string, durationSec: number): Chapter
   }
   if (found.length < 2) return [];
   if (found[0].start !== 0) return [];
-  // dedupe/normalize: strictly increasing starts, capped at duration
+  // dedupe/normalize: strictly increasing starts, capped at duration (when known)
   const chapters: Chapter[] = [];
   for (const c of found) {
-    if (c.start >= durationSec) continue;
+    if (durationSec !== null && c.start >= durationSec) continue;
     if (chapters.length && c.start <= chapters[chapters.length - 1].startSec) continue;
-    chapters.push({ startSec: c.start, endSec: 0, title: c.title });
+    chapters.push({ startSec: c.start, endSec: null, title: c.title });
   }
   for (let i = 0; i < chapters.length; i++) {
     chapters[i].endSec =

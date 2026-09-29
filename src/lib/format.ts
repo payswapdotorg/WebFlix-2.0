@@ -3,8 +3,9 @@
  * (optional `now` parameter for deterministic tests).
  */
 
-/** 596 → "9:56", 47 → "0:47", 3725 → "1:02:05" */
-export function formatDuration(totalSec: number): string {
+/** 596 → "9:56", 47 → "0:47", 3725 → "1:02:05", null → "" (live/unknown). */
+export function formatDuration(totalSec: number | null): string {
+  if (totalSec === null || totalSec === undefined) return "";
   const sec = Math.max(0, Math.floor(totalSec));
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
@@ -36,6 +37,21 @@ function trimZero(s: string): string {
 /** "12.8M views" / "918 views" */
 export function formatViews(n: number): string {
   return `${formatCount(n)} view${n === 1 ? "" : "s"}`;
+}
+
+/** "12.8M views" / "918 views" — prefers the live passthrough text. */
+export function displayViews(video: { views: number; viewsText?: string | null }): string {
+  return video.viewsText ?? formatViews(video.views);
+}
+
+/** Relative age — prefers the live passthrough ("16 years ago"). */
+export function displayPublished(
+  video: { createdAt: string | null; publishedText?: string | null },
+  now: Date = new Date()
+): string {
+  if (video.publishedText) return video.publishedText;
+  if (video.createdAt) return formatRelativeDate(video.createdAt, now);
+  return "";
 }
 
 /** YouTube-style relative date: "3 hours ago", "2 months ago", "1 year ago". */

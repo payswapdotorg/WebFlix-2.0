@@ -96,7 +96,7 @@ export default function HistoryPage() {
 }
 
 function HistoryRow({ item }: { item: ContinueVideoDTO }) {
-  const progress = watchProgress(item.watchedSec, item.durationSec);
+  const progress = watchProgress(item.watchedSec, item.durationSec ?? 0);
   const finished = progress >= 0.95;
   return (
     <div className="px-4 sm:px-6">

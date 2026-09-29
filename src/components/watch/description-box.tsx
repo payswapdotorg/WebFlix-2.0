@@ -18,7 +18,9 @@ export function DescriptionBox({
   videoId,
   description,
   views,
+  viewsText,
   createdAt,
+  publishedText,
   durationSec,
   thumbnailUrl,
   onSeek,
@@ -26,8 +28,10 @@ export function DescriptionBox({
   videoId: string;
   description: string;
   views: number;
-  createdAt: string;
-  durationSec: number;
+  viewsText?: string | null;
+  createdAt: string | null;
+  publishedText?: string | null;
+  durationSec: number | null;
   thumbnailUrl: string;
   onSeek: (sec: number) => void;
 }) {
@@ -51,15 +55,21 @@ export function DescriptionBox({
       {/* meta row */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium">
         <span>
-          {expanded
-            ? `${exactCount(views)} views`
-            : `${compactCount(views)} views`}
+          {viewsText
+            ? expanded
+              ? `${exactCount(views)} views`
+              : viewsText
+            : expanded
+              ? `${exactCount(views)} views`
+              : `${compactCount(views)} views`}
         </span>
         <span aria-hidden="true" className="text-muted-foreground">
           •
         </span>
-        <span title={fullDate(createdAt)}>
-          {expanded ? fullDate(createdAt) : relativeTime(createdAt)}
+        <span title={fullDate(createdAt) || undefined}>
+          {expanded
+            ? fullDate(createdAt) || publishedText || ""
+            : publishedText || relativeTime(createdAt)}
         </span>
         {hashtags.slice(0, expanded ? hashtags.length : 3).map((tag) => (
           <Link
@@ -162,7 +172,7 @@ export function DescriptionBox({
                           {ch.title}
                         </div>
                         <div className="text-[11px] text-muted-foreground">
-                          {formatDuration(ch.endSec - ch.startSec)}
+                          {ch.endSec !== null ? formatDuration(ch.endSec - ch.startSec) : ""}
                         </div>
                       </button>
                     ))}

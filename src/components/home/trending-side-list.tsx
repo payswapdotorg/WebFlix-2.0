@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { formatViews, formatRelativeDate } from "@/lib/format";
+import { displayViews, displayPublished } from "@/lib/format";
 import { VerifiedBadge } from "@/components/app/verified-badge";
 import type { VideoDTO } from "@/lib/types";
 
@@ -43,7 +43,7 @@ export function TrendingSideList({ videos }: { videos: VideoDTO[] }) {
                   {video.channel.verified && <VerifiedBadge />}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {formatViews(video.views)} · {formatRelativeDate(video.createdAt)}
+                  {displayViews(video)} · {displayPublished(video)}
                 </p>
               </div>
             </Link>

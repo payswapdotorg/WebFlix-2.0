@@ -1,53 +1,43 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { toChannelLite, toVideoDTO } from "@/lib/dto";
+import { searchYouTube } from "@/lib/youtube/search";
+import { parseSearchFilters } from "@/lib/youtube/filters";
+import { rateLimit } from "@/lib/youtube/cache";
 import type { SearchPageDTO } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/search?q= — case-insensitive title/description/channel match. */
+/**
+ * GET /api/search?q=&sort=&uploadDate=&duration=&type= — live youtube.com
+ * search (InnerTube) with the verified filter params encoding.
+ * sort: relevance|date|views|rating · uploadDate: hour|today|week|month|year ·
+ * duration: short|long · type: video|channel|playlist|shorts|movie
+ */
 export async function GET(req: Request) {
   try {
-    const q = (new URL(req.url).searchParams.get("q") ?? "").trim();
+    const params = new URL(req.url).searchParams;
+    const q = (params.get("q") ?? "").trim();
     if (!q) {
       const empty: SearchPageDTO = { query: q, videos: [], channels: [] };
       return NextResponse.json(empty);
     }
-    const needle = `%${q.replace(/[%_]/g, (m) => `\\${m}`)}%`;
-    const videos = await db.video.findMany({
-      where: {
-        visibility: "public",
-        OR: [{ title: { contains: needle } }, { description: { contains: needle } }],
-      },
-      include: { channel: true },
-      orderBy: { views: "desc" },
-      take: 20,
+    if (!rateLimit(`search:${req.headers.get("x-forwarded-for") ?? "local"}`)) {
+      return NextResponse.json({ error: "Too many searches — slow down" }, { status: 429 });
+    }
+    const filters = parseSearchFilters({
+      sort: params.get("sort"),
+      uploadDate: params.get("uploadDate"),
+      duration: params.get("duration"),
+      type: params.get("type"),
     });
-    const matchingChannelIds = [...new Set(videos.map((v) => v.channelId))];
-    const channelsByName = await db.channel.findMany({
-      where: {
-        OR: [
-          { name: { contains: needle } },
-          { handle: { contains: needle } },
-          { id: { in: matchingChannelIds } },
-        ],
-      },
-      take: 3,
-    });
-    // Ranking: channels whose NAME matches first, then those only present via videos.
-    channelsByName.sort((a, b) => {
-      const aName = a.name.toLowerCase().includes(q.toLowerCase()) ? 0 : 1;
-      const bName = b.name.toLowerCase().includes(q.toLowerCase()) ? 0 : 1;
-      return aName - bName || b.subscriberCount - a.subscriberCount;
-    });
+    const results = await searchYouTube(q, filters);
     const data: SearchPageDTO = {
-      query: q,
-      videos: videos.map(toVideoDTO),
-      channels: channelsByName.map(toChannelLite),
+      query: results.query,
+      videos: results.videos,
+      channels: results.channels,
     };
     return NextResponse.json(data);
   } catch (err) {
     console.error("GET /api/search failed", err);
-    return NextResponse.json({ error: "Failed to search" }, { status: 500 });
+    return NextResponse.json({ error: "Search failed — try again" }, { status: 502 });
   }
 }

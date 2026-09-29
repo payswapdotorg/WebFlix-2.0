@@ -168,7 +168,7 @@ export function SeekBar({
           <div className="absolute inset-0 flex items-stretch">
             {chapters.map((ch, i) => {
               const segStart = pct(ch.startSec);
-              const segEnd = pct(ch.endSec);
+              const segEnd = pct(ch.endSec ?? duration);
               const segPlayed = Math.min(Math.max(playedPct, segStart), segEnd);
               return (
                 <div

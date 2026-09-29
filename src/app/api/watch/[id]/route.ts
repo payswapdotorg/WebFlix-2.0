@@ -1,83 +1,100 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { getDemoUser } from "@/lib/session";
-import { toVideoDTO } from "@/lib/dto";
-import type { CommentDTO, WatchPageDTO } from "@/lib/types";
+import { getWatchMetadata } from "@/lib/youtube/watch";
+import { commentsForWatch } from "@/lib/youtube/comments";
+import { rateLimit } from "@/lib/youtube/cache";
+import type { CommentDTO, VideoDTO, WatchPageDTO } from "@/lib/types";
+import type { CommentDto, RelatedVideoDto } from "@/lib/watch/types";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/watch/[id] — video + engagement state + related + comments (top-level). */
+/** RelatedVideoDto (rail DTO) → the full VideoDTO the aggregate payload uses. */
+function relatedToVideoDTO(r: RelatedVideoDto): VideoDTO {
+  return {
+    id: r.id,
+    title: r.title,
+    description: "",
+    thumbnailUrl: r.thumbnailUrl,
+    videoUrl: `https://www.youtube.com/watch?v=${r.id}`,
+    durationSec: r.durationSec,
+    views: r.views,
+    viewsText: r.viewsText ?? null,
+    publishedText: r.publishedText ?? null,
+    likes: 0,
+    dislikes: 0,
+    visibility: "public",
+    isMembersOnly: false,
+    membersTier: null,
+    category: "All",
+    isShort: false,
+    isLive: false,
+    premieredAt: null,
+    createdAt: r.createdAt,
+    badges: [],
+    channel: {
+      id: r.channel.id,
+      handle: r.channel.handle,
+      name: r.channel.name,
+      avatarUrl: r.channel.avatarUrl,
+      verified: r.channel.verified,
+      subscriberCount: 0,
+    },
+  };
+}
+
+/** Live CommentDto (watch domain) → the aggregate CommentDTO. */
+function liveCommentToDTO(c: CommentDto): CommentDTO {
+  return {
+    id: c.id,
+    body: c.body,
+    likes: c.likes,
+    likesText: c.likesText ?? null,
+    heartedByCreator: c.heartedByCreator,
+    pinned: c.pinned,
+    createdAt: c.createdAt,
+    publishedText: c.publishedText ?? null,
+    author: {
+      handle: c.author.handle,
+      name: c.author.name,
+      avatarUrl: c.author.avatarUrl,
+    },
+    replyCount: c.replyCount,
+  };
+}
+
+/**
+ * GET /api/watch/[id] — the aggregate watch bootstrap: `next {videoId}`
+ * metadata + the first comments page + the related rail (one cached upstream
+ * response feeds all three).
+ */
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    if (!rateLimit(`watch:${_req.headers.get("x-forwarded-for") ?? "local"}`)) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    }
     const { id } = await params;
-    const video = await db.video.findUnique({
-      where: { id },
-      include: { channel: true },
-    });
-    if (!video || video.visibility === "private") {
+    const meta = await getWatchMetadata(id);
+    if (!meta) {
       return NextResponse.json({ error: "Video not found" }, { status: 404 });
     }
-    const user = await getDemoUser().catch(() => null);
-
-    const sub = user
-      ? await db.subscribe.findUnique({
-          where: { userId_channelId: { userId: user.id, channelId: video.channelId } },
-        })
-      : null;
-
-    const membership = user
-      ? await db.membership.findFirst({
-          where: { userId: user.id, tier: { channelId: video.channelId } },
-          include: { tier: true },
-        })
-      : null;
-
-    // Related: same category first (views desc), then the rest.
-    const sameCategory = await db.video.findMany({
-      where: { visibility: "public", id: { not: video.id }, category: video.category },
-      include: { channel: true },
-      orderBy: { views: "desc" },
-      take: 6,
-    });
-    const other = await db.video.findMany({
-      where: { visibility: "public", id: { not: video.id }, category: { not: video.category } },
-      include: { channel: true },
-      orderBy: { views: "desc" },
-      take: 12,
-    });
-    const related = [...sameCategory, ...other].slice(0, 12).map(toVideoDTO);
-
-    const commentRows = await db.comment.findMany({
-      where: { videoId: video.id, moderation: "approved", parentId: null },
-      include: { user: true, replies: { select: { id: true } } },
-      orderBy: [{ pinned: "desc" }, { createdAt: "desc" }],
-      take: 12,
-    });
-    const comments: CommentDTO[] = commentRows.map((c) => ({
-      id: c.id,
-      body: c.body,
-      likes: c.likes,
-      heartedByCreator: c.heartedByCreator,
-      pinned: c.pinned,
-      createdAt: c.createdAt.toISOString(),
-      author: { handle: c.user.handle, name: c.user.name, avatarUrl: c.user.avatarUrl },
-      replyCount: c.replies.length,
+    const commentsResult = await commentsForWatch(id).catch(() => ({
+      comments: [] as CommentDto[],
+      total: 0,
+      nextCursor: null,
     }));
-
     const data: WatchPageDTO = {
-      video: toVideoDTO(video),
-      isSubscribed: !!sub,
-      isOwner: video.channel.ownerId === user?.id,
-      memberTierName: membership?.tier.name ?? null,
-      related,
-      comments,
+      video: meta.video,
+      isSubscribed: meta.state.subscribed,
+      isOwner: false,
+      memberTierName: null,
+      related: meta.related.items.slice(0, 12).map(relatedToVideoDTO),
+      comments: commentsResult.comments.map(liveCommentToDTO),
     };
     return NextResponse.json(data);
   } catch (err) {
     console.error("GET /api/watch/[id] failed", err);
-    return NextResponse.json({ error: "Failed to load video" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to load video" }, { status: 502 });
   }
 }

@@ -1,16 +1,47 @@
 /// <reference types="bun-types" />
-import { describe, expect, test } from "bun:test";
+/**
+ * WFX2-A-B home + videos API — the swapped live routes exercised against
+ * fixture bytes (tests/fixtures/yt/) via the setUpstream() seam. The seed
+ * database no longer powers these routes; this file keeps its place in the
+ * `test:boot` phase but needs no database.
+ */
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+
+import { setUpstream } from "@/lib/youtube/innertube";
+import { clearCache } from "@/lib/youtube/cache";
 import { GET as getHome } from "@/app/api/home/route";
 import { GET as listVideosRoute } from "@/app/api/videos/route";
-import { getHomeFeed } from "@/lib/queries";
-import { isUnfinishedWatch } from "@/lib/dto";
-import type { ContinueVideoDTO, HomeFeedDTO, VideoDTO, VideoPageDTO } from "@/lib/types";
+import type { HomeFeedDTO, VideoPageDTO } from "@/lib/types";
 
-/**
- * Home API shape — integration test against the real route handler and
- * the seeded SQLite database (bun test boots the same Prisma client).
- */
-describe("GET /api/home — shape (every rail present + typed)", () => {
+const FIXTURE_DIR = "tests/fixtures/yt";
+const load = (name: string): any => JSON.parse(readFileSync(`${FIXTURE_DIR}/${name}.json`, "utf8"));
+
+let recorded: { url: string; body: any }[] = [];
+
+beforeEach(() => {
+  clearCache();
+  recorded = [];
+  const search = load("search_lofi");
+  const home = load("home_feed");
+  setUpstream(async (url: string, init?: RequestInit) => {
+    recorded.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null });
+    const json = (data: unknown) =>
+      new Response(JSON.stringify(data), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    if (url.includes("/youtubei/v1/search")) return json(search);
+    if (url.includes("/youtubei/v1/browse")) return json(home);
+    return new Response("not found", { status: 404 });
+  });
+});
+
+afterEach(() => {
+  setUpstream(null);
+});
+
+describe("GET /api/home — shape (every rail present + typed, live mapping)", () => {
   test("responds 200 with every WebFlix rail in the payload", async () => {
     const res = await getHome(new Request("http://localhost/api/home"));
     expect(res.status).toBe(200);
@@ -33,120 +64,90 @@ describe("GET /api/home — shape (every rail present + typed)", () => {
     ).toBe(true);
   });
 
-  test("video DTOs are typed and complete", async () => {
-    const feed = await getHomeFeed(null);
-    const all: VideoDTO[] = [
-      ...(feed.hero ? [feed.hero] : []),
-      ...feed.trending,
-      ...feed.recommended,
-    ];
-    expect(all.length).toBeGreaterThan(0);
-    for (const v of all) {
+  test("the recorded unauthenticated feed (feedNudge) maps to honest empty rails", async () => {
+    // YouTube's own logged-out response for FEwhat_to_watch is a nudge —
+    // no shelves, no hero, no continue-watching without a session.
+    const feed = (await (await getHome(new Request("http://localhost/api/home"))).json()) as HomeFeedDTO;
+    expect(feed.hero).toBeNull();
+    expect(feed.recommended).toEqual([]);
+    expect(feed.shorts).toEqual([]);
+    expect(feed.continueWatching).toEqual([]);
+    expect(feed.becauseYouWatched).toBeNull();
+    expect(feed.chips[0]).toBe("All");
+    // the browse call actually went upstream with the right browseId
+    const browse = recorded.find((r) => r.url.includes("/youtubei/v1/browse"));
+    expect(browse?.body.browseId).toBe("FEwhat_to_watch");
+    expect(browse?.body.context.client.clientName).toBe("WEB");
+    expect(browse?.body.context.client.clientVersion).toBe("2.20260925.08.00");
+  });
+
+  test("category mode is search-backed: recommended fills from real search results", async () => {
+    const res = await getHome(new Request("http://localhost/api/home?category=Music"));
+    expect(res.status).toBe(200);
+    const feed = (await res.json()) as HomeFeedDTO;
+    expect(feed.hero).toBeNull(); // chips swap to a flat grid (UI contract)
+    expect(feed.recommended.length).toBeGreaterThan(0);
+    for (const v of feed.recommended) {
+      expect(typeof v.id).toBe("string");
+      expect(typeof v.title).toBe("string");
+      expect(v.thumbnailUrl).toMatch(/^https:\/\//);
+      expect(v.videoUrl).toMatch(/^https:\/\/www\.youtube\.com\/watch\?v=/);
+      expect(typeof v.channel.name).toBe("string");
+    }
+    expect(feed.becauseYouWatched).toBeNull();
+    const call = recorded.find((r) => r.url.includes("/youtubei/v1/search"));
+    expect(call?.body.query).toBe("Music");
+  });
+
+  test("video DTOs are typed and complete (search-backed cards)", async () => {
+    const feed = (await (await getHome(new Request("http://localhost/api/home?category=Music"))).json()) as HomeFeedDTO;
+    expect(feed.recommended.length).toBeGreaterThan(0);
+    for (const v of feed.recommended) {
       expect(typeof v.id).toBe("string");
       expect(typeof v.title).toBe("string");
       expect(v.thumbnailUrl).toMatch(/^https:\/\//);
       expect(v.videoUrl).toMatch(/^https:\/\//);
-      expect(v.durationSec).toBeGreaterThanOrEqual(0);
+      expect(v.durationSec === null || v.durationSec >= 0).toBe(true);
       expect(v.views).toBeGreaterThanOrEqual(0);
       expect(["public", "unlisted", "private"]).toContain(v.visibility);
       expect(typeof v.isShort).toBe("boolean");
       expect(typeof v.isLive).toBe("boolean");
-      expect(typeof v.createdAt).toBe("string");
-      expect(Number.isNaN(Date.parse(v.createdAt))).toBe(false);
+      expect(v.createdAt === null || !Number.isNaN(Date.parse(v.createdAt))).toBe(true);
       expect(v.channel).toBeDefined();
       expect(typeof v.channel.handle).toBe("string");
       expect(typeof v.channel.name).toBe("string");
     }
   });
-
-  test("hero is trending #1 by views in the window; trending is views-desc", async () => {
-    const feed = await getHomeFeed(null);
-    expect(feed.hero).not.toBeNull();
-    for (const t of feed.trending) {
-      expect(t.views).toBeLessThanOrEqual(feed.hero!.views);
-    }
-    for (let i = 1; i < feed.trending.length; i++) {
-      expect(feed.trending[i - 1].views).toBeGreaterThanOrEqual(feed.trending[i].views);
-    }
-    expect(feed.trending.length).toBeLessThanOrEqual(8);
-  });
-
-  test("continueWatching: unfinished (>30s), recency-ordered, progress data present", async () => {
-    const feed = await getHomeFeed(null);
-    const items = feed.continueWatching as ContinueVideoDTO[];
-    expect(items.length).toBeGreaterThan(0);
-    for (const item of items) {
-      expect(item.watchedSec).toBeGreaterThan(30);
-      expect(isUnfinishedWatch(item.watchedSec, item.durationSec)).toBe(true);
-      expect(typeof item.watchedAt).toBe("string");
-    }
-    for (let i = 1; i < items.length; i++) {
-      expect(new Date(items[i - 1].watchedAt).getTime()).toBeGreaterThanOrEqual(
-        new Date(items[i].watchedAt).getTime()
-      );
-    }
-  });
-
-  test("shorts shelf holds exactly the seeded shorts (6, vertical thumbs)", async () => {
-    const feed = await getHomeFeed(null);
-    expect(feed.shorts).toHaveLength(6);
-    for (const s of feed.shorts) {
-      expect(s.isShort).toBe(true);
-      expect(s.thumbnailUrl).toMatch(/\/360\/640$/);
-    }
-  });
-
-  test("becauseYouWatched points at the most recent watch's category", async () => {
-    const feed = await getHomeFeed(null);
-    expect(feed.becauseYouWatched).not.toBeNull();
-    const label = feed.becauseYouWatched!.label;
-    // The seed's most recent watch is the Tokyo street food tour (Cooking).
-    expect(label).toContain("Tokyo");
-    for (const v of feed.becauseYouWatched!.videos) {
-      expect(v.category).toBe("Cooking");
-    }
-  });
-
-  test("category filter: Music feed contains only Music (chips behavior, server side)", async () => {
-    const res = await getHome(new Request("http://localhost/api/home?category=Music"));
-    const feed = (await res.json()) as HomeFeedDTO;
-    const all = [...feed.trending, ...feed.recommended, ...(feed.hero ? [feed.hero] : [])];
-    expect(all.length).toBeGreaterThan(0);
-    for (const v of all) {
-      expect(v.category).toBe("Music");
-    }
-    expect(feed.becauseYouWatched).toBeNull();
-  });
 });
 
-describe("GET /api/videos — keyset pagination for infinite scroll", () => {
-  test("first page + cursor + no overlap on second page", async () => {
+describe("GET /api/videos — continuation-token pagination (live)", () => {
+  test("default page: browse feed + honest empty when YouTube nudges", async () => {
     const res1 = await listVideosRoute(new Request("http://localhost/api/videos"));
     expect(res1.status).toBe(200);
     const page1 = (await res1.json()) as VideoPageDTO;
-    expect(page1.videos.length).toBeGreaterThan(0);
-    expect(page1.nextCursor).not.toBeNull();
-
-    const res2 = await listVideosRoute(
-      new Request(`http://localhost/api/videos?cursor=${page1.nextCursor}`)
-    );
-    const page2 = (await res2.json()) as VideoPageDTO;
-    const ids1 = new Set(page1.videos.map((v) => v.id));
-    const overlap = page2.videos.filter((v) => ids1.has(v.id));
-    expect(overlap).toHaveLength(0);
-
-    // Views stay non-increasing across the keyset boundary.
-    const last1 = page1.videos[page1.videos.length - 1].views;
-    for (const v of page2.videos) {
-      expect(v.views).toBeLessThanOrEqual(last1);
-    }
+    expect(Array.isArray(page1.videos)).toBe(true);
+    expect(page1.nextCursor === null || typeof page1.nextCursor === "string").toBe(true);
   });
 
-  test("invalid cursor → 500 JSON error (no crash)", async () => {
-    const res = await listVideosRoute(
-      new Request("http://localhost/api/videos?cursor=garbage")
+  test("category page: search-backed, cursor POSTs the continuation upstream", async () => {
+    const res1 = await listVideosRoute(new Request("http://localhost/api/videos?category=Music"));
+    expect(res1.status).toBe(200);
+    const page1 = (await res1.json()) as VideoPageDTO;
+    expect(page1.videos.length).toBeGreaterThan(0);
+
+    // the cursor is an opaque InnerTube continuation token passed straight through
+    const res2 = await listVideosRoute(
+      new Request(`http://localhost/api/videos?category=Music&cursor=tok-1`)
     );
-    expect(res.status).toBe(500);
+    expect(res2.status).toBe(200);
+    const call = recorded.find((r) => r.url.includes("/youtubei/v1/search") && r.body?.continuation);
+    expect(call?.body.continuation).toBe("tok-1");
+  });
+
+  test("upstream failure → JSON error (no seed fallback, no crash)", async () => {
+    setUpstream(async () => new Response("boom", { status: 503 }));
+    const res = await listVideosRoute(new Request("http://localhost/api/videos"));
+    expect(res.status).toBe(502);
     const body = (await res.json()) as { error: string };
     expect(typeof body.error).toBe("string");
   });

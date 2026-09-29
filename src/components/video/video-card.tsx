@@ -24,7 +24,8 @@ import { Progress } from "@/components/ui/progress";
 import { useHoverPreview } from "./video-hover-preview";
 import { PlaylistSaveDialog } from "./playlist-save-dialog";
 import { useQueue } from "@/lib/sidebar-store";
-import { formatDuration, formatViews, formatRelativeDate, watchProgress } from "@/lib/format";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { formatDuration, displayViews, displayPublished, watchProgress } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { postJson } from "@/hooks/use-api";
 import { VerifiedBadge } from "@/components/app/verified-badge";
@@ -48,7 +49,7 @@ export function VideoCard({ video, progress, variant = "grid", className }: Vide
   if (hidden) return null;
 
   const watched =
-    "watchedSec" in video ? watchProgress(video.watchedSec, video.durationSec) : 0;
+    "watchedSec" in video ? watchProgress(video.watchedSec, video.durationSec ?? 0) : 0;
   const shownProgress = progress ?? watched;
 
   async function copyLink() {
@@ -109,11 +110,11 @@ export function VideoCard({ video, progress, variant = "grid", className }: Vide
             <span className="absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-sm bg-yt-red px-1.5 py-0.5 text-[11px] font-bold uppercase text-white">
               <span className="size-1.5 rounded-full bg-white" /> Live
             </span>
-          ) : (
+          ) : video.durationSec !== null ? (
             <span className="duration-badge absolute bottom-1.5 right-1.5 rounded-sm px-1.5 py-0.5 text-[11px] font-medium tabular-nums">
               {formatDuration(video.durationSec)}
             </span>
-          )}
+          ) : null}
           {video.isMembersOnly && (
             <span className="absolute left-1.5 top-1.5 rounded-sm bg-yt-red px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
               Members
@@ -136,12 +137,12 @@ export function VideoCard({ video, progress, variant = "grid", className }: Vide
           className="hidden shrink-0 sm:block"
           tabIndex={-1}
         >
-          <img
-            src={video.channel.avatarUrl}
-            alt=""
-            loading="lazy"
-            className="size-9 rounded-full object-cover"
-          />
+          <Avatar className="size-9">
+            {video.channel.avatarUrl ? (
+              <AvatarImage src={video.channel.avatarUrl} alt="" />
+            ) : null}
+            <AvatarFallback>{video.channel.name.slice(0, 1).toUpperCase()}</AvatarFallback>
+          </Avatar>
         </Link>
         <div className="min-w-0 flex-1">
           <Link href={`/watch/${video.id}`} className="block">
@@ -160,7 +161,11 @@ export function VideoCard({ video, progress, variant = "grid", className }: Vide
             {video.channel.verified && <VerifiedBadge />}
           </Link>
           <p className="text-[13px] text-muted-foreground">
-            {formatViews(video.views)} · {formatRelativeDate(video.createdAt)}
+            {displayViews(video)}
+            {(() => {
+              const age = displayPublished(video);
+              return age ? ` · ${age}` : "";
+            })()}
           </p>
         </div>
         <DropdownMenu>
