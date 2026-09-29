@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+<head>
+<!--
+  WFX2-C-B SYNTHETIC FIXTURE (provenance):
+  Minimal stand-in for a cookie-authenticated
+  https://studio.youtube.com/channel/UC…/analytics page. The real page is a
+  JS application whose serialized state embeds the analytics numbers; the
+  exact live shape still requires an operator-cookie capture (pending —
+  documented in the lane report; the runtime path degrades honestly to
+  mode:"unavailable" until a real parse succeeds). This fixture drives the
+  tolerant extractor: metric keys are the creator-analytics key family
+  (views / impressions / estimatedMinutesWatched / subscribersGained /
+  estimatedRevenue / likes / comments / shares); the VALUES are placeholders
+  for parser tests only (never surfaced as real data).
+-->
+<script>
+window.__BOOTSTRAP__ = {"unifiedAnalyticsData":{"views":7123,"impressions":984231,"estimatedMinutesWatched":456789,"subscribersGained":421,"estimatedRevenue":123.45,"likes":8712,"comments":559,"shares":37}};
+</script>
+</head>
+<body><div id="studio-app"></div></body>
+</html>
