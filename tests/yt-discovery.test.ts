@@ -16,7 +16,7 @@ import { readFileSync } from "node:fs";
 import { NextRequest } from "next/server";
 import { setUpstream } from "@/lib/youtube/innertube";
 import { clearCache } from "@/lib/youtube/cache";
-import { buildSearchParam } from "@/lib/youtube/filters";
+import { buildSearchParam, type SearchFilters } from "@/lib/youtube/filters";
 import {
   FILTER_GROUPS,
   appliedFilterChips,
@@ -262,7 +262,7 @@ describe("search-filters — URL ↔ state round-trips", () => {
   });
 
   test("full state round-trips (all groups + verbatim)", () => {
-    const state = { uploadDate: "week", type: "video", duration: "medium", sort: "views", verbatim: true };
+    const state = { uploadDate: "week", type: "video", duration: "medium", sort: "views", verbatim: true } satisfies SearchFilters;
     const entries = filtersToEntries("lofi", state);
     expect(entries).toEqual([
       ["q", "lofi"],
@@ -277,7 +277,7 @@ describe("search-filters — URL ↔ state round-trips", () => {
   });
 
   test("relevance sort is the default (not emitted in URLs)", () => {
-    expect(filtersToEntries("lofi", { sort: "relevance" })).toEqual([["q", "lofi"]]);
+    expect(filtersToEntries("lofi", { sort: "relevance" } satisfies SearchFilters)).toEqual([["q", "lofi"]]);
     expect(filtersFromParams({ q: "lofi", sort: "relevance" }).state.sort).toBeUndefined();
   });
 
@@ -309,7 +309,7 @@ describe("search-filters — URL ↔ state round-trips", () => {
   });
 
   test("withGroupValue — real single-select semantics (group replacement)", () => {
-    const state = { uploadDate: "today", type: "video" };
+    const state = { uploadDate: "today", type: "video" } satisfies SearchFilters;
     // same group → replaced
     expect(withGroupValue(state, "uploadDate", "week").uploadDate).toBe("week");
     // other groups untouched

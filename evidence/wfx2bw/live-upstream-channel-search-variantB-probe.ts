@@ -12,7 +12,7 @@ async function yt(endpoint: string, body: object) {
 function dumpShape(data: any, label: string) {
   const tabs = data?.contents?.twoColumnBrowseResultsRenderer?.tabs ?? [];
   console.log(label, "| tabs:", tabs.map((t: any) => t?.tabRenderer?.title ?? "?").join(", "));
-  const alerts = [];
+  const alerts: string[] = [];
   function walk(n: any) {
     if (!n || typeof n !== "object") return;
     if (Array.isArray(n)) { n.forEach(walk); return; }
