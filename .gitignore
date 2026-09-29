@@ -38,3 +38,6 @@ yarn-error.log*
 
 # vercel
 .vercel
+
+# documented example (never the real values)
+!.env.example
