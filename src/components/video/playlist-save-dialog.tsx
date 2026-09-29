@@ -15,7 +15,8 @@ import { Input } from "@/components/ui/input";
 import { postJson, useApi } from "@/hooks/use-api";
 import type { PlaylistDTO } from "@/lib/types";
 
-/** "Save to playlist" — real playlist picker + create-new (all DB-backed). */
+/** "Save to playlist" — the operator's real YouTube playlists + create-new
+ * (list via the live /api/playlists read; adds via the broker write lane). */
 export function PlaylistSaveDialog({
   open,
   onOpenChange,
@@ -27,7 +28,10 @@ export function PlaylistSaveDialog({
   videoId: string;
   videoTitle: string;
 }) {
-  const { data: playlists, reload } = useApi<PlaylistDTO[]>(open ? "/api/playlists" : null);
+  const { data, reload } = useApi<{ playlists: PlaylistDTO[]; loginRequired: boolean }>(
+    open ? "/api/playlists" : null
+  );
+  const playlists = data?.playlists ?? null;
   const [newTitle, setNewTitle] = useState("");
   const [creating, setCreating] = useState(false);
 
@@ -49,13 +53,18 @@ export function PlaylistSaveDialog({
     if (!title) return;
     setCreating(true);
     try {
-      const created = await postJson<PlaylistDTO[]>("/api/playlists", { title, visibility: "private" });
-      const newPlaylist = created.find((p) => p.title === title);
-      if (newPlaylist) {
+      const created = await postJson<{ playlist: PlaylistDTO; note?: string }>('/api/playlists', {
+        title,
+        visibility: "private",
+      });
+      const newPlaylist = created.playlist;
+      if (newPlaylist?.id) {
         await addTo(newPlaylist.id, title);
-        reload();
+      } else {
+        toast.info(`${title} created${created.note ? " (mirror — broker offline)" : ""}`);
       }
       setNewTitle("");
+      reload();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create playlist");
     } finally {
@@ -87,9 +96,15 @@ export function PlaylistSaveDialog({
               <span className="text-xs text-muted-foreground">{p.videoCount}</span>
             </button>
           ))}
-          {playlists && playlists.length === 0 && (
+          {playlists && playlists.length === 0 && !data?.loginRequired && (
             <p className="px-3 py-4 text-center text-sm text-muted-foreground">
               No playlists yet — create one below.
+            </p>
+          )}
+          {data?.loginRequired && (
+            <p className="px-3 py-4 text-center text-sm text-muted-foreground">
+              Sign in to see the account&apos;s playlists — saving still works through the
+              action broker for Watch later.
             </p>
           )}
         </div>

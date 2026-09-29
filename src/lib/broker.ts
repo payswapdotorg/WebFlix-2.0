@@ -27,7 +27,16 @@ export type BrokerKind =
   | "comment-like"
   | "playlist-add"
   | "watch-later"
-  | "not-interested";
+  | "not-interested"
+  // WFX2-B-B (personal surfaces) — additive
+  | "history-remove"
+  | "history-clear-all"
+  | "history-pause"
+  | "search-history-pause"
+  | "playlist-remove-item"
+  | "playlist-create"
+  | "playlist-delete"
+  | "notifications-mark-read";
 
 export interface BrokerTarget {
   videoId?: string;
@@ -44,6 +53,10 @@ export interface BrokerPayload {
   title?: string;
   add?: boolean;
   videoId?: string;
+  /** playlist-create: "private" | "unlisted" | "public" */
+  visibility?: string;
+  /** history-pause / search-history-pause: desired end state */
+  paused?: boolean;
 }
 
 /** Typed failure for the routes to map (502 offline / 502 action-failed). */

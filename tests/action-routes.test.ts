@@ -20,7 +20,9 @@ import { afterAll, beforeEach, describe, expect, test, mock } from "bun:test";
 /* the registry, so the values must be copied into a fresh object.      */
 /* ------------------------------------------------------------------ */
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const realBroker = { ...require("@/lib/broker") } as Record<string, unknown>;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const realDirect = { ...require("@/lib/youtube-direct") } as Record<string, unknown>;
 
 /* ------------------------------------------------------------------ */

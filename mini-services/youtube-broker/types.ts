@@ -15,6 +15,15 @@ export const ACTION_KINDS = [
   "playlist-add",
   "watch-later",
   "not-interested",
+  // WFX2-B-B (personal surfaces) — additive
+  "history-remove",
+  "history-clear-all",
+  "history-pause",
+  "search-history-pause",
+  "playlist-remove-item",
+  "playlist-create",
+  "playlist-delete",
+  "notifications-mark-read",
 ] as const;
 
 export type BrokerActionKind = (typeof ACTION_KINDS)[number];
@@ -41,6 +50,15 @@ export interface BrokerTarget {
  *  - watch-later:          mode: "toggle" (default) | "add" | "remove".
  *  - like/dislike/
  *    subscribe/unsubscribe: mode: "set" (default) | "toggle" | "on" | "off".
+ *  - history-pause /
+ *    search-history-pause:  paused: boolean — desired end state (default:
+ *                          true = paused; false = resume).
+ *  - playlist-remove-item: videoId (in target or payload), playlistId (in
+ *                          target).
+ *  - playlist-create:      title (required), visibility: "private" |
+ *                          "unlisted" | "public" (default private).
+ *  - notifications-mark-read: (no payload — opens the bell menu in the
+ *                          logged-in tab and re-reads the unseen count).
  */
 export interface BrokerPayload {
   text?: string;
@@ -50,6 +68,8 @@ export interface BrokerPayload {
   title?: string;
   add?: boolean;
   videoId?: string;
+  visibility?: string;
+  paused?: boolean;
 }
 
 export interface BrokerActionRequest {
