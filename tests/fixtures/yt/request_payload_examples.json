@@ -1,0 +1,17 @@
+{
+ "like/like": {
+  "target": {
+   "videoId": "dQw4w9WgXcQ"
+  },
+  "params": "Cg0KC2RRdzR3OVdnWGNRIAAyDAiH6OzVBhCG4ZOCAg%3D%3D"
+ },
+ "like/removelike": {
+  "target": {
+   "videoId": "dQw4w9WgXcQ"
+  },
+  "params": "Cg0KC2RRdzR3OVdnWGNRGAAqDAiH6OzVBhCurJSCAg%3D%3D"
+ },
+ "browse": {
+  "browseId": "FEsubscriptions"
+ }
+}
