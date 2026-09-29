@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+<head>
+<!--
+  WFX2-C-B SYNTHETIC FIXTURE (provenance):
+  Minimal stand-in for a SIGNED-IN www.youtube.com home page. Real pages embed
+  ytcfg.set({...}) — which carries the session's own "CHANNEL_ID" — plus
+  `var ytInitialData = {...}` (the same bootstrap the ssr.ts layer parses).
+  Shapes mirror the public youtube.com HTML structure; the CHANNEL_ID value is
+  the Rick Astley channel (UCuAXFkgsw1L7xaCfnd5JJOw) so this fixture chains
+  with the REAL channel_rickastley.json browse fixture. The lowercase
+  "channelId" inside ytInitialData belongs to a feed item (a DIFFERENT
+  channel) — the operator resolver must only honor the ytcfg-style
+  "CHANNEL_ID" key, never a grid item's channelId. Values are placeholders
+  for parser tests only (never surfaced as real data).
+-->
+<script>ytcfg.set({"INNERTUBE_API_KEY":"fixture-key","SESSION_INDEX":"0","CHANNEL_ID":"UCuAXFkgsw1L7xaCfnd5JJOw","VISITOR_DATA":"fixture"});</script>
+<script>var ytInitialData = {"feedContents":{"items":[{"videoRenderer":{"videoId":"fixtureVideo1","channelId":"UCNOTtheOperator00000000"}}]}};</script>
+</head>
+<body><div id="content"></div></body>
+</html>

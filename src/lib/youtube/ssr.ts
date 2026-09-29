@@ -41,6 +41,21 @@ export async function fetchYtInitialData(
   path: string,
   opts: { cookies?: string | null; timeoutMs?: number } = {}
 ): Promise<Record<string, any>> {
+  const html = await fetchPageHtml(path, opts);
+  return extractYtInitialData(html);
+}
+
+/**
+ * GET `https://www.youtube.com<path>` and return the RAW page HTML (with
+ * session cookies when present). WFX2-C-B addition: the studio lane needs the
+ * raw markup (ytcfg `CHANNEL_ID` extraction) where `ytInitialData` alone is
+ * not enough. `path` must start with "/". Redirects are followed (a 3xx
+ * target page's markup is what you get; non-2xx throws).
+ */
+export async function fetchPageHtml(
+  path: string,
+  opts: { cookies?: string | null; timeoutMs?: number } = {}
+): Promise<string> {
   if (!path.startsWith("/")) throw new Error(`ssr path must start with "/": ${path}`);
   const url = `${YT_BASE}${path}`;
   const controller = new AbortController();
@@ -54,7 +69,7 @@ export async function fetchYtInitialData(
     if (!res.ok) {
       throw new Error(`SSR fetch ${path} failed: HTTP ${res.status}`);
     }
-    return extractYtInitialData(await res.text());
+    return await res.text();
   } finally {
     clearTimeout(timer);
   }

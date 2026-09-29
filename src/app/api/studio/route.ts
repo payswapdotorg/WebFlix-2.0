@@ -1,55 +1,37 @@
-import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { getDemoUser } from "@/lib/session";
-import { toVideoDTO } from "@/lib/dto";
-import type { StudioDTO } from "@/lib/types";
+import { NextRequest, NextResponse } from "next/server";
+import { hasSession } from "@/lib/youtube/session";
+import { rateLimit } from "@/lib/youtube/cache";
+import { getStudioData, DEFAULT_ENRICH_LIMIT, MAX_ENRICH_LIMIT } from "@/lib/youtube/studio";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/studio — the demo user's channel (CodeCraft) + real stats. */
-export async function GET() {
+/**
+ * GET /api/studio?enrich=N — the creator studio surface for the
+ * single-tenant operator channel:
+ *  - the operator's REAL channel (session-only resolution; null in public
+ *    mode — honest "connect the operator session" state)
+ *  - the channel's real public videos + per-video real likes/comments for
+ *    the first N rows (public-scope, labeled)
+ *  - studio-scope analytics via Studio SSR (parse-or-honestly-degrade —
+ *    NEVER fabricated numbers)
+ *  - deep links out to the real studio.youtube.com pages
+ * `enrich` defaults to 10, clamped to 50 (each enriched row costs real,
+ * cached upstream reads).
+ */
+export async function GET(req: NextRequest) {
   try {
-    const user = await getDemoUser();
-    const channel = await db.channel.findFirst({
-      where: { ownerId: user.id },
-    });
-    if (!channel) {
-      return NextResponse.json({ error: "You don't own a channel yet" }, { status: 404 });
+    if (!rateLimit(`studio:${req.headers.get("x-forwarded-for") ?? "local"}`, { limit: 30 })) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
-    const videos = await db.video.findMany({
-      where: { channelId: channel.id },
-      include: { channel: true },
-      orderBy: { createdAt: "desc" },
+    const raw = new URL(req.url).searchParams.get("enrich");
+    const parsed = raw !== null ? Number(raw) : NaN;
+    const enrich = Number.isFinite(parsed) ? Math.trunc(parsed) : DEFAULT_ENRICH_LIMIT;
+    const data = await getStudioData({
+      enrich: Number.isFinite(parsed) ? Math.max(0, Math.min(enrich, MAX_ENRICH_LIMIT)) : undefined,
     });
-    const commentCounts = new Map<string, number>();
-    for (const v of videos) {
-      const c = await db.comment.count({ where: { videoId: v.id } });
-      commentCounts.set(v.id, c);
-    }
-    const totals = {
-      views: videos.reduce((sum, v) => sum + v.views, 0),
-      likes: videos.reduce((sum, v) => sum + v.likes, 0),
-      videos: videos.length,
-      comments: [...commentCounts.values()].reduce((a, b) => a + b, 0),
-    };
-    const data: StudioDTO = {
-      channel: {
-        id: channel.id,
-        handle: channel.handle,
-        name: channel.name,
-        avatarUrl: channel.avatarUrl,
-        verified: channel.verified,
-        subscriberCount: channel.subscriberCount,
-        bannerUrl: channel.bannerUrl,
-        description: channel.description,
-        createdAt: channel.createdAt.toISOString(),
-      },
-      totals,
-      videos: videos.map((v) => ({ ...toVideoDTO(v), commentCount: commentCounts.get(v.id) ?? 0 })),
-    };
-    return NextResponse.json(data);
+    return NextResponse.json({ ...data, loginRequired: !hasSession() });
   } catch (err) {
     console.error("GET /api/studio failed", err);
-    return NextResponse.json({ error: "Failed to load studio" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to load studio" }, { status: 502 });
   }
 }

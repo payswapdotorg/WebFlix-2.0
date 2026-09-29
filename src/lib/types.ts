@@ -138,14 +138,133 @@ export type WatchPageDTO = {
   comments: CommentDTO[];
 };
 
-export type StudioDTO = {
-  channel: ChannelLite & {
-    bannerUrl: string | null;
-    description: string | null;
-    createdAt: string;
+export type StudioDTO = StudioPageDTO;
+
+/** WFX2-C-B — the studio surface for the single-tenant operator channel. */
+export type StudioPageDTO = {
+  /** true when YT_COOKIES is configured (the operator session is live) */
+  session: boolean;
+  /** the operator's REAL channel (browse/channel-header data) — null in public mode */
+  channel: StudioChannelDTO | null;
+  /** the channel's public videos tab (real rows, public-scope stats) */
+  videos: StudioVideoDTO[];
+  /** public-scope totals computed from the real videos above (never studio-private numbers) */
+  totals: {
+    /** header subscriber count (real, channel-wide) */
+    subscribers: number;
+    subscriberCountText: string | null;
+    /** header video count (real, channel-wide) */
+    videoCount: number;
+    /** views summed across the listed public videos (real) */
+    views: number;
+    /** likes summed across the enriched videos (null entries excluded — honest) */
+    likes: number;
+    /** comments summed across the enriched videos (null entries excluded — honest) */
+    comments: number;
+    /** how many listed rows the likes/comments sums cover */
+    enrichedCount: number;
   };
-  totals: { views: number; likes: number; videos: number; comments: number };
-  videos: (VideoDTO & { commentCount: number })[];
+  /** studio-scope analytics (Studio SSR with cookie auth — honest modes, never fake) */
+  analytics: StudioAnalyticsDTO;
+  /** deep links out to the real studio.youtube.com pages */
+  deepLinks: StudioDeepLinksDTO;
+};
+
+export type StudioChannelDTO = {
+  id: string;
+  handle: string;
+  name: string;
+  avatarUrl: string;
+  bannerUrl: string | null;
+  description: string | null;
+  verified: boolean;
+  subscriberCount: number;
+  subscriberCountText: string | null;
+  videoCountText: string | null;
+  /** channel links from the browse/about data (real — empty when the response carries none) */
+  links: { title: string; url: string }[];
+};
+
+export type StudioVideoDTO = {
+  id: string;
+  title: string;
+  thumbnailUrl: string;
+  durationSec: number | null;
+  views: number;
+  viewsText: string | null;
+  publishedText: string | null;
+  createdAt: string | null;
+  isShort: boolean;
+  isLive: boolean;
+  /** likes from the video's real watch metadata — null when not enriched */
+  likes: number | null;
+  /** comment count from the video's real comments page — null when not enriched */
+  commentCount: number | null;
+};
+
+export type StudioAnalyticsDTO = {
+  /**
+   * "ok" — real metrics parsed from the Studio SSR page.
+   * "no-session" — no YT_COOKIES; "no-channel" — operator channel unresolved.
+   * "auth-required" — Studio redirected to accounts.google.com (re-auth needed).
+   * "unavailable" — page fetched but no parseable metrics (honest empty).
+   * "error" — upstream fetch failed.
+   */
+  mode: "ok" | "no-session" | "no-channel" | "auth-required" | "unavailable" | "error";
+  /** real parsed metrics — null in every non-ok mode (NEVER fabricated) */
+  metrics: {
+    views: number | null;
+    impressions: number | null;
+    watchTimeMinutes: number | null;
+    subscribersGained: number | null;
+    estimatedRevenue: number | null;
+    likes: number | null;
+    comments: number | null;
+    shares: number | null;
+  } | null;
+  /** human-readable honest note for the UI */
+  note: string;
+};
+
+export type StudioDeepLinksDTO = {
+  /** https://studio.youtube.com (root — resolves the operator's channel via Google auth) */
+  studioRoot: string;
+  /** per-channel Studio pages (fall back to studioRoot when the channel is unresolved) */
+  analytics: string;
+  content: string;
+  customization: string;
+  /** https://www.youtube.com/upload — the real upload flow */
+  upload: string;
+};
+
+/** WFX2-C-B — the upload hand-off (NO upload simulation: metadata → YouTube). */
+export type UploadContextDTO = {
+  session: boolean;
+  /** the operator's channel (for "publishing as …" context) — null in public mode */
+  channel: { name: string; handle: string; avatarUrl: string } | null;
+  uploadUrl: string;
+  studioRoot: string;
+};
+
+export type UploadHandoffDTO = {
+  /** the real YouTube upload page */
+  handoffUrl: string;
+  /**
+   * false — YouTube's upload page documents no URL params for title/description
+   * pre-fill; the copy-to-clipboard bundle is the honest carrier.
+   */
+  prefillSupported: boolean;
+  /** the copy-paste-ready metadata bundle */
+  bundle: string;
+  /** the validated fields echoed back */
+  fields: {
+    title: string;
+    description: string;
+    tags: string[];
+    visibility: "public" | "unlisted" | "private";
+    thumbnailUrl: string | null;
+    isShort: boolean;
+  };
 };
 
 /** Playlist result card (search) — real lockupViewModel/playlistRenderer data. */
