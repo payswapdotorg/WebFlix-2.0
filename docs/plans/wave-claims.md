@@ -33,3 +33,17 @@ Wave B (personal surfaces + comment writes) and Wave C (studio + replay + cutove
 
 ### Ledger note (2026-09-29, this console)
 The sporta-only redirect note above (68f1f28) belongs to the parallel session's context. THIS session's operator directive (2026-09-29, the YouTube pivot message) explicitly commands webflix-2.0 live-YouTube work with 3 dispatched workers — the Wave A stakes above execute that directive. No conflict: the withdrawn stakes were Wave 2 (old roadmap, now superseded).
+
+## 2026-09-29 17:05Z — WAVE B (R43) re-dispatch after the reset; morning dispatches recorded stillborn
+
+The post-reset lead (replay re-deployed 16:44Z, operator re-login 16:56Z) re-dispatched Wave B from inside the replay at base `2db5d04` (Wave A + gate-repair):
+
+| Lane | Branch | Session | Status |
+|---|---|---|---|
+| B-B personal → R43-W1 | `wfx2/waveB-personal` | r43w1 · chat `6a606a31` | DISPATCHED 16:56:51Z (accepted; server-side capacity queue at send) |
+| B-S comments+channel → R43-W2 | `wfx2/waveB-comments-write` | r43w2 · chat `bada20b0` | DISPATCHED 16:57:31Z (accepted) |
+| B-W filters+categories → R43-W3 | `wfx2/waveB-search-filters` | r43w3 · chat `dd8d1edd` | DISPATCHED 16:58:11Z (accepted) |
+
+- **Morning dispatches VOID** (pre-reset lead, prompts ~08:05–08:39Z: chats `ffefe16a` B-B / `8a786301` B-W / `b418ad85` B-S): assistant turns empty, 0-message trees server-side, workspace pods never bound (`last_seen 0001`). Nothing salvageable; the stale workspaces hold no active jobs and do not block the cap.
+- Gate battery at the re-dispatch base: lint 0 / typecheck 0 / **305/305 tests** (the `--isolate` repair was required on bun ≥ 1.3 — `mock.module` in action-routes.test.ts is process-global and poisoned sibling files).
+- Deadline: midnight UTC 2026-09-30 (operator directive). Wave C (R44) queued behind B merges.
