@@ -1,0 +1,97 @@
+{
+ "_synthetic": "SYNTHETIC-BUT-SHAPED-FROM-REAL \u2014 WFX2-A-S test fixture. Structure mirrors a real POST /youtubei/v1/reel/reel_watch_sequence response (captured 2026-09-29 from youtube.com via design probes, evidence/wfx2as/). Entry videoIds and params are synthetic; renderer shape is real. request_payload_examples.json does NOT contain the reel payload shapes (deviation documented).",
+ "responseContext": {
+  "visitorData": "SYNTH",
+  "serviceTrackingParams": []
+ },
+ "entries": [
+  {
+   "command": {
+    "clickTrackingParams": "SYNTH",
+    "commandMetadata": {
+     "webCommandMetadata": {
+      "url": "/shorts/AMSypSjbOiM",
+      "webPageType": "WEB_PAGE_TYPE_SHORTS",
+      "rootVe": 37414
+     }
+    },
+    "reelWatchEndpoint": {
+     "videoId": "AMSypSjbOiM",
+     "playerParams": "8AEByAMyogYVSYNTH",
+     "params": "CBQqAEoeCg4iDGNvbGQtc3ludGhldBIMc3ludGhldC1zeW50aGV0ugEYVUNTWU5USEFQRVI=",
+     "sequenceProvider": "REEL_WATCH_SEQUENCE_PROVIDER_RPC",
+     "sequenceParams": "CgtTWU5USEFQRVI="
+    }
+   },
+   "trackingParams": "SYNTH"
+  },
+  {
+   "command": {
+    "clickTrackingParams": "SYNTH",
+    "commandMetadata": {
+     "webCommandMetadata": {
+      "url": "/shorts/3pDCfX-PN1k",
+      "webPageType": "WEB_PAGE_TYPE_SHORTS",
+      "rootVe": 37414
+     }
+    },
+    "reelWatchEndpoint": {
+     "videoId": "3pDCfX-PN1k",
+     "playerParams": "8AEByAMyogYVSYNTH",
+     "params": "CBQqAEoeCg4iDGNvbGQtc3ludGhldBIMc3ludGhldC1zeW50aGV0ugEYVUNTWU5USEFQRVI=",
+     "sequenceProvider": "REEL_WATCH_SEQUENCE_PROVIDER_RPC",
+     "sequenceParams": "CgtTWU5USEFQRVI="
+    }
+   },
+   "trackingParams": "SYNTH"
+  },
+  {
+   "command": {
+    "clickTrackingParams": "SYNTH",
+    "commandMetadata": {
+     "webCommandMetadata": {
+      "url": "/shorts/28ufM37HoWA",
+      "webPageType": "WEB_PAGE_TYPE_SHORTS",
+      "rootVe": 37414
+     }
+    },
+    "reelWatchEndpoint": {
+     "videoId": "28ufM37HoWA",
+     "playerParams": "8AEByAMyogYVSYNTH",
+     "params": "CBQqAEoeCg4iDGNvbGQtc3ludGhldBIMc3ludGhldC1zeW50aGV0ugEYVUNTWU5USEFQRVI=",
+     "sequenceProvider": "REEL_WATCH_SEQUENCE_PROVIDER_RPC",
+     "sequenceParams": "CgtTWU5USEFQRVI="
+    }
+   },
+   "trackingParams": "SYNTH"
+  },
+  {
+   "command": {
+    "clickTrackingParams": "SYNTH",
+    "commandMetadata": {
+     "webCommandMetadata": {
+      "url": "/shorts/n7CnyD4Rdus",
+      "webPageType": "WEB_PAGE_TYPE_SHORTS",
+      "rootVe": 37414
+     }
+    },
+    "reelWatchEndpoint": {
+     "videoId": "n7CnyD4Rdus",
+     "playerParams": "8AEByAMyogYVSYNTH",
+     "params": "CBQqAEoeCg4iDGNvbGQtc3ludGhldBIMc3ludGhldC1zeW50aGV0ugEYVUNTWU5USEFQRVI=",
+     "sequenceProvider": "REEL_WATCH_SEQUENCE_PROVIDER_RPC",
+     "sequenceParams": "CgtTWU5USEFQRVI="
+    }
+   },
+   "trackingParams": "SYNTH"
+  }
+ ],
+ "trackingParams": "SYNTH",
+ "continuationEndpoint": {
+  "clickTrackingParams": "SYNTH",
+  "continuationCommand": {
+   "token": "CgtTWU5USEFQRVSkAQoNCgtTWU5USEFQRVIK",
+   "request": "CONTINUATION_REQUEST_TYPE_WATCH_NEXT"
+  }
+ }
+}

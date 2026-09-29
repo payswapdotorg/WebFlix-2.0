@@ -1,0 +1,139 @@
+{
+  "_synthetic": "HAND-WRITTEN (not captured) — WFX2-A-S test fixture. Minimal action shapes for renderers the real livechat_aljazeera.json fixture does not contain: liveChatPaidMessageRenderer (Super Chat), liveChatPaidStickerRenderer (Super Sticker), liveChatMemberMilestoneChatItemRenderer (member milestone), addLiveChatTickerItemAction (ticker), authorBadges variants. Shaped after documented InnerTube renderer contracts; values synthetic.",
+  "continuationContents": {
+    "liveChatContinuation": {
+      "actions": [
+        {
+          "addChatItemAction": {
+            "item": {
+              "liveChatPaidMessageRenderer": {
+                "id": "ChkKCzEyMzQ1Njc4OTAxMjM0",
+                "timestampUsec": "1790654137000000",
+                "authorName": { "simpleText": "@superfan" },
+                "authorPhoto": {
+                  "thumbnails": [
+                    { "url": "https://yt4.ggpht.com/synth32", "width": 32, "height": 32 },
+                    { "url": "https://yt4.ggpht.com/synth64", "width": 64, "height": 64 }
+                  ]
+                },
+                "authorExternalChannelId": "UCsuperfan123",
+                "authorBadges": [
+                  {
+                    "liveChatAuthorBadgeRenderer": {
+                      "customThumbnail": { "thumbnails": [{ "url": "https://yt4.ggpht.com/member.png" }] },
+                      "tooltip": "Member (12 months)",
+                      "accessibilityData": { "label": "Member (12 months)" }
+                    }
+                  }
+                ],
+                "purchaseAmountText": { "simpleText": "US$5.00" },
+                "purchaseAmountPaddedText": { "simpleText": "US$5.00" },
+                "purchaseAmountColor": 4289374890,
+                "message": { "runs": [{ "text": "Keep going! Great stream" }] },
+                "bodyBackgroundColor": 4294948652,
+                "bodyTextColor": 4294967295
+              }
+            }
+          }
+        },
+        {
+          "addChatItemAction": {
+            "item": {
+              "liveChatPaidStickerRenderer": {
+                "id": "ChkKCzEyMzQ1Njc4OTAxMjM1",
+                "timestampUsec": "1790654138000000",
+                "authorName": { "simpleText": "@stickerfan" },
+                "authorPhoto": { "thumbnails": [{ "url": "https://yt4.ggpht.com/synth-sticker", "width": 32, "height": 32 }] },
+                "authorExternalChannelId": "UCstickerfan456",
+                "purchaseAmountText": { "simpleText": "$2.00" },
+                "sticker": {
+                  "thumbnails": [{ "url": "https://yt4.ggpht.com/sticker.png" }],
+                  "accessibility": { "label": "Love Heart Sticker" }
+                },
+                "backgroundColor": 4294934400
+              }
+            }
+          }
+        },
+        {
+          "addChatItemAction": {
+            "item": {
+              "liveChatMemberMilestoneChatItemRenderer": {
+                "id": "ChkKCzEyMzQ1Njc4OTAxMjM2",
+                "timestampUsec": "1790654139000000",
+                "authorName": { "simpleText": "@milestonemember" },
+                "authorPhoto": { "thumbnails": [{ "url": "https://yt4.ggpht.com/synth-milestone", "width": 32, "height": 32 }] },
+                "authorExternalChannelId": "UCmilestone789",
+                "authorBadges": [
+                  {
+                    "liveChatAuthorBadgeRenderer": {
+                      "customThumbnail": { "thumbnails": [{ "url": "https://yt4.ggpht.com/member.png" }] },
+                      "tooltip": "Member (6 months)"
+                    }
+                  }
+                ],
+                "memberSinceText": { "simpleText": "6 months as a member" },
+                "message": { "runs": [{ "text": "6 months strong" }] }
+              }
+            }
+          }
+        },
+        {
+          "addLiveChatTickerItemAction": {
+            "item": {
+              "liveChatTickerPaidMessageItemRenderer": {
+                "id": "ChkKCzEyMzQ1Njc4OTAxMjM3",
+                "authorName": { "simpleText": "@superfan" },
+                "authorPhoto": { "thumbnails": [{ "url": "https://yt4.ggpht.com/synth32", "width": 32, "height": 32 }] },
+                "authorExternalChannelId": "UCsuperfan123",
+                "amountText": { "simpleText": "US$5.00" },
+                "detailText": { "simpleText": "Keep going! Great stream" },
+                "backgroundColor": 4294948652,
+                "durationSec": "10"
+              }
+            }
+          }
+        },
+        {
+          "addChatItemAction": {
+            "item": {
+              "liveChatTextMessageRenderer": {
+                "id": "ChkKCzEyMzQ1Njc4OTAxMjM4",
+                "timestampUsec": "1790654140000000",
+                "authorName": { "simpleText": "@moduser" },
+                "authorPhoto": { "thumbnails": [{ "url": "https://yt4.ggpht.com/synth-mod", "width": 32, "height": 32 }] },
+                "authorExternalChannelId": "UCmoduser000",
+                "authorBadges": [
+                  { "liveChatAuthorBadgeRenderer": { "icon": { "iconType": "MODERATOR" }, "tooltip": "Moderator" } },
+                  { "liveChatAuthorBadgeRenderer": { "icon": { "iconType": "VERIFIED" }, "tooltip": "Verified" } }
+                ],
+                "message": { "runs": [{ "text": "Chat is now in slow mode" }] }
+              }
+            }
+          }
+        },
+        {
+          "addChatItemAction": {
+            "item": {
+              "liveChatPlaceholderItemRenderer": {
+                "id": "ChkKCzEyMzQ1Njc4OTAxMjM5"
+              }
+            }
+          }
+        },
+        {
+          "markChatItemAsDeletedAction": {
+            "deletedStateMessage": { "runs": [{ "text": "message deleted" }] },
+            "targetItemId": "ChkKCzEyMzQ1Njc4OTAxMjM4"
+          }
+        },
+        {
+          "totallyUnknownActionKind": { "whatever": true }
+        }
+      ],
+      "continuations": [
+        { "timedContinuationData": { "timeoutMs": 7300, "continuation": "synthetic-next-token-abc" } }
+      ]
+    }
+  }
+}

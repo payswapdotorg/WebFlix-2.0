@@ -29,6 +29,12 @@ import { DescriptionBox } from "./description-box";
 import { TranscriptPanel } from "./transcript-panel";
 import { CommentsSection } from "./comments-section";
 import { RelatedRail } from "./related-rail";
+import dynamic from "next/dynamic";
+
+const LiveChatPanel = dynamic(
+  () => import("@/components/watch/live-chat-panel").then((m) => m.LiveChatPanel),
+  { ssr: false },
+);
 
 export function WatchPage({ videoId, startAt }: { videoId: string; startAt: number | null }) {
   const [detail, setDetail] = useState<VideoDetailDto | null>(null);
@@ -287,6 +293,9 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
 
         {/* related rail */}
         <aside aria-label="Related videos" className={theater ? "min-w-0" : "px-3 sm:px-0"}>
+          {detail && !theater && (
+            <LiveChatPanel videoId={videoId} currentTimeSec={currentTime} />
+          )}
           <RelatedRail videoId={videoId} onFirstPage={setNextVideo} />
         </aside>
       </div>

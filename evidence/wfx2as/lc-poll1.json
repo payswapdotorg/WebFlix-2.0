@@ -1,0 +1,78 @@
+{
+ "chatAvailable": true,
+ "messages": [
+  {
+   "id": "ChwKGkNPUDk5N3FycFA0Q0ZiWUkxZ0FkZzQ4S29B",
+   "author": {
+    "id": "UCNye-wNBqNL5ZzHSJj3l8Bg",
+    "name": "@aljazeeraenglish",
+    "avatarUrl": "https://yt4.ggpht.com/XsTga3Nsfc1E6ZgC6HfHfzTG_3zhuZleOnsKxSK2aILMjwkkIm-0vdALFaU-yt0Lw07iLtbSifk=s64-c-k-c0x00ffffff-no-rj",
+    "badges": [
+     "verified",
+     "owner"
+    ],
+    "memberSinceText": null
+   },
+   "body": "Welcome to the #AlJazeeraEnglish Live chatroom! Comment & react respectfully Subscribe: https://www.youtube.com/user/AlJazeer... Read the International News: https://www.aljazeera.com/",
+   "timestampUsec": "1681302384173478",
+   "kind": "banner",
+   "isSuperChat": false,
+   "superChat": null,
+   "isMember": false,
+   "isMemberMilestone": false,
+   "memberMilestoneText": null,
+   "offsetMsec": null
+  },
+  {
+   "id": "ChwKGkNOZVJtS19fa3BjREZTdkh3Z1FkVEpna01B",
+   "author": {
+    "id": "UCzLDzr_k7WZnf1Oj_ClYTPw",
+    "name": "@blathers19x",
+    "avatarUrl": "https://yt4.ggpht.com/ytc/AIdro_lmfnUpVsFMWjQjO4BpPC8mdd-983xThOkb9MO2r5n2EHIJbd2NhLgnnYwRRX3zP7lqEw=s64-c-k-c0x00ffffff-no-rj",
+    "badges": [],
+    "memberSinceText": null
+   },
+   "body": "orange cheese personified ",
+   "timestampUsec": "1790657595581968",
+   "kind": "text",
+   "isSuperChat": false,
+   "superChat": null,
+   "isMember": false,
+   "isMemberMilestone": false,
+   "memberMilestoneText": null,
+   "offsetMsec": null
+  },
+  {
+   "id": "ChwKGkNKLVo3ckhfa3BjREZhVlFUQWdkWlFVVk1n",
+   "author": {
+    "id": "UC-r-MuVflZTiRQlss6_WfzA",
+    "name": "@CredenceGlocal",
+    "avatarUrl": "https://yt4.ggpht.com/EF2b7X8c4FX26fDKubuLH3ED8AXK1EAZJUfUYpGmCFELDhryNGrr7YWkQcDxbL3b7wYQqNVQRA=s64-c-k-c0x00ffffff-no-rj",
+    "badges": [],
+    "memberSinceText": null
+   },
+   "body": "Yes  I completely agree with the Honorable Lady  that Africa needs to learn Adaptation with check on Corruption.",
+   "timestampUsec": "1790657601184244",
+   "kind": "text",
+   "isSuperChat": false,
+   "superChat": null,
+   "isMember": false,
+   "isMemberMilestone": false,
+   "memberMilestoneText": null,
+   "offsetMsec": null
+  },
+  {
+   "_trimmed": "[TRIMMED for relay: 69 total, first 3 kept]"
+  }
+ ],
+ "nextToken": "0ofMyAOZAhpeQ2lrcUp3b1lWVU5PZVdVdGQwNUNjVTVNTlZwNlNGTkthak5zT0VKbkVndG5RMDVsUkZkRFNUQjJieG9UNnFqZHVRRU5DZ3RuUTA1bFJGZERTVEIyYnlBQk1BQSUzRCjmibitiJOXAzAAQAJKcwgBGAAgAEoIEAAYACAAMABQhsj6u4iTlwNYBHgAogEHGgUI4I-GD6oBDBAAGgAiACoECAAQALABAMABAMgBhsj6u4iTlwPiAQwIxpvt1QYQ0PvZgQHoAQD4AQCIAgCQAgCaAgwIxpvt1QYQ0PvZgQGIAwBQ-cf-rYiTlwNYv5vQy93NlgOCAQYIBBgBMACIAQCgAYfH_LuIk5cDsgEAugECCArQAcSb7dUG",
+ "pollMs": 10000,
+ "mode": "live",
+ "participants": 1,
+ "skippedActions": 7,
+ "skippedKinds": [
+  "removeChatItemAction",
+  "addChatItemAction"
+ ],
+ "isReplay": false
+}
