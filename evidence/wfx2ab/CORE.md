@@ -28,7 +28,7 @@ Captures in this folder (`live-*.json`, arrays trimmed to first 3 items; **untri
 | Endpoint | HTTP | Bytes | Result |
 |---|---|---|---|
 | `GET /api/search?q=lofi` | 200 | 27,598 | Real search results (live streams flagged `isLive`, "N watching" passthrough) |
-| `GET /api/videos/dQw4w9WgXcQ` | 200 | 3,504 | Rick Astley watch metadata — views **1,821,187,782** (exact), likes **19,427,647** (exact, from a11y), full description, channel block |
+| `GET /api/videos/dQw4w9WgXcQ` | 200 | 3,504 | Rick Astley watch metadata — views **1,821,187,782** (exact at fixture capture; live checks during the audit returned 1,821,219,423 — the drift is the video still accumulating real views, i.e. genuinely live data), likes **19,427,647** (exact, from a11y), full description, channel block |
 | `GET /api/trending` | 200 | 30 | `{"category":"All","videos":[]}` — see honest note below |
 | `GET /api/search/suggest?q=lofi` | 200 | 223 | Real autocomplete (JSONP → clean array) |
 | `GET /api/watch/dQw4w9WgXcQ` | 200 | 22,408 | Aggregate: metadata + 20 live comments (total **2,457,866** — ten more than the recorded fixture, i.e. genuinely live) + 12 related |
