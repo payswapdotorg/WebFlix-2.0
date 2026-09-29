@@ -1,0 +1,39 @@
+{
+ "url": "/api/search?q=news&sort=views&date=week&type=video",
+ "http": 200,
+ "query": "news",
+ "filters": "sort=views + date=week + type=video",
+ "count": 20,
+ "videos": [
+  {
+   "id": "k6WLJ5co3PE",
+   "title": "White House Bans Media Outlets & MAGA Embraces AI While Demo",
+   "viewsText": "7,593,576 views",
+   "publishedText": "7 days ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "The Daily Show",
+   "durationSec": 1158
+  },
+  {
+   "id": "eMHKNCwe_QI",
+   "title": "Trump Bans News Outlets from the White House, Has a Thing fo",
+   "viewsText": "4,020,895 views",
+   "publishedText": "7 days ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "Jimmy Kimmel Live",
+   "durationSec": 894
+  },
+  {
+   "id": "P-UucwAj0aQ",
+   "title": "Trump Talks S**t at the U.N., Rebrands AI as \"Superintellige",
+   "viewsText": "4,045,757 views",
+   "publishedText": "6 days ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "The Daily Show",
+   "durationSec": 689
+  }
+ ]
+}

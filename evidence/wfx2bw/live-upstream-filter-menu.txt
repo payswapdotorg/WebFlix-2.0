@@ -1,0 +1,38 @@
+# Live ground-truth capture — the REAL youtube.com search filter menu (2026-09-29, public mode)
+
+## Type
+- Videos → params EgIQAQ%3D%3D
+- Shorts → params EgIQCQ%3D%3D
+- Channels → params EgIQAg%3D%3D
+- Playlists → params EgIQAw%3D%3D
+- Movies → params EgIQBA%3D%3D
+
+## Duration
+- Under 3 minutes → params EgIYBA%3D%3D
+- 3 - 20 minutes → params EgIYBQ%3D%3D
+- Over 20 minutes → params EgIYAg%3D%3D
+
+## Upload date
+- Today → params EgIIAg%3D%3D
+- This week → params EgIIAw%3D%3D
+- This month → params EgIIBA%3D%3D
+- This year → params EgIIBQ%3D%3D
+
+## Features
+- Live → params EgJAAQ%3D%3D
+- 4K → params EgJwAQ%3D%3D
+- HD → params EgIgAQ%3D%3D
+- Subtitles/CC → params EgIoAQ%3D%3D
+- Creative Commons → params EgIwAQ%3D%3D
+- 360° → params EgJ4AQ%3D%3D
+- VR180 → params EgPQAQE%3D
+- 3D → params EgI4AQ%3D%3D
+- HDR → params EgPIAQE%3D
+- Location → params EgO4AQE%3D
+- Purchased → params EgJIAQ%3D%3D
+
+## Prioritize
+- Relevance → params (none) [default-selected]
+- Popularity → params CAM%3D
+
+estimatedResults: 1327171359

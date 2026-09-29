@@ -6,6 +6,7 @@ import {
   ChefHat,
   Clapperboard,
   Code,
+  Compass,
   Cpu,
   Crown,
   Disc3,
@@ -35,7 +36,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useApi } from "@/hooks/use-api";
 import { useSidebarHydration } from "@/lib/sidebar-store";
-import { CATEGORIES } from "@/lib/categories";
+import { CATEGORIES, categoryDestination } from "@/lib/categories";
 import { VerifiedBadge } from "./verified-badge";
 import type { MeDTO } from "@/lib/types";
 
@@ -193,12 +194,21 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 
       <Divider />
       <SectionHeader>Explore</SectionHeader>
+      <Link
+        href="/explore"
+        onClick={onNavigate}
+        aria-current={isActive("/explore") ? "page" : undefined}
+        className="flex items-center gap-6 rounded-lg px-3 py-2 text-sm font-medium text-foreground/90 transition-colors hover:bg-accent/60 hover:text-foreground"
+      >
+        <Compass className="size-[22px] shrink-0" strokeWidth={1.8} />
+        <span>Explore</span>
+      </Link>
       {CATEGORIES.map((category) => {
         const Icon = CATEGORY_ICON_MAP[category] ?? Disc3;
         return (
           <Link
             key={category}
-            href={`/?category=${encodeURIComponent(category)}`}
+            href={categoryDestination(category)}
             onClick={onNavigate}
             className="flex items-center gap-6 rounded-lg px-3 py-2 text-sm text-foreground/90 transition-colors hover:bg-accent/60"
           >

@@ -6,15 +6,18 @@ import Link from "next/link";
 import { Flame } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
 import { displayViews, displayPublished, formatDuration } from "@/lib/format";
-import { CategoryChips } from "@/components/home/category-chips";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VerifiedBadge } from "@/components/app/verified-badge";
-import { HOME_CHIPS, normalizeCategory } from "@/lib/categories";
+import { TRENDING_CATEGORIES } from "@/lib/youtube/trending-categories";
+import { cn } from "@/lib/utils";
 import type { TrendingPageDTO } from "@/lib/types";
 
 /**
- * Trending — the ranked list (views desc) with category chips (WebFlix tabs).
- * Full tabs + windows arrive with WFX2-D (Wave 3).
+ * Trending (WFX2-B-W) — the real youtube.com /feed/trending categories:
+ * Now / Music / Gaming / Movies chips (URL-synced via ?category=), the
+ * ranked rail. Data path: the SSR category page grid; in public mode (the
+ * What-to-Watch nudge — probed live) a real search-backed popular-this-week
+ * rail, honestly labeled by the response's `source`.
  */
 export default function TrendingPage() {
   return (
@@ -26,7 +29,8 @@ export default function TrendingPage() {
 
 function TrendingContent() {
   const params = useSearchParams();
-  const category = normalizeCategory(params.get("category"));
+  const raw = params.get("category") ?? "Now";
+  const category = TRENDING_CATEGORIES.some((c) => c.key === raw) ? raw : "Now";
   const { data, loading, error } = useApi<TrendingPageDTO>(
     `/api/trending?category=${encodeURIComponent(category)}`
   );
@@ -34,9 +38,33 @@ function TrendingContent() {
   return (
     <div>
       <h1 className="flex items-center gap-2 px-4 py-4 text-xl font-bold sm:px-6 sm:text-2xl">
-        <Flame className="size-7 text-yt-red" /> Trending
+        <Flame className="size-7 text-yt-red" aria-hidden /> Trending
       </h1>
-      <CategoryChips chips={HOME_CHIPS} active={category} />
+      {data?.source === "search" && (
+        <p className="px-4 pb-2 text-xs text-muted-foreground sm:px-6">
+          Popular this week — the live category grid needs the YouTube session (public mode).
+        </p>
+      )}
+      <nav aria-label="Trending categories" className="flex gap-2 overflow-x-auto px-4 pb-4 sm:px-6 no-scrollbar">
+        {TRENDING_CATEGORIES.map((cat) => {
+          const active = cat.key === category;
+          return (
+            <Link
+              key={cat.key}
+              href={cat.key === "Now" ? "/trending" : `/trending?category=${encodeURIComponent(cat.key)}`}
+              aria-current={active ? "page" : undefined}
+              className={cn(
+                "shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors",
+                active
+                  ? "bg-foreground text-background"
+                  : "bg-secondary text-foreground hover:bg-accent"
+              )}
+            >
+              {cat.label}
+            </Link>
+          );
+        })}
+      </nav>
       {loading && <TrendingSkeleton />}
       {error && (
         <p className="px-4 py-10 text-center text-sm text-muted-foreground" role="alert">
@@ -45,7 +73,7 @@ function TrendingContent() {
       )}
       {data && data.videos.length === 0 && (
         <p className="px-4 py-10 text-center text-sm text-muted-foreground">
-          Nothing trending in {category} yet.
+          Nothing trending in {category} right now.
         </p>
       )}
       <ol className="px-4 sm:px-6">

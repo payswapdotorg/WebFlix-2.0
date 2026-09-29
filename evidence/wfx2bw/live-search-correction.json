@@ -1,0 +1,43 @@
+{
+ "url": "/api/search?q=rick%20astely%20never%20gonna",
+ "http": 200,
+ "query": "rick astely never gonna",
+ "correction": {
+  "kind": "showingResultsFor",
+  "correctedQuery": "rick astley never gonna",
+  "originalQuery": "rick astely never gonna"
+ },
+ "resultCountText": "About 3,839,629 results",
+ "videos": [
+  {
+   "id": "dQw4w9WgXcQ",
+   "title": "Rick Astley - Never Gonna Give You Up (Official Video) (4K R",
+   "viewsText": "1,821,230,148 views",
+   "publishedText": "16 years ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "Rick Astley",
+   "durationSec": 214
+  },
+  {
+   "id": "qWNQUvIk954",
+   "title": "Rick Astley - Never Gonna Stop (Official Video)",
+   "viewsText": "5,409,318 views",
+   "publishedText": "3 years ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "Rick Astley",
+   "durationSec": 201
+  },
+  {
+   "id": "XGxIE1hr0w4",
+   "title": "Never Gonna Give You Up | Rick Astley Rocks New Year's Eve -",
+   "viewsText": "5,480,973 views",
+   "publishedText": "2 years ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "BBC",
+   "durationSec": 234
+  }
+ ]
+}

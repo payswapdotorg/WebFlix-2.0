@@ -1,0 +1,40 @@
+{
+ "url": "/api/search?q=lofi&duration=medium",
+ "http": 200,
+ "query": "lofi",
+ "filters": "duration=medium (3-20 minutes)",
+ "count": 20,
+ "allMidWindow": false,
+ "videos": [
+  {
+   "id": "AzV77KFsLn4",
+   "title": "lofi songs for slow days",
+   "viewsText": "14,661,960 views",
+   "publishedText": "6 years ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "the bootleg boy",
+   "durationSec": 1140
+  },
+  {
+   "id": "YOJsKatW-Ts",
+   "title": "RAINING IN ＯＳＡＫＡ (Lofi HipHop)",
+   "viewsText": "35,516,725 views",
+   "publishedText": "7 years ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "the bootleg boy",
+   "durationSec": 1151
+  },
+  {
+   "id": "6me17gGZYRg",
+   "title": "ＡＵＴＵＭＮ　ＣＨＩＬＬ",
+   "viewsText": "15,598,108 views",
+   "publishedText": "6 years ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "the bootleg boy 2",
+   "durationSec": 1093
+  }
+ ]
+}

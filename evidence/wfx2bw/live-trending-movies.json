@@ -1,0 +1,39 @@
+{
+ "url": "/api/trending?category=Movies",
+ "http": 200,
+ "category": "Movies",
+ "source": "search",
+ "count": 20,
+ "videos": [
+  {
+   "id": "hN_ZUElLH44",
+   "title": "Udta Teer Official Trailer | Ayushmann Khurrana & Sara Ali K",
+   "viewsText": "35,405,264 views",
+   "publishedText": "5 days ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "Dharma Productions and Sikhya Entertainment",
+   "durationSec": 199
+  },
+  {
+   "id": "HvW_N5p1q44",
+   "title": "You Can See Everything | Official Trailer HD | A24",
+   "viewsText": "11,910,852 views",
+   "publishedText": "5 days ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "A24",
+   "durationSec": 149
+  },
+  {
+   "id": "ma0HBK7fSLk",
+   "title": "KICK 2 -\"Ravi Teja\" New Released South Action Blockbuster Su",
+   "viewsText": "7,358,277 views",
+   "publishedText": "6 days ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "Bolly Filmy",
+   "durationSec": 8972
+  }
+ ]
+}

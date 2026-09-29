@@ -1,0 +1,40 @@
+{
+ "url": "/api/search?q=live&live=1",
+ "http": 200,
+ "query": "live",
+ "filters": "live=1 (Features→Live, EgJAAQ==)",
+ "count": 20,
+ "allLive": true,
+ "videos": [
+  {
+   "id": "KjoPkHdZ46o",
+   "title": "Stock Market LIVE Today | Nifty LIVE | Share Market LIVE New",
+   "viewsText": "282 watching",
+   "publishedText": null,
+   "isLive": true,
+   "isShort": false,
+   "channel": "NDTV Profit",
+   "durationSec": null
+  },
+  {
+   "id": "wP41Np6N4V0",
+   "title": "🔴 Stock Market LIVE: Sensex, Nifty, Bank Nifty, Crude Oil &",
+   "viewsText": "1,666 watching",
+   "publishedText": null,
+   "isLive": true,
+   "isShort": false,
+   "channel": "CNBC Awaaz.",
+   "durationSec": null
+  },
+  {
+   "id": "NjPena8GhuA",
+   "title": "Cafe Music LIVE | Today's COFFEE TUESDAY: September Window C",
+   "viewsText": "1,215 watching",
+   "publishedText": null,
+   "isLive": true,
+   "isShort": false,
+   "channel": "Cafe Music BGM channel",
+   "durationSec": null
+  }
+ ]
+}

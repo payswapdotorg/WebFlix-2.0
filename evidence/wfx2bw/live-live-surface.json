@@ -1,0 +1,38 @@
+{
+ "url": "/api/live?limit=12",
+ "http": 200,
+ "count": 12,
+ "allLive": true,
+ "videos": [
+  {
+   "id": "KjoPkHdZ46o",
+   "title": "Stock Market LIVE Today | Nifty LIVE | Share Market LIVE New",
+   "viewsText": "282 watching",
+   "publishedText": null,
+   "isLive": true,
+   "isShort": false,
+   "channel": "NDTV Profit",
+   "durationSec": null
+  },
+  {
+   "id": "iipR5yUp36o",
+   "title": "LIVE: ABC News Live - 24/7 news, context and analysis",
+   "viewsText": "875 watching",
+   "publishedText": null,
+   "isLive": true,
+   "isShort": false,
+   "channel": "ABC News",
+   "durationSec": null
+  },
+  {
+   "id": "bmgmuhvlxhw",
+   "title": "FREE FIRE GIRL GAMER LIVE || ID CHECK REACTION ON YOUR GAMEP",
+   "viewsText": "20 watching",
+   "publishedText": null,
+   "isLive": true,
+   "isShort": false,
+   "channel": "SHERNI GAMING",
+   "durationSec": null
+  }
+ ]
+}

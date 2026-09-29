@@ -1,0 +1,74 @@
+{
+  "_synthetic": "WFX2-B-W test fixture — NOT a raw recording. Shape follows the real chipCloudChipRenderer + browseEndpoint chip-bar form (the shape YouTube chip navigation uses on pages whose chips are browse endpoints, e.g. logged-in /feed/trending). The bp params are shape-real placeholders for parser tests; at runtime the params come from the live page itself (see trending-categories.ts + evidence/wfx2bw/DISCOVERY.md).",
+  "contents": {
+    "twoColumnBrowseResultsRenderer": {
+      "tabs": [
+        {
+          "tabRenderer": {
+            "title": "Now",
+            "selected": true,
+            "content": {
+              "richGridRenderer": {
+                "header": {
+                  "feedFilterChipBarRenderer": {
+                    "contents": [
+                      {
+                        "chipCloudChipRenderer": {
+                          "text": { "simpleText": "Now" },
+                          "isSelected": true
+                        }
+                      },
+                      {
+                        "chipCloudChipRenderer": {
+                          "text": { "simpleText": "Music" },
+                          "navigationEndpoint": {
+                            "commandMetadata": { "webCommandMetadata": { "sendPost": true, "apiUrl": "/youtubei/v1/browse" } },
+                            "browseEndpoint": {
+                              "browseId": "FEtrending",
+                              "params": "4gSMBgpzZWFyY2gtbXVzaWM%3D"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "chipCloudChipRenderer": {
+                          "text": { "runs": [{ "text": "Gaming" }] },
+                          "navigationEndpoint": {
+                            "browseEndpoint": {
+                              "browseId": "FEtrending",
+                              "params": "4gSMBgpzZWFyY2gtZ2FtaW5n%3D"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "chipCloudChipRenderer": {
+                          "text": { "simpleText": "Movies" },
+                          "navigationEndpoint": {
+                            "browseEndpoint": {
+                              "browseId": "FEtrending",
+                              "params": "4gSMBgpzZWFyY2gtbW92aWVz%3D"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "chipCloudChipRenderer": {
+                          "text": { "simpleText": "NotACategory" },
+                          "navigationEndpoint": {
+                            "searchEndpoint": { "query": "should be ignored" }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                "contents": []
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

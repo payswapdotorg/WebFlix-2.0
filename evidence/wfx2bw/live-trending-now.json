@@ -1,0 +1,39 @@
+{
+ "url": "/api/trending?category=Now",
+ "http": 200,
+ "category": "Now",
+ "source": "search",
+ "count": 20,
+ "videos": [
+  {
+   "id": "zHqGSU7Ymw0",
+   "title": "Ooroda Oththa Don - Lyric | Baththa | Vijay Sethupathi | @Sa",
+   "viewsText": "16,018,567 views",
+   "publishedText": "6 days ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "Think Music India",
+   "durationSec": 226
+  },
+  {
+   "id": "dhoTZat86bk",
+   "title": "2  Ziddi Bow Special Trending Comedy Video 2026 😂 Ep 133 By",
+   "viewsText": "2,639,008 views",
+   "publishedText": "6 days ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "Maha Fun Tv",
+   "durationSec": 483
+  },
+  {
+   "id": "ptwUYrguUI8",
+   "title": "Pesamale - Official Music Video Song | Siri Xander | Arra Ar",
+   "viewsText": "3,918,169 views",
+   "publishedText": "6 days ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "Sony Music South",
+   "durationSec": 207
+  }
+ ]
+}

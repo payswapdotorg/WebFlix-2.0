@@ -11,6 +11,9 @@ export type ChannelLite = {
   subscriberCount: number;
   /** live passthrough, e.g. "4.55M subscribers" */
   subscriberCountText?: string | null;
+  /** channel RESULT cards only (search): the real description snippet + video count */
+  description?: string | null;
+  videoCountText?: string | null;
 };
 
 export type VideoDTO = {
@@ -145,10 +148,38 @@ export type StudioDTO = {
   videos: (VideoDTO & { commentCount: number })[];
 };
 
+/** Playlist result card (search) — real lockupViewModel/playlistRenderer data. */
+export type PlaylistLiteDTO = {
+  id: string;
+  title: string;
+  videoCount: number;
+  videoCountText: string | null;
+  thumbnailUrl: string | null;
+  channelName: string;
+  updatedText: string | null;
+  /** RD… mixes / radios */
+  isMix?: boolean;
+};
+
+/** The spelling correction the search page renders (real renderer data). */
+export type SearchCorrection = {
+  kind: "didYouMean" | "showingResultsFor";
+  /** the corrected query YouTube suggests (results are shown for it when kind=showingResultsFor) */
+  correctedQuery: string;
+  /** the original (misspelled) query — present on showingResultsFor ("Search instead for …") */
+  originalQuery: string | null;
+};
+
 export type SearchPageDTO = {
   query: string;
   videos: VideoDTO[];
   channels: ChannelLite[];
+  /** playlist result cards (present when the query/filters yield playlists) */
+  playlists?: PlaylistLiteDTO[];
+  /** "About 3,839,607 results" — from the response's own estimatedResults */
+  resultCountText?: string | null;
+  /** "Showing results for X / Search instead for Y" when YouTube corrected the query */
+  correction?: SearchCorrection | null;
 };
 
 export type HistoryGroupDTO = {
@@ -164,6 +195,36 @@ export type SubscriptionsPageDTO = {
 export type TrendingPageDTO = {
   category: string;
   videos: VideoDTO[];
+  /** "trending" = the SSR category page grid · "search" = the popular-this-week fallback (public mode) */
+  source?: "trending" | "search";
+};
+
+/** The public playlist page (/playlist/[id] — browse VL…). */
+export type PlaylistPageDTO = {
+  playlist: {
+    id: string;
+    title: string;
+    channelName: string;
+    videoCountText: string | null;
+    viewsText: string | null;
+    description: string | null;
+  };
+  videos: VideoDTO[];
+  nextCursor: string | null;
+};
+
+/** The Live surface (/explore/live) — real live streams with watching counts. */
+export type LivePageDTO = {
+  videos: VideoDTO[];
+};
+
+/** In-channel search results ("Search this channel"). */
+export type ChannelSearchDTO = {
+  query: string;
+  channelId: string;
+  channelName: string;
+  videos: VideoDTO[];
+  nextCursor: string | null;
 };
 
 export type ShortsPageDTO = {

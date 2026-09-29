@@ -1,0 +1,41 @@
+{
+ "url": "/api/channel/@RickAstleyYT/search?q=never",
+ "http": 200,
+ "query": "never",
+ "channelId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+ "channelName": "Rick Astley",
+ "count": 24,
+ "allChannelVideos": true,
+ "videos": [
+  {
+   "id": "dQw4w9WgXcQ",
+   "title": "Rick Astley - Never Gonna Give You Up (Official Video) (4K R",
+   "viewsText": "1,821,230,148 views",
+   "publishedText": "16 years ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "Rick Astley",
+   "durationSec": 214
+  },
+  {
+   "id": "0tEdkbZPwc8",
+   "title": "Never: The Autobiography will be available in paperback on t",
+   "viewsText": "41,015 views",
+   "publishedText": "1 year ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "Rick Astley",
+   "durationSec": 13
+  },
+  {
+   "id": "RrESvSRNpeo",
+   "title": "【日本語字幕】Rick Astley - Never Gonna Give You Up",
+   "viewsText": "11,776,178 views",
+   "publishedText": "1 year ago",
+   "isLive": false,
+   "isShort": false,
+   "channel": "Rick Astley",
+   "durationSec": 214
+  }
+ ]
+}

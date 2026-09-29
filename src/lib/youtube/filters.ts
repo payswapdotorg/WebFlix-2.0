@@ -49,7 +49,7 @@ function bytesToBase64(bytes: number[]): string {
 
 export type SearchSort = "relevance" | "date" | "views" | "rating";
 export type SearchUploadDate = "hour" | "today" | "week" | "month" | "year";
-export type SearchDuration = "short" | "long";
+export type SearchDuration = "short" | "medium" | "long";
 export type SearchType = "video" | "channel" | "playlist" | "shorts" | "movie";
 
 export interface SearchFilters {
@@ -57,6 +57,17 @@ export interface SearchFilters {
   uploadDate?: SearchUploadDate;
   duration?: SearchDuration;
   type?: SearchType;
+  /**
+   * Features → Live filter (the real menu option `EgJAAQ==` = Filters{4:1}).
+   * Added by WFX2-B-W for the Live surface (search live-scoped).
+   */
+  live?: boolean;
+  /**
+   * Skip spell autocorrection — the flag YouTube's own "Search instead for"
+   * link sends (recorded in search_misspelled.json: params `QgIIAQ==` =
+   * SearchParam{8: {1: 1}}).
+   */
+  verbatim?: boolean;
 }
 
 const SORT_VALUES: Record<SearchSort, number | undefined> = {
@@ -83,11 +94,15 @@ const TYPE_VALUES: Record<SearchType, number> = {
 };
 
 /**
- * Current YouTube duration semantics: "short" = Under 3 minutes (field3=4),
- * "long" = Over 20 minutes (field3=2).
+ * Duration semantics (ground truth: the recorded filter menu in
+ * search_lofi.json + live probing — see evidence/wfx2bw/DISCOVERY.md):
+ *   "short"  = Under 3 minutes  (field3=4, `EgIYBA==`)
+ *   "medium" = 3 - 20 minutes   (field3=5, `EgIYBQ==`)
+ *   "long"   = Over 20 minutes  (field3=2, `EgIYAg==`)
  */
 const DURATION_VALUES: Record<SearchDuration, number> = {
   short: 4,
+  medium: 5,
   long: 2,
 };
 
@@ -106,6 +121,11 @@ export function buildSearchParam(filters: SearchFilters = {}): string {
   if (filters.duration) {
     filterMessage.push(...varintField(3, DURATION_VALUES[filters.duration]));
   }
+  if (filters.live) {
+    // Features → Live (the real menu option `EgJAAQ==` = Filters{8:1} —
+    // byte-decoded from the recorded menu; field 8, NOT field 4)
+    filterMessage.push(...varintField(8, 1));
+  }
 
   const message: number[] = [];
   const sortValue = filters.sort ? SORT_VALUES[filters.sort] : undefined;
@@ -114,6 +134,10 @@ export function buildSearchParam(filters: SearchFilters = {}): string {
   }
   if (filterMessage.length > 0) {
     message.push(...lenDelimited(2, filterMessage));
+  }
+  if (filters.verbatim) {
+    // skip-autocorrect flag — SearchParam{8: {1: 1}} (`QgIIAQ==`, recorded)
+    message.push(...lenDelimited(8, varintField(1, 1)));
   }
   return bytesToBase64(message);
 }
@@ -124,6 +148,8 @@ export function parseSearchFilters(input: {
   uploadDate?: string | null;
   duration?: string | null;
   type?: string | null;
+  live?: string | boolean | null;
+  verbatim?: string | boolean | null;
 }): SearchFilters {
   const filters: SearchFilters = {};
   if (input.sort && input.sort in SORT_VALUES) filters.sort = input.sort as SearchSort;
@@ -134,5 +160,9 @@ export function parseSearchFilters(input: {
     filters.duration = input.duration as SearchDuration;
   }
   if (input.type && input.type in TYPE_VALUES) filters.type = input.type as SearchType;
+  if (input.live === true || input.live === "1" || input.live === "true") filters.live = true;
+  if (input.verbatim === true || input.verbatim === "1" || input.verbatim === "true") {
+    filters.verbatim = true;
+  }
   return filters;
 }
