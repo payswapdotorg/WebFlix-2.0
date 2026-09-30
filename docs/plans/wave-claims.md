@@ -146,3 +146,11 @@ Prior chats: 6065f7fa (bs-1: completed, sandbox reaped before harvest — the lo
 **Production (webflix-2-0-one.vercel.app — the TRUE domain; the 3l2mqi5ti URL is a stale deployment artifact):** 11 pages 200; videos?q= **12 real videos** (the empty-q finding FIXED live); search 40; trending 20; shorts 25; home?category= 35 (search-backed chips). **Remaining gap:** the default home browse rails — youtube.com's wall now covers EVERY lead-controlled egress (the sandbox's browse answers the "Try searching" nudge as of ~14:00Z; the TurboVPN browser route hangs). The last-good seed needs an unwalled runner (the ops runbook's warmer; the worker sandboxes ARE unwalled — the original cutover worker verified live home data from its own sandbox). Parked for the next live worker turn.
 
 **The v2 re-dispatches (bs/cc9a7568, cw/ec489dd1, cs poller) remain queued on the midday wall** — the machinery holds them; the C-W lane is CLOSED regardless (the v2 cw dispatch is now redundant and will be voided when its slot is needed).
+
+## 2026-09-30 15:20Z — The acceptance sweep state (32/38, one root cause)
+
+The lane's acceptance harness (two lead integration fixes pushed: title entity-decode + the watch-meta {video} wrapper) against production: **32/38**. All 6 remaining failures share ONE root cause — the egress wall family (youtube.com walls browse FEwhat_to_watch AND the @handle scrape for every lead-controlled egress; the handle scrape 404s from the sandbox where trending SSR still works):
+- home rails / videos default / videos limit=24 (browse-backed)
+- channel page + tabs / channel tab search (handle-scrape → 502 instead of an honest degrade — a channel-last-good worker task) + search channel renderers
+
+The channel-502-instead-of-honest-degrade is recorded as B-S/follow-up lane scope (the channel parity + last-good cache). The home warmer needs an unwalled runner (the worker sandboxes are unwalled — verified by the original cutover worker's own live home data).
