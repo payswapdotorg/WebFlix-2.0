@@ -55,7 +55,9 @@ export function runsText(node: any): string {
   return "";
 }
 
-function lastThumbnailUrl(node: any): string {
+/** Best-quality thumbnail URL from a sources/thumbnails block (WFX2-C-F:
+ * exported for the channel search-compose's avatar extraction). */
+export function lastThumbnailUrl(node: any): string {
   const thumbs = node?.thumbnails ?? node?.sources;
   if (!Array.isArray(thumbs) || thumbs.length === 0) return "";
   const best = thumbs.reduce((a: any, b: any) => ((b?.width ?? 0) >= (a?.width ?? 0) ? b : a));

@@ -14,6 +14,7 @@ import { innertubeBrowse, innertubeSearch } from "./innertube";
 import { fetchYtInitialData } from "./ssr";
 import { cached, cachedResilient, TTL } from "./cache";
 import { cachePeek } from "./upstash-cache";
+import { composeChannelPage, storeComposedPage } from "./channel-compose";
 import { hasSession } from "./session";
 import {
   mapChannelHeader,
@@ -34,9 +35,12 @@ export function normalizeChannelHandle(handle: string): string {
   return decodeURIComponent(handle).trim().toLowerCase();
 }
 
+/** The channel-page family key prefix (the "channel family" root). */
+const CHANNEL_PAGE_PREFIX = "yt:channel:page:";
+
 /** The channel-page last-good cache key (the "channel family" root). */
 export function channelPageCacheKey(handle: string): string {
-  return `yt:channel:page:${normalizeChannelHandle(handle)}`;
+  return `${CHANNEL_PAGE_PREFIX}${normalizeChannelHandle(handle)}`;
 }
 
 export interface ChannelLookup {
@@ -155,6 +159,16 @@ export async function getChannelPage(handle: string): Promise<ChannelPageDTO | n
  * wall hits, and a cold walled read returns the honest
  * `{page: null, walled: true}` marker for the route to degrade with
  * (HTTP 200 + structured empty — never a naked 502).
+ *
+ * WFX2-C-F extends the ladder with a THIRD rung — search-compose:
+ *   browse-fresh → browse-last-good → search-compose → honest-degrade.
+ * When the wall stands (fresh browse AND last-good both failed) the page is
+ * composed from the real search results the dominant channel owns (see
+ * channel-compose.ts — exact-id resolution, `composed: true`, honest nulls
+ * for the fields search cannot carry). The composed page is kept in the
+ * family so repeated reads and the search-route channelFromLastGood
+ * lookup serve it; the honest degrade stands when the name search does not
+ * resolve below the supermajority threshold.
  */
 export interface ChannelPageResult {
   page: ChannelPageDTO | null;
@@ -162,13 +176,16 @@ export interface ChannelPageResult {
 }
 
 export async function getChannelPageResilient(handle: string): Promise<ChannelPageResult> {
-  return cachedResilient(
+  const result = await cachedResilient(
     channelPageCacheKey(handle),
     TTL.FEED_MS,
     async (): Promise<ChannelPageResult> => {
       try {
         const page = await getChannelPage(handle);
-        if (!page) return { page: null, walled: true };
+        // the wall's 200-skeleton maps to a header with id/avatar but NO
+        // title — a real channel always has a name, so a nameless page IS
+        // the walled shape (the compose rung gets its turn)
+        if (!page || !page.channel.name) return { page: null, walled: true };
         return { page, walled: false };
       } catch {
         // the walled @handle scrape throws (SSR 404 on datacenter egress) —
@@ -178,6 +195,28 @@ export async function getChannelPageResilient(handle: string): Promise<ChannelPa
     },
     { isEmpty: (v: unknown) => (v as ChannelPageResult | null)?.walled === true }
   );
+  if (result.page) return result; // rungs 1–2: the fresh browse or the last-good
+  // WFX2-C-F rung 3 — search-compose: the wall stood, but the plain video
+  // search is unwalled — compose the page from the real results the
+  // dominant channel owns.
+  try {
+    const composed = await composeChannelPage(handle);
+    if (composed) {
+      await storeComposedPage(handle, composed);
+      return { page: composed, walled: false };
+    }
+  } catch {
+    // the compose is best-effort — rung 4 (the honest degrade) stands
+  }
+  return result;
+}
+
+/**
+ * Case-, space- and "@"-insensitive comparison key — exact-normalized
+ * matching only (WFX2-C-F: never similarity guessing).
+ */
+function normForMatch(value: string): string {
+  return value.trim().toLowerCase().replace(/^@/, "").replace(/\s+/g, "");
 }
 
 /**
@@ -185,19 +224,48 @@ export async function getChannelPageResilient(handle: string): Promise<ChannelPa
  * upstream omits channel renderers (the wall signature — mixed searches
  * from server egress return video renderers only), a query that matches a
  * channel handle served through the resilient channel path resolves to
- * that channel's LAST-GOOD page header. Exact handle match only ("@name"
- * or bare "name" == the cached handle) — never a guessed attribution.
- * Returns null when no last-good entry exists (the honest empty).
+ * that channel's LAST-GOOD page header — including a page composed from
+ * real search results (WFX2-C-F stores those in the same family).
+ *
+ * WFX2-C-F matching (all exact-normalized equality, never similarity):
+ *  1. the historic exact handle match — the query probes the family keys
+ *     derived from its "@name"/"name" forms;
+ *  2. space-stripped handle matching — "Rick Astley" probes "rickastley";
+ *  3. the cached page's channel NAME match (case/space-normalized).
+ * Returns null when nothing matches (the honest empty).
  */
 export async function channelFromLastGood(query: string): Promise<ChannelLiteRow | null> {
   const cleaned = query.trim();
   if (!cleaned) return null;
-  const atHandle = cleaned.startsWith("@") ? cleaned : `@${cleaned}`;
-  const keys = [channelPageCacheKey(atHandle), channelPageCacheKey(cleaned)];
+  const bare = cleaned.startsWith("@") ? cleaned.slice(1) : cleaned;
+  // collapse whitespace runs in the probe base (query spacing noise — "rick
+  //  astley" probes the "rick astley" family keys), then derive the @/bare
+  // and space-stripped forms
+  const collapsed = bare.replace(/\s+/g, " ");
+  const atHandle = `@${collapsed}`;
+  const keys = [
+    channelPageCacheKey(atHandle),
+    channelPageCacheKey(collapsed),
+    // (1) space-stripped handle matching: "Rick Astley" → "rickastley"
+    channelPageCacheKey(atHandle.replace(/\s+/g, "")),
+    channelPageCacheKey(collapsed.replace(/\s+/g, "")),
+  ];
+  const queryNorm = normForMatch(cleaned);
+  const seen = new Set<string>();
   for (const key of keys) {
+    if (seen.has(key)) continue;
+    seen.add(key);
     const peeked = await cachePeek<ChannelPageResult>(key);
-    if (peeked && peeked.value.page) {
-      return fromPage(peeked.value.page);
+    const page = peeked?.value?.page;
+    if (!page) continue;
+    // exact-normalized acceptance: the probed handle (the historic exact
+    // match), the page's own channel handle, or the page's channel NAME
+    if (
+      normForMatch(key.slice(CHANNEL_PAGE_PREFIX.length)) === queryNorm ||
+      normForMatch(page.channel.handle ?? "") === queryNorm ||
+      normForMatch(page.channel.name ?? "") === queryNorm
+    ) {
+      return fromPage(page);
     }
   }
   return null;

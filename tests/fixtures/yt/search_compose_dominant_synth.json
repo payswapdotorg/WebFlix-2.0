@@ -1,0 +1,1090 @@
+{
+  "_synthetic": true,
+  "responseContext": {
+    "visitorData": "composeSynthetic"
+  },
+  "contents": {
+    "twoColumnSearchResultsRenderer": {
+      "primaryContents": {
+        "sectionListRenderer": {
+          "contents": [
+            {
+              "itemSectionRenderer": {
+                "contents": [
+                  {
+                    "videoRenderer": {
+                      "videoId": "rickcompose01",
+                      "thumbnail": {
+                        "thumbnails": [
+                          {
+                            "url": "https://i.ytimg.com/vi/rickcompose01/hqdefault.jpg",
+                            "width": 480,
+                            "height": 360
+                          }
+                        ]
+                      },
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Never Gonna Give You Up (composed take 1)"
+                          }
+                        ]
+                      },
+                      "longBylineText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@RickAstleyYT",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                                "canonicalBaseUrl": "/@RickAstleyYT"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "ownerText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@RickAstleyYT",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                                "canonicalBaseUrl": "/@RickAstleyYT"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "shortBylineText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley"
+                          }
+                        ]
+                      },
+                      "lengthText": {
+                        "simpleText": "3:33"
+                      },
+                      "viewCountText": {
+                        "simpleText": "1,234,567 views"
+                      },
+                      "shortViewCountText": {
+                        "simpleText": "1.2M views"
+                      },
+                      "publishedTimeText": {
+                        "simpleText": "2 years ago"
+                      },
+                      "trackingParams": "composeSynthetic",
+                      "ownerBadges": [
+                        {
+                          "metadataBadgeRenderer": {
+                            "style": "BADGE_STYLE_TYPE_VERIFIED",
+                            "label": "Verified"
+                          }
+                        }
+                      ],
+                      "avatar": {
+                        "decoratedAvatarViewModel": {
+                          "avatar": {
+                            "avatarViewModel": {
+                              "image": {
+                                "sources": [
+                                  {
+                                    "url": "https://yt3.ggpht.com/rick-compose-synth-avatar=s88-c-k-c0x00ffffff-no-rj",
+                                    "width": 68,
+                                    "height": 68
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "channelThumbnailSupportedRenderers": {
+                        "channelThumbnailWithLinkRenderer": {
+                          "thumbnail": {
+                            "thumbnails": [
+                              {
+                                "url": "https://yt3.ggpht.com/rick-compose-synth-avatar=s88-c-k-c0x00ffffff-no-rj",
+                                "width": 68,
+                                "height": 68
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "videoRenderer": {
+                      "videoId": "rickcompose02",
+                      "thumbnail": {
+                        "thumbnails": [
+                          {
+                            "url": "https://i.ytimg.com/vi/rickcompose02/hqdefault.jpg",
+                            "width": 480,
+                            "height": 360
+                          }
+                        ]
+                      },
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Never Gonna Give You Up (composed take 2)"
+                          }
+                        ]
+                      },
+                      "longBylineText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@RickAstleyYT",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                                "canonicalBaseUrl": "/@RickAstleyYT"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "ownerText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@RickAstleyYT",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                                "canonicalBaseUrl": "/@RickAstleyYT"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "shortBylineText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley"
+                          }
+                        ]
+                      },
+                      "lengthText": {
+                        "simpleText": "3:33"
+                      },
+                      "viewCountText": {
+                        "simpleText": "1,234,567 views"
+                      },
+                      "shortViewCountText": {
+                        "simpleText": "1.2M views"
+                      },
+                      "publishedTimeText": {
+                        "simpleText": "2 years ago"
+                      },
+                      "trackingParams": "composeSynthetic",
+                      "avatar": {
+                        "decoratedAvatarViewModel": {
+                          "avatar": {
+                            "avatarViewModel": {
+                              "image": {
+                                "sources": [
+                                  {
+                                    "url": "https://yt3.ggpht.com/rick-compose-synth-avatar=s88-c-k-c0x00ffffff-no-rj",
+                                    "width": 68,
+                                    "height": 68
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "channelThumbnailSupportedRenderers": {
+                        "channelThumbnailWithLinkRenderer": {
+                          "thumbnail": {
+                            "thumbnails": [
+                              {
+                                "url": "https://yt3.ggpht.com/rick-compose-synth-avatar=s88-c-k-c0x00ffffff-no-rj",
+                                "width": 68,
+                                "height": 68
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "videoRenderer": {
+                      "videoId": "rickcompose03",
+                      "thumbnail": {
+                        "thumbnails": [
+                          {
+                            "url": "https://i.ytimg.com/vi/rickcompose03/hqdefault.jpg",
+                            "width": 480,
+                            "height": 360
+                          }
+                        ]
+                      },
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Never Gonna Give You Up (composed take 3)"
+                          }
+                        ]
+                      },
+                      "longBylineText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@RickAstleyYT",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                                "canonicalBaseUrl": "/@RickAstleyYT"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "ownerText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@RickAstleyYT",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                                "canonicalBaseUrl": "/@RickAstleyYT"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "shortBylineText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley"
+                          }
+                        ]
+                      },
+                      "lengthText": {
+                        "simpleText": "3:33"
+                      },
+                      "viewCountText": {
+                        "simpleText": "1,234,567 views"
+                      },
+                      "shortViewCountText": {
+                        "simpleText": "1.2M views"
+                      },
+                      "publishedTimeText": {
+                        "simpleText": "2 years ago"
+                      },
+                      "trackingParams": "composeSynthetic",
+                      "avatar": {
+                        "decoratedAvatarViewModel": {
+                          "avatar": {
+                            "avatarViewModel": {
+                              "image": {
+                                "sources": [
+                                  {
+                                    "url": "https://yt3.ggpht.com/rick-compose-synth-avatar=s88-c-k-c0x00ffffff-no-rj",
+                                    "width": 68,
+                                    "height": 68
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "channelThumbnailSupportedRenderers": {
+                        "channelThumbnailWithLinkRenderer": {
+                          "thumbnail": {
+                            "thumbnails": [
+                              {
+                                "url": "https://yt3.ggpht.com/rick-compose-synth-avatar=s88-c-k-c0x00ffffff-no-rj",
+                                "width": 68,
+                                "height": 68
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "videoRenderer": {
+                      "videoId": "rickcompose04",
+                      "thumbnail": {
+                        "thumbnails": [
+                          {
+                            "url": "https://i.ytimg.com/vi/rickcompose04/hqdefault.jpg",
+                            "width": 480,
+                            "height": 360
+                          }
+                        ]
+                      },
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Never Gonna Give You Up (composed take 4)"
+                          }
+                        ]
+                      },
+                      "longBylineText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@RickAstleyYT",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                                "canonicalBaseUrl": "/@RickAstleyYT"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "ownerText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@RickAstleyYT",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                                "canonicalBaseUrl": "/@RickAstleyYT"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "shortBylineText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley"
+                          }
+                        ]
+                      },
+                      "lengthText": {
+                        "simpleText": "3:33"
+                      },
+                      "viewCountText": {
+                        "simpleText": "1,234,567 views"
+                      },
+                      "shortViewCountText": {
+                        "simpleText": "1.2M views"
+                      },
+                      "publishedTimeText": {
+                        "simpleText": "2 years ago"
+                      },
+                      "trackingParams": "composeSynthetic",
+                      "avatar": {
+                        "decoratedAvatarViewModel": {
+                          "avatar": {
+                            "avatarViewModel": {
+                              "image": {
+                                "sources": [
+                                  {
+                                    "url": "https://yt3.ggpht.com/rick-compose-synth-avatar=s88-c-k-c0x00ffffff-no-rj",
+                                    "width": 68,
+                                    "height": 68
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "channelThumbnailSupportedRenderers": {
+                        "channelThumbnailWithLinkRenderer": {
+                          "thumbnail": {
+                            "thumbnails": [
+                              {
+                                "url": "https://yt3.ggpht.com/rick-compose-synth-avatar=s88-c-k-c0x00ffffff-no-rj",
+                                "width": 68,
+                                "height": 68
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "videoRenderer": {
+                      "videoId": "rickcompose05",
+                      "thumbnail": {
+                        "thumbnails": [
+                          {
+                            "url": "https://i.ytimg.com/vi/rickcompose05/hqdefault.jpg",
+                            "width": 480,
+                            "height": 360
+                          }
+                        ]
+                      },
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Never Gonna Give You Up (composed take 5)"
+                          }
+                        ]
+                      },
+                      "longBylineText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@RickAstleyYT",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                                "canonicalBaseUrl": "/@RickAstleyYT"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "ownerText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@RickAstleyYT",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                                "canonicalBaseUrl": "/@RickAstleyYT"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "shortBylineText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley"
+                          }
+                        ]
+                      },
+                      "lengthText": {
+                        "simpleText": "3:33"
+                      },
+                      "viewCountText": {
+                        "simpleText": "1,234,567 views"
+                      },
+                      "shortViewCountText": {
+                        "simpleText": "1.2M views"
+                      },
+                      "publishedTimeText": {
+                        "simpleText": "2 years ago"
+                      },
+                      "trackingParams": "composeSynthetic",
+                      "avatar": {
+                        "decoratedAvatarViewModel": {
+                          "avatar": {
+                            "avatarViewModel": {
+                              "image": {
+                                "sources": [
+                                  {
+                                    "url": "https://yt3.ggpht.com/rick-compose-synth-avatar=s88-c-k-c0x00ffffff-no-rj",
+                                    "width": 68,
+                                    "height": 68
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "channelThumbnailSupportedRenderers": {
+                        "channelThumbnailWithLinkRenderer": {
+                          "thumbnail": {
+                            "thumbnails": [
+                              {
+                                "url": "https://yt3.ggpht.com/rick-compose-synth-avatar=s88-c-k-c0x00ffffff-no-rj",
+                                "width": 68,
+                                "height": 68
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "videoRenderer": {
+                      "videoId": "rickcompose06",
+                      "thumbnail": {
+                        "thumbnails": [
+                          {
+                            "url": "https://i.ytimg.com/vi/rickcompose06/hqdefault.jpg",
+                            "width": 480,
+                            "height": 360
+                          }
+                        ]
+                      },
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Never Gonna Give You Up (composed take 6)"
+                          }
+                        ]
+                      },
+                      "longBylineText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@RickAstleyYT",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                                "canonicalBaseUrl": "/@RickAstleyYT"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "ownerText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@RickAstleyYT",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                                "canonicalBaseUrl": "/@RickAstleyYT"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "shortBylineText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley"
+                          }
+                        ]
+                      },
+                      "lengthText": {
+                        "simpleText": "3:33"
+                      },
+                      "viewCountText": {
+                        "simpleText": "1,234,567 views"
+                      },
+                      "shortViewCountText": {
+                        "simpleText": "1.2M views"
+                      },
+                      "publishedTimeText": {
+                        "simpleText": "2 years ago"
+                      },
+                      "trackingParams": "composeSynthetic",
+                      "avatar": {
+                        "decoratedAvatarViewModel": {
+                          "avatar": {
+                            "avatarViewModel": {
+                              "image": {
+                                "sources": [
+                                  {
+                                    "url": "https://yt3.ggpht.com/rick-compose-synth-avatar=s88-c-k-c0x00ffffff-no-rj",
+                                    "width": 68,
+                                    "height": 68
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "channelThumbnailSupportedRenderers": {
+                        "channelThumbnailWithLinkRenderer": {
+                          "thumbnail": {
+                            "thumbnails": [
+                              {
+                                "url": "https://yt3.ggpht.com/rick-compose-synth-avatar=s88-c-k-c0x00ffffff-no-rj",
+                                "width": 68,
+                                "height": 68
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "videoRenderer": {
+                      "videoId": "rickcompose07",
+                      "thumbnail": {
+                        "thumbnails": [
+                          {
+                            "url": "https://i.ytimg.com/vi/rickcompose07/hqdefault.jpg",
+                            "width": 480,
+                            "height": 360
+                          }
+                        ]
+                      },
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Never Gonna Give You Up (composed take 7)"
+                          }
+                        ]
+                      },
+                      "longBylineText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@RickAstleyYT",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                                "canonicalBaseUrl": "/@RickAstleyYT"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "ownerText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@RickAstleyYT",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                                "canonicalBaseUrl": "/@RickAstleyYT"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "shortBylineText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley"
+                          }
+                        ]
+                      },
+                      "lengthText": {
+                        "simpleText": "3:33"
+                      },
+                      "viewCountText": {
+                        "simpleText": "1,234,567 views"
+                      },
+                      "shortViewCountText": {
+                        "simpleText": "1.2M views"
+                      },
+                      "publishedTimeText": {
+                        "simpleText": "2 years ago"
+                      },
+                      "trackingParams": "composeSynthetic",
+                      "avatar": {
+                        "decoratedAvatarViewModel": {
+                          "avatar": {
+                            "avatarViewModel": {
+                              "image": {
+                                "sources": [
+                                  {
+                                    "url": "https://yt3.ggpht.com/rick-compose-synth-avatar=s88-c-k-c0x00ffffff-no-rj",
+                                    "width": 68,
+                                    "height": 68
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "channelThumbnailSupportedRenderers": {
+                        "channelThumbnailWithLinkRenderer": {
+                          "thumbnail": {
+                            "thumbnails": [
+                              {
+                                "url": "https://yt3.ggpht.com/rick-compose-synth-avatar=s88-c-k-c0x00ffffff-no-rj",
+                                "width": 68,
+                                "height": 68
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "videoRenderer": {
+                      "videoId": "othercompose01",
+                      "thumbnail": {
+                        "thumbnails": [
+                          {
+                            "url": "https://i.ytimg.com/vi/othercompose01/hqdefault.jpg",
+                            "width": 480,
+                            "height": 360
+                          }
+                        ]
+                      },
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Some other channel's upload"
+                          }
+                        ]
+                      },
+                      "longBylineText": {
+                        "runs": [
+                          {
+                            "text": "Some Other Channel",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@SomeOtherChannel",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UComposeOtherAaaaaaaaaaa",
+                                "canonicalBaseUrl": "/@SomeOtherChannel"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "ownerText": {
+                        "runs": [
+                          {
+                            "text": "Some Other Channel",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@SomeOtherChannel",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UComposeOtherAaaaaaaaaaa",
+                                "canonicalBaseUrl": "/@SomeOtherChannel"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "shortBylineText": {
+                        "runs": [
+                          {
+                            "text": "Some Other Channel"
+                          }
+                        ]
+                      },
+                      "lengthText": {
+                        "simpleText": "3:33"
+                      },
+                      "viewCountText": {
+                        "simpleText": "1,234,567 views"
+                      },
+                      "shortViewCountText": {
+                        "simpleText": "1.2M views"
+                      },
+                      "publishedTimeText": {
+                        "simpleText": "2 years ago"
+                      },
+                      "trackingParams": "composeSynthetic"
+                    }
+                  },
+                  {
+                    "videoRenderer": {
+                      "videoId": "othercompose02",
+                      "thumbnail": {
+                        "thumbnails": [
+                          {
+                            "url": "https://i.ytimg.com/vi/othercompose02/hqdefault.jpg",
+                            "width": 480,
+                            "height": 360
+                          }
+                        ]
+                      },
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Some other channel's second upload"
+                          }
+                        ]
+                      },
+                      "longBylineText": {
+                        "runs": [
+                          {
+                            "text": "Some Other Channel",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@SomeOtherChannel",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UComposeOtherAaaaaaaaaaa",
+                                "canonicalBaseUrl": "/@SomeOtherChannel"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "ownerText": {
+                        "runs": [
+                          {
+                            "text": "Some Other Channel",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@SomeOtherChannel",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UComposeOtherAaaaaaaaaaa",
+                                "canonicalBaseUrl": "/@SomeOtherChannel"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "shortBylineText": {
+                        "runs": [
+                          {
+                            "text": "Some Other Channel"
+                          }
+                        ]
+                      },
+                      "lengthText": {
+                        "simpleText": "3:33"
+                      },
+                      "viewCountText": {
+                        "simpleText": "1,234,567 views"
+                      },
+                      "shortViewCountText": {
+                        "simpleText": "1.2M views"
+                      },
+                      "publishedTimeText": {
+                        "simpleText": "2 years ago"
+                      },
+                      "trackingParams": "composeSynthetic"
+                    }
+                  },
+                  {
+                    "videoRenderer": {
+                      "videoId": "othercompose03",
+                      "thumbnail": {
+                        "thumbnails": [
+                          {
+                            "url": "https://i.ytimg.com/vi/othercompose03/hqdefault.jpg",
+                            "width": 480,
+                            "height": 360
+                          }
+                        ]
+                      },
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "A third channel's upload"
+                          }
+                        ]
+                      },
+                      "longBylineText": {
+                        "runs": [
+                          {
+                            "text": "Another Channel",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@AnotherChannel",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UComposeOtherBbbbbbbbbbb",
+                                "canonicalBaseUrl": "/@AnotherChannel"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "ownerText": {
+                        "runs": [
+                          {
+                            "text": "Another Channel",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@AnotherChannel",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UComposeOtherBbbbbbbbbbb",
+                                "canonicalBaseUrl": "/@AnotherChannel"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "shortBylineText": {
+                        "runs": [
+                          {
+                            "text": "Another Channel"
+                          }
+                        ]
+                      },
+                      "lengthText": {
+                        "simpleText": "3:33"
+                      },
+                      "viewCountText": {
+                        "simpleText": "1,234,567 views"
+                      },
+                      "shortViewCountText": {
+                        "simpleText": "1.2M views"
+                      },
+                      "publishedTimeText": {
+                        "simpleText": "2 years ago"
+                      },
+                      "trackingParams": "composeSynthetic"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -124,6 +124,13 @@ export type ChannelPageDTO = {
     isSubscribed: boolean;
     isOwner: boolean;
     videoCount: number;
+    /**
+     * WFX2-C-F (additive): the page was composed from real search results
+     * (the channel-read wall). Header fields search cannot carry —
+     * subscriberCount/subscriberCountText/bannerUrl/description — are honest
+     * nulls/0, never invented. Videos are the exact-id-filtered results.
+     */
+    composed?: boolean;
   };
   videos: VideoDTO[];
   shorts: VideoDTO[];

@@ -14,11 +14,19 @@
  * Derivation note: the packet suggested `b64{2: query, 6: 8}` — that encoding
  * returns the channel page with an EMPTY Search tab (probed live). The tab
  * params + `query` body field is the mechanism the real response itself uses.
+ *
+ * WFX2-C-F: the channel-read wall — when the channel cannot be resolved
+ * through the browse family (the @handle SSR scrape 404s / the UC browse
+ * answers a skeleton), the channel is resolved per the name-search
+ * supermajority resolver (channel-compose.ts) and the search composes:
+ * `innertubeSearch("${query} ${channelName}")` + the exact-id filter, with
+ * honest cursor pagination (a cursor only when the upstream provides one).
  */
-import { innertubeBrowse } from "./innertube";
+import { innertubeBrowse, innertubeSearch } from "./innertube";
 import { cached, TTL } from "./cache";
 import { mapVideos, walkTree } from "./mappers";
-import { resolveChannel } from "./channels";
+import { resolveChannel, type ChannelLookup } from "./channels";
+import { resolveChannelFromSearch } from "./channel-compose";
 import type { VideoDTO } from "@/lib/types";
 
 /** Live-verified constant (the real channel Search tab params). */
@@ -64,28 +72,73 @@ export async function searchInChannel(
   const term = query.trim();
   if (!cleaned || (!term && !cursor)) return null;
 
-  const lookup = await resolveChannel(cleaned);
-  if (!lookup || !lookup.header) return null;
+  let lookup: ChannelLookup | null = null;
+  try {
+    lookup = await resolveChannel(cleaned);
+  } catch {
+    // the walled @handle scrape throws — the compose path takes over
+    lookup = null;
+  }
+  if (lookup && lookup.header) {
+    const tabParams =
+      channelSearchTabParams(lookup.homeResponse) ?? CHANNEL_SEARCH_TAB_PARAM;
 
-  const tabParams =
-    channelSearchTabParams(lookup.homeResponse) ?? CHANNEL_SEARCH_TAB_PARAM;
+    const body: Record<string, unknown> = cursor
+      ? { browseId: lookup.browseId, params: tabParams, continuation: cursor }
+      : { browseId: lookup.browseId, params: tabParams, query: term };
 
-  const body: Record<string, unknown> = cursor
-    ? { browseId: lookup.browseId, params: tabParams, continuation: cursor }
-    : { browseId: lookup.browseId, params: tabParams, query: term };
+    const response = await cached(
+      `yt:channel:search:${lookup.browseId}:${term}:${cursor ?? ""}`,
+      TTL.SEARCH_MS,
+      () => innertubeBrowse(body)
+    );
 
-  const response = await cached(
-    `yt:channel:search:${lookup.browseId}:${term}:${cursor ?? ""}`,
-    TTL.SEARCH_MS,
-    () => innertubeBrowse(body)
+    const videos = mapVideos(response, { dedupe: true, limit: 40 }).filter((v) => !v.isShort);
+    return {
+      query: term,
+      channelId: lookup.browseId,
+      channelName: lookup.header.name,
+      videos,
+      nextCursor: continuationToken(response),
+    };
+  }
+
+  // WFX2-C-F — the channel-read wall: resolve the channel per the name-search
+  // supermajority resolver, then search "${query} ${channelName}" + the
+  // exact-id filter. Null when the resolution is below the threshold.
+  return searchComposedInChannel(cleaned, term, cursor);
+}
+
+/**
+ * The composed in-channel search (WFX2-C-F): resolve per A
+ * (resolveChannelFromSearch), search "${query} ${channelName}", keep only
+ * the results the resolved channelId actually owns (exact-id — never a
+ * guessed attribution). Cursor pagination is honest: a cursor only when
+ * the upstream provides one, else null.
+ */
+async function searchComposedInChannel(
+  handle: string,
+  term: string,
+  cursor?: string
+): Promise<ChannelSearchPage | null> {
+  const resolution = await resolveChannelFromSearch(handle);
+  if (!resolution) return null;
+
+  const cacheKey = `yt:channel:search:compose:${resolution.channelId}:${term}:${cursor ?? ""}`;
+  const response = await cached(cacheKey, TTL.SEARCH_MS, () =>
+    innertubeSearch(
+      cursor ? { continuation: cursor } : { query: `${term} ${resolution.channelName}`.trim() }
+    )
   );
 
-  const videos = mapVideos(response, { dedupe: true, limit: 40 }).filter((v) => !v.isShort);
+  const videos = mapVideos(response, { dedupe: true, limit: 40 }).filter(
+    (v) => !v.isShort && v.channel.id === resolution.channelId
+  );
   return {
     query: term,
-    channelId: lookup.browseId,
-    channelName: lookup.header.name,
+    channelId: resolution.channelId,
+    channelName: resolution.channelName,
     videos,
-    nextCursor: continuationToken(response),
+    nextCursor: continuationToken(response), // honest: null when absent
   };
 }
