@@ -241,10 +241,17 @@ export default function ChannelPage() {
                 {data.channel.verified && <VerifiedBadge className="size-5" />}
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                @/{data.channel.handle} ·{" "}
-                <span className="font-medium text-foreground">
-                  {formatSubscribers(data.channel.subscriberCount)}
-                </span>{" "}
+                @/{data.channel.handle}
+                {/* WFX2-C-F: composed pages carry no subscriber data (the
+                    channel-read wall) — honest omission, never a fake 0 */}
+                {!data.channel.composed && (
+                  <>
+                    {" · "}
+                    <span className="font-medium text-foreground">
+                      {formatSubscribers(data.channel.subscriberCount)}
+                    </span>
+                  </>
+                )}{" "}
                 · {formatCount(data.channel.videoCount)} videos
               </p>
               <p className="mt-1 line-clamp-1 text-sm text-muted-foreground">

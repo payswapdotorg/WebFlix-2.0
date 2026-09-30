@@ -1,0 +1,486 @@
+{
+  "_synthetic": true,
+  "responseContext": {
+    "visitorData": "composeSynthetic"
+  },
+  "contents": {
+    "twoColumnSearchResultsRenderer": {
+      "primaryContents": {
+        "sectionListRenderer": {
+          "contents": [
+            {
+              "itemSectionRenderer": {
+                "contents": [
+                  {
+                    "videoRenderer": {
+                      "videoId": "inchannel01",
+                      "thumbnail": {
+                        "thumbnails": [
+                          {
+                            "url": "https://i.ytimg.com/vi/inchannel01/hqdefault.jpg",
+                            "width": 480,
+                            "height": 360
+                          }
+                        ]
+                      },
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Never Gonna Give You Up (live aid)"
+                          }
+                        ]
+                      },
+                      "longBylineText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@RickAstleyYT",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                                "canonicalBaseUrl": "/@RickAstleyYT"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "ownerText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@RickAstleyYT",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                                "canonicalBaseUrl": "/@RickAstleyYT"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "shortBylineText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley"
+                          }
+                        ]
+                      },
+                      "lengthText": {
+                        "simpleText": "3:33"
+                      },
+                      "viewCountText": {
+                        "simpleText": "1,234,567 views"
+                      },
+                      "shortViewCountText": {
+                        "simpleText": "1.2M views"
+                      },
+                      "publishedTimeText": {
+                        "simpleText": "2 years ago"
+                      },
+                      "trackingParams": "composeSynthetic",
+                      "avatar": {
+                        "decoratedAvatarViewModel": {
+                          "avatar": {
+                            "avatarViewModel": {
+                              "image": {
+                                "sources": [
+                                  {
+                                    "url": "https://yt3.ggpht.com/rick-compose-synth-avatar=s88-c-k-c0x00ffffff-no-rj",
+                                    "width": 68,
+                                    "height": 68
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "channelThumbnailSupportedRenderers": {
+                        "channelThumbnailWithLinkRenderer": {
+                          "thumbnail": {
+                            "thumbnails": [
+                              {
+                                "url": "https://yt3.ggpht.com/rick-compose-synth-avatar=s88-c-k-c0x00ffffff-no-rj",
+                                "width": 68,
+                                "height": 68
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "videoRenderer": {
+                      "videoId": "inchannel02",
+                      "thumbnail": {
+                        "thumbnails": [
+                          {
+                            "url": "https://i.ytimg.com/vi/inchannel02/hqdefault.jpg",
+                            "width": 480,
+                            "height": 360
+                          }
+                        ]
+                      },
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Never Gonna Give You Up (piano version)"
+                          }
+                        ]
+                      },
+                      "longBylineText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@RickAstleyYT",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                                "canonicalBaseUrl": "/@RickAstleyYT"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "ownerText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@RickAstleyYT",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                                "canonicalBaseUrl": "/@RickAstleyYT"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "shortBylineText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley"
+                          }
+                        ]
+                      },
+                      "lengthText": {
+                        "simpleText": "3:33"
+                      },
+                      "viewCountText": {
+                        "simpleText": "1,234,567 views"
+                      },
+                      "shortViewCountText": {
+                        "simpleText": "1.2M views"
+                      },
+                      "publishedTimeText": {
+                        "simpleText": "2 years ago"
+                      },
+                      "trackingParams": "composeSynthetic"
+                    }
+                  },
+                  {
+                    "videoRenderer": {
+                      "videoId": "inchannel03",
+                      "thumbnail": {
+                        "thumbnails": [
+                          {
+                            "url": "https://i.ytimg.com/vi/inchannel03/hqdefault.jpg",
+                            "width": 480,
+                            "height": 360
+                          }
+                        ]
+                      },
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Never Gonna Run Around And Desert You"
+                          }
+                        ]
+                      },
+                      "longBylineText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@RickAstleyYT",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                                "canonicalBaseUrl": "/@RickAstleyYT"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "ownerText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@RickAstleyYT",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                                "canonicalBaseUrl": "/@RickAstleyYT"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "shortBylineText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley"
+                          }
+                        ]
+                      },
+                      "lengthText": {
+                        "simpleText": "3:33"
+                      },
+                      "viewCountText": {
+                        "simpleText": "1,234,567 views"
+                      },
+                      "shortViewCountText": {
+                        "simpleText": "1.2M views"
+                      },
+                      "publishedTimeText": {
+                        "simpleText": "2 years ago"
+                      },
+                      "trackingParams": "composeSynthetic"
+                    }
+                  },
+                  {
+                    "videoRenderer": {
+                      "videoId": "inchannel04",
+                      "thumbnail": {
+                        "thumbnails": [
+                          {
+                            "url": "https://i.ytimg.com/vi/inchannel04/hqdefault.jpg",
+                            "width": 480,
+                            "height": 360
+                          }
+                        ]
+                      },
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "Never Gonna Make You Cry (2024 remaster)"
+                          }
+                        ]
+                      },
+                      "longBylineText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@RickAstleyYT",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                                "canonicalBaseUrl": "/@RickAstleyYT"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "ownerText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@RickAstleyYT",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                                "canonicalBaseUrl": "/@RickAstleyYT"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "shortBylineText": {
+                        "runs": [
+                          {
+                            "text": "Rick Astley"
+                          }
+                        ]
+                      },
+                      "lengthText": {
+                        "simpleText": "3:33"
+                      },
+                      "viewCountText": {
+                        "simpleText": "1,234,567 views"
+                      },
+                      "shortViewCountText": {
+                        "simpleText": "1.2M views"
+                      },
+                      "publishedTimeText": {
+                        "simpleText": "2 years ago"
+                      },
+                      "trackingParams": "composeSynthetic"
+                    }
+                  },
+                  {
+                    "videoRenderer": {
+                      "videoId": "foreign01",
+                      "thumbnail": {
+                        "thumbnails": [
+                          {
+                            "url": "https://i.ytimg.com/vi/foreign01/hqdefault.jpg",
+                            "width": 480,
+                            "height": 360
+                          }
+                        ]
+                      },
+                      "title": {
+                        "runs": [
+                          {
+                            "text": "A foreign result that must be filtered out"
+                          }
+                        ]
+                      },
+                      "longBylineText": {
+                        "runs": [
+                          {
+                            "text": "Some Other Channel",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@SomeOtherChannel",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UComposeOtherAaaaaaaaaaa",
+                                "canonicalBaseUrl": "/@SomeOtherChannel"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "ownerText": {
+                        "runs": [
+                          {
+                            "text": "Some Other Channel",
+                            "navigationEndpoint": {
+                              "clickTrackingParams": "composeSynthetic",
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "url": "/@SomeOtherChannel",
+                                  "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                  "rootVe": 3611,
+                                  "apiUrl": "/youtubei/v1/browse"
+                                }
+                              },
+                              "browseEndpoint": {
+                                "browseId": "UComposeOtherAaaaaaaaaaa",
+                                "canonicalBaseUrl": "/@SomeOtherChannel"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "shortBylineText": {
+                        "runs": [
+                          {
+                            "text": "Some Other Channel"
+                          }
+                        ]
+                      },
+                      "lengthText": {
+                        "simpleText": "3:33"
+                      },
+                      "viewCountText": {
+                        "simpleText": "1,234,567 views"
+                      },
+                      "shortViewCountText": {
+                        "simpleText": "1.2M views"
+                      },
+                      "publishedTimeText": {
+                        "simpleText": "2 years ago"
+                      },
+                      "trackingParams": "composeSynthetic"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "continuationItemRenderer": {
+                "continuationEndpoint": {
+                  "continuationCommand": {
+                    "token": "COMPOSE-INCHANNEL-CURSOR-SYNTH"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

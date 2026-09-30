@@ -190,3 +190,22 @@ Operational notes: the cs worker's own 515 was on its pre-cutover base — the m
 | C-S replay-polish | `7dfbe7a1` | **MERGED + LIVE** (a76b6d01 → aa2a759; 558 tests) |
 | C-W cutover | — | **MERGED + LIVE** (473-tests era → 558 now) |
 | HW home-warmer | `b2e239f5` | formed server-side ("Home-Browse Cache Warm-Up Fix", msgs=2), awaiting spawn (slot freed) |
+
+## 2026-09-30 — WFX2-C-F: channel search-compose (the wall-proof channel family) — 642 tests
+
+The channel-read wall is total for server egress (@handle SSR scrape 404, browse-by-UCid 200-skeleton, type=channel search decoys) — but the plain video search stays unwalled and every videoRenderer carries REAL channel fields. The CF lane composed the channel family from that data with exact-id honesty. Branch `wfx2/waveC-channel-compose` (base b517e2e, PUSH-first delivery).
+
+Landed:
+- **resolveChannelFromSearch** (new `src/lib/youtube/channel-compose.ts`): a name search on the handle ("@" stripped) whose results group by the channelId they actually carry — the id owning **≥60% of the results that have channel fields** is the channel (inclusive threshold; results without channel fields never count in the denominator; a UC… handle adds the exact-id guard — the dominant id must BE the requested one). Below the threshold → null (honest degrade stands; never name-similarity attribution). Cached at `yt:channel:resolve:<normalized>` (feed TTL, the adapter's default last-good; cached nulls so repeated reads never re-search).
+- **The composed channel page** — the ladder's third rung: browse-fresh → browse-last-good → **search-compose** → honest-degrade (`getChannelPageResilient` extends; the wall's nameless 200-skeleton is now detected as the walled shape). Header = the REAL fields the results carry (id, name, @handle from the byline canonicalBaseUrl, avatar from the renderer's avatar/channelThumbnail blocks, verified from owner badges) + `composed: true` (additive DTO flag) + honest nulls/0 for subscriberCount/banner/description (search cannot carry them — never invented). Videos = the id-filtered results; shorts = their shorts else honest empty; tabs = ["videos"] only; joinable: false. The composed page is stored in the `yt:channel:page:*` family (requested-handle key + the resolved real-handle key when free — never clobbers a browse last-good) so repeated reads and the search-route family lookups serve it.
+- **In-channel search within the walls** (`searchInChannel`): the healthy browse-tab mechanism stands; when the channel can't resolve (the walled scrape throws / the skeleton header), resolve per the supermajority resolver then `innertubeSearch("${query} ${channelName}")` + the exact-id filter, cursor pagination honest (a cursor only when the upstream provides one — null otherwise; continuations pass through as `{continuation}`).
+- **channelFromLastGood normalization** (the search route's channel rows): probe keys extended with space-collapsed + space-stripped forms ("Rick Astley" → "rickastley") and acceptance extended to the cached page's channel NAME (case/space/@-normalized equality) — all exact-normalized matching, never similarity. Composed pages land in the family, so `search?q=<name|handle>` serves the row end-to-end.
+
+Gates (clean env, no Upstash vars): lint 0 / typecheck 0 / **642 green** (619 + 23 new in `tests/channel-compose.test.ts`, in `test:cutover`). Two synthetic fixtures (`_synthetic: true`, *_synth.json): the 7/10 dominant-id name search + the composed in-channel page with a real continuation token; the mixed-below-threshold case uses the REAL search_lofi capture (top channel 21%).
+
+| Lane | Branch | Status |
+|---|---|---|
+| C-F channel search-compose | `wfx2/waveC-channel-compose` | PUSHED (this entry) |
+| B-S comments-write | `cc9a7568` | merged (b517e2e) |
+| C-S replay-polish | `7dfbe7a1` | merged (aa2a759) |
+| C-W cutover | — | merged + live |
