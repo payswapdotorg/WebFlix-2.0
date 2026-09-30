@@ -164,11 +164,13 @@ export async function getChannelPage(handle: string): Promise<ChannelPageDTO | n
  *   browse-fresh → browse-last-good → search-compose → honest-degrade.
  * When the wall stands (fresh browse AND last-good both failed) the page is
  * composed from the real search results the dominant channel owns (see
- * channel-compose.ts — exact-id resolution, `composed: true`, honest nulls
- * for the fields search cannot carry). The composed page is kept in the
- * family so repeated reads and the search-route channelFromLastGood
- * lookup serve it; the honest degrade stands when the name search does not
- * resolve below the supermajority threshold.
+ * channel-compose.ts — exact-id resolution under the WFX2-CF-2 dominance
+ * rule, `composed: true`, the header watch-enriched through the unwalled
+ * watch path where real data serves, honest nulls otherwise). The composed
+ * page is kept in the family so repeated reads and the search-route
+ * channelFromLastGood lookup serve it; the honest degrade stands when the
+ * name search does not resolve below both the dominance and supermajority
+ * thresholds.
  */
 export interface ChannelPageResult {
   page: ChannelPageDTO | null;

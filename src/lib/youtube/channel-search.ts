@@ -18,7 +18,7 @@
  * WFX2-C-F: the channel-read wall — when the channel cannot be resolved
  * through the browse family (the @handle SSR scrape 404s / the UC browse
  * answers a skeleton), the channel is resolved per the name-search
- * supermajority resolver (channel-compose.ts) and the search composes:
+ * dominance resolver (channel-compose.ts) and the search composes:
  * `innertubeSearch("${query} ${channelName}")` + the exact-id filter, with
  * honest cursor pagination (a cursor only when the upstream provides one).
  */
@@ -104,8 +104,8 @@ export async function searchInChannel(
   }
 
   // WFX2-C-F — the channel-read wall: resolve the channel per the name-search
-  // supermajority resolver, then search "${query} ${channelName}" + the
-  // exact-id filter. Null when the resolution is below the threshold.
+  // dominance resolver (WFX2-CF-2), then search "${query} ${channelName}" +
+  // the exact-id filter. Null when the resolution is below both thresholds.
   return searchComposedInChannel(cleaned, term, cursor);
 }
 
