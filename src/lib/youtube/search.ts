@@ -8,6 +8,7 @@ import { innertubeSearch } from "./innertube";
 import { cached, TTL } from "./cache";
 import { buildSearchParam, parseSearchFilters, type SearchFilters } from "./filters";
 import { mapVideos, mapChannelRenderer, mapPlaylistRenderer, walkTree } from "./mappers";
+import { channelFromLastGood } from "./channels";
 import { mapSearchCorrection, searchResultCountText, mapSearchPlaylists } from "./search-parity";
 import type { ChannelLite, PlaylistLiteDTO, SearchCorrection, VideoDTO } from "@/lib/types";
 
@@ -60,6 +61,18 @@ export async function searchYouTube(
     if (!dto || seenChannels.has(dto.id)) continue;
     seenChannels.add(dto.id);
     channels.push(dto);
+  }
+  // WFX2-B-S item 14 — the channel-renderer wall: mixed searches from server
+  // egress can omit channel renderers entirely. When the query matches a
+  // channel handle served through the resilient channel path, that
+  // channel's LAST-GOOD header fills the row (exact handle match — never a
+  // guessed attribution); otherwise the honest empty stands.
+  if (channels.length === 0) {
+    const fromCache = await channelFromLastGood(query);
+    if (fromCache && !seenChannels.has(fromCache.id)) {
+      seenChannels.add(fromCache.id);
+      channels.push(fromCache);
+    }
   }
   // type=channel searches are all-channel; mixed results carry a compact row
   const channelLimit = filters.type === "channel" ? 24 : 6;

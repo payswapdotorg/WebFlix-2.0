@@ -1,9 +1,8 @@
 import { NextRequest } from "next/server";
 import { json, errorResponse } from "@/lib/watch/api";
 import { resolveViewer } from "@/lib/watch/session";
-import { editComment, deleteComment } from "@/lib/watch/comment-service";
-import { proxyCommentReply } from "@/lib/watch/action-proxy";
-import { commentEditBodySchema } from "@/lib/watch/validators";
+import { proxyCommentReply, proxyCommentEdit, proxyCommentDelete } from "@/lib/watch/action-proxy";
+import { commentWriteBodySchema, commentDeleteBodySchema } from "@/lib/watch/validators";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +17,6 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
-    const viewer = await resolveViewer(req.headers);
     let body: Record<string, unknown> = {};
     try {
       body = (await req.json()) as Record<string, unknown>;
@@ -31,6 +29,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     if (!videoId) return json({ error: "videoId is required" }, 400);
     const parentText =
       typeof body.parentText === "string" && body.parentText ? body.parentText : undefined;
+    const viewer = await resolveViewer(req.headers);
     const comment = await proxyCommentReply(videoId, id, text, viewer, parentText);
     return json(comment, { status: 201 });
   } catch (e) {
@@ -39,27 +38,65 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 }
 
 /**
- * PATCH /api/comments/[id] {body} — edit own comment (inline). Seed-backed
- * until the comment-write lane (B-S) swaps it to the broker tier.
+ * PATCH /api/comments/[id] — LIVE Tier-2 write: edit own comment (broker
+ * comment-edit — the ⋮ → Edit → inline editor DOM path on the watch page).
+ *
+ * Request: {body, videoId, commentText?} — commentText is the comment's
+ * CURRENT text (the broker's DOM locator). Ownership is enforced by YouTube
+ * itself (Edit only exists on the operator's own comments).
+ *
+ * Response: {ok, effect, body, edited: true, path?} — the UI merges the new
+ * body into the row it already holds (the row's id/author stay).
  */
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
-    const viewer = await resolveViewer(req.headers);
-    const body = commentEditBodySchema.parse(await req.json());
-    const comment = await editComment(id, viewer.id, body.body);
-    return json(comment);
+    let raw: unknown;
+    try {
+      raw = await req.json();
+    } catch {
+      return json({ error: "body must be JSON" }, 400);
+    }
+    const parsed = commentWriteBodySchema.safeParse(raw);
+    if (!parsed.success) {
+      return json({ error: parsed.error.issues[0]?.message ?? "invalid body" }, 400);
+    }
+    const result = await proxyCommentEdit(id, parsed.data.body, {
+      videoId: parsed.data.videoId,
+      ...(parsed.data.commentText ? { commentText: parsed.data.commentText } : {}),
+    });
+    return json(result);
   } catch (e) {
     return errorResponse(e);
   }
 }
 
-/** DELETE /api/comments/[id] — soft-delete own comment (undo toast restores). */
+/**
+ * DELETE /api/comments/[id] — LIVE Tier-2 write: delete own comment (broker
+ * comment-delete — the ⋮ → Delete → confirm-dialog DOM path, YouTube's exact
+ * flow).
+ *
+ * Request: {videoId, commentText?} (commentText = the CURRENT text locator).
+ * Response: {ok, deleted: true, effect, path?}.
+ */
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
-    const viewer = await resolveViewer(req.headers);
-    const result = await deleteComment(id, viewer.id);
+    let raw: unknown = {};
+    try {
+      const text = await req.text();
+      if (text) raw = JSON.parse(text);
+    } catch {
+      return json({ error: "body must be JSON" }, 400);
+    }
+    const parsed = commentDeleteBodySchema.safeParse(raw);
+    if (!parsed.success) {
+      return json({ error: parsed.error.issues[0]?.message ?? "invalid body" }, 400);
+    }
+    const result = await proxyCommentDelete(id, {
+      videoId: parsed.data.videoId,
+      ...(parsed.data.commentText ? { commentText: parsed.data.commentText } : {}),
+    });
     return json(result);
   } catch (e) {
     return errorResponse(e);

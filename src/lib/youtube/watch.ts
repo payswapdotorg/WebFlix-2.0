@@ -25,6 +25,7 @@ import { runsText, parseViewCount, parseCompactCount, watchUrl, videoThumbnailUr
 import { mapRelatedPage, type RelatedPage } from "./related";
 import { mapAutoplay } from "./autoplay";
 import { commentsTokenFromWatchResponse } from "./comments";
+import { operatorIsCreator } from "./operator";
 import type { VideoDto, ViewerVideoState, VideoDetailDto } from "@/lib/watch/types";
 import { parseChapters, type Chapter } from "@/lib/watch/chapters";
 
@@ -205,5 +206,8 @@ export async function getWatchMetadata(videoId: string): Promise<WatchMetadata |
 export async function getVideoDetail(videoId: string): Promise<VideoDetailDto | null> {
   const meta = await getWatchMetadata(videoId);
   if (!meta) return null;
-  return { video: meta.video, state: meta.state };
+  // WFX2-B-S creator-mode: the operator session IS the video's channel
+  // (heart/pin surface on the watch page). Public mode → false, honestly.
+  const isCreator = await operatorIsCreator(meta.video.channel.id);
+  return { video: meta.video, state: { ...meta.state, isCreator } };
 }

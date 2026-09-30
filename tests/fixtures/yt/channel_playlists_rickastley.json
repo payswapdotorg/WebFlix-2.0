@@ -1,0 +1,717 @@
+{
+ "note": "sanitized real capture 2026-09-30 (Rick Astley Playlists tab via browse {browseId, params: the response-own Playlists tab param}; first 8 playlist lockups; tracking/style runs stripped, thumbnails de-parameterized)",
+ "contents": {
+  "twoColumnBrowseResultsRenderer": {
+   "tabs": [
+    {
+     "tabRenderer": {
+      "title": "Playlists",
+      "selected": true,
+      "content": {
+       "richGridRenderer": {
+        "contents": [
+         {
+          "richItemRenderer": {
+           "content": {
+            "lockupViewModel": {
+             "contentId": "PLlaN88a7y2_qHDbY9eQbuNTAuEJUSEeuu",
+             "contentType": "LOCKUP_CONTENT_TYPE_PLAYLIST",
+             "contentImage": {
+              "collectionThumbnailViewModel": {
+               "primaryThumbnail": {
+                "thumbnailViewModel": {
+                 "image": {
+                  "sources": [
+                   {
+                    "url": "https://i.ytimg.com/vi/PXC_PYeB6F8/hqdefault.jpg",
+                    "width": 480,
+                    "height": 270
+                   }
+                  ]
+                 },
+                 "overlays": [
+                  {
+                   "thumbnailOverlayBadgeViewModel": {
+                    "thumbnailBadges": [
+                     {
+                      "thumbnailBadgeViewModel": {
+                       "icon": {
+                        "sources": [
+                         {
+                          "clientResource": {
+                           "imageName": "PLAYLISTS"
+                          }
+                         }
+                        ]
+                       },
+                       "text": "3 videos",
+                       "badgeStyle": "THUMBNAIL_OVERLAY_BADGE_STYLE_DEFAULT",
+                       "backgroundColor": {
+                        "lightTheme": 1775923,
+                        "darkTheme": 1775923
+                       }
+                      }
+                     }
+                    ],
+                    "position": "THUMBNAIL_OVERLAY_BADGE_POSITION_BOTTOM_END"
+                   }
+                  }
+                 ]
+                }
+               }
+              }
+             },
+             "metadata": {
+              "lockupMetadataViewModel": {
+               "title": {
+                "content": "Rick Astley Live at The O2"
+               },
+               "metadata": {
+                "contentMetadataViewModel": {
+                 "metadataRows": [
+                  {
+                   "metadataParts": [
+                    {
+                     "text": {
+                      "content": "Playlist"
+                     }
+                    }
+                   ]
+                  },
+                  {
+                   "metadataParts": [
+                    {
+                     "text": {
+                      "content": "View full playlist"
+                     }
+                    }
+                   ]
+                  }
+                 ]
+                }
+               }
+              }
+             },
+             "videoCountBadge": "3 videos"
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "lockupViewModel": {
+             "contentId": "PLlaN88a7y2_oK0nKMjZSwdU_njxUYWykm",
+             "contentType": "LOCKUP_CONTENT_TYPE_PLAYLIST",
+             "contentImage": {
+              "collectionThumbnailViewModel": {
+               "primaryThumbnail": {
+                "thumbnailViewModel": {
+                 "image": {
+                  "sources": [
+                   {
+                    "url": "https://i.ytimg.com/vi/RrESvSRNpeo/hqdefault.jpg",
+                    "width": 480,
+                    "height": 270
+                   }
+                  ]
+                 },
+                 "overlays": [
+                  {
+                   "thumbnailOverlayBadgeViewModel": {
+                    "thumbnailBadges": [
+                     {
+                      "thumbnailBadgeViewModel": {
+                       "icon": {
+                        "sources": [
+                         {
+                          "clientResource": {
+                           "imageName": "PLAYLISTS"
+                          }
+                         }
+                        ]
+                       },
+                       "text": "5 videos",
+                       "badgeStyle": "THUMBNAIL_OVERLAY_BADGE_STYLE_DEFAULT",
+                       "backgroundColor": {
+                        "lightTheme": 1647155,
+                        "darkTheme": 1647155
+                       }
+                      }
+                     }
+                    ],
+                    "position": "THUMBNAIL_OVERLAY_BADGE_POSITION_BOTTOM_END"
+                   }
+                  }
+                 ]
+                }
+               }
+              }
+             },
+             "metadata": {
+              "lockupMetadataViewModel": {
+               "title": {
+                "content": "Rick Astley (リック・アストリー) － 名曲ミュージックビデオ（日本語字幕）"
+               },
+               "metadata": {
+                "contentMetadataViewModel": {
+                 "metadataRows": [
+                  {
+                   "metadataParts": [
+                    {
+                     "text": {
+                      "content": "Playlist"
+                     }
+                    }
+                   ]
+                  },
+                  {
+                   "metadataParts": [
+                    {
+                     "text": {
+                      "content": "View full playlist"
+                     }
+                    }
+                   ]
+                  }
+                 ]
+                }
+               }
+              }
+             },
+             "videoCountBadge": "5 videos"
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "lockupViewModel": {
+             "contentId": "PLlaN88a7y2_pVVkl4fGdTny21_LRyT85E",
+             "contentType": "LOCKUP_CONTENT_TYPE_PLAYLIST",
+             "contentImage": {
+              "collectionThumbnailViewModel": {
+               "primaryThumbnail": {
+                "thumbnailViewModel": {
+                 "image": {
+                  "sources": [
+                   {
+                    "url": "https://i.ytimg.com/vi/QJjrf9RkzGo/hqdefault.jpg",
+                    "width": 480,
+                    "height": 270
+                   }
+                  ]
+                 },
+                 "overlays": [
+                  {
+                   "thumbnailOverlayBadgeViewModel": {
+                    "thumbnailBadges": [
+                     {
+                      "thumbnailBadgeViewModel": {
+                       "icon": {
+                        "sources": [
+                         {
+                          "clientResource": {
+                           "imageName": "PLAYLISTS"
+                          }
+                         }
+                        ]
+                       },
+                       "text": "2 videos",
+                       "badgeStyle": "THUMBNAIL_OVERLAY_BADGE_STYLE_DEFAULT",
+                       "backgroundColor": {
+                        "lightTheme": 1977139,
+                        "darkTheme": 1977139
+                       }
+                      }
+                     }
+                    ],
+                    "position": "THUMBNAIL_OVERLAY_BADGE_POSITION_BOTTOM_END"
+                   }
+                  }
+                 ]
+                }
+               }
+              }
+             },
+             "metadata": {
+              "lockupMetadataViewModel": {
+               "title": {
+                "content": "Forever and More"
+               },
+               "metadata": {
+                "contentMetadataViewModel": {
+                 "metadataRows": [
+                  {
+                   "metadataParts": [
+                    {
+                     "text": {
+                      "content": "Playlist"
+                     }
+                    }
+                   ]
+                  },
+                  {
+                   "metadataParts": [
+                    {
+                     "text": {
+                      "content": "View full playlist"
+                     }
+                    }
+                   ]
+                  }
+                 ]
+                }
+               }
+              }
+             },
+             "videoCountBadge": "2 videos"
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "lockupViewModel": {
+             "contentId": "PLlaN88a7y2_obcaRtOX2oQsmlSDJMiwOr",
+             "contentType": "LOCKUP_CONTENT_TYPE_PLAYLIST",
+             "contentImage": {
+              "collectionThumbnailViewModel": {
+               "primaryThumbnail": {
+                "thumbnailViewModel": {
+                 "image": {
+                  "sources": [
+                   {
+                    "url": "https://i.ytimg.com/vi/mIHHfNVfhPk/hqdefault.jpg",
+                    "width": 480,
+                    "height": 270
+                   }
+                  ]
+                 },
+                 "overlays": [
+                  {
+                   "thumbnailOverlayBadgeViewModel": {
+                    "thumbnailBadges": [
+                     {
+                      "thumbnailBadgeViewModel": {
+                       "icon": {
+                        "sources": [
+                         {
+                          "clientResource": {
+                           "imageName": "PLAYLISTS"
+                          }
+                         }
+                        ]
+                       },
+                       "text": "15 videos",
+                       "badgeStyle": "THUMBNAIL_OVERLAY_BADGE_STYLE_DEFAULT",
+                       "backgroundColor": {
+                        "lightTheme": 3355443,
+                        "darkTheme": 3355443
+                       }
+                      }
+                     }
+                    ],
+                    "position": "THUMBNAIL_OVERLAY_BADGE_POSITION_BOTTOM_END"
+                   }
+                  }
+                 ]
+                }
+               }
+              }
+             },
+             "metadata": {
+              "lockupMetadataViewModel": {
+               "title": {
+                "content": "Are We There Yet?"
+               },
+               "metadata": {
+                "contentMetadataViewModel": {
+                 "metadataRows": [
+                  {
+                   "metadataParts": [
+                    {
+                     "text": {
+                      "content": "Playlist"
+                     }
+                    }
+                   ]
+                  },
+                  {
+                   "metadataParts": [
+                    {
+                     "text": {
+                      "content": "View full playlist"
+                     }
+                    }
+                   ]
+                  }
+                 ]
+                }
+               }
+              }
+             },
+             "videoCountBadge": "15 videos"
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "lockupViewModel": {
+             "contentId": "PLlaN88a7y2_rosKX2WQt2VjFbjyDQXOkR",
+             "contentType": "LOCKUP_CONTENT_TYPE_PLAYLIST",
+             "contentImage": {
+              "collectionThumbnailViewModel": {
+               "primaryThumbnail": {
+                "thumbnailViewModel": {
+                 "image": {
+                  "sources": [
+                   {
+                    "url": "https://i.ytimg.com/vi/LjmOX9jGoR4/hqdefault.jpg",
+                    "width": 480,
+                    "height": 270
+                   }
+                  ]
+                 },
+                 "overlays": [
+                  {
+                   "thumbnailOverlayBadgeViewModel": {
+                    "thumbnailBadges": [
+                     {
+                      "thumbnailBadgeViewModel": {
+                       "icon": {
+                        "sources": [
+                         {
+                          "clientResource": {
+                           "imageName": "PLAYLISTS"
+                          }
+                         }
+                        ]
+                       },
+                       "text": "132 videos",
+                       "badgeStyle": "THUMBNAIL_OVERLAY_BADGE_STYLE_DEFAULT",
+                       "backgroundColor": {
+                        "lightTheme": 400166,
+                        "darkTheme": 400166
+                       }
+                      }
+                     }
+                    ],
+                    "position": "THUMBNAIL_OVERLAY_BADGE_POSITION_BOTTOM_END"
+                   }
+                  }
+                 ]
+                }
+               }
+              }
+             },
+             "metadata": {
+              "lockupMetadataViewModel": {
+               "title": {
+                "content": "Rick Astley: Complete"
+               },
+               "metadata": {
+                "contentMetadataViewModel": {
+                 "metadataRows": [
+                  {
+                   "metadataParts": [
+                    {
+                     "text": {
+                      "content": "Playlist"
+                     }
+                    }
+                   ]
+                  },
+                  {
+                   "metadataParts": [
+                    {
+                     "text": {
+                      "content": "View full playlist"
+                     }
+                    }
+                   ]
+                  }
+                 ]
+                }
+               }
+              }
+             },
+             "videoCountBadge": "132 videos"
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "lockupViewModel": {
+             "contentId": "PLlaN88a7y2_rUZ4ojREfC3XbmWABADnHc",
+             "contentType": "LOCKUP_CONTENT_TYPE_PLAYLIST",
+             "contentImage": {
+              "collectionThumbnailViewModel": {
+               "primaryThumbnail": {
+                "thumbnailViewModel": {
+                 "image": {
+                  "sources": [
+                   {
+                    "url": "https://i.ytimg.com/vi/tS77-WDtuFo/hqdefault.jpg",
+                    "width": 480,
+                    "height": 270
+                   }
+                  ]
+                 },
+                 "overlays": [
+                  {
+                   "thumbnailOverlayBadgeViewModel": {
+                    "thumbnailBadges": [
+                     {
+                      "thumbnailBadgeViewModel": {
+                       "icon": {
+                        "sources": [
+                         {
+                          "clientResource": {
+                           "imageName": "PLAYLISTS"
+                          }
+                         }
+                        ]
+                       },
+                       "text": "9 videos",
+                       "badgeStyle": "THUMBNAIL_OVERLAY_BADGE_STYLE_DEFAULT",
+                       "backgroundColor": {
+                        "lightTheme": 3353386,
+                        "darkTheme": 3353386
+                       }
+                      }
+                     }
+                    ],
+                    "position": "THUMBNAIL_OVERLAY_BADGE_POSITION_BOTTOM_END"
+                   }
+                  }
+                 ]
+                }
+               }
+              }
+             },
+             "metadata": {
+              "lockupMetadataViewModel": {
+               "title": {
+                "content": "Rick Astley: Interviews"
+               },
+               "metadata": {
+                "contentMetadataViewModel": {
+                 "metadataRows": [
+                  {
+                   "metadataParts": [
+                    {
+                     "text": {
+                      "content": "Playlist"
+                     }
+                    }
+                   ]
+                  },
+                  {
+                   "metadataParts": [
+                    {
+                     "text": {
+                      "content": "View full playlist"
+                     }
+                    }
+                   ]
+                  }
+                 ]
+                }
+               }
+              }
+             },
+             "videoCountBadge": "9 videos"
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "lockupViewModel": {
+             "contentId": "PLlaN88a7y2_oyxwuMg72dcUz1S5qeoJYv",
+             "contentType": "LOCKUP_CONTENT_TYPE_PLAYLIST",
+             "contentImage": {
+              "collectionThumbnailViewModel": {
+               "primaryThumbnail": {
+                "thumbnailViewModel": {
+                 "image": {
+                  "sources": [
+                   {
+                    "url": "https://i.ytimg.com/vi/C5oeWHngDS4/hqdefault.jpg",
+                    "width": 480,
+                    "height": 270
+                   }
+                  ]
+                 },
+                 "overlays": [
+                  {
+                   "thumbnailOverlayBadgeViewModel": {
+                    "thumbnailBadges": [
+                     {
+                      "thumbnailBadgeViewModel": {
+                       "icon": {
+                        "sources": [
+                         {
+                          "clientResource": {
+                           "imageName": "PLAYLISTS"
+                          }
+                         }
+                        ]
+                       },
+                       "text": "9 videos",
+                       "badgeStyle": "THUMBNAIL_OVERLAY_BADGE_STYLE_DEFAULT",
+                       "backgroundColor": {
+                        "lightTheme": 2172447,
+                        "darkTheme": 2172447
+                       }
+                      }
+                     }
+                    ],
+                    "position": "THUMBNAIL_OVERLAY_BADGE_POSITION_BOTTOM_END"
+                   }
+                  }
+                 ]
+                }
+               }
+              }
+             },
+             "metadata": {
+              "lockupMetadataViewModel": {
+               "title": {
+                "content": "Covered by Rick Astley"
+               },
+               "metadata": {
+                "contentMetadataViewModel": {
+                 "metadataRows": [
+                  {
+                   "metadataParts": [
+                    {
+                     "text": {
+                      "content": "Playlist"
+                     }
+                    }
+                   ]
+                  },
+                  {
+                   "metadataParts": [
+                    {
+                     "text": {
+                      "content": "View full playlist"
+                     }
+                    }
+                   ]
+                  }
+                 ]
+                }
+               }
+              }
+             },
+             "videoCountBadge": "9 videos"
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "lockupViewModel": {
+             "contentId": "PLlaN88a7y2_qSLH3pLiQIQ6isY_DZTtdg",
+             "contentType": "LOCKUP_CONTENT_TYPE_PLAYLIST",
+             "contentImage": {
+              "collectionThumbnailViewModel": {
+               "primaryThumbnail": {
+                "thumbnailViewModel": {
+                 "image": {
+                  "sources": [
+                   {
+                    "url": "https://i.ytimg.com/vi/GHMjD0Lp5DY/hqdefault.jpg",
+                    "width": 480,
+                    "height": 270
+                   }
+                  ]
+                 },
+                 "overlays": [
+                  {
+                   "thumbnailOverlayBadgeViewModel": {
+                    "thumbnailBadges": [
+                     {
+                      "thumbnailBadgeViewModel": {
+                       "icon": {
+                        "sources": [
+                         {
+                          "clientResource": {
+                           "imageName": "PLAYLISTS"
+                          }
+                         }
+                        ]
+                       },
+                       "text": "11 videos",
+                       "badgeStyle": "THUMBNAIL_OVERLAY_BADGE_STYLE_DEFAULT",
+                       "backgroundColor": {
+                        "lightTheme": 3350286,
+                        "darkTheme": 3350286
+                       }
+                      }
+                     }
+                    ],
+                    "position": "THUMBNAIL_OVERLAY_BADGE_POSITION_BOTTOM_END"
+                   }
+                  }
+                 ]
+                }
+               }
+              }
+             },
+             "metadata": {
+              "lockupMetadataViewModel": {
+               "title": {
+                "content": "Rick Astley - The Best of Me (Reimagined) (Album)"
+               },
+               "metadata": {
+                "contentMetadataViewModel": {
+                 "metadataRows": [
+                  {
+                   "metadataParts": [
+                    {
+                     "text": {
+                      "content": "Playlist"
+                     }
+                    }
+                   ]
+                  },
+                  {
+                   "metadataParts": [
+                    {
+                     "text": {
+                      "content": "View full playlist"
+                     }
+                    }
+                   ]
+                  }
+                 ]
+                }
+               }
+              }
+             },
+             "videoCountBadge": "11 videos"
+            }
+           }
+          }
+         }
+        ]
+       }
+      }
+     }
+    }
+   ]
+  }
+ }
+}

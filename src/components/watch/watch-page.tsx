@@ -72,6 +72,7 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
   const router = useRouter();
   const [detail, setDetail] = useState<VideoDetailDto | null>(null);
   const [viewer, setViewer] = useState<ViewerDto | null>(null);
+  const [operatorSession, setOperatorSession] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [theater, setTheater] = useState(false);
   const [autoplay, setAutoplay] = useState(true);
@@ -108,9 +109,12 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
   useEffect(() => {
     let alive = true;
 
-    void api<{ viewer: ViewerDto }>("/api/watch/session")
+    void api<{ viewer: ViewerDto; operatorSession?: boolean }>("/api/watch/session")
       .then((r) => {
-        if (alive) setViewer(r.viewer);
+        if (alive) {
+          setViewer(r.viewer);
+          setOperatorSession(r.operatorSession !== false);
+        }
       })
       .catch(() => {});
 
@@ -580,6 +584,7 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
                 viewer={viewer}
                 viewerIsCreator={state.isCreator}
                 creatorName={video.channel.name}
+                operatorSession={operatorSession}
               />
             )}
           </div>

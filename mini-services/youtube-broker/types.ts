@@ -24,6 +24,12 @@ export const ACTION_KINDS = [
   "playlist-create",
   "playlist-delete",
   "notifications-mark-read",
+  // WFX2-B-S (comment writes) — additive
+  "comment-edit",
+  "comment-delete",
+  "comment-heart",
+  "comment-pin",
+  "comment-report",
 ] as const;
 
 export type BrokerActionKind = (typeof ACTION_KINDS)[number];
@@ -59,6 +65,22 @@ export interface BrokerTarget {
  *                          "unlisted" | "public" (default private).
  *  - notifications-mark-read: (no payload — opens the bell menu in the
  *                          logged-in tab and re-reads the unseen count).
+ *  WFX2-B-S (comment writes — DOM path only; the read layer carries no
+ *  edit tokens, so payload.commentText locates the comment in the
+ *  logged-in tab's DOM):
+ *  - comment-edit:         text (the NEW body), commentId (in target),
+ *                          commentText? (the CURRENT body — the locator),
+ *                          videoId (in target).
+ *  - comment-delete:       commentId (in target), commentText? (locator),
+ *                          videoId (in target).
+ *  - comment-heart:        commentId (in target), commentText? (locator),
+ *                          videoId (in target) — creator heart toggle.
+ *  - comment-pin:          commentId (in target), commentText? (locator),
+ *                          videoId (in target) — pin/unpin toggle.
+ *  - comment-report:       commentId (in target), commentText? (locator),
+ *                          videoId (in target), reason? (label substring
+ *                          matched against YouTube's report-dialog rows;
+ *                          default: the first row).
  */
 export interface BrokerPayload {
   text?: string;
@@ -70,6 +92,7 @@ export interface BrokerPayload {
   videoId?: string;
   visibility?: string;
   paused?: boolean;
+  reason?: string;
 }
 
 export interface BrokerActionRequest {

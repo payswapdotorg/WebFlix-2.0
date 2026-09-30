@@ -36,7 +36,13 @@ export type BrokerKind =
   | "playlist-remove-item"
   | "playlist-create"
   | "playlist-delete"
-  | "notifications-mark-read";
+  | "notifications-mark-read"
+  // WFX2-B-S (comment writes) — additive
+  | "comment-edit"
+  | "comment-delete"
+  | "comment-heart"
+  | "comment-pin"
+  | "comment-report";
 
 export interface BrokerTarget {
   videoId?: string;
@@ -57,6 +63,8 @@ export interface BrokerPayload {
   visibility?: string;
   /** history-pause / search-history-pause: desired end state */
   paused?: boolean;
+  /** comment-report: YouTube report-dialog reason label (substring match) */
+  reason?: string;
 }
 
 /** Typed failure for the routes to map (502 offline / 502 action-failed). */

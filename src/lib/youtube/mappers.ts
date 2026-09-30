@@ -13,7 +13,7 @@
  * Card thumbnails hotlink `i.ytimg.com/vi/<id>/hqdefault.jpg` (regular) or
  * `oardefault.jpg` (shorts) per the architecture doc — zero egress cost.
  */
-import type { ChannelLite, VideoDTO } from "@/lib/types";
+import type { ChannelLite, ChannelTabId, VideoDTO } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // generic tree walking + text helpers
@@ -246,10 +246,29 @@ function badgeStyles(node: any): string[] {
   for (const b of node?.ownerBadges ?? []) {
     const style = b?.metadataBadgeRenderer?.style;
     if (typeof style === "string") out.push(style.replace(/^BADGE_STYLE_TYPE_/, "").toLowerCase());
+    else {
+      const label = runsText(b?.metadataBadgeRenderer?.label);
+      if (label) out.push(label.toLowerCase());
+    }
   }
   for (const b of node?.badges ?? []) {
     const style = b?.metadataBadgeRenderer?.style;
     if (typeof style === "string") out.push(style.replace(/^BADGE_STYLE_TYPE_/, "").toLowerCase());
+    else {
+      const label = runsText(b?.metadataBadgeRenderer?.label);
+      if (label) out.push(label.toLowerCase());
+    }
+  }
+  return [...new Set(out)];
+}
+
+/** Text badges off thumbnail overlays (lockup view models) — duration-like
+ * strings ("3:51") excluded; "Members only" is the member-only marker. */
+function overlayBadgeTexts(node: any): string[] {
+  const out: string[] = [];
+  for (const badge of walkTree(node, "thumbnailBadgeViewModel")) {
+    const text = typeof badge?.text === "string" ? badge.text.trim() : "";
+    if (text && !/^\d+[\d:]*$/.test(text)) out.push(text.toLowerCase());
   }
   return [...new Set(out)];
 }
@@ -311,6 +330,7 @@ export function mapVideoRenderer(r: any): VideoDTO | null {
   dto.badges = badgeStyles(r);
   dto.channel.verified =
     dto.channel.verified || dto.badges.some((b) => b.startsWith("verified"));
+  dto.isMembersOnly = dto.badges.some((b) => b.includes("members only"));
   dto.isLive = isLiveFromRenderer(r);
   return dto;
 }
@@ -333,6 +353,7 @@ export function mapCompactVideoRenderer(r: any): VideoDTO | null {
   dto.createdAt = relativeAgeToDate(dto.publishedText);
   dto.badges = badgeStyles(r);
   dto.channel.verified = dto.badges.some((b) => b.startsWith("verified"));
+  dto.isMembersOnly = dto.badges.some((b) => b.includes("members only"));
   dto.isLive = isLiveFromRenderer(r);
   return dto;
 }
@@ -440,7 +461,9 @@ export function mapLockupViewModel(l: any): VideoDTO | null {
       }
     }
   }
-  dto.badges = [];
+  // WFX2-B-S: member-only badges on locked channel videos ("Members only")
+  dto.badges = overlayBadgeTexts(l);
+  dto.isMembersOnly = dto.badges.some((b) => b.includes("members only"));
   return dto;
 }
 
@@ -674,4 +697,44 @@ export function mapChannelHeader(response: unknown): ChannelHeaderDTO | null {
     };
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// channel page tabs + membership (WFX2-B-S)
+// ---------------------------------------------------------------------------
+
+/** Map the response's tab titles to our tab ids (Community tab = "Posts"). */
+const TAB_TITLE_TO_ID: Record<string, ChannelTabId> = {
+  Home: "home",
+  Videos: "videos",
+  Shorts: "shorts",
+  Live: "live",
+  Playlists: "playlists",
+  Posts: "community",
+  Community: "community",
+};
+
+/** The channel's available tabs from its own tab list (YouTube's order + About). */
+export function channelTabsFromResponse(response: unknown): ChannelTabId[] {
+  const seen: ChannelTabId[] = [];
+  for (const tab of walkTree(response, "tabRenderer")) {
+    const id = TAB_TITLE_TO_ID[String(tab?.title ?? "")];
+    if (id && !seen.includes(id)) seen.push(id);
+  }
+  // About rides the header (the "…more" panel) — always offered
+  if (!seen.includes("about")) seen.push("about");
+  return seen;
+}
+
+/** Does the channel offer memberships (the Join button in the header actions)? */
+export function channelJoinable(response: unknown): boolean {
+  const actions = walkTree(response, "pageHeaderViewModel")[0]?.actions
+    ?.flexibleActionsViewModel?.actionsRows;
+  for (const row of actions ?? []) {
+    for (const a of row?.actions ?? []) {
+      if (a?.buttonViewModel?.title === "Join") return true;
+    }
+  }
+  // legacy header shape
+  return findFirst(response, "sponsorButtonRenderer") !== null;
 }

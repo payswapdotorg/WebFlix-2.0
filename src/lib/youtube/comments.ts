@@ -12,6 +12,10 @@
  *      [continuationItemRenderer] (next page)
  *  - entities: frameworkUpdates.entityBatchUpdate.mutations[].payload
  *    .commentEntityPayload (keyed lookup)
+ *  - WFX2-B-S: engagementToolbarStateEntityPayload (same mutations) carries
+ *    heartState (TOOLBAR_HEART_STATE_HEARTED — creator hearts) and likeState
+ *    (TOOLBAR_LIKE_STATE_LIKE/DISLIKE — the session viewer's own rating),
+ *    keyed by commentViewModel.toolbarStateKey.
  *  - sort: commentsHeaderRenderer.sortMenu.sortFilterSubMenuRenderer
  *    .subMenuItems[{title:"Top"|"Newest", serviceEndpoint.continuationCommand.token}]
  *  - replies: commentThreadRenderer.replies.commentRepliesRenderer.subThreads[0]
@@ -45,6 +49,26 @@ interface CommentsPage {
   sortTokens: { top: string | null; newest: string | null };
 }
 
+/** toolbarState entities (like/heart state per comment — WFX2-B-S). */
+interface ToolbarStates {
+  like: Map<string, "like" | "dislike" | null>;
+  hearted: Set<string>;
+}
+
+function toolbarStatesFrom(response: unknown): ToolbarStates {
+  const like = new Map<string, "like" | "dislike" | null>();
+  const hearted = new Set<string>();
+  for (const st of walkTree(response, "engagementToolbarStateEntityPayload")) {
+    const key = st?.key;
+    if (typeof key !== "string" || !key) continue;
+    if (st?.heartState === "TOOLBAR_HEART_STATE_HEARTED") hearted.add(key);
+    if (st?.likeState === "TOOLBAR_LIKE_STATE_LIKE") like.set(key, "like");
+    else if (st?.likeState === "TOOLBAR_LIKE_STATE_DISLIKE") like.set(key, "dislike");
+    else like.set(key, null);
+  }
+  return { like, hearted };
+}
+
 /** Pure mapper for one comments continuation page. */
 export function mapCommentsPage(response: unknown, parentId: string | null): CommentsPage {
   // entity payloads keyed for lookup
@@ -52,6 +76,8 @@ export function mapCommentsPage(response: unknown, parentId: string | null): Com
   for (const payload of walkTree(response, "commentEntityPayload")) {
     if (typeof payload?.key === "string") entities.set(payload.key, payload);
   }
+  // toolbar states (creator heart + viewer like — the response's own state)
+  const toolbar = toolbarStatesFrom(response);
 
   const threads: any[] = [];
   let nextCursor: string | null = null;
@@ -85,7 +111,7 @@ export function mapCommentsPage(response: unknown, parentId: string | null): Com
   for (const thread of threads) {
     const cvm = thread?.commentViewModel?.commentViewModel ?? thread?.commentViewModel ?? {};
     const entity = entities.get(cvm?.commentKey ?? "") ?? null;
-    const dto = mapCommentEntity(entity, cvm, thread, parentId);
+    const dto = mapCommentEntity(entity, cvm, thread, parentId, toolbar);
     if (dto) items.push(dto);
   }
 
@@ -96,7 +122,8 @@ function mapCommentEntity(
   entity: any,
   cvm: any,
   thread: any,
-  parentId: string | null
+  parentId: string | null,
+  toolbar: ToolbarStates
 ): CommentDto | null {
   const id = entity?.properties?.commentId ?? cvm?.commentId;
   if (typeof id !== "string" || !id) return null;
@@ -137,7 +164,8 @@ function mapCommentEntity(
     body: entity?.properties?.content?.content ?? "",
     likes: parseCompactCount(likesText) ?? 0,
     likesText,
-    heartedByCreator: false, // not exposed in this response format (see CORE.md)
+    // the response's own engagementToolbarState (creator hearts + viewer like)
+    heartedByCreator: toolbar.hearted.has(cvm?.toolbarStateKey ?? ""),
     pinned:
       typeof cvm?.pinnedText === "string" ||
       thread?.renderingPriority === "RENDERING_PRIORITY_PINNED_COMMENT",
@@ -153,7 +181,7 @@ function mapCommentEntity(
       isMember: false, // no member data in this response format
       isCreator: author?.isCreator === true,
     },
-    yourLike: null,
+    yourLike: toolbar.like.get(cvm?.toolbarStateKey ?? "") ?? null,
     isOwn: author?.isCurrentUser === true,
     replyCount,
     totalReplyCount: replyCount,
