@@ -81,3 +81,19 @@ The post-reset lead (replay re-deployed 16:44Z, operator re-login 16:56Z) re-dis
 The sessions persist server-side; watchers + supervisor keep fighting. Harvest → gates → merge continues as each lands (the resident loop).
 
 **Test battery: 305 → 430 today. Zero placeholder assets in any production code path (live InnerTube/SSR data everywhere; personal surfaces honestly degrade without the operator session).**
+
+## 2026-09-30 09:45Z — RESET RECOVERY + the three outstanding lanes re-dispatched (this console, ali10 lineage)
+
+The 03:54Z container reset wiped the prior console's operational state (registry, watchers, browser login). Recovery by this console (operator re-login 09:27Z): replay stack redeployed, credentials restored, campaign state synced from this repo (the source of truth).
+
+**Server-side forensics on the overnight-queued sessions (09:30Z):** chats 0778e195 (B-S) / 4b3cac08 (C-S) / 06f47a00 (C-W) each held exactly 1 message (the packet), ZERO assistant turns after ~13.5h — and their `/c/` URLs redirect home instantly (sessions destroyed server-side; the queued-capacity state never resolved). The nudge path was closed; re-dispatch was the only route. The stale C-B workspace (chat-e5ebd333, lane merged 19:08Z Sep 29, idle 10h+) was released via the workspaces API → 0/3 slots.
+
+**Re-dispatch @ base 4b96834** (fresh packets, relay-bundle transport, public-repo clone — no token in transit):
+
+| Lane | Session | Chat | Status @ 09:45Z |
+|---|---|---|---|
+| B-S comments-write | wfx2-bs | `6065f7fa` | **GENERATING** |
+| C-S replay-polish | wfx2-cs | `b3fa5177` | queued-capacity (accepted; watcher + supervisor own the fight) |
+| C-W cutover | wfx2-cw | `ba6dd8bd` | queued-capacity (accepted) |
+
+Notes: the site's send-wall required a manual trusted-click recovery on all three (the dispatcher's [7/7] ladder exhausted; focus-composer → live-coords Input.dispatchMouseEvent on the send button landed each in ≤2 attempts — recorded for the toolbox). C-W's packet carries the 04:15Z production finding (home rails + videos?q= empty from Vercel egress; browse endpoint walled for datacenter IPs — Upstash caching must fix). Lead = this console; no other console has pushed for 10.5h+.
