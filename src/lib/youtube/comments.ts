@@ -189,7 +189,10 @@ async function fetchCommentsPage(token: string, parentId: string | null): Promis
   return mapCommentsPage(response, parentId);
 }
 
-/** Top-level comments page (20/page) — `sort` maps to the Top/Newest tokens. */
+/** Top-level comments page (20/page) — `sort` maps to the Top/Newest tokens.
+ * WFX2-C-W: the first page per (video, sort) is cached through the Upstash
+ * adapter (5-minute soft TTL, last-good on upstream failure); continuation
+ * pages use unique tokens and pass straight through. */
 export async function listLiveComments(
   videoId: string,
   sort: "top" | "new",
@@ -207,7 +210,9 @@ export async function listLiveComments(
     // no comments section on this video
     return { items: [], nextCursor: null, total: 0 };
   }
-  const page = await fetchCommentsPage(token, null);
+  const page = await cached(`yt:comments:page:${videoId}:${sort}`, TTL.COMMENTS_MS, () =>
+    fetchCommentsPage(token, null)
+  );
   return {
     items: page.items,
     nextCursor: page.nextCursor,

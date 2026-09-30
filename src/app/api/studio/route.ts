@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: NextRequest) {
   try {
-    if (!rateLimit(`studio:${req.headers.get("x-forwarded-for") ?? "local"}`, { limit: 30 })) {
+    if (!(await rateLimit(`studio:${req.headers.get("x-forwarded-for") ?? "local"}`, { limit: 30 }))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
     const raw = new URL(req.url).searchParams.get("enrich");

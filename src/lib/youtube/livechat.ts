@@ -24,6 +24,8 @@
  * HARD RULE (architecture doc): the `player` endpoint is never called here.
  */
 
+import { rateLimitFixed } from "./upstash-cache";
+
 // ---------------------------------------------------------------------------
 // InnerTube transport (minimal, self-contained)
 // ---------------------------------------------------------------------------
@@ -1061,26 +1063,20 @@ export function cacheSet(key: string, value: unknown, ttlMs: number): void {
   }
 }
 
-/** Per-IP token bucket (architecture: rate limiting on live routes). */
-const buckets = new Map<string, { tokens: number; refilledAt: number }>();
-
+/** Per-IP budget check — WFX2-C-W: adapter-backed fixed window.
+ *
+ * The A-S lane shipped a local token bucket (capacity + refill/s). The
+ * cutover moves every limiter behind the shared Upstash adapter, whose
+ * primitive is a fixed window — so the bucket's 60-second ceiling is
+ * preserved exactly: limit = capacity + refill×60 (burst + sustained
+ * allowance over one window). Response semantics (boolean → 429) unchanged;
+ * the check is now awaited.
+ */
 export function rateLimit(
   key: string,
   capacity = 60,
   refillPerSec = 0.5,
-): boolean {
-  const now = Date.now();
-  const b = buckets.get(key);
-  if (!b) {
-    buckets.set(key, { tokens: capacity - 1, refilledAt: now });
-    return true;
-  }
-  const elapsed = (now - b.refilledAt) / 1000;
-  b.tokens = Math.min(capacity, b.tokens + elapsed * refillPerSec);
-  b.refilledAt = now;
-  if (b.tokens >= 1) {
-    b.tokens -= 1;
-    return true;
-  }
-  return false;
+): Promise<boolean> {
+  const limit = capacity + Math.ceil(refillPerSec * 60);
+  return rateLimitFixed(key, limit, 60_000);
 }

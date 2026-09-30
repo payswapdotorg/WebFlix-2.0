@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  cacheGet,
-  cacheSet,
-  rateLimit,
-} from "@/lib/youtube/livechat";
+import { rateLimit } from "@/lib/youtube/livechat";
+import { cachedResilient, TTL } from "@/lib/youtube/cache";
 import {
   getShortsPage,
   getShortsSeed,
@@ -20,42 +17,40 @@ import {
  *
  * Seed items carry title/views from the real search response; cursor-page
  * entries are bare (the reel sequence returns ids only) — the client
- * hydrates each via GET /api/shorts/[id]. Seed cached 5 minutes.
+ * hydrates each via GET /api/shorts/[id].
+ *
+ * WFX2-C-W: the seed is cached through the Upstash adapter (5-minute soft
+ * TTL, stale-while-revalidate, last-good on upstream failure — an empty
+ * seed is never cached over a good one). Cursor pages pass straight through
+ * (unique tokens).
  */
 
 export const dynamic = "force-dynamic";
-
-const SEED_TTL_MS = 5 * 60 * 1000;
 
 export async function GET(req: NextRequest) {
   const ip =
     req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
     req.headers.get("x-real-ip") ??
     "local";
-  if (!rateLimit(`shorts:${ip}`)) {
+  if (!(await rateLimit(`shorts:${ip}`))) {
     return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
   }
 
   const cursor = req.nextUrl.searchParams.get("cursor");
 
   try {
+    const headers = { "Cache-Control": "private, max-age=60" } as const;
     if (cursor) {
       const feed = await getShortsPage(cursor);
-      return NextResponse.json(feed, {
-        headers: { "Cache-Control": "private, max-age=60" },
-      });
+      return NextResponse.json(feed, { headers });
     }
-    const cached = cacheGet<ShortsFeedDTO>("shorts:seed");
-    if (cached) {
-      return NextResponse.json(cached, {
-        headers: { "Cache-Control": "private, max-age=60" },
-      });
-    }
-    const feed = await getShortsSeed();
-    cacheSet("shorts:seed", feed, SEED_TTL_MS);
-    return NextResponse.json(feed, {
-      headers: { "Cache-Control": "private, max-age=60" },
-    });
+    const feed = await cachedResilient(
+      "shorts:seed",
+      TTL.SHORTS_SEED_MS,
+      () => getShortsSeed(),
+      { isEmpty: (f) => (f as ShortsFeedDTO).items.length === 0 },
+    );
+    return NextResponse.json(feed, { headers });
   } catch (err) {
     return NextResponse.json(
       {

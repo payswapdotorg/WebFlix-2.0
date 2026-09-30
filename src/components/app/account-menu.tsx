@@ -53,7 +53,7 @@ export function AccountMenu() {
             </Avatar>
           )}
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">{user?.name ?? "Demo Viewer"}</p>
+            <p className="truncate text-sm font-semibold">{user?.name ?? "Viewer"}</p>
             <p className="truncate text-xs text-muted-foreground">@{user?.handle ?? "you"}</p>
           </div>
         </DropdownMenuLabel>
@@ -74,7 +74,7 @@ export function AccountMenu() {
         <DropdownMenuItem
           onSelect={(e) => {
             e.preventDefault();
-            toast("Demo mode — sign in / sign out ships with the account wave (WFX2-A).");
+            toast("Sign in / sign out ships with the account wave (WFX2-A).");
           }}
         >
           <LogOut className="size-4" /> Sign out

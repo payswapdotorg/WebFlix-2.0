@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: Request) {
   try {
-    if (!rateLimit(`liked:${req.headers.get("x-forwarded-for") ?? "local"}`)) {
+    if (!(await rateLimit(`liked:${req.headers.get("x-forwarded-for") ?? "local"}`))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
     const cursor = new URL(req.url).searchParams.get("cursor") ?? undefined;

@@ -16,7 +16,7 @@ export async function GET(
 ) {
   try {
     const { id, commentId } = await ctx.params;
-    if (!rateLimit(`replies:${req.headers.get("x-forwarded-for") ?? "local"}`, { limit: 240 })) {
+    if (!(await rateLimit(`replies:${req.headers.get("x-forwarded-for") ?? "local"}`, { limit: 240 }))) {
       return json({ error: "Too many requests" }, { status: 429 });
     }
     const cursor = new URL(req.url).searchParams.get("cursor") ?? undefined;

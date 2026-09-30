@@ -33,7 +33,7 @@ export function SiteFooter() {
         ))}
       </nav>
       <p className="mt-3 text-xs text-muted-foreground/70">
-        © 2026 WebFlix 2.0 · demo data from SQLite · interface baseline: WebFlix
+        © 2026 WebFlix 2.0 · live data from youtube.com · interface baseline: WebFlix
       </p>
     </footer>
   );

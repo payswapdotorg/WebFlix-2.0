@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: Request) {
   try {
-    if (!rateLimit(`live:${req.headers.get("x-forwarded-for") ?? "local"}`)) {
+    if (!(await rateLimit(`live:${req.headers.get("x-forwarded-for") ?? "local"}`))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
     const limitParam = new URL(req.url).searchParams.get("limit");

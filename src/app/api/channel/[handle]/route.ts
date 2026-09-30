@@ -14,7 +14,7 @@ export async function GET(
   { params }: { params: Promise<{ handle: string }> }
 ) {
   try {
-    if (!rateLimit(`channel:${_req.headers.get("x-forwarded-for") ?? "local"}`)) {
+    if (!(await rateLimit(`channel:${_req.headers.get("x-forwarded-for") ?? "local"}`))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
     const { handle } = await params;

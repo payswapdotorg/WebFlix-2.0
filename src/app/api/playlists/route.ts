@@ -29,7 +29,7 @@ function brokerErrorResponse(err: BrokerError): NextResponse {
  */
 export async function GET(req: NextRequest) {
   try {
-    if (!rateLimit(`playlists:${req.headers.get("x-forwarded-for") ?? "local"}`)) {
+    if (!(await rateLimit(`playlists:${req.headers.get("x-forwarded-for") ?? "local"}`))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
     const videoId = new URL(req.url).searchParams.get("videoId");
