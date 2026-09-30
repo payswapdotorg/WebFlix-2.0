@@ -41,7 +41,7 @@ const handoffSchema = z.object({
  */
 export async function GET(req: NextRequest) {
   try {
-    if (!rateLimit(`upload:${req.headers.get("x-forwarded-for") ?? "local"}`, { limit: 60 })) {
+    if (!(await rateLimit(`upload:${req.headers.get("x-forwarded-for") ?? "local"}`, { limit: 60 }))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
     const context = await getUploadContext();
@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
-    if (!rateLimit(`upload-post:${req.headers.get("x-forwarded-for") ?? "local"}`, { limit: 30 })) {
+    if (!(await rateLimit(`upload-post:${req.headers.get("x-forwarded-for") ?? "local"}`, { limit: 30 }))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
     let body: unknown;

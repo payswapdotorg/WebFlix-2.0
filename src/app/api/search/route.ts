@@ -30,7 +30,7 @@ export async function GET(req: Request) {
       };
       return NextResponse.json(empty);
     }
-    if (!rateLimit(`search:${req.headers.get("x-forwarded-for") ?? "local"}`)) {
+    if (!(await rateLimit(`search:${req.headers.get("x-forwarded-for") ?? "local"}`))) {
       return NextResponse.json({ error: "Too many searches — slow down" }, { status: 429 });
     }
     const filters = parseSearchFilters({

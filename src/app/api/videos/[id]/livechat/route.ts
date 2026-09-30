@@ -48,7 +48,7 @@ export async function GET(
   ctx: { params: Promise<{ id: string }> },
 ) {
   const { id: videoId } = await ctx.params;
-  if (!rateLimit(`livechat:${clientIp(req)}`)) {
+  if (!(await rateLimit(`livechat:${clientIp(req)}`))) {
     return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
   }
 

@@ -10,7 +10,7 @@
  */
 import { innertubeBrowse, innertubeSearch } from "./innertube";
 import { fetchYtInitialData } from "./ssr";
-import { cached, TTL } from "./cache";
+import { cached, cachedResilient, TTL } from "./cache";
 import { hasSession } from "./session";
 import { mapVideos, mapShorts, walkTree, runsText } from "./mappers";
 import { buildSearchParam, parseSearchFilters } from "./filters";
@@ -39,6 +39,38 @@ export function mapHomeShelves(response: unknown): { title: string | null; video
   return shelves;
 }
 
+/**
+ * WFX2-C-W — the walled-browse detector: youtube.com answers the InnerTube
+ * browse call with 200 + a body that maps to ZERO content when the request
+ * comes from a datacenter IP (Vercel egress — verified live 2026-09-30).
+ * Such answers are "unhealthy": they must never be cached and must never
+ * overwrite a good payload.
+ */
+function homeResponseIsEmpty(response: unknown): boolean {
+  return (
+    mapVideos(response, { dedupe: true }).length === 0 &&
+    mapShorts(response, 12).length === 0 &&
+    mapHomeShelves(response).length === 0
+  );
+}
+
+/**
+ * The home browse response — the cutover's production fix for empty rails:
+ * Upstash-backed (L1+L2), stale-while-revalidate past the 5-minute soft TTL,
+ * and last-good serving while the Vercel egress is walled (upstream failure
+ * OR the 200-but-empty shape above). The 2-hour hard window covers 12 missed
+ * runs of the 10-minute warmer (scripts/warm-cache.mjs). With no last-good
+ * the honest empty feed is returned — never fake data.
+ */
+function fetchHomeBrowseResponse(): Promise<unknown> {
+  return cachedResilient(
+    "yt:home:feed",
+    TTL.FEED_MS,
+    () => innertubeBrowse({ browseId: "FEwhat_to_watch" }),
+    { isEmpty: homeResponseIsEmpty, hardTtlMs: TTL.HOME_HARD_MS },
+  );
+}
+
 export async function getHomeFeed(rawCategory: string | null): Promise<HomeFeedDTO> {
   const category = HOME_CHIPS.includes(rawCategory ?? "") ? (rawCategory as string) : "All";
 
@@ -57,9 +89,7 @@ export async function getHomeFeed(rawCategory: string | null): Promise<HomeFeedD
     };
   }
 
-  const response = await cached("yt:home:feed", TTL.FEED_MS, () =>
-    innertubeBrowse({ browseId: "FEwhat_to_watch" })
-  );
+  const response = await fetchHomeBrowseResponse();
   const shelves = mapHomeShelves(response);
   const feedVideos = mapVideos(response, { dedupe: true });
   const shorts = mapShorts(response, 12);
@@ -175,20 +205,31 @@ function searchContinuationToken(response: unknown): string | null {
   return null;
 }
 
-/** One search-backed page of videos with its continuation cursor. */
+/** One search-backed page of videos with its continuation cursor.
+ * WFX2-C-W: cursorless (first) pages are cached through the Upstash adapter —
+ * search is NOT walled for Vercel egress, so this is pure performance; the
+ * adapter still adds last-good on upstream failure. Continuation pages use
+ * unique opaque tokens — they pass straight through. */
 export async function getSearchVideoPage(
   query: string,
   filters: { sort?: string; uploadDate?: string; duration?: string; type?: string },
   cursor: string | undefined,
   limit: number
 ): Promise<VideoPage> {
-  const params = cursor ? undefined : buildSearchParam(parseSearchFilters(filters)) || undefined;
-  const body: Record<string, unknown> = cursor
-    ? { continuation: cursor }
-    : { query, ...(params ? { params } : {}) };
-  const response = await innertubeSearch(body);
-  const videos = mapVideos(response, { dedupe: true, limit });
-  return { videos, nextCursor: searchContinuationToken(response) };
+  const fetchPage = async (): Promise<VideoPage> => {
+    const params = cursor ? undefined : buildSearchParam(parseSearchFilters(filters)) || undefined;
+    const body: Record<string, unknown> = cursor
+      ? { continuation: cursor }
+      : { query, ...(params ? { params } : {}) };
+    const response = await innertubeSearch(body);
+    return { videos: mapVideos(response, { dedupe: true, limit }), nextCursor: searchContinuationToken(response) };
+  };
+  if (cursor) return fetchPage();
+  return cached(
+    `yt:searchpage:${query.toLowerCase()}:${JSON.stringify(filters)}:${limit}`,
+    TTL.SEARCH_MS,
+    fetchPage,
+  );
 }
 
 /** One browse-backed page (home continuation or category browse). */
@@ -198,20 +239,25 @@ export async function getBrowseVideoPage(
 ): Promise<VideoPage> {
   const response = cursor
     ? await innertubeBrowse({ continuation: cursor })
-    : await cached("yt:home:feed", TTL.FEED_MS, () =>
-        innertubeBrowse({ browseId: "FEwhat_to_watch" })
-      );
+    : await fetchHomeBrowseResponse();
   const videos = mapVideos(response, { dedupe: true, limit });
   return { videos, nextCursor: feedContinuationToken(response) };
 }
 
-/** /api/videos implementation — category routes search, default routes browse. */
+/** /api/videos implementation — `q=` and category routes search (search is
+ * NOT walled for Vercel egress — this is the `/api/videos?q=music` production
+ * fix), the default page rides the resilient home browse cache. */
 export async function listLiveVideos(opts: {
   cursor?: string | null;
   category?: string | null;
   limit?: number;
+  query?: string | null;
 }): Promise<VideoPage> {
   const limit = Math.min(Math.max(opts.limit ?? 12, 1), 48);
+  const query = (opts.query ?? "").trim();
+  if (query) {
+    return getSearchVideoPage(query, { type: "video" }, opts.cursor ?? undefined, limit);
+  }
   const category = HOME_CHIPS.includes(opts.category ?? "") ? (opts.category as string) : "All";
   if (category !== "All") {
     return getSearchVideoPage(category, { type: "video" }, opts.cursor ?? undefined, limit);

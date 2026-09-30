@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: Request) {
   try {
-    if (!rateLimit(`trending:${req.headers.get("x-forwarded-for") ?? "local"}`)) {
+    if (!(await rateLimit(`trending:${req.headers.get("x-forwarded-for") ?? "local"}`))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
     const category = normalizeTrendingCategory(new URL(req.url).searchParams.get("category"));

@@ -57,7 +57,16 @@ Rules: one branch per lane (`wfx2/waveX-<lane>`), base = main at dispatch time. 
 
 - **C-B `wfx2/waveC-studio`**: Studio deep-link + real channel analytics (Studio SSR with session), upload flow → YouTube Studio deep-link with metadata hand-off, channel customization read.
 - **C-S `wfx2/waveC-replay-polish`**: live-chat replay seeking perfection, miniplayer persistence across navigation, ambient-mode (page glow from player), watch-next chain UX.
-- **C-W `wfx2/waveC-cutover`**: Vercel build green (env: DATABASE_URL Neon, UPSTASH_*, BROKER_*), performance pass (Upstash caching on all read routes, ISR where safe), demo-data purge sweep (grep for seed remnants), the full end-to-end acceptance script (search 5 random real videos → watch each → like → subscribe → comment → verify on youtube.com in the broker browser), README/docs final state.
+- **C-W `wfx2/waveC-cutover`**: Vercel build green (env: DATABASE_URL Neon, UPSTASH_*, BROKER_*), performance pass (Upstash caching on all read routes, ISR where safe), demo-data purge sweep (grep for seed remnants), the full end-to-end acceptance script (per the dispatch spec: 12 page routes + 16+ live-data API checks + honest-degradation checks, `scripts/acceptance.mjs`), README/docs final state.
+
+#### Wave C completion checklist (workers mark DELIVERED; the lead marks MERGED at acceptance)
+
+| Lane | Scope delivered (relay bundle) | Worker status | Lead: merged |
+| --- | --- | --- | --- |
+| C-B `wfx2/waveC-studio` | studio + upload surfaces, operator channel resolution, Studio SSR analytics | delivered @ 23e8a8d (r44w1c relay) | ☐ |
+| C-S `wfx2/waveC-replay-polish` | per dispatch | ☐ | ☐ |
+| C-W `wfx2/waveC-cutover` | Upstash cache adapter (L1+L2+SWR+last-good, poisoning guard), all read routes wired, videos?q= prod fix, rate limits behind the adapter, ISR shells, demo-data purge, acceptance harness + selftest, warm-cache runbook, README/env docs | delivered (webflix-wfx2cw bundle) | ☐ |
+| Wave C acceptance | `bun scripts/acceptance.mjs` green against the live deployment + full gate battery | ☐ | ☐ |
 
 ## Merge order within a wave
 

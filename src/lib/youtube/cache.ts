@@ -1,32 +1,28 @@
 /**
- * WFX2-A-B in-memory TTL cache + rate limiting around upstream calls.
+ * WFX2-A-B cache seam → WFX2-C-W: the same `cached(key, ttl, fn)` contract,
+ * now backed by the Upstash adapter (src/lib/youtube/upstash-cache.ts).
  *
- * Upstash Redis arrives in a later wave; the `cached(key, ttl, fn)` interface
- * is the seam it will replace (a Map today, Upstash later — same signature).
- * In-flight calls are deduped so a cold key hit by concurrent requests makes
- * exactly one upstream call.
+ * Every existing call site transparently gains:
+ *  - an L1 in-memory layer (the pre-cutover behavior, per lambda instance);
+ *  - an L2 Upstash Redis layer when UPSTASH_REDIS_REST_URL + _TOKEN are set
+ *    (no-op offline — dev + tests keep working exactly as before);
+ *  - stale-while-revalidate past the soft TTL;
+ *  - last-good serving when the upstream call fails, within the hard TTL.
+ *
+ * Rate limiting moved behind the same adapter: fixed-window, per-IP,
+ * per-route budgets — INCR/PEXPIRE on Upstash when configured, the local
+ * in-memory window otherwise. Response semantics (429 + budgets) unchanged;
+ * the check is now awaited.
  */
-import { isTestUpstream } from "./upstream";
+import {
+  cachedResilient,
+  clearLocalRateLimits,
+  rateLimitFixed,
+  resetCacheEngine,
+} from "./upstash-cache";
 
-interface CacheEntry<T> {
-  expiresAt: number;
-  value: T;
-}
-
-const store = new Map<string, CacheEntry<unknown>>();
-const inflight = new Map<string, Promise<unknown>>();
-const MAX_ENTRIES = 500;
-
-function sweep(now: number): void {
-  for (const [key, entry] of store) {
-    if (entry.expiresAt <= now) store.delete(key);
-  }
-  if (store.size > MAX_ENTRIES) {
-    // evict oldest-expiring entries first
-    const sorted = [...store.entries()].sort((a, b) => a[1].expiresAt - b[1].expiresAt);
-    for (const [key] of sorted.slice(0, store.size - MAX_ENTRIES)) store.delete(key);
-  }
-}
+export { cachedResilient } from "./upstash-cache";
+export type { ResilientOptions } from "./upstash-cache";
 
 /** TTL constants (architecture doc: search 10m, feeds 5m, watch meta longer). */
 export const TTL = {
@@ -35,44 +31,29 @@ export const TTL = {
   WATCH_MS: 10 * 60_000,
   COMMENTS_MS: 5 * 60_000,
   SUGGEST_MS: 10 * 60_000,
+  /** live-status polls every pollMs (~5s); 30s sheds upstream load honestly */
+  LIVE_STATUS_MS: 30_000,
+  /** shorts feed surfaces (route-level keys, previously local consts) */
+  SHORTS_SEED_MS: 5 * 60_000,
+  SHORTS_META_MS: 10 * 60_000,
+  /** the home browse entry's last-good window — 12× the 10-minute warmer cadence */
+  HOME_HARD_MS: 2 * 3_600_000,
 } as const;
 
-/** Get-or-compute with TTL + in-flight dedupe. Errors are never cached. */
-export async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
-  const now = Date.now();
-  const hit = store.get(key);
-  if (hit && hit.expiresAt > now) return hit.value as T;
-  const pending = inflight.get(key);
-  if (pending) return pending as Promise<T>;
-  const p = fn()
-    .then((value) => {
-      store.set(key, { expiresAt: Date.now() + ttlMs, value });
-      return value;
-    })
-    .finally(() => {
-      inflight.delete(key);
-    });
-  inflight.set(key, p);
-  return p;
+/** Get-or-compute with TTL + in-flight dedupe (+ L2/SWR/last-good via the adapter). */
+export function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
+  return cachedResilient<T>(key, ttlMs, fn);
 }
 
 /** Test hook: wipe the cache between route-handler invocations. */
 export function clearCache(): void {
-  store.clear();
-  inflight.clear();
+  resetCacheEngine();
 }
 
 // ---------------------------------------------------------------------------
-// Rate limiting — a simple fixed window counter per key (per route+IP).
+// Rate limiting — fixed window per key (per route+IP), adapter-backed.
 // Stands down automatically while a test upstream serves fixtures.
 // ---------------------------------------------------------------------------
-
-interface WindowState {
-  windowStart: number;
-  count: number;
-}
-
-const windows = new Map<string, WindowState>();
 
 export interface RateLimitOptions {
   limit?: number;
@@ -82,22 +63,13 @@ export interface RateLimitOptions {
 /**
  * Returns true when the call is allowed. Default: 120 requests / 60s per key
  * (the app caches aggressively upstream of this, so client bursts are cheap).
+ * Awaited since WFX2-C-W (the counter may live on Upstash).
  */
-export function rateLimit(key: string, opts: RateLimitOptions = {}): boolean {
-  if (isTestUpstream()) return true;
-  const limit = opts.limit ?? 120;
-  const windowMs = opts.windowMs ?? 60_000;
-  const now = Date.now();
-  const state = windows.get(key);
-  if (!state || now - state.windowStart >= windowMs) {
-    windows.set(key, { windowStart: now, count: 1 });
-    return true;
-  }
-  state.count += 1;
-  return state.count <= limit;
+export async function rateLimit(key: string, opts: RateLimitOptions = {}): Promise<boolean> {
+  return rateLimitFixed(key, opts.limit ?? 120, opts.windowMs ?? 60_000);
 }
 
 /** Test hook. */
 export function clearRateLimits(): void {
-  windows.clear();
+  clearLocalRateLimits();
 }

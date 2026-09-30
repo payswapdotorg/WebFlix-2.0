@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: Request) {
   try {
-    if (!rateLimit(`notifications:${req.headers.get("x-forwarded-for") ?? "local"}`)) {
+    if (!(await rateLimit(`notifications:${req.headers.get("x-forwarded-for") ?? "local"}`))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
     const feed = await getNotificationsFeed();

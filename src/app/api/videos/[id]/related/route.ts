@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
-    if (!rateLimit(`related:${req.headers.get("x-forwarded-for") ?? "local"}`, { limit: 240 })) {
+    if (!(await rateLimit(`related:${req.headers.get("x-forwarded-for") ?? "local"}`, { limit: 240 }))) {
       return json({ error: "Too many requests" }, { status: 429 });
     }
     const url = new URL(req.url);

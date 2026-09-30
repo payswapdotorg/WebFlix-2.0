@@ -14,6 +14,10 @@ export const metadata: Metadata = {
   title: "Shorts",
 };
 
+/** WFX2-C-W — ISR: the shorts shell revalidates hourly; the feed stays
+ * client-fetched from /api/shorts (dynamic by law). */
+export const revalidate = 3600;
+
 export default function ShortsPage() {
   return (
     <div className="h-full">

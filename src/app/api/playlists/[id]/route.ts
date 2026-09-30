@@ -17,7 +17,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     if (!id || !/^[\w-]{2,64}$/.test(id)) {
       return NextResponse.json({ error: "invalid playlist id" }, { status: 400 });
     }
-    if (!rateLimit(`playlist:${id}:${req.headers.get("x-forwarded-for") ?? "local"}`)) {
+    if (!(await rateLimit(`playlist:${id}:${req.headers.get("x-forwarded-for") ?? "local"}`))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
     const cursor = new URL(req.url).searchParams.get("cursor") ?? undefined;
