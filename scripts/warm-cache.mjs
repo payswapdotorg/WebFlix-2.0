@@ -14,8 +14,9 @@
  * Usage:
  *   WARM_URL=http://localhost:3000 bun scripts/warm-cache.mjs
  *
- * Recommended cadence: every 10 minutes (cron), matching the 2-hour
- * last-good window (12 missed runs of headroom). See docs/ops/vercel-env.md.
+ * Recommended cadence: daily (cron) — the home entry's 24-hour last-good
+ * window means one warm buys a full day of home rails. See
+ * docs/ops/vercel-env.md.
  */
 
 const WARM_URL = (process.env.WARM_URL || "http://localhost:3000").replace(/\/+$/, "");

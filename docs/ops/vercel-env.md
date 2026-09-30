@@ -58,8 +58,8 @@ bun run dev                         # local app, port 3000
 WARM_URL=http://localhost:3000 bun scripts/warm-cache.mjs
 ```
 
-- **Cadence: every 10 minutes** (cron). The home entry's hard (last-good)
-  window is 2 hours — twelve missed warmer runs of headroom.
+- **Cadence: daily** (cron). The home entry's hard (last-good) window is
+  24 hours — one successful warm buys a full day of home rails.
 - The warmer walks the browse-critical routes (`/api/home`, `/api/videos`,
   trending categories, shorts seed, live surface, a search set) so the real
   routes compute into the real cache keys.

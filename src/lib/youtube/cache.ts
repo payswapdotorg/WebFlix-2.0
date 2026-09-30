@@ -36,8 +36,13 @@ export const TTL = {
   /** shorts feed surfaces (route-level keys, previously local consts) */
   SHORTS_SEED_MS: 5 * 60_000,
   SHORTS_META_MS: 10 * 60_000,
-  /** the home browse entry's last-good window — 12× the 10-minute warmer cadence */
-  HOME_HARD_MS: 2 * 3_600_000,
+  /**
+   * The home browse entry's last-good window — one warm buys a full day: a
+   * daily warmer cadence keeps home alive, and stale-but-REAL beats
+   * honest-empty for a clone. The 5-minute soft TTL (FEED_MS) + SWR still
+   * refreshes whenever an unwalled request comes through.
+   */
+  HOME_HARD_MS: 24 * 3_600_000,
 } as const;
 
 /** Get-or-compute with TTL + in-flight dedupe (+ L2/SWR/last-good via the adapter). */
