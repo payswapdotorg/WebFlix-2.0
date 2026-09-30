@@ -143,8 +143,11 @@ const API_CHECKS = [
     name: "watch meta real (dQw4w9WgXcQ)",
     path: "/api/videos/dQw4w9WgXcQ",
     expect: (j) => {
-      if (!j.title || !j.channel?.name) throw new Error("title/channel missing");
-      return `title="${String(j.title).slice(0, 40)}" ch="${j.channel.name}"`;
+      // 2026-09-30 integration fix (lead): the route wraps in {video: …} —
+      // the original expectation read the top level (never true in prod).
+      const v = j.video ?? j;
+      if (!v.title || !v.channel?.name) throw new Error("title/channel missing");
+      return `title="${String(v.title).slice(0, 40)}" ch="${v.channel.name}"`;
     },
   },
   {
@@ -255,7 +258,12 @@ async function runPageCheck(target, check) {
   if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
   const html = await res.text();
   const m = /<title[^>]*>([^<]*)<\/title>/i.exec(html);
-  const title = m ? m[1].trim() : "(no <title>)";
+  // 2026-09-30 integration fix (lead): the raw <title> carries HTML entities
+  // (&amp; &lt; …) — decode before comparing or every "&" in a title fails.
+  const decode = (s) =>
+    s.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+  const title = m ? decode(m[1].trim()) : "(no <title>)";
   if (title !== check.title) throw new Error(`title="${title}" want="${check.title}"`);
   return `title="${title}"`;
 }
