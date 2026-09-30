@@ -134,3 +134,15 @@ Prior chats b3fa5177/ba6dd8bd VOIDED (dead). Watchers armed on the true tabs; su
 | C-W cutover v2 | wfx2-cw | `ec489dd1` | **PUSH** (token-grant mandate; the prior attempt's verified design embedded in the packet) | packet committed; spawn pending (slot freed 12:20Z) |
 
 Prior chats: 6065f7fa (bs-1: completed, sandbox reaped before harvest — the loss that taught lesson 1), a854bd76 (bs-2: generation dropped at a cap-full moment), 9b8862f3 (cw-1: complete + verified design recovered into the v2 packet; delivery unreachable), 181a403c (junk — deleted). All dead workspaces released.
+
+## 2026-09-30 14:40Z — WFX2-C-W MERGED + LIVE-VERIFIED + two production fixes by the lead
+
+**The original cutover worker's push landed** (its post-completion turn executed the push after all — the branch `wfx2/waveC-cutover` @ 3868b40d appeared while the v2 re-dispatch sat queued). Integration-station gates: lint 0 / typecheck 0 / **473 tests green** (430 + 43 new). MERGED `--no-ff` @ 9e52ab2 → auto-deployed.
+
+**Lead live-verification found + fixed two production defects:**
+1. **The stale Upstash credential** (meet-ewe-145933.upstash.io = NXDOMAIN globally; both stored tokens WRONGPASS). The account's real database: **ADCOS @ polished-yeti-167554.upstash.io** (via the Upstash CLI + the developer key). Vercel env patched + redeployed. NOTE: the ADCOS database is SHARED (aise:* keys from a sibling app coexist).
+2. **The adapter's L2 writes never worked**: `envRest()` POSTed the command pipeline to the BASE URL (nested bodies = "unsupported arg type" → every write failed silently; the lane's tests ran on the injected fake). One-line integration fix → `/pipeline` (commit 34184d6, 473 tests still green, deployed). Verified: the warmer now seeds real keys (17 yt:* in Upstash).
+
+**Production (webflix-2-0-one.vercel.app — the TRUE domain; the 3l2mqi5ti URL is a stale deployment artifact):** 11 pages 200; videos?q= **12 real videos** (the empty-q finding FIXED live); search 40; trending 20; shorts 25; home?category= 35 (search-backed chips). **Remaining gap:** the default home browse rails — youtube.com's wall now covers EVERY lead-controlled egress (the sandbox's browse answers the "Try searching" nudge as of ~14:00Z; the TurboVPN browser route hangs). The last-good seed needs an unwalled runner (the ops runbook's warmer; the worker sandboxes ARE unwalled — the original cutover worker verified live home data from its own sandbox). Parked for the next live worker turn.
+
+**The v2 re-dispatches (bs/cc9a7568, cw/ec489dd1, cs poller) remain queued on the midday wall** — the machinery holds them; the C-W lane is CLOSED regardless (the v2 cw dispatch is now redundant and will be voided when its slot is needed).
