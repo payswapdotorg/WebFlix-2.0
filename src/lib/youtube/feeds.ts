@@ -58,8 +58,9 @@ function homeResponseIsEmpty(response: unknown): boolean {
  * The home browse response — the cutover's production fix for empty rails:
  * Upstash-backed (L1+L2), stale-while-revalidate past the 5-minute soft TTL,
  * and last-good serving while the Vercel egress is walled (upstream failure
- * OR the 200-but-empty shape above). The 2-hour hard window covers 12 missed
- * runs of the 10-minute warmer (scripts/warm-cache.mjs). With no last-good
+ * OR the 200-but-empty shape above). The 24-hour hard window means one warm
+ * from an unwalled runner (a daily warmer cadence, scripts/warm-cache.mjs)
+ * keeps home alive for a full day. With no last-good
  * the honest empty feed is returned — never fake data.
  */
 function fetchHomeBrowseResponse(): Promise<unknown> {

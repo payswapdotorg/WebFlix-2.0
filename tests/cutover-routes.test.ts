@@ -157,7 +157,7 @@ describe("GET /api/home — the walled-browse fix", () => {
     expect(set).toBeDefined();
     const envelope = JSON.parse(set![2]);
     expect(envelope.v).toBe(1);
-    // hard window = the explicit 2h home override; soft = the 5-minute feed TTL
+    // hard window = the explicit 24h home override; soft = the 5-minute feed TTL
     expect(envelope.hardUntil - envelope.softUntil).toBe(TTL.HOME_HARD_MS - TTL.FEED_MS);
   });
 
