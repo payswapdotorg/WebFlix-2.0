@@ -175,3 +175,18 @@ The channel-502-instead-of-honest-degrade is recorded as B-S/follow-up lane scop
 | HW home-warmer | `2eb9fe8c` | push (tiny) | queued-capacity (packet committed; workspace pool 1/3 used) |
 
 Next: markers → push/harvest → gates (473 baseline) → merge --no-ff → verify Vercel → the final acceptance sweep (expect 32→36+/38; the channel family = B-S scope).
+
+## 2026-09-30 18:05Z — WFX2-C-S MERGED: replay polish live (558 tests)
+
+The replay-polish lane delivered PUSH-FIRST exactly per doctrine: branch `wfx2/waveC-replay-polish` @ a76b6d01 (base 4b96834), 85 new tests, E2E browser-verified on live YouTube data. Lead gates on the merged tree (main 405d998 + the branch): lint 0 / typecheck 0 / **558 tests green** (473 + 85; the one package.json conflict = the union of the test-script lists). MERGED `--no-ff` @ **aa2a759** → pushed → production verified healthy.
+
+Landed: **replay-chat seeking** (backward seek drops future msgs + re-bootstraps via ?replayOffsetSec; forward leaps walk from current token; scrub coalescing with intent-seq + abort + dropSeq for stale frames), **miniplayer persistence** (player-host context above the route tree; slot-release→limbo→rAF mini check; same-commit slot re-register kills the watch→watch takeover flash; same id expands in place, diff id = loadVideoById), **ambient mode** (thumbnail-driven blurred backdrop), **autoplay countdown** (idle-armed once per ENDED, PLAYING resets, spurious re-ENDED ignored, wall-clock deadline survives throttled tabs, Esc/Space cancel).
+
+Operational notes: the cs worker's own 515 was on its pre-cutover base — the merged tree's true total is 558. The lead's first merged-tree gate run showed 16 fails — root cause: the LEAD's own shell had sourced the live Upstash env (the adapter went live in test context; rate-limit calls hit the real endpoint). Clean-env re-run: 0 fail. LESSON: gates always run with `env -u UPSTASH_REDIS_REST_URL -u UPSTASH_REDIS_REST_TOKEN`. The completed cs workspace was released (the spawn slot freed for HW/BS).
+
+| Lane | Chat | Status @ 18:05Z |
+|---|---|---|
+| B-S comments-write | `cc9a7568` | queued-alive (slot freed) |
+| C-S replay-polish | `7dfbe7a1` | **MERGED + LIVE** (a76b6d01 → aa2a759; 558 tests) |
+| C-W cutover | — | **MERGED + LIVE** (473-tests era → 558 now) |
+| HW home-warmer | `b2e239f5` | formed server-side ("Home-Browse Cache Warm-Up Fix", msgs=2), awaiting spawn (slot freed) |
