@@ -5,14 +5,28 @@
  * mode, ?t= seek-on-load, resume, transcript panel, dialogs, sticky mobile
  * player. Data via /api/watch/session + /api/videos/[id].
  *
- * WFX2-A-W: the demo player is swapped for the REAL YouTube player
- * (IFrame Player API — live streams included). Native player UI (captions/
- * quality/speed/fullscreen); autoplay-next on ENDED; theater CSS toggle;
- * the player docks bottom-right (miniplayer) once scrolled past on
- * desktop. Progress memory + view ping live inside the player component.
- * (A-S adds the conditional LiveChatPanel below the player.)
+ * WFX2-A-W: the REAL YouTube player (IFrame Player API — live streams
+ * included). Native player UI (captions/quality/speed/fullscreen);
+ * theater CSS toggle; autoplay-next on ENDED; progress memory + view ping
+ * live inside the player component. (A-S adds the conditional
+ * LiveChatPanel below the player.)
+ *
+ * WFX2-C-S — replay polish:
+ * - The player is hosted by the persistent player host (miniplayer
+ *   persistence): this page renders an inline SLOT the host's wrapper
+ *   lands in. Same video → expand at the same position; different video →
+ *   takeover via loadVideoById (no reload); scrolling past the anchor or
+ *   navigating away shrinks the player into the bottom-right miniplayer.
+ * - Ambient mode: the blurred/desaturated thumbnail glow behind the
+ *   player (CSS filter + radial mask — static thumbnail only; the
+ *   cross-origin iframe can never be frame-grabbed).
+ * - Watch-next autoplay chain: ENDED arms the 5s countdown overlay
+ *   (circular cancel, "Playing next in…", next-title preview) before
+ *   advancing; wall-clock ticks survive throttled tabs; Esc/space cancel.
+ * - The playhead feeds the chat replay (seeking classifier +
+ *   reveal gating) at ~1/sec through the player-host store.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BadgeCheck, Maximize2, Minimize2, SkipForward } from "lucide-react";
@@ -22,17 +36,20 @@ import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/watch/client";
 import { compactCount } from "@/lib/watch/format";
 import { parseChapters } from "@/lib/watch/chapters";
+import { readProgress } from "@/components/watch/youtube-player";
+import { playerHost, usePlayerHost } from "@/lib/player/player-host";
+import {
+  countdownReducer,
+  initialCountdown,
+} from "@/lib/watch/autoplay-countdown";
 import type {
   RelatedVideoDto,
   TranscriptCueDto,
   VideoDetailDto,
   ViewerDto,
 } from "@/lib/watch/types";
-import {
-  YoutubePlayer,
-  type YoutubePlayerHandle,
-  type YoutubePlayerState,
-} from "./youtube-player";
+import { AmbientBackdrop } from "./ambient-backdrop";
+import { AutoplayCountdownOverlay } from "./autoplay-countdown-overlay";
 import { SubscribeButton } from "./subscribe-button";
 import { ActionRow } from "./action-row";
 import { ShareDialog } from "./share-dialog";
@@ -70,10 +87,22 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
   const [subCount, setSubCount] = useState<number | null>(null);
   const [docked, setDocked] = useState(false);
 
-  const playerRef = useRef<YoutubePlayerHandle>(null);
+  // WFX2-C-S: the watch-next countdown machine (advance on "fired").
+  const [countdown, dispatch] = useReducer(countdownReducer, initialCountdown);
+
   const timeRef = useRef(0);
   const transcriptFetchedRef = useRef(false);
   const anchorRef = useRef<HTMLDivElement>(null);
+  const dockedRef = useRef(false);
+  const slotElRef = useRef<HTMLDivElement | null>(null);
+  const startAtRef = useRef(startAt);
+  const autoplayRef = useRef(autoplay);
+  const nextVideoRef = useRef<RelatedVideoDto | null>(null);
+  const resumeAppliedRef = useRef(false);
+
+  // player-host state (the persistent player + its playhead)
+  const positionSec = usePlayerHost((s) => s.positionSec);
+  const hostHasVideo = usePlayerHost((s) => s.videoId === videoId);
 
   // bootstrap: session cookie + video detail (fresh mount per video via key)
   useEffect(() => {
@@ -99,6 +128,48 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
     };
   }, [videoId]);
 
+  // WFX2-C-S: take the persistent player — same videoId expands at the
+  // same position; a different id is a takeover (loadVideoById, no reload).
+  useEffect(() => {
+    playerHost.attach({ videoId, startSec: startAtRef.current });
+  }, [videoId]);
+
+  // enrich the miniplayer meta once the detail arrives
+  useEffect(() => {
+    if (!detail) return;
+    playerHost.updateMeta({
+      title: detail.video.title,
+      channelName: detail.video.channel.name,
+      thumbnailUrl: detail.video.thumbnailUrl,
+      durationSec: detail.video.durationSec ?? 0,
+    });
+  }, [detail]);
+
+  // playhead mirror for transcript/share reads (no re-render)
+  useEffect(() => playerHost.onProgress((sec) => {
+    timeRef.current = sec;
+  }), []);
+
+  // server-side resume fallback: only when neither ?t= nor the local
+  // progress memory applies (the player itself seeks on startSec). The
+  // handle appears once the iframe API is ready — retry briefly.
+  useEffect(() => {
+    if (!detail || resumeAppliedRef.current) return;
+    resumeAppliedRef.current = true;
+    if (startAtRef.current !== null) return; // explicit ?t= wins
+    if (readProgress(videoId) !== null) return; // local memory wins
+    const resume = detail.state.resumeSec;
+    if (resume === null || resume <= 5) return;
+    const trySeek = (attempts: number) => {
+      if (playerHost.handleRef.current) {
+        playerHost.seekTo(resume);
+      } else if (attempts > 0) {
+        setTimeout(() => trySeek(attempts - 1), 500);
+      }
+    };
+    trySeek(10); // ~5s of retries while the iframe API loads
+  }, [detail, videoId]);
+
   // autoplay preference (the Wave-1 key, default on)
   useEffect(() => {
     try {
@@ -111,6 +182,8 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
 
   const setAutoplayPref = useCallback((on: boolean) => {
     setAutoplay(on);
+    // AUTOPLAY_OFF mid-count cancels instantly (countdown state machine)
+    dispatch({ type: "TOGGLE", autoplay: on });
     try {
       localStorage.setItem(AUTOPLAY_KEY, on ? "1" : "0");
     } catch {
@@ -138,9 +211,39 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
     };
   }, [detail, videoId]);
 
-  // miniplayer: dock the player bottom-right once scrolled past it. The app
-  // shell scrolls an inner container (not the window) — find the player's
-  // real scroll parent and listen there.
+  // WFX2-C-S: player events → the countdown machine.
+  //   ENDED   → arm (once per cycle — the machine's idle guard)
+  //   PLAYING → reset (replay / seek-after-ended restarts the cycle)
+  useEffect(() => {
+    autoplayRef.current = autoplay;
+    nextVideoRef.current = nextVideo;
+  }, [autoplay, nextVideo]);
+  useEffect(() => {
+    return playerHost.onEnded(() => {
+      dispatch({
+        type: "ENDED",
+        autoplay: autoplayRef.current,
+        hasNext: nextVideoRef.current !== null,
+        now: Date.now(),
+      });
+    });
+  }, []);
+  useEffect(() => {
+    return playerHost.onStateChange((st) => {
+      if (st === "playing") dispatch({ type: "PLAYING" });
+    });
+  }, []);
+
+  // "fired" (wall-clock deadline or FIRE click) → advance exactly once
+  useEffect(() => {
+    if (countdown.status !== "fired") return;
+    const next = nextVideoRef.current;
+    if (next) router.push(`/watch/${next.id}`);
+  }, [countdown.status, router]);
+
+  // WFX2-C-S: miniplayer — dock the player bottom-right once scrolled past
+  // it (the app shell scrolls an inner container — find the player's real
+  // scroll parent and listen there).
   useEffect(() => {
     const anchor = anchorRef.current;
     let scrollEl: HTMLElement | Window = window;
@@ -158,11 +261,20 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
     const onScroll = () => {
       const el = anchorRef.current;
       if (!el) {
-        setDocked(false);
+        if (dockedRef.current) {
+          dockedRef.current = false;
+          setDocked(false);
+          playerHost.setMini(false);
+        }
         return;
       }
       const rect = el.getBoundingClientRect();
-      setDocked((d) => (d === rect.bottom < 80 ? d : rect.bottom < 80));
+      const next = rect.bottom < 80;
+      if (next !== dockedRef.current) {
+        dockedRef.current = next;
+        setDocked(next);
+        playerHost.setMini(next);
+      }
     };
     scrollEl.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
@@ -170,12 +282,35 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
   }, [theater, detail]);
 
   const undock = useCallback(() => {
+    dockedRef.current = false;
     setDocked(false);
+    playerHost.setMini(false);
     anchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
+  // miniplayer "expand" while ON the watch page → back inline + scroll up
+  useEffect(() => {
+    return playerHost.onExpand(() => {
+      dockedRef.current = false;
+      setDocked(false);
+      anchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, []);
+
+  // the persistent player's inline slot (ref callback — registers with the
+  // host; on unmount the host takes the player to the miniplayer)
+  const setSlotEl = useCallback((el: HTMLDivElement | null) => {
+    if (el) {
+      slotElRef.current = el;
+      playerHost.registerSlot(el);
+    } else {
+      playerHost.releaseSlot(slotElRef.current);
+      slotElRef.current = null;
+    }
+  }, []);
+
   const seek = useCallback((sec: number) => {
-    playerRef.current?.seekTo(sec);
+    playerHost.seekTo(sec);
   }, []);
 
   const chapters = useMemo(
@@ -201,7 +336,16 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
   if (!detail) {
     return (
       <main className="mx-auto max-w-6xl px-4 py-6" aria-busy="true" aria-label="Loading video">
-        <div className="aspect-video w-full animate-pulse rounded-xl bg-secondary" />
+        {/* the host slot — the persistent player lands here immediately
+            (takeover/expand) while the page metadata loads */}
+        <div
+          className={cn(
+            "relative aspect-video w-full overflow-hidden rounded-xl bg-secondary",
+            !hostHasVideo && "animate-pulse",
+          )}
+        >
+          <div ref={setSlotEl} className="absolute inset-0" />
+        </div>
         <div className="mt-4 h-6 w-3/4 animate-pulse rounded bg-secondary" />
         <div className="mt-3 flex items-center gap-3">
           <div className="size-10 animate-pulse rounded-full bg-secondary" />
@@ -214,30 +358,30 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
   const { video, state } = detail;
   const isLive = video.durationSec === 0;
 
-  const player = (
-    <YoutubePlayer
-      handleRef={playerRef}
-      videoId={videoId}
-      startSec={startAt ?? state.resumeSec}
-      onProgress={(sec) => {
-        timeRef.current = sec;
-      }}
-      onStateChange={(_s: YoutubePlayerState) => {
-        /* native player UI owns the controls */
-      }}
-      onEnded={() => {
-        // autoplay-next: the related rail's first item (A-B's autoplay set
-        // lands in the same DTO shape)
-        if (autoplay && nextVideo) router.push(`/watch/${nextVideo.id}`);
-      }}
-    />
-  );
+  const countdownNext = nextVideo
+    ? {
+        id: nextVideo.id,
+        title: nextVideo.title,
+        channelName: nextVideo.channel.name,
+        thumbnailUrl: nextVideo.thumbnailUrl,
+      }
+    : null;
+
+  const countdownOverlay =
+    countdown.status === "counting" && countdownNext ? (
+      <AutoplayCountdownOverlay state={countdown} next={countdownNext} dispatch={dispatch} />
+    ) : null;
 
   return (
     <main className="mx-auto w-full max-w-[1754px] px-0 sm:px-4 sm:pb-8">
       {theater ? (
         <div className="bg-black">
-          <div className="mx-auto max-w-[1754px]">{player}</div>
+          <div className="mx-auto max-w-[1754px]">
+            <div className="relative aspect-video w-full overflow-hidden bg-black">
+              <div ref={setSlotEl} className="absolute inset-0" />
+              {countdownOverlay}
+            </div>
+          </div>
         </div>
       ) : null}
 
@@ -259,26 +403,32 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
                   !docked && "sticky top-0 z-30 bg-black sm:static sm:rounded-xl"
                 )}
               >
-                {/* aspect keeper: holds the layout slot while the player docks */}
-                <div className="relative aspect-video w-full overflow-hidden">
-                  <div
-                    className={
-                      docked
-                        ? "fixed bottom-4 right-4 z-50 aspect-video w-80 overflow-hidden rounded-xl bg-black shadow-2xl ring-1 ring-border"
-                        : "absolute inset-0"
-                    }
-                  >
-                    {player}
+                <div className="relative">
+                  {/* WFX2-C-S: ambient mode — blurred thumbnail glow behind
+                      the player (light/dark honored; no layout shift) */}
+                  {!docked && <AmbientBackdrop thumbnailUrl={video.thumbnailUrl} />}
+
+                  {/* aspect keeper: holds the layout slot while the player
+                      shrinks into the miniplayer */}
+                  <div className="relative z-10 aspect-video w-full overflow-hidden bg-black sm:rounded-xl">
+                    {/* the persistent player's inline slot (host wrapper) */}
+                    <div ref={setSlotEl} className="absolute inset-0" />
                     {docked && (
                       <button
                         type="button"
                         onClick={undock}
                         aria-label="Expand player back into the page"
-                        className="absolute left-1 top-1 z-10 rounded-full bg-black/70 p-1.5 text-white opacity-80 transition hover:opacity-100"
+                        className="absolute inset-0 bg-black/60"
                       >
-                        <Maximize2 className="size-4" aria-hidden="true" />
+                        <img
+                          src={video.thumbnailUrl}
+                          alt=""
+                          className="h-full w-full object-cover opacity-50"
+                          draggable={false}
+                        />
                       </button>
                     )}
+                    {countdownOverlay}
                   </div>
                 </div>
               </div>
@@ -389,7 +539,7 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
                   );
                 }}
                 onShare={() => {
-                  setCurrentTime(timeRef.current);
+                  setCurrentTime(playerHost.getPosition());
                   setShareOpen(true);
                 }}
                 onSave={() => setSaveOpen(true)}
@@ -415,7 +565,7 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
             {transcriptOpen && (
               <TranscriptPanel
                 cues={cues}
-                getTime={() => timeRef.current}
+                getTime={() => playerHost.getPosition()}
                 query={transcriptQuery}
                 onQueryChange={setTranscriptQuery}
                 onSeek={seek}
@@ -438,7 +588,7 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
         {/* related rail */}
         <aside aria-label="Related videos" className={theater ? "min-w-0" : "px-3 sm:px-0"}>
           {detail && !theater && (
-            <LiveChatPanel videoId={videoId} currentTimeSec={currentTime} />
+            <LiveChatPanel videoId={videoId} currentTimeSec={positionSec} />
           )}
           <RelatedRail videoId={videoId} onFirstPage={setNextVideo} />
         </aside>

@@ -36,6 +36,15 @@ import { LiveChatMessage } from "./live-chat-message";
 /** Near-bottom threshold (px) that keeps auto-scroll pinned on. */
 const BOTTOM_EPS_PX = 80;
 
+/** WFX2-C-S: strict H:MM:SS for the replay offset chip (hours always shown). */
+export function formatOffsetChip(sec: number): string {
+  const s = Math.max(0, Math.floor(sec));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = s % 60;
+  return `${h}:${String(m).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
+}
+
 const iconButton =
   "flex size-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
 
@@ -55,6 +64,7 @@ export function LiveChatPanel({
     topChat,
     setTopChat,
     refresh,
+    seeking,
   } = useLiveChat(videoId, { currentTimeSec });
 
   const [collapsed, setCollapsed] = useState(false);
@@ -67,6 +77,10 @@ export function LiveChatPanel({
   const prevShownRef = useRef(0);
 
   const isReplay = state === "replay";
+  // WFX2-C-S: a seek re-anchor / leap-walk is in flight → header chip + list
+  // shimmer (loading state for the seek transition; the kept messages stay
+  // visible under a subtle pulse — no layout shift).
+  const showSeekShimmer = isReplay && seeking;
 
   // replay: only reveal messages at/below the playhead (messages appear
   // as currentTimeSec advances; the hook fetches the frames)
@@ -166,6 +180,19 @@ export function LiveChatPanel({
           </span>
         )}
         <div className="ml-auto flex items-center gap-1">
+          {isReplay && currentTimeSec !== undefined && (
+            <span
+              aria-label={`Replay offset ${formatOffsetChip(currentTimeSec)}`}
+              title="Chat replay position"
+              className={cn(
+                "mr-1 hidden items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-[11px] font-medium tabular-nums text-secondary-foreground transition-opacity duration-200 sm:inline-flex",
+                showSeekShimmer && "animate-pulse",
+              )}
+            >
+              <Clock className="size-3 text-muted-foreground" aria-hidden="true" />
+              {formatOffsetChip(currentTimeSec)}
+            </span>
+          )}
           <button
             type="button"
             onClick={() => setShowTimestamps((v) => !v)}
@@ -312,6 +339,16 @@ export function LiveChatPanel({
             </span>
             <span className="sr-only">{newCount} new messages</span>
           </button>
+        )}
+
+        {/* WFX2-C-S: seek shimmer — translucent pulse while the chat
+            re-anchors after a seek (loading variant for the seek state;
+            kept messages stay visible underneath — no layout shift) */}
+        {showSeekShimmer && (
+          <div
+            className="pointer-events-none absolute inset-x-0 top-0 z-10 h-24 animate-pulse bg-gradient-to-b from-secondary/60 to-transparent"
+            aria-hidden="true"
+          />
         )}
       </div>
 

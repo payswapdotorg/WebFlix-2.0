@@ -23,9 +23,33 @@
  * - "loading" is DERIVED from the internal "boot" phase (a bootstrap fetch
  *   is in flight) instead of being set inside the effect body, which would
  *   trip react-hooks/set-state-in-effect.
+ *
+ * WFX2-C-S — REPLAY SEEKING (youtube.com behavior):
+ * Every playhead jump is classified by the pure planReplaySeek() (±1s
+ * youtube.com tolerance):
+ * - BACKWARD seek → future messages are dropped INSTANTLY (render-phase,
+ *   the panel reveal-gating hides them the same frame) and the chat
+ *   re-anchors: re-bootstrap from the session-start token with
+ *   `?replayOffsetSec=<target>` (the server walks the continuation chain —
+ *   ZERO server/DTO changes, the existing walk is reused).
+ * - FORWARD leap past the fetched window + 10s grace → a walk fetch from
+ *   the CURRENT token: `?token=<t>&mode=replay&replayOffsetSec=<target>`.
+ * - Forward in-window (and ≤ window+10s) → "reveal": no fetch; the panel
+ *   gates visibility by offsetMsec <= playhead.
+ * Scrub drags coalesce (newest intent wins — each intent bumps a seq,
+ * aborts in-flight fetches and supersedes pending walk intents); stale
+ * advance-frames captured before a seek are DISCARDED on arrival (dropSeq
+ * guard) so an old window can never land on top of a re-anchored one.
+ * The chat freezes while the player is paused (currentTimeSec stops —
+ * no intents, no advance) and catches up on resume.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LiveChatMessageDTO, LiveChatMode } from "@/lib/youtube/livechat";
+import {
+  keepMessagesAtOrBelow,
+  planReplaySeek,
+  replayWindowFrom,
+} from "@/lib/watch/replay-seek";
 
 export type LiveChatHookState =
   | "boot"
@@ -65,6 +89,8 @@ export type UseLiveChatResult = {
   setTopChat: (v: boolean) => void;
   visibleMessages: LiveChatMessageDTO[];
   refresh: () => void;
+  /** A seek-triggered fetch (re-anchor or leap-walk) is in flight. */
+  seeking: boolean;
 };
 
 const MAX_MESSAGES = 500;
@@ -97,8 +123,42 @@ export function useLiveChat(
   const [tick, setTick] = useState(0);
   const [prevVideoId, setPrevVideoId] = useState(videoId);
 
+  // --- WFX2-C-S seek state ------------------------------------------------
+  /** Playhead at the previous classification (undefined → not yet seen). */
+  const [prevTime, setPrevTime] = useState<number | undefined>(undefined);
+  /** A seek intent counter; each intent bumps it (scrub coalescing). */
+  const [intentSeq, setIntentSeq] = useState(0);
+  /** The pending seek intent: re-anchor (bootstrap with offset) or forward
+   * leap-walk from the current token. Replaced by newer intents — the
+   * newest wins (scrub drags coalesce). */
+  const [intent, setIntent] = useState<
+    { seq: number; kind: "reanchor" | "walk"; targetSec: number } | null
+  >(null);
+  /** True while a seek fetch (re-anchor bootstrap or leap-walk) is in flight. */
+  const [seeking, setSeeking] = useState(false);
+
+  // Loop bookkeeping kept in refs (stable across renders, not deps —
+  // written only from effects/callbacks, never during render).
+  const tokenRef = useRef<string | null>(null);
+  const modeRef = useRef<LiveChatMode>(initialMode ?? "live");
+  const pollMsRef = useRef<number>(MIN_POLL_MS);
+  const backoffRef = useRef<number>(1);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inFlightRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+  /** seekSeqRef: bumped by each applied intent; stale frames check it. */
+  const seekSeqRef = useRef(0);
+  /** Replay offset for the NEXT bootstrap run (re-anchor target). */
+  const bootstrapOffsetSecRef = useRef<number | null>(null);
+  /** Seq of walk intents already consumed (fetch done or dropped). */
+  const walkSeqDoneRef = useRef<number>(-1);
+  /** Seq of intents whose side effects have been applied. */
+  const appliedIntentRef = useRef(0);
+
   // Adjust state when the video changes (guarded render-phase reset —
   // the use-api.ts pattern). topChat is a user preference and persists.
+  // (Ref resets happen in the effect below — refs are never written in
+  // render.)
   if (videoId !== prevVideoId) {
     setPrevVideoId(videoId);
     setState("boot");
@@ -108,16 +168,58 @@ export function useLiveChat(
     setNextToken(null);
     setError(null);
     setTick(0);
+    setPrevTime(undefined);
+    setIntentSeq(0);
+    setIntent(null);
+    setSeeking(false);
   }
 
-  // Loop bookkeeping kept in refs (stable across renders, not deps).
-  const tokenRef = useRef<string | null>(null);
-  const modeRef = useRef<LiveChatMode>(initialMode ?? "live");
-  const pollMsRef = useRef<number>(MIN_POLL_MS);
-  const backoffRef = useRef<number>(1);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const inFlightRef = useRef(false);
-  const abortRef = useRef<AbortController | null>(null);
+  // Ref resets on video change (runs before the loop effects below).
+  useEffect(() => {
+    seekSeqRef.current = 0;
+    walkSeqDoneRef.current = -1;
+    bootstrapOffsetSecRef.current = null;
+    appliedIntentRef.current = 0;
+  }, [videoId]);
+
+  // --- WFX2-C-S: render-phase seek classification -------------------------
+  // The playhead prop moves → classify the jump (guarded render-phase
+  // pattern, same as the videoId reset above). Only replay (or still
+  // loading — a seek racing the first frame) is classified; live chat has
+  // no offsets. Organic playback advances ~1s/sec → "none". Pure state
+  // updates only — the intent's side effects (seq bump, abort, offset
+  // latch) run in the intent effect below.
+  if (currentTimeSec !== prevTime) {
+    const prevHead = prevTime;
+    setPrevTime(currentTimeSec);
+
+    const classifyable =
+      currentTimeSec !== undefined &&
+      prevHead !== undefined &&
+      (state === "replay" || state === "loading" || state === "boot");
+
+    if (classifyable) {
+      const windowState = replayWindowFrom(messages, nextToken);
+      const plan = planReplaySeek(prevHead, currentTimeSec, windowState);
+      if (plan.action === "reanchor") {
+        // Drop future messages INSTANTLY (the reveal gating hides them
+        // this same render; the store drop keeps memory/merge clean).
+        setMessages(keepMessagesAtOrBelow(messages, plan.targetSec));
+        setIntentSeq((s) => s + 1);
+        setIntent({ seq: intentSeq + 1, kind: "reanchor", targetSec: plan.targetSec });
+        setSeeking(true);
+        // Re-anchor = re-bootstrap from the session-start token with
+        // ?replayOffsetSec (the existing server walk).
+        setState("boot");
+        setTick((t) => t + 1);
+      } else if (plan.action === "walk") {
+        setIntentSeq((s) => s + 1);
+        setIntent({ seq: intentSeq + 1, kind: "walk", targetSec: plan.targetSec });
+        setSeeking(true);
+      }
+      // "reveal" / "none": no fetch — reveal gating handles visibility.
+    }
+  }
 
   /** Append a frame's messages, deduped by id, capped at MAX_MESSAGES. */
   const mergeMessages = useCallback((frame: LiveChatMessageDTO[]) => {
@@ -146,12 +248,38 @@ export function useLiveChat(
       }
       setParticipants(frame.participants ?? null);
       setError(null);
+      // A landed frame settles any pending seek (re-anchor or walk).
+      bootstrapOffsetSecRef.current = null;
+      setSeeking(false);
       const next: LiveChatMode =
         frame.mode ?? (frame.isReplay ? "replay" : "live");
       setState(next === "replay" ? "replay" : "live");
     },
     [mergeMessages],
   );
+
+  // --- WFX2-C-S: intent side effects (post-render) -------------------------
+  // Each new intent (scrub drags coalesce into the newest seq): bump the
+  // dropSeq, abort any in-flight fetch and clear the in-flight latch so
+  // the newest intent wins immediately. Runs BEFORE the bootstrap/walk
+  // effects (declaration order) so the re-anchor offset is latched before
+  // the bootstrap URL is built.
+  useEffect(() => {
+    if (!intent || intent.seq === appliedIntentRef.current) return;
+    appliedIntentRef.current = intent.seq;
+    seekSeqRef.current = intent.seq;
+    if (intent.kind === "reanchor") {
+      // the bootstrap run triggered by the same render consumes this
+      bootstrapOffsetSecRef.current = intent.targetSec;
+    }
+    try {
+      abortRef.current?.abort();
+    } catch {
+      /* already aborted */
+    }
+    abortRef.current = new AbortController();
+    inFlightRef.current = false;
+  }, [intent]);
 
   // --- bootstrap + LIVE poll loop (one effect per videoId/refresh) --------
   useEffect(() => {
@@ -216,7 +344,12 @@ export function useLiveChat(
       if (!alive || inFlightRef.current) return;
       inFlightRef.current = true;
       try {
-        const url = `/api/videos/${encodeURIComponent(videoId)}/livechat`;
+        // WFX2-C-S: a re-anchor seek bootstraps with ?replayOffsetSec so
+        // the server walks the session-start token to the seek target.
+        const offset = bootstrapOffsetSecRef.current;
+        const offsetQ =
+          offset !== null ? `?replayOffsetSec=${Math.max(0, Math.floor(offset))}` : "";
+        const url = `/api/videos/${encodeURIComponent(videoId)}/livechat${offsetQ}`;
         const res = await fetch(url, { cache: "no-store", signal });
         if (!res.ok) throw new Error(await errorMessage(res));
         const frame = (await res.json()) as LiveChatResponse;
@@ -259,10 +392,63 @@ export function useLiveChat(
     };
   }, [videoId, tick, initialMode, applyFrame, mergeMessages]);
 
+  // --- WFX2-C-S: forward leap-walk (from the CURRENT token) ---------------
+  // Fires for "walk" intents; waits out a bootstrap; drops honestly when
+  // live / exhausted / superseded; fetches
+  // ?token=<current>&mode=replay&replayOffsetSec=<target>.
+  useEffect(() => {
+    if (!intent || intent.kind !== "walk") return;
+    if (walkSeqDoneRef.current === intent.seq) return; // consumed
+    if (seekSeqRef.current !== intent.seq) {
+      // superseded by a newer seek intent (scrub coalescing: newest wins)
+      walkSeqDoneRef.current = intent.seq;
+      return;
+    }
+    if (state === "live" || state === "unavailable" || state === "error") {
+      walkSeqDoneRef.current = intent.seq;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- honest terminal drop: the walk can never land (live/no chat/error); clears the shimmer once
+      setSeeking(false);
+      return;
+    }
+    if (state === "boot" || state === "loading") return; // wait for the frame
+    if (!nextToken) {
+      // replay exhausted — nothing to walk (the video may outlive its chat)
+      walkSeqDoneRef.current = intent.seq;
+      setSeeking(false);
+      return;
+    }
+
+    const controller =
+      abortRef.current ?? (abortRef.current = new AbortController());
+    const signal = controller.signal;
+    const seq = intent.seq;
+    inFlightRef.current = true;
+
+    void (async () => {
+      try {
+        const target = Math.max(0, Math.floor(intent.targetSec));
+        const url = `/api/videos/${encodeURIComponent(videoId)}/livechat?token=${encodeURIComponent(nextToken)}&mode=replay&replayOffsetSec=${target}`;
+        const res = await fetch(url, { cache: "no-store", signal });
+        if (!res.ok) throw new Error(await errorMessage(res));
+        const frame = (await res.json()) as LiveChatResponse;
+        // dropSeq: a newer seek re-anchored while we were in flight → discard
+        if (signal.aborted || seekSeqRef.current !== seq) return;
+        applyFrame(frame);
+      } catch (err) {
+        if (signal.aborted || seekSeqRef.current !== seq) return;
+        setError(err instanceof Error ? err.message : "Chat replay seek failed");
+      } finally {
+        walkSeqDoneRef.current = seq;
+        inFlightRef.current = false;
+      }
+    })();
+  }, [intent, state, nextToken, videoId, applyFrame]);
+
   // --- REPLAY advance: fetch the next frame when the playhead passes the
   // newest fetched offset. No timer; one fetch per advance, double-fetch
   // guarded by inFlightRef; re-fires as messages/state settle so the chat
   // catches up to the playhead (bounded by the server's frames).
+  // WFX2-C-S: dropSeq — frames captured before a seek intent are discarded.
   useEffect(() => {
     if (state !== "replay") return;
     if (currentTimeSec === undefined) return; // no playhead → first frame only
@@ -278,6 +464,7 @@ export function useLiveChat(
     const controller = abortRef.current; // aborted on videoId/refresh change
     if (!controller) return;
     const signal = controller.signal;
+    const seqAtFetch = seekSeqRef.current;
     inFlightRef.current = true;
 
     void (async () => {
@@ -286,7 +473,9 @@ export function useLiveChat(
         const res = await fetch(url, { cache: "no-store", signal });
         if (!res.ok) throw new Error(await errorMessage(res));
         const frame = (await res.json()) as LiveChatResponse;
-        if (signal.aborted) return;
+        // dropSeq: a seek re-anchored the window while this frame was in
+        // flight → applying it would resurrect the abandoned window.
+        if (signal.aborted || seekSeqRef.current !== seqAtFetch) return;
         applyFrame(frame); // state stays "replay"; token/mode roll forward
       } catch (err) {
         if (signal.aborted) return;
@@ -333,12 +522,21 @@ export function useLiveChat(
     });
   }, [messages, topChat]);
 
-  /** Re-bootstrap (aborts in-flight requests, dedupes on merge). */
+  /** Re-bootstrap (aborts in-flight requests, dedupes on merge).
+   * WFX2-C-S: in replay mode the refresh re-anchors to the CURRENT
+   * playhead (the old first-frame bootstrap would regress the window to
+   * the stream start and crawl back frame-by-frame). */
   const refresh = useCallback(() => {
     setError(null);
+    if (state === "replay" && typeof prevTime === "number" && prevTime > 0) {
+      bootstrapOffsetSecRef.current = prevTime;
+      setSeeking(true);
+    } else {
+      bootstrapOffsetSecRef.current = null;
+    }
     setState("boot"); // re-enter the bootstrap phase (surfaced as "loading")
     setTick((t) => t + 1);
-  }, []);
+  }, [state, prevTime]);
 
   // internal "boot" = a bootstrap fetch for this video is in flight →
   // surfaced to callers as "loading" (derived, not set in the effect body)
@@ -355,5 +553,6 @@ export function useLiveChat(
     setTopChat,
     visibleMessages,
     refresh,
+    seeking,
   };
 }
