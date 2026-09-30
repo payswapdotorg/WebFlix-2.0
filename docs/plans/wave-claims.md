@@ -116,3 +116,21 @@ The 09:45Z re-dispatch's queued-capacity sessions (wfx2-cs b3fa5177 / wfx2-cw ba
 | C-W cutover | wfx2-cw | `9b8862f3` | queued-capacity (server-alive, titled "Final Lane Cutover Hardening") |
 
 Prior chats b3fa5177/ba6dd8bd VOIDED (dead). Watchers armed on the true tabs; supervisor specs updated. The capacity queue drains as wfx2-bs's turn completes.
+
+## 2026-09-30 12:25Z — THE DELIVERY DOCTRINE + slot hygiene + the v2 re-dispatches
+
+**Lessons this cycle (all reproduced, all now encoded in the machinery):**
+1. **Sandbox reaping at completion**: the workspace pod dies within minutes of turn completion — relay bundles staged in it are lost unless harvested within seconds (instant-harvest daemons now armed on every lane; `harvest_exact.py` replaces the prefix-broken harvester).
+2. **The shell-home blind spot**: the files API exposes only the web-dev workspace root (`/home/z/my-project`-shaped); workers that build in their shell home (`/home/z`) are UNREACHABLE (path traversal blocked — verified). Packets must mandate the file-browser root OR push delivery.
+3. **The send-wall + content-drop**: continuation sends to completed agent chats commit as EMPTY user records (5 consecutive reproductions; page-local VERIFIED proof lies). The create path (fresh chat + packet) carries content reliably (4× today). Conclusion: **push-first delivery via fresh dispatch beats nudges** — worker packets now carry a transient-token push mandate.
+4. **Slot hygiene**: the 3-pod cap starves queued lanes when dead chats (voided lanes, deleted junk chats, zombie completed lanes) hold workspaces. The lead now audits + releases slots at every dispatch (the a854bd76 lesson: a send at a cap-full moment never spawns — the platform drops the generation request).
+
+**Current wave state @ 12:25Z (all @ base 4b96834):**
+
+| Lane | Session | Chat | Delivery | Status |
+|---|---|---|---|---|
+| B-S comments-write | wfx2-bs (3rd dispatch) | `cc9a7568` | relay bundle at file-browser root (proven reachable by the 1st attempt) | packet committed; spawn pending (slot freed 12:20Z) |
+| C-S replay-polish | wfx2-cs | `9ba9fa6f` | relay bundle | GENERATING ~3h (the longest lane) |
+| C-W cutover v2 | wfx2-cw | `ec489dd1` | **PUSH** (token-grant mandate; the prior attempt's verified design embedded in the packet) | packet committed; spawn pending (slot freed 12:20Z) |
+
+Prior chats: 6065f7fa (bs-1: completed, sandbox reaped before harvest — the loss that taught lesson 1), a854bd76 (bs-2: generation dropped at a cap-full moment), 9b8862f3 (cw-1: complete + verified design recovered into the v2 packet; delivery unreachable), 181a403c (junk — deleted). All dead workspaces released.
