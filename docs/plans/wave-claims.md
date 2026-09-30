@@ -97,3 +97,22 @@ The 03:54Z container reset wiped the prior console's operational state (registry
 | C-W cutover | wfx2-cw | `ba6dd8bd` | queued-capacity (accepted) |
 
 Notes: the site's send-wall required a manual trusted-click recovery on all three (the dispatcher's [7/7] ladder exhausted; focus-composer → live-coords Input.dispatchMouseEvent on the send button landed each in ≤2 attempts — recorded for the toolbox). C-W's packet carries the 04:15Z production finding (home rails + videos?q= empty from Vercel egress; browse endpoint walled for datacenter IPs — Upstash caching must fix). Lead = this console; no other console has pushed for 10.5h+.
+
+## 2026-09-30 10:05Z — CAPACITY-QUEUE DEATH + machinery patches + C-S/C-W re-dispatched again (round 2)
+
+The 09:45Z re-dispatch's queued-capacity sessions (wfx2-cs b3fa5177 / wfx2-cw ba6dd8bd) were DESTROYED server-side ~11 min after queuing: the watcher-era unstick fired a tab RELOAD on the queued sessions → /c/ redirect-home → chats torn down (probe: "chat not found" — this endpoint 500s with the death verdict in the body). wfx2-bs (6065f7fa) was never touched and is GENERATING strongly (49K chars by 10:00Z).
+
+**Machinery patches (live-tested this cycle):**
+1. probe_chat captures error BODIES — "chat not found" classifies as definitive death (was: http-500 = uncertain → infinite patience on dead chats).
+2. queue_watch unstick is gated on the lesson-185 server-alive probe for agent lanes: alive-queued sessions get PATIENCE (no reload); the patch visibly skipped both live sessions this cycle.
+3. dispatch_worker [7/7] settle patches (2×2.5s): the send-wall (trusted clicks dead ~1s post-insert) was a React-state settle race — the patched ladder landed C-S VERIFIED on its own rungs.
+
+**Round-2 dispatch @ base 4b96834** (same packets, patched dispatcher):
+
+| Lane | Session | Chat | Status @ 10:05Z |
+|---|---|---|---|
+| B-S comments-write | wfx2-bs | `6065f7fa` | **GENERATING** (49K chars, sandbox pod Running) |
+| C-S replay-polish | wfx2-cs | `608b4181` | queued-capacity (server-alive, watcher patience active) |
+| C-W cutover | wfx2-cw | `9b8862f3` | queued-capacity (server-alive, titled "Final Lane Cutover Hardening") |
+
+Prior chats b3fa5177/ba6dd8bd VOIDED (dead). Watchers armed on the true tabs; supervisor specs updated. The capacity queue drains as wfx2-bs's turn completes.
