@@ -154,3 +154,24 @@ The lane's acceptance harness (two lead integration fixes pushed: title entity-d
 - channel page + tabs / channel tab search (handle-scrape → 502 instead of an honest degrade — a channel-last-good worker task) + search channel renderers
 
 The channel-502-instead-of-honest-degrade is recorded as B-S/follow-up lane scope (the channel parity + last-good cache). The home warmer needs an unwalled runner (the worker sandboxes are unwalled — verified by the original cutover worker's own live home data).
+
+## 2026-09-30 17:10Z — The wall breaks for C-S; the janitor inversion fixed; WFX2-HW dispatched (the home-gap lane)
+
+**The afternoon wall broke at 16:38Z for C-S**: the cs poller landed the v2 packet in chat `7dfbe7a1` ("Replay Polish Delivery - Wave C Lane 2") after ~10 dead rounds. The lane SPAWNED: workspace ws-7322ed4e active, pod Running, the full WebFlix clone in the workspace tree, worker deep in exploration (9.4K transcript chars at 16:55). **PUSH-first delivery** — the integration watch is the branch `wfx2/waveC-replay-polish` on GitHub.
+
+**The janitor inversion bug (found by its fingerprints)**: tab_janitor closed `home_tabs[1:] + session_tabs` — it KILLED every live session tab (the generating cs tab at 16:40Z among them) while keeping phantom /c/ tabs. Root cause of the afternoon's probe blindness (all probes routed through one hung orphan survivor). Fixed (three-way home/session/phantom classification) + verified live. The janitor had also eaten the watcher tabs at 15:25 (the "tab explosion cleanup" — its first-run bug was only half-fixed then).
+
+**The Upstash env fixed for good**: env.sh still carried the dead meet-ewe URL + a wrong token. The real ADCOS rest_token recovered via the management API (email + api-key → databases → rest_token), verified live (dbsize 84). Confirmed the home gap: `yt:home:feed` absent (TTL -2) — the warmer could never seed it from lead egress.
+
+**The redundant cw-v2 voided**: chat `ec489dd1` deleted (200-true) — cutover is merged+live; the queued v2 re-run would waste a generation slot. The cw watcher stood down.
+
+**WFX2-HW dispatched (chat `2eb9fe8c`, 17:00Z)** — the home-browse gap closure: (1) warm `yt:home:feed` last-good from the worker's UNWALLED sandbox (local dev + the real Upstash env via send-time-substituted credentials — the dispatcher now substitutes `[REDACTED:upstash_rest_url]`/`[REDACTED:upstash_rest_token]` with the same in-memory-only doctrine as the PAT), healing production /api/home with NO deploy; (2) `TTL.HOME_HARD_MS` 2h→24h (one warm = a day of home rails; stale-but-real beats honest-empty); (3) honest-failure report if the wall now covers worker egress. The send-wall hit at dispatch-time (insert 100%, send dead) — the manual recovery ladder landed it first pass.
+
+| Lane | Chat | Delivery | Status @ 17:10Z |
+|---|---|---|---|
+| B-S comments-write | `cc9a7568` (3rd) | relay + push | queued-alive (msgs=1; 6.4h old — the death-probe machinery owns the 13.5h window) |
+| C-S replay-polish | `7dfbe7a1` | **PUSH** | **GENERATING** (pod Running; workspace holds the full clone) |
+| C-W cutover | — | merged | **CLOSED + LIVE** (3868b40d → 9e52ab2 + 34184d6; 473 tests) |
+| HW home-warmer | `2eb9fe8c` | push (tiny) | queued-capacity (packet committed; workspace pool 1/3 used) |
+
+Next: markers → push/harvest → gates (473 baseline) → merge --no-ff → verify Vercel → the final acceptance sweep (expect 32→36+/38; the channel family = B-S scope).
