@@ -1,0 +1,166 @@
+{
+  "_synthetic": true,
+  "responseContext": {
+    "visitorData": "composeWatchSynthetic",
+    "serviceTrackingParams": [
+      { "service": "CSI", "params": [{ "key": "c", "value": "WEB" }, { "key": "cver", "value": "2.20260925.08.00" }] }
+    ]
+  },
+  "contents": {
+    "twoColumnWatchNextResults": {
+      "results": {
+        "results": {
+          "contents": [
+            {
+              "videoPrimaryInfoRenderer": {
+                "videoRenderer": {},
+                "title": {
+                  "runs": [{ "text": "Never Gonna Give You Up (composed take 1)" }]
+                },
+                "viewCount": {
+                  "videoViewCountRenderer": {
+                    "viewCount": { "simpleText": "1,234,567 views" },
+                    "shortViewCount": { "simpleText": "1.2M views" },
+                    "originalViewCount": "1234567"
+                  }
+                },
+                "dateText": { "simpleText": "Oct 25, 2009" },
+                "relativeDateText": { "simpleText": "16 years ago" },
+                "videoActions": {
+                  "menuRenderer": {
+                    "topLevelButtons": [
+                      {
+                        "segmentedLikeDislikeButtonViewModel": {
+                          "likeButtonViewModel": {
+                            "likeButtonViewModel": {
+                              "toggleButtonViewModel": {
+                                "toggleButtonViewModel": {
+                                  "defaultButtonViewModel": {
+                                    "buttonViewModel": {
+                                      "title": "19,447,647",
+                                      "accessibilityText": "like this video along with 19,447,647 other people"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "videoSecondaryInfoRenderer": {
+                "owner": {
+                  "videoOwnerRenderer": {
+                    "title": {
+                      "runs": [
+                        {
+                          "text": "Rick Astley",
+                          "navigationEndpoint": {
+                            "clickTrackingParams": "composeWatchSynthetic",
+                            "commandMetadata": {
+                              "webCommandMetadata": {
+                                "url": "/@RickAstleyYT",
+                                "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                "rootVe": 3611,
+                                "apiUrl": "/youtubei/v1/browse"
+                              }
+                            },
+                            "browseEndpoint": {
+                              "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                              "canonicalBaseUrl": "/@RickAstleyYT"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    "navigationEndpoint": {
+                      "clickTrackingParams": "composeWatchSynthetic",
+                      "commandMetadata": {
+                        "webCommandMetadata": {
+                          "url": "/@RickAstleyYT",
+                          "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                          "rootVe": 3611,
+                          "apiUrl": "/youtubei/v1/browse"
+                        }
+                      },
+                      "browseEndpoint": {
+                        "browseId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                        "canonicalBaseUrl": "/@RickAstleyYT"
+                      }
+                    },
+                    "subscriberCountText": {
+                      "simpleText": "4.55M subscribers",
+                      "accessibility": {
+                        "accessibilityData": { "label": "4.55 million subscribers" }
+                      }
+                    },
+                    "badges": [
+                      {
+                        "metadataBadgeRenderer": {
+                          "icon": { "iconType": "AUDIO_BADGE" },
+                          "style": "BADGE_STYLE_TYPE_VERIFIED_ARTIST",
+                          "tooltip": "Official Artist Channel",
+                          "trackingParams": "composeWatchSynthetic",
+                          "accessibilityData": { "label": "Official Artist Channel" }
+                        }
+                      }
+                    ],
+                    "thumbnail": {
+                      "thumbnails": [
+                        {
+                          "url": "https://yt3.ggpht.com/rick-compose-watch-synth-avatar=s88-c-k-c0x00ffffff-no-rj",
+                          "width": 88,
+                          "height": 88
+                        },
+                        {
+                          "url": "https://yt3.ggpht.com/rick-compose-watch-synth-avatar=s176-c-k-c0x00ffffff-no-rj",
+                          "width": 176,
+                          "height": 176
+                        }
+                      ]
+                    }
+                  }
+                },
+                "attributedDescription": {
+                  "content": "The synthetic watch payload for the composed channel's top video — mirrors the real `next` owner shape (Rick's live-verified values).",
+                  "styleRuns": [{ "startIndex": 0, "length": 20 }]
+                },
+                "subscribeButton": {
+                  "subscribeButtonRenderer": {
+                    "subscribed": false,
+                    "subscriberCountText": { "simpleText": "4.55M" }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "playerOverlays": {
+    "decoratedPlayerBarRenderer": {
+      "decoratedPlayerBarRenderer": {
+        "playerBar": {
+          "multiMarkersPlayerBarRenderer": {
+            "markersMap": [
+              {
+                "key": "DESCRIPTION_CHAPTERS",
+                "value": {
+                  "markerRenderer": [
+                    { "timeRangeStartMillis": 0, "markerProgressPercentage": 0 }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

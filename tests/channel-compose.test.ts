@@ -6,25 +6,33 @@
  * real channel fields. The lane composes the channel family from that data
  * with exact-id honesty:
  *
- *  - the supermajority resolver: a name search's results grouped by the
- *    channelId they actually carry — the id owning >= 60% of the results
- *    that have channel fields IS the channel; below the threshold → null
- *    (the honest degrade stands; never a name-similarity guess);
+ *  - the dominance resolver (WFX2-CF-2): a name search's results grouped by
+ *    the channelId they actually carry — the id owning >= 40% of the results
+ *    that have channel fields AND >= 2x the runner-up's count, OR an
+ *    absolute >= 60% supermajority, IS the channel; below both → null (the
+ *    honest degrade stands; never a name-similarity guess, never a mere
+ *    plurality);
  *  - the composed channel page: the ladder's third rung
  *    (browse-fresh → browse-last-good → search-compose → honest-degrade) —
- *    `composed: true`, real header fields, honest nulls for the fields
- *    search cannot carry (subs/banner/description), id-filtered videos;
+ *    `composed: true`, real header fields WATCH-ENRICHED through the
+ *    unwalled watch path (WFX2-CF-2: the resolved channel's top video
+ *    rides getVideoDetail / the yt:watch:<videoId> cache family — its
+ *    `next` payload carries the real subs/verified/handle/avatar), honest
+ *    nulls for the fields no path carries (banner/description),
+ *    id-filtered videos;
  *  - in-channel search within the walls ("${query} ${channelName}" + the
  *    exact-id filter, honest cursor pagination);
  *  - channelFromLastGood normalization: space-stripped handle matching +
  *    the cached page's channel NAME match — all exact-normalized.
  *
  * Fixture bytes via setUpstream() + the Upstash fake via setUpstashRest()
- * (the channel-wall.test.ts patterns — never the network). The two new
- * fixtures are synthetic (`_synthetic: true`, *_synth.json — the repo
- * convention): search_compose_dominant_synth (7/10 results owned by Rick
- * Astley's UC id) and search_compose_inchannel_synth (the composed
- * in-channel search page + a real continuation token).
+ * (the channel-wall.test.ts patterns — never the network). The synthetic
+ * fixtures (`_synthetic: true`, *_synth.json — the repo convention):
+ * search_compose_dominant_synth (7/10 results owned by Rick Astley's UC
+ * id), search_compose_inchannel_synth (the composed in-channel search page
+ * + a real continuation token), and — WFX2-CF-2 — next_compose_rick_synth
+ * (the composed top video's watch payload, carrying the live-verified real
+ * Rick owner fields: @RickAstleyYT, 4.55M subscribers, verified artist).
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
@@ -51,6 +59,7 @@ const channelSearch = load("channel_search_rickastley"); // the healthy in-chann
 const searchLofi = load("search_lofi"); // REAL mixed capture: 19 renderers, max share 21%, zero channelRenderers
 const dominantSynth = load("search_compose_dominant_synth"); // synthetic — 7/10 owned by UC_RICK
 const inchannelSynth = load("search_compose_inchannel_synth"); // synthetic — the composed in-channel page + cursor
+const watchSynth = load("next_compose_rick_synth"); // synthetic — the top video's `next` payload (real Rick owner fields)
 
 const RICK_ID = "UCuAXFkgsw1L7xaCfnd5JJOw";
 const CURSOR = "COMPOSE-INCHANNEL-CURSOR-SYNTH";
@@ -66,13 +75,18 @@ interface Recorded {
  * @handle / bare-name forms) and "neverrickastley" (the composed in-channel
  * search) hit the synthetics; everything else returns the REAL mixed
  * search_lofi capture (below the threshold). The @handle SSR scrape is
- * injectably walled (the live egress behavior).
+ * injectably walled (the live egress behavior). WFX2-CF-2: the watch
+ * (`next`) endpoint serves the composed top video's synthetic watch payload —
+ * injectably walled (the enrichment's honest-degrade path) and the owner
+ * browseId spoofable (the enrichment's exact-id guard).
  */
 function fixtureUpstream() {
   const recorded: Recorded[] = [];
   const htmlFor = (data: unknown) =>
     `<!doctype html><script>var ytInitialData = ${JSON.stringify(data)};</script>`;
   let ssrWalled = false;
+  let watchWalled = false;
+  let watchOwnerSpoof: string | null = null;
   const impl = async (url: string, init?: RequestInit): Promise<Response> => {
     const body = init?.body ? JSON.parse(String(init.body)) : null;
     recorded.push({ url, body });
@@ -87,7 +101,14 @@ function fixtureUpstream() {
       if (flatQuery === "neverrickastley" || body?.continuation) {
         return json(inchannelSynth); // the composed in-channel search + continuations
       }
-      return json(searchLofi); // the real mixed capture — below the threshold
+      return json(searchLofi); // the real mixed capture — below both thresholds
+    }
+    if (url.includes("/youtubei/v1/next")) {
+      // WFX2-CF-2 — the composed header's watch-meta enrichment call
+      if (watchWalled) return new Response("not found", { status: 404 });
+      return json(
+        watchOwnerSpoof ? withWatchOwnerBrowseId(watchSynth, watchOwnerSpoof) : watchSynth
+      );
     }
     if (url.includes("/youtubei/v1/browse")) {
       // the healthy in-channel search mechanism (the channel's own Search tab)
@@ -102,7 +123,27 @@ function fixtureUpstream() {
     }
     return new Response("not found", { status: 404 });
   };
-  return { impl, recorded, wall: (v: boolean) => (ssrWalled = v) };
+  return {
+    impl,
+    recorded,
+    wall: (v: boolean) => (ssrWalled = v),
+    wallWatch: (v: boolean) => (watchWalled = v),
+    spoofWatchOwner: (id: string | null) => (watchOwnerSpoof = id),
+  };
+}
+
+/** Clone the watch synthetic with a different owner browseId — the
+ * enrichment's exact-id guard probe (a watch payload attributing the top
+ * video to another channel must enrich nothing). */
+function withWatchOwnerBrowseId(payload: any, browseId: string): any {
+  const clone = JSON.parse(JSON.stringify(payload));
+  const owner =
+    clone?.contents?.twoColumnWatchNextResults?.results?.results?.contents?.find(
+      (c: any) => c?.videoSecondaryInfoRenderer
+    )?.videoSecondaryInfoRenderer?.owner?.videoOwnerRenderer;
+  owner.navigationEndpoint.browseEndpoint.browseId = browseId;
+  owner.title.runs[0].navigationEndpoint.browseEndpoint.browseId = browseId;
+  return clone;
 }
 
 /** An in-memory fake of the Upstash REST pipeline endpoint. */
@@ -170,6 +211,7 @@ function familyPage(overrides: Record<string, unknown> = {}) {
 
 let upstream: ReturnType<typeof fixtureUpstream>;
 const searchCalls = () => upstream.recorded.filter((r) => r.url.includes("/youtubei/v1/search"));
+const nextCalls = () => upstream.recorded.filter((r) => r.url.includes("/youtubei/v1/next"));
 
 beforeEach(() => {
   clearCache();
@@ -185,10 +227,10 @@ afterEach(() => {
 const ctx = (handle: string) => ({ params: Promise.resolve({ handle }) });
 
 // ---------------------------------------------------------------------------
-// 1. the supermajority resolver
+// 1. the dominance resolver (WFX2-CF-2)
 // ---------------------------------------------------------------------------
 
-describe("the supermajority resolver (resolveFromSearchResponse)", () => {
+describe("the dominance resolver (resolveFromSearchResponse)", () => {
   test("a dominant-id search resolves — real fields, id-owned videos only", () => {
     const r = resolveFromSearchResponse(dominantSynth);
     expect(r).not.toBeNull();
@@ -201,12 +243,13 @@ describe("the supermajority resolver (resolveFromSearchResponse)", () => {
     expect(r!.videos.every((v) => v.channel.id === RICK_ID)).toBe(true); // exact-id
   });
 
-  test("a mixed search below the threshold → null (the honest degrade stands)", () => {
+  test("a mixed search below BOTH thresholds → null (the honest degrade stands)", () => {
     // the REAL recorded capture: 19 renderers, the top channel owns 4 (21%)
+    // — under the 40% floor, however weak the field
     expect(resolveFromSearchResponse(searchLofi)).toBeNull();
   });
 
-  test("exactly 60% (the inclusive >= threshold) resolves", () => {
+  test("supermajority-pass: exactly 60% (the inclusive >= threshold) resolves", () => {
     const resp = synthSearch([
       ["UCdom000000000000000000", 6],
       ["UCaaa0000000000000000A", 4],
@@ -215,11 +258,68 @@ describe("the supermajority resolver (resolveFromSearchResponse)", () => {
     expect(r?.channelId).toBe("UCdom000000000000000000");
   });
 
-  test("just below the threshold (59/99) → null — never a plurality guess", () => {
+  test("supermajority overrides the lead requirement: 60% vs a 35% runner-up resolves", () => {
+    // 12/20 = 60% — but 12 < 2x7: only the supermajority branch carries it
+    const resp = synthSearch([
+      ["UCdom000000000000000000", 12],
+      ["UCaaa0000000000000000A", 7],
+      ["UCbbb0000000000000000B", 1],
+    ]);
+    expect(resolveFromSearchResponse(resp)?.channelId).toBe("UCdom000000000000000000");
+  });
+
+  test("dominant-2x-pass: the live finding's arithmetic — 44% over a 16% runner-up resolves", () => {
+    // the lead's live capture: "Rick Astley" from either egress attributes
+    // 11/25 (44%) to the REAL channel with the runner-up at 4/25 (16%) — a
+    // 2-4x lead the bare supermajority declined (the CF-2 fix)
+    const resp = synthSearch([
+      ["UCdom000000000000000000", 11],
+      ["UCaaa0000000000000000A", 4],
+      ["UCbbb0000000000000000B", 4],
+      ["UCccc0000000000000000C", 2],
+      ["UCddd0000000000000000D", 2],
+      ["UCeee0000000000000000E", 2],
+    ]);
+    expect(resolveFromSearchResponse(resp)?.channelId).toBe("UCdom000000000000000000");
+  });
+
+  test("dominant-2x-pass: just below the supermajority (59/99) with a 3x lead resolves", () => {
+    // the old rule declined this shape — the honest degrade served instead
+    // of the clearly-dominant real channel
     const resp = synthSearch([
       ["UCdom000000000000000000", 59],
       ["UCaaa0000000000000000A", 20],
       ["UCbbb0000000000000000B", 20],
+    ]);
+    expect(resolveFromSearchResponse(resp)?.channelId).toBe("UCdom000000000000000000");
+  });
+
+  test("dominant-but-weak-lead-fail: >= 40% but under 2x the runner-up → null", () => {
+    // 9/20 = 45% — but 9 < 2x6: a plurality-ish lead is NOT dominance
+    const resp = synthSearch([
+      ["UCdom000000000000000000", 9],
+      ["UCaaa0000000000000000A", 6],
+      ["UCbbb0000000000000000B", 5],
+    ]);
+    expect(resolveFromSearchResponse(resp)).toBeNull();
+  });
+
+  test("below the 40% floor → null, however weak the field", () => {
+    // 3/10 = 30% with 3 >= 2x2 — the floor still declines it
+    const resp = synthSearch([
+      ["UCdom000000000000000000", 3],
+      ["UCaaa0000000000000000A", 2],
+      ["UCbbb0000000000000000B", 2],
+      ["UCccc0000000000000000C", 2],
+      ["UCddd0000000000000000D", 1],
+    ]);
+    expect(resolveFromSearchResponse(resp)).toBeNull();
+  });
+
+  test("a 50/50 tie resolves to nothing (the runner-up equals the dominant)", () => {
+    const resp = synthSearch([
+      ["UCdom000000000000000000", 5],
+      ["UCaaa0000000000000000A", 5],
     ]);
     expect(resolveFromSearchResponse(resp)).toBeNull();
   });
@@ -277,7 +377,7 @@ describe("the cached resolver (resolveChannelFromSearch)", () => {
     expect(searchCalls().every((c) => !String(c.body?.query ?? "").startsWith("@"))).toBe(true);
   });
 
-  test("below the threshold the cached null serves — no re-search", async () => {
+  test("below both thresholds the cached null serves — no re-search", async () => {
     expect(await resolveChannelFromSearch("@lofi")).toBeNull();
     expect(await resolveChannelFromSearch("@lofi")).toBeNull();
     expect(searchCalls()).toHaveLength(1);
@@ -289,7 +389,7 @@ describe("the cached resolver (resolveChannelFromSearch)", () => {
 // ---------------------------------------------------------------------------
 
 describe("GET /api/channel/[handle] — the search-compose rung", () => {
-  test("walled browse + dominant name search → the composed page (composed: true, honest nulls, id-filtered videos)", async () => {
+  test("walled browse + dominant name search → the composed page (composed: true, watch-enriched header, id-filtered videos)", async () => {
     upstream.wall(true);
     const res = await channelRoute(
       new Request("http://localhost/api/channel/@RickAstleyYT"),
@@ -302,10 +402,14 @@ describe("GET /api/channel/[handle] — the search-compose rung", () => {
     expect(page.channel.id).toBe(RICK_ID);
     expect(page.channel.name).toBe("Rick Astley");
     expect(page.channel.handle).toBe("@RickAstleyYT");
-    expect(page.channel.avatarUrl).toContain("rick-compose-synth-avatar");
-    // the fields search cannot carry are honest nulls — never invented
-    expect(page.channel.subscriberCount).toBe(0);
-    expect(page.channel.subscriberCountText).toBeNull();
+    // WFX2-CF-2: the header is watch-enriched — the resolved channel's top
+    // video went through the unwalled watch path, whose `next` payload
+    // carries the REAL subs/avatar/verified
+    expect(page.channel.subscriberCount).toBe(4_550_000);
+    expect(page.channel.subscriberCountText).toBe("4.55M subscribers");
+    expect(page.channel.verified).toBe(true);
+    expect(page.channel.avatarUrl).toContain("rick-compose-watch-synth-avatar");
+    // the fields NO path carries stay honest nulls — never invented
     expect(page.channel.bannerUrl).toBeNull();
     expect(page.channel.description).toBeNull();
     // only the tabs the compose can actually fill
@@ -389,6 +493,73 @@ describe("GET /api/channel/[handle] — the search-compose rung", () => {
     expect(page.channel.composed).toBeUndefined();
     expect(page.channel.subscriberCountText).toBeTruthy(); // the real header data
     expect(searchCalls()).toHaveLength(0); // no compose attempt
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 2b. the watch-meta header enrichment (WFX2-CF-2)
+// ---------------------------------------------------------------------------
+
+describe("the watch-meta header enrichment (WFX2-CF-2)", () => {
+  test("the top video's watch payload enriches the header through the EXISTING watch cache family", async () => {
+    upstream.wall(true);
+    const res = await channelRoute(
+      new Request("http://localhost/api/channel/@RickAstleyYT"),
+      ctx("@RickAstleyYT")
+    );
+    const page = (await res.json()) as any;
+    // one `next` call for the resolved channel's top video — getVideoDetail
+    // riding the yt:watch:<videoId> cache key family
+    expect(nextCalls()).toHaveLength(1);
+    expect(nextCalls()[0]?.body?.videoId).toBe("rickcompose01");
+    const cachedWatch = await cachePeek<Record<string, any>>("yt:watch:rickcompose01");
+    expect(cachedWatch).not.toBeNull(); // the enrichment rode the real watch key
+    // the header carries the watch payload's REAL owner fields
+    expect(page.channel.subscriberCount).toBe(4_550_000);
+    expect(page.channel.subscriberCountText).toBe("4.55M subscribers");
+    expect(page.channel.handle).toBe("@RickAstleyYT");
+    expect(page.channel.avatarUrl).toContain("rick-compose-watch-synth-avatar");
+    expect(page.channel.verified).toBe(true);
+    // the fields no path carries stay honest — never invented
+    expect(page.channel.bannerUrl).toBeNull();
+    expect(page.channel.description).toBeNull();
+  });
+
+  test("the watch call fails → the search-carried fields + honest nulls stand (never fabricated)", async () => {
+    upstream.wall(true);
+    upstream.wallWatch(true); // the `next` endpoint 404s
+    const res = await channelRoute(
+      new Request("http://localhost/api/channel/@RickAstleyYT"),
+      ctx("@RickAstleyYT")
+    );
+    expect(res.status).toBe(200); // the composed page still serves
+    const page = (await res.json()) as any;
+    expect(page.channel.composed).toBe(true);
+    // the call was genuinely attempted (twice — the transport's built-in
+    // single retry on any error, then the honest give-up)
+    expect(nextCalls()).toHaveLength(2);
+    // honest nulls — never invented numbers
+    expect(page.channel.subscriberCount).toBe(0);
+    expect(page.channel.subscriberCountText).toBeNull();
+    // the search-carried fields survive untouched
+    expect(page.channel.avatarUrl).toContain("rick-compose-synth-avatar");
+    expect(page.channel.handle).toBe("@RickAstleyYT");
+    expect(page.channel.verified).toBe(true);
+  });
+
+  test("exact-id honesty: a watch payload owned by ANOTHER channel enriches nothing", async () => {
+    upstream.wall(true);
+    upstream.spoofWatchOwner("UCspoofed00000000000000"); // the owner browseId disagrees
+    const res = await channelRoute(
+      new Request("http://localhost/api/channel/@RickAstleyYT"),
+      ctx("@RickAstleyYT")
+    );
+    const page = (await res.json()) as any;
+    expect(page.channel.composed).toBe(true);
+    // no enrichment from a foreign owner — the honest nulls stand
+    expect(page.channel.subscriberCount).toBe(0);
+    expect(page.channel.subscriberCountText).toBeNull();
+    expect(page.channel.avatarUrl).toContain("rick-compose-synth-avatar");
   });
 });
 
@@ -546,6 +717,10 @@ describe("GET /api/search — composed pages serve the channel rows", () => {
       id: RICK_ID,
       name: "Rick Astley",
       handle: "@RickAstleyYT",
+      // WFX2-CF-2: the watch-enriched composed page serves the rows — the
+      // REAL subscriber data, not the honest-null degrade
+      subscriberCount: 4_550_000,
+      subscriberCountText: "4.55M subscribers",
     });
 
     // the real-handle query finds it too (the real-handle family store)
