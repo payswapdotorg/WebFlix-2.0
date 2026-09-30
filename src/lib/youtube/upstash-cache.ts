@@ -64,7 +64,13 @@ function envRest(): UpstashRest | null {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), REST_TIMEOUT_MS);
     try {
-      const res = await fetch(url, {
+      // 2026-09-30 integration fix (lead): the command pipeline must POST to
+      // the /pipeline endpoint — the BASE url parses the body as a SINGLE
+      // command's argv, so the nested [[...]] body errored ("unsupported
+      // arg type") and every L2 write failed silently (the lane's tests ran
+      // on the injected fake and never exercised the real endpoint shape).
+      const pipelineUrl = url.replace(/\/+$/, "") + "/pipeline";
+      const res = await fetch(pipelineUrl, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
