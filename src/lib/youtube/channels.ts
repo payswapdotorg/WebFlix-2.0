@@ -12,12 +12,32 @@
  */
 import { innertubeBrowse, innertubeSearch } from "./innertube";
 import { fetchYtInitialData } from "./ssr";
-import { cached, TTL } from "./cache";
+import { cached, cachedResilient, TTL } from "./cache";
+import { cachePeek } from "./upstash-cache";
 import { hasSession } from "./session";
-import { mapChannelHeader, mapVideos, mapShorts, walkTree, findFirst, type ChannelHeaderDTO } from "./mappers";
+import {
+  mapChannelHeader,
+  mapVideos,
+  mapShorts,
+  walkTree,
+  findFirst,
+  channelTabsFromResponse,
+  channelJoinable,
+  type ChannelHeaderDTO,
+} from "./mappers";
 import type { ChannelPageDTO } from "@/lib/types";
 
 const VIDEOS_TAB_FALLBACK_PARAM = "EgZ2aWRlb3MyBgQKAjoA";
+
+/** Normalize a handle for cache keys ("@RickAstley" | "rickastley" | "UC…"). */
+export function normalizeChannelHandle(handle: string): string {
+  return decodeURIComponent(handle).trim().toLowerCase();
+}
+
+/** The channel-page last-good cache key (the "channel family" root). */
+export function channelPageCacheKey(handle: string): string {
+  return `yt:channel:page:${normalizeChannelHandle(handle)}`;
+}
 
 export interface ChannelLookup {
   browseId: string;
@@ -114,13 +134,96 @@ export async function getChannelPage(handle: string): Promise<ChannelPageDTO | n
       subscriberCountText: header.subscriberCountText,
       bannerUrl: header.bannerUrl,
       description: header.description,
-      createdAt: null, // join date is not part of this response (about tab owns it — Wave B)
+      createdAt: null, // the About panel owns the join date (WFX2-B-S)
       isSubscribed,
       isOwner: false, // single-tenant mode: the operator's own channel is rare; not exposed here
       videoCount: parseVideoCountText(header.videoCountText) || videos.length,
     },
     videos,
     shorts,
+    // WFX2-B-S: the response's own tab list + the Join button renderer
+    tabs: channelTabsFromResponse(lookup.homeResponse),
+    joinable: channelJoinable(lookup.homeResponse),
+  };
+}
+
+/**
+ * The channel page under the cutover resilience contract (WFX2-B-S — the
+ * live production gap): the whole read (SSR @handle scrape + browse) is
+ * cached through `cachedResilient` with an unhealthy-shape predicate — the
+ * walled/failed shape is NEVER cached, a last-good page serves when the
+ * wall hits, and a cold walled read returns the honest
+ * `{page: null, walled: true}` marker for the route to degrade with
+ * (HTTP 200 + structured empty — never a naked 502).
+ */
+export interface ChannelPageResult {
+  page: ChannelPageDTO | null;
+  walled: boolean;
+}
+
+export async function getChannelPageResilient(handle: string): Promise<ChannelPageResult> {
+  return cachedResilient(
+    channelPageCacheKey(handle),
+    TTL.FEED_MS,
+    async (): Promise<ChannelPageResult> => {
+      try {
+        const page = await getChannelPage(handle);
+        if (!page) return { page: null, walled: true };
+        return { page, walled: false };
+      } catch {
+        // the walled @handle scrape throws (SSR 404 on datacenter egress) —
+        // the honest marker, cached last-good kept intact
+        return { page: null, walled: true };
+      }
+    },
+    { isEmpty: (v: unknown) => (v as ChannelPageResult | null)?.walled === true }
+  );
+}
+
+/**
+ * The channel last-good family lookup (WFX2-B-S item 14): when search
+ * upstream omits channel renderers (the wall signature — mixed searches
+ * from server egress return video renderers only), a query that matches a
+ * channel handle served through the resilient channel path resolves to
+ * that channel's LAST-GOOD page header. Exact handle match only ("@name"
+ * or bare "name" == the cached handle) — never a guessed attribution.
+ * Returns null when no last-good entry exists (the honest empty).
+ */
+export async function channelFromLastGood(query: string): Promise<ChannelLiteRow | null> {
+  const cleaned = query.trim();
+  if (!cleaned) return null;
+  const atHandle = cleaned.startsWith("@") ? cleaned : `@${cleaned}`;
+  const keys = [channelPageCacheKey(atHandle), channelPageCacheKey(cleaned)];
+  for (const key of keys) {
+    const peeked = await cachePeek<ChannelPageResult>(key);
+    if (peeked && peeked.value.page) {
+      return fromPage(peeked.value.page);
+    }
+  }
+  return null;
+}
+
+export interface ChannelLiteRow {
+  id: string;
+  handle: string;
+  name: string;
+  avatarUrl: string;
+  verified: boolean;
+  subscriberCount: number;
+  subscriberCountText: string | null;
+  description: string | null;
+}
+
+function fromPage(page: ChannelPageDTO): ChannelLiteRow {
+  return {
+    id: page.channel.id,
+    handle: page.channel.handle,
+    name: page.channel.name,
+    avatarUrl: page.channel.avatarUrl,
+    verified: page.channel.verified,
+    subscriberCount: page.channel.subscriberCount,
+    subscriberCountText: page.channel.subscriberCountText ?? null,
+    description: page.channel.description ?? null,
   };
 }
 

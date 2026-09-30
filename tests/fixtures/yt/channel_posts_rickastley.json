@@ -1,0 +1,302 @@
+{
+ "note": "sanitized real capture 2026-09-30 (Rick Astley Community/Posts tab via browse {browseId, params: EgVwb3N0c_IGBAoCSgA%3D}; first 5 posts; tracking stripped, one thumbnail kept per attachment)",
+ "contents": {
+  "twoColumnBrowseResultsRenderer": {
+   "tabs": [
+    {
+     "tabRenderer": {
+      "title": "Posts",
+      "selected": true,
+      "content": {
+       "richGridRenderer": {
+        "contents": [
+         {
+          "richItemRenderer": {
+           "content": {
+            "backstagePostRenderer": {
+             "postId": "Ugkx6HzKUems4roLJrhsxgkRwC0sz_cHiVHX",
+             "contentText": {
+              "runs": [
+               {
+                "text": "We’re excited to announce that Rick is bringing his spectacular Swinging Christmas show back to London’s iconic Royal Albert Hall on 9th December 2026! 🎄✨\n \nPre-sale begins tomorrow, Wednesday 23rd September, at 10am BST.Sign up for pre-sale access: "
+               },
+               {
+                "text": "https://gigst.rs/RASC26SignUp "
+               },
+               {
+                "text": "\n \nGeneral sale begins Friday 25th September at 10am BST.\n\nLet’s swing into Christmas together!\n\nTeam Rick"
+               }
+              ]
+             },
+             "authorText": {
+              "runs": [
+               {
+                "text": "Rick Astley"
+               }
+              ]
+             },
+             "voteCount": {
+              "accessibility": {
+               "accessibilityData": {
+                "label": "4.4K likes"
+               }
+              }
+             },
+             "actionButtons": {
+              "commentActionButtonsRenderer": {
+               "replyButton": {
+                "buttonRenderer": {
+                 "text": {
+                  "accessibility": {
+                   "accessibilityData": {
+                    "label": "129 comments"
+                   }
+                  },
+                  "simpleText": "129"
+                 }
+                }
+               }
+              }
+             },
+             "backstageAttachment": {
+              "backstageImageRenderer": {
+               "image": {
+                "thumbnails": [
+                 {
+                  "url": "https://yt3.ggpht.com/fguRbd_ZoAiK9tpgAcgOXqMDRtt4mpbAB-ftzqh4kS01g4KnHANFrCVqsNpu8R4MBpgYDr3rzAn6=s288-c-fcrop64=1,00000000ffffffff-rw-nd-v1",
+                  "width": 288,
+                  "height": 288
+                 }
+                ]
+               }
+              }
+             }
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "backstagePostRenderer": {
+             "postId": "UgkxufAVto9bwy5lOS5oaHC5mqSKYVowzPpI",
+             "contentText": {
+              "runs": [
+               {
+                "text": "38 years on, and the music video still hits 🕺 - Team Rick"
+               }
+              ]
+             },
+             "authorText": {
+              "runs": [
+               {
+                "text": "Rick Astley"
+               }
+              ]
+             },
+             "voteCount": {
+              "accessibility": {
+               "accessibilityData": {
+                "label": "219 likes"
+               }
+              }
+             },
+             "actionButtons": {
+              "commentActionButtonsRenderer": {
+               "replyButton": {
+                "buttonRenderer": {
+                 "text": {
+                  "accessibility": {
+                   "accessibilityData": {
+                    "label": "10 comments"
+                   }
+                  },
+                  "simpleText": "10"
+                 }
+                }
+               }
+              }
+             }
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "backstagePostRenderer": {
+             "postId": "UgkxOZefqLHjXjtTyCYepL11ELz6kSlfg1I1",
+             "contentText": {
+              "runs": [
+               {
+                "text": "Valencia 💃 Rick will be coming to @far_valencia on the 16th of July 2026. Tickets go on sale Thursday 18th December at 12:00 PM CET - Team Rick"
+               }
+              ]
+             },
+             "authorText": {
+              "runs": [
+               {
+                "text": "Rick Astley"
+               }
+              ]
+             },
+             "voteCount": {
+              "accessibility": {
+               "accessibilityData": {
+                "label": "1.7K likes"
+               }
+              }
+             },
+             "actionButtons": {
+              "commentActionButtonsRenderer": {
+               "replyButton": {
+                "buttonRenderer": {
+                 "text": {
+                  "accessibility": {
+                   "accessibilityData": {
+                    "label": "97 comments"
+                   }
+                  },
+                  "simpleText": "97"
+                 }
+                }
+               }
+              }
+             },
+             "backstageAttachment": {
+              "backstageImageRenderer": {
+               "image": {
+                "thumbnails": [
+                 {
+                  "url": "https://yt3.ggpht.com/WU4GyBaChfxlH9PuIxQKz-aa-0l-gArC2gvC-Hsj_ayj9Pl5Ji7657tHYoYMDl8EHl5lDKrtUY_51mk=s288-c-fcrop64=1,00000000ffffcccc-rw-nd-v1",
+                  "width": 288,
+                  "height": 288
+                 }
+                ]
+               }
+              }
+             }
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "backstagePostRenderer": {
+             "postId": "UgkxROz37qu6JZHHxEIEFpktfwje730One1P",
+             "contentText": {
+              "runs": [
+               {
+                "text": "Keep It Turned On was released 24 years ago today 💿 What's your favourite track from the album? - Team Rick"
+               }
+              ]
+             },
+             "authorText": {
+              "runs": [
+               {
+                "text": "Rick Astley"
+               }
+              ]
+             },
+             "voteCount": {
+              "accessibility": {
+               "accessibilityData": {
+                "label": "2.2K likes"
+               }
+              }
+             },
+             "actionButtons": {
+              "commentActionButtonsRenderer": {
+               "replyButton": {
+                "buttonRenderer": {
+                 "text": {
+                  "accessibility": {
+                   "accessibilityData": {
+                    "label": "86 comments"
+                   }
+                  },
+                  "simpleText": "86"
+                 }
+                }
+               }
+              }
+             },
+             "backstageAttachment": {
+              "backstageImageRenderer": {
+               "image": {
+                "thumbnails": [
+                 {
+                  "url": "https://yt3.ggpht.com/nW-k3FNoVSv62ePx-cei7tOli06H7aww-gV3-1NWKh3IszsnQEiiHwyIW_OaY4FLQgPWhtVREX5p2Oc=s288-c-fcrop64=1,00930000ff6cffff-rw-nd-v1",
+                  "width": 288,
+                  "height": 288
+                 }
+                ]
+               }
+              }
+             }
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "backstagePostRenderer": {
+             "postId": "Ugkxn2vT6vGpSE4Y43kx-Iaj8trQIVSQh52m",
+             "contentText": {
+              "runs": [
+               {
+                "text": "‪@CarFestofficial‬"
+               },
+               {
+                "text": " 🙌 Rick is back again to perform in 2026! What a great cause and what a lineup!! Tickets on sale Wednesday at 8am - Team Rick\n"
+               },
+               {
+                "text": "https://carfest.org/"
+               }
+              ]
+             },
+             "authorText": {
+              "runs": [
+               {
+                "text": "Rick Astley"
+               }
+              ]
+             },
+             "voteCount": {
+              "accessibility": {
+               "accessibilityData": {
+                "label": "949 likes"
+               }
+              }
+             },
+             "actionButtons": {
+              "commentActionButtonsRenderer": {
+               "replyButton": {
+                "buttonRenderer": {
+                 "text": {
+                  "accessibility": {
+                   "accessibilityData": {
+                    "label": "23 comments"
+                   }
+                  },
+                  "simpleText": "23"
+                 }
+                }
+               }
+              }
+             }
+            }
+           }
+          }
+         }
+        ]
+       }
+      }
+     }
+    }
+   ]
+  }
+ }
+}

@@ -1,10 +1,14 @@
 "use client";
 
 /**
- * WFX2-W comments section — count header + sort control (Top comments by
- * likes / Newest first), composer with optimistic insert, rows, reply
- * threads, "Show more" server cursor pagination (10/page), honest empty
- * state.
+ * WFX2 comments section — count header + sort control (Top comments /
+ * Newest first — wired to the live continuation sort tokens), composer with
+ * optimistic insert, rows, reply threads, "Show more" server cursor
+ * pagination, honest empty state.
+ *
+ * WFX2-B-S: `operatorSession` (from /api/watch/session) drives the
+ * signed-out composer state ("Comment..." box → "Sign in to continue to
+ * comment") and the row-level write gates in public mode.
  */
 import { useCallback, useEffect, useState } from "react";
 import { ArrowDownUp, MessageSquare } from "lucide-react";
@@ -32,11 +36,14 @@ export function CommentsSection({
   viewer,
   viewerIsCreator,
   creatorName,
+  operatorSession = true,
 }: {
   videoId: string;
   viewer: ViewerDto;
   viewerIsCreator: boolean;
   creatorName: string;
+  /** false in public mode → YouTube-parity signed-out states */
+  operatorSession?: boolean;
 }) {
   const [items, setItems] = useState<CommentDto[] | null>(null);
   const [total, setTotal] = useState(0);
@@ -217,6 +224,7 @@ export function CommentsSection({
         <CommentComposer
           videoId={videoId}
           viewer={viewer}
+          operatorSession={operatorSession}
           onSubmitted={(c) => {
             // optimistic: appears instantly; the server row IS the row
             setItems((prev) => [c, ...(prev ?? [])]);
@@ -254,6 +262,7 @@ export function CommentsSection({
               viewer={viewer}
               viewerIsCreator={viewerIsCreator}
               creatorName={creatorName}
+              operatorSession={operatorSession}
               depth={0}
               threadReplies={threads[c.id]?.replies}
               threadCursor={threads[c.id]?.cursor}

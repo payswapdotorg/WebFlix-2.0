@@ -15,7 +15,12 @@ import {
   brokerAction,
   type BrokerActionSuccess,
 } from "@/lib/broker";
-import { subscribeChannel, getSubscribedState, directAuthConfigured } from "@/lib/youtube-direct";
+import {
+  createComment,
+  subscribeChannel,
+  getSubscribedState,
+  directAuthConfigured,
+} from "@/lib/youtube-direct";
 
 export { BROKER_OFFLINE_MESSAGE };
 
@@ -257,13 +262,14 @@ export interface CommentViewer {
   avatarUrl: string;
 }
 
-/** Synthesize the CommentDto the composer UI expects from a broker post. */
+/** Synthesize the CommentDto the composer UI expects from a broker/direct post. */
 function synthComment(
   videoId: string,
   text: string,
   viewer: CommentViewer,
   parentId: string | null,
-  verified: boolean
+  /** the execution path honestly reported by the tier (ui | fetch | none | direct) */
+  path: "ui" | "fetch" | "none" | "direct" = "ui"
 ): CommentDto & { ok: true; effect: string; path?: string } {
   const author: CommentAuthorDto = {
     id: viewer.id,
@@ -290,19 +296,26 @@ function synthComment(
     totalReplyCount: 0,
     ok: true,
     effect: parentId ? "comment-replied" : "comment-created",
-    path: verified ? "ui" : undefined,
+    path,
   };
 }
 
-/** Create a comment (broker comment-create). */
+/** Create a comment — direct-first (InnerTube create_comment + SAPISIDHASH,
+ * the subscribe-lane pattern), broker fallback (the DOM UI path). */
 export async function proxyCommentCreate(
   videoId: string,
   text: string,
   viewer: CommentViewer
 ): Promise<CommentDto & { ok: true; effect: string; path?: string }> {
+  if (directAuthConfigured()) {
+    const direct = await createComment(videoId, text);
+    if (direct.ok) {
+      return synthComment(videoId, text, viewer, null, "direct");
+    }
+  }
   const r = await brokerAction("comment-create", { videoId }, { text });
   if (!ok(r)) throw fail(r);
-  return synthComment(videoId, text, viewer, null, r.verified !== false);
+  return synthComment(videoId, text, viewer, null, r.path ?? "ui");
 }
 
 /** Reply to a comment (broker comment-reply; UI path needs parent text). */
@@ -319,7 +332,7 @@ export async function proxyCommentReply(
     { text, ...(parentText ? { commentText: parentText } : {}) }
   );
   if (!ok(r)) throw fail(r);
-  return synthComment(videoId, text, viewer, parentId, r.verified !== false);
+  return synthComment(videoId, text, viewer, parentId, r.path ?? "ui");
 }
 
 export interface CommentLikeRequest {
@@ -472,5 +485,147 @@ export async function proxyNotInterested(videoId: string): Promise<NotInterested
     hidden: true,
     path: r.path,
     ...(note ? { note } : {}),
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* WFX2-B-S comment writes (broker ⋮-menu DOM paths)                   */
+/* ------------------------------------------------------------------ */
+
+/** The comment's identity the broker needs to locate it in the DOM. */
+export interface CommentLocator {
+  videoId: string;
+  /** the comment's CURRENT text — the DOM locator for the ⋮ menu path */
+  commentText?: string;
+}
+
+export interface CommentEditResult {
+  ok: true;
+  effect: string;
+  body: string;
+  edited: true;
+  path?: string;
+}
+
+/** Edit own comment — broker comment-edit (⋮ → Edit → inline editor). */
+export async function proxyCommentEdit(
+  commentId: string,
+  text: string,
+  locator: CommentLocator
+): Promise<CommentEditResult> {
+  const r = await brokerAction(
+    "comment-edit",
+    { commentId, videoId: locator.videoId },
+    { text, ...(locator.commentText ? { commentText: locator.commentText } : {}) }
+  );
+  if (!ok(r)) throw fail(r);
+  return { ok: true, effect: "comment-edited", body: text, edited: true, path: r.path };
+}
+
+export interface CommentDeleteResult {
+  ok: true;
+  effect: string;
+  deleted: true;
+  path?: string;
+}
+
+/** Delete own comment — broker comment-delete (⋮ → Delete → confirm). */
+export async function proxyCommentDelete(
+  commentId: string,
+  locator: CommentLocator
+): Promise<CommentDeleteResult> {
+  const r = await brokerAction(
+    "comment-delete",
+    { commentId, videoId: locator.videoId },
+    locator.commentText ? { commentText: locator.commentText } : {}
+  );
+  if (!ok(r)) throw fail(r);
+  return { ok: true, effect: "comment-deleted", deleted: true, path: r.path };
+}
+
+export interface CommentHeartResult {
+  ok: true;
+  effect: string;
+  heartedByCreator: boolean;
+  path?: string;
+}
+
+/** Creator heart toggle — broker comment-heart (⋮ → Heart / Remove heart). */
+export async function proxyCommentHeart(
+  commentId: string,
+  locator: CommentLocator
+): Promise<CommentHeartResult> {
+  const r = await brokerAction(
+    "comment-heart",
+    { commentId, videoId: locator.videoId },
+    locator.commentText ? { commentText: locator.commentText } : {}
+  );
+  if (!ok(r)) throw fail(r);
+  const hearted =
+    typeof r.detail?.["hearted"] === "boolean" ? r.detail.hearted : true;
+  return {
+    ok: true,
+    effect: hearted ? "comment-hearted" : "comment-heart-removed",
+    heartedByCreator: hearted,
+    path: r.path,
+  };
+}
+
+export interface CommentPinResult {
+  ok: true;
+  effect: string;
+  pinned: boolean;
+  path?: string;
+}
+
+/** Creator pin toggle — broker comment-pin (⋮ → Pin / Unpin). */
+export async function proxyCommentPin(
+  commentId: string,
+  locator: CommentLocator
+): Promise<CommentPinResult> {
+  const r = await brokerAction(
+    "comment-pin",
+    { commentId, videoId: locator.videoId },
+    locator.commentText ? { commentText: locator.commentText } : {}
+  );
+  if (!ok(r)) throw fail(r);
+  const pinned = typeof r.detail?.["pinned"] === "boolean" ? r.detail.pinned : true;
+  return {
+    ok: true,
+    effect: pinned ? "comment-pinned" : "comment-unpinned",
+    pinned,
+    path: r.path,
+  };
+}
+
+export interface CommentReportResult {
+  ok: true;
+  effect: string;
+  reported: true;
+  reason?: string;
+  path?: string;
+}
+
+/** Report a comment — broker comment-report (⋮ → Report → reasons dialog). */
+export async function proxyCommentReport(
+  commentId: string,
+  locator: CommentLocator & { reason?: string }
+): Promise<CommentReportResult> {
+  const r = await brokerAction(
+    "comment-report",
+    { commentId, videoId: locator.videoId },
+    {
+      ...(locator.commentText ? { commentText: locator.commentText } : {}),
+      ...(locator.reason ? { reason: locator.reason } : {}),
+    }
+  );
+  if (!ok(r)) throw fail(r);
+  const reason = typeof r.detail?.["reason"] === "string" ? r.detail.reason : undefined;
+  return {
+    ok: true,
+    effect: "comment-reported",
+    reported: true,
+    ...(reason ? { reason } : {}),
+    path: r.path,
   };
 }

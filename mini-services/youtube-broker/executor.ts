@@ -286,6 +286,179 @@ return {ok:res.ok,verified:false,path:'fetch',status:res.status,body:res.text,no
 `);
 }
 
+/* ------------------------------------------------------------------ */
+/* WFX2-B-S comment writes — ⋮ menu DOM paths (edit/delete/heart/pin/report) */
+/* ------------------------------------------------------------------ */
+
+/** Shared locator + ⋮ menu opener for the comment-menu actions.
+ * Returns the script prologue that binds `comment` (the ytd-comment-renderer)
+ * or an honest failure object the caller script returns directly. */
+const FIND_COMMENT_BY_TEXT = (commentText: string | null) => `
+const parentNeedle=${j(commentText ? commentText.slice(0, 60) : null)};
+if(!parentNeedle) return {ok:false,error:'commentText-required',path:'ui',note:'the menu actions locate the comment by text; pass payload.commentText'};
+const findComment=()=>qa("ytd-comment-renderer").find(el=>{
+  const t=textOf(el.querySelector("#content-text"));
+  return t&&(t.startsWith(parentNeedle)||parentNeedle.startsWith(t.slice(0,parentNeedle.length)));
+});
+const commentsAnchor=q("#comments, ytd-comments");
+if(commentsAnchor) commentsAnchor.scrollIntoView({block:'start'});
+const comment=await until(findComment,15000);
+if(!comment) return {ok:false,error:'comment-not-in-dom',path:'ui',dom:{needle:parentNeedle}};
+const thread=comment.closest("ytd-comment-thread-renderer")||comment;
+const openMenu=async()=>{
+  const menuBtn=comment.querySelector("#action-buttons ytd-menu-renderer yt-icon-button#button button, #action-buttons ytd-menu-renderer button, ytd-menu-renderer#menu yt-icon-button#button button, #menu button[aria-label*='more' i], #menu button[aria-label*='actions' i]")||comment.querySelector("#action-buttons button[aria-label*='more' i]");
+  if(!menuBtn) return {ok:false,error:'comment-menu-button-not-found',path:'ui',dom:{actions:comment.querySelector("#action-buttons")?1:0}};
+  menuBtn.click();
+  const item=await until(()=>qa("ytd-menu-service-item-renderer, yt-list-item-view-model, [role='menuitem'], tp-yt-paper-item").find(el=>el.isConnected),6000);
+  if(!item) return {ok:false,error:'comment-menu-did-not-open',path:'ui'};
+  return null;
+};
+const menuItem=async(labelRe)=>{
+  return await until(()=>qa("ytd-menu-service-item-renderer, yt-list-item-view-model, [role='menuitem'], tp-yt-paper-item").find(el=>labelRe.test(textOf(el))),6000);
+};
+const closeMenus=()=>{document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));};
+const menuItemsText=()=>qa("ytd-menu-service-item-renderer, yt-list-item-view-model, [role='menuitem']").map(textOf).filter(Boolean).slice(0,14);`;
+
+/** comment-edit — ⋮ → Edit → the inline editor → replace text → save. */
+function commentEditScript(newText: string, commentText: string | null): string {
+  return script(`
+${FIND_COMMENT_BY_TEXT(commentText)}
+const menuErr=await openMenu();
+if(menuErr) return menuErr;
+const editItem=await menuItem(/^edit$/i);
+if(!editItem){closeMenus();return {ok:false,error:'edit-menu-item-not-found',path:'ui',dom:{menu:menuItemsText()},note:'Edit only appears on the operator own comments'};}
+editItem.click();
+// the inline editable composer appears INSIDE the comment row (contenteditable)
+const editor=await until(()=>thread.querySelector("#contenteditable-root"),8000);
+if(!editor){closeMenus();return {ok:false,error:'edit-editor-not-found',path:'ui'};}
+editor.focus();
+document.execCommand('selectAll',false,null);
+document.execCommand('insertText',false,${j(newText)});
+// the edit bar's save button (check icon, same #submit-button family as the composer)
+const submit=await until(()=>{
+  const b=thread.querySelector("#submit-button button, #submit-button yt-button-shape button, #submit-button a");
+  if(!b) return null;
+  if(b.hasAttribute('disabled')) return null;
+  return b;
+},8000);
+if(!submit){closeMenus();return {ok:false,error:'edit-save-not-ready',path:'ui',dom:{editorText:textOf(editor).slice(0,80)}};}
+submit.click();
+const want=${j(newText.slice(0, 60))};
+const done=await until(()=>{
+  const el=thread.querySelector("ytd-comment-renderer #content-text, #content-text");
+  const t=el?textOf(el):null;
+  return t&&t.includes(want)?t:null;
+},15000);
+const editorClosed=!thread.querySelector("#contenteditable-root");
+if(done) return {ok:true,verified:true,path:'ui'};
+if(editorClosed) return {ok:true,verified:false,path:'ui',detail:{note:'edit submitted; new text not yet visible in DOM'}};
+return {ok:false,verified:false,error:'edit-text-unchanged',path:'ui'};
+`);
+}
+
+/** comment-delete — ⋮ → Delete → the confirm dialog. */
+function commentDeleteScript(commentText: string | null): string {
+  return script(`
+${FIND_COMMENT_BY_TEXT(commentText)}
+const menuErr=await openMenu();
+if(menuErr) return menuErr;
+const deleteItem=await menuItem(/^delete$/i);
+if(!deleteItem){closeMenus();return {ok:false,error:'delete-menu-item-not-found',path:'ui',dom:{menu:menuItemsText()}};}
+deleteItem.click();
+const confirmBtn=await until(()=>q(${CONFIRM_SEL}),6000);
+if(!confirmBtn){closeMenus();return {ok:false,error:'delete-confirm-not-found',path:'ui',dom:{dialogText:(q("yt-confirm-dialog-renderer, tp-yt-paper-dialog")?.textContent||'').slice(0,120)}};}
+confirmBtn.click();
+const gone=await until(()=>!document.contains(comment),10000);
+if(gone) return {ok:true,verified:true,path:'ui'};
+const toast=!!q("yt-notification-action-renderer, #toast, tp-yt-paper-toast");
+if(toast) return {ok:true,verified:false,path:'ui',detail:{note:'delete confirmed; row removal pending virtualization'}};
+return {ok:false,verified:false,error:'comment-still-present',path:'ui'};
+`);
+}
+
+/** comment-heart — ⋮ → Heart / Remove heart (creator tools). */
+function commentHeartScript(commentText: string | null): string {
+  return script(`
+${FIND_COMMENT_BY_TEXT(commentText)}
+const menuErr=await openMenu();
+if(menuErr) return menuErr;
+const heartItem=await menuItem(/^(remove )?heart$/i);
+if(!heartItem){closeMenus();return {ok:false,error:'heart-menu-item-not-found',path:'ui',dom:{menu:menuItemsText()},note:'Heart only appears for the video channel owner (creator mode)'};}
+const wasHearted=/^remove heart$/i.test(textOf(heartItem));
+heartItem.click();
+const heartVisible=()=>!!comment.querySelector("ytd-comment-engagement-bar, #creator-heart, [aria-label*='hearted' i], yt-icon-shape .hearted, #hearted-button[aria-pressed='true']");
+const nowHearted=await until(()=>wasHearted?!heartVisible():heartVisible(),8000);
+closeMenus();
+return {ok:nowHearted,verified:nowHearted,hearted:!wasHearted,path:'ui',error:nowHearted?undefined:'heart-state-unchanged'};
+`);
+}
+
+/** comment-pin — ⋮ → Pin / Unpin (creator tools, top-level comments only). */
+function commentPinScript(commentText: string | null): string {
+  return script(`
+${FIND_COMMENT_BY_TEXT(commentText)}
+const menuErr=await openMenu();
+if(menuErr) return menuErr;
+const pinItem=await menuItem(/^(un)?pin$/i);
+if(!pinItem){closeMenus();return {ok:false,error:'pin-menu-item-not-found',path:'ui',dom:{menu:menuItemsText()},note:'Pin only appears for the video channel owner (creator mode) and on top-level comments'};}
+const wasPinned=/^unpin$/i.test(textOf(pinItem));
+pinItem.click();
+const pinVisible=()=>{const label=comment.querySelector("ytd-pinned-comment-header-renderer, #pinned-comment-header-renderer, [class*='pinned']");return !!label||/pinned/i.test(comment.textContent||'');};
+const nowPinned=await until(()=>wasPinned?!pinVisible():pinVisible(),8000);
+closeMenus();
+return {ok:nowPinned,verified:nowPinned,pinned:!wasPinned,path:'ui',error:nowPinned?undefined:'pin-state-unchanged'};
+`);
+}
+
+/** comment-report — ⋮ → Report → the report dialog (reason rows) → submit. */
+function commentReportScript(commentText: string | null, reason: string | null): string {
+  const wantReason = reason ? reason.toLowerCase().slice(0, 60) : null;
+  return script(`
+${FIND_COMMENT_BY_TEXT(commentText)}
+const menuErr=await openMenu();
+if(menuErr) return menuErr;
+const reportItem=await menuItem(/^report$/i);
+if(!reportItem){closeMenus();return {ok:false,error:'report-menu-item-not-found',path:'ui',dom:{menu:menuItemsText()}};}
+reportItem.click();
+const dialog=await until(()=>q("yt-report-form-modal-renderer, ytd-report-form-modal-renderer, tp-yt-paper-dialog, ytd-dialog-renderer, dialog"),8000);
+if(!dialog){closeMenus();return {ok:false,error:'report-dialog-not-found',path:'ui'};}
+const reasons=()=>qa("yt-radio-button-renderer, tp-yt-paper-radio-button, [role='radio'], [role='menuitemradio'], yt-formatted-string").map(el=>textOf(el)).filter(t=>t&&t.length>3&&t.length<80);
+const reasonRows=()=>qa("yt-radio-button-renderer, tp-yt-paper-radio-button, [role='radio']").filter(el=>textOf(el).length>3);
+const want=${j(wantReason)};
+let row=want?await until(()=>reasonRows().find(el=>norm(textOf(el)).includes(norm(want))),4000):null;
+if(!row){row=await until(()=>reasonRows()[0]||null,4000);}
+if(!row){closeMenus();return {ok:false,error:'report-reason-rows-not-found',path:'ui',dom:{reasons:reasons().slice(0,12)}};}
+row.click();
+await S(300);
+// the dialog's submit control (REPORT / NEXT when sub-reasons follow)
+const submit=await until(()=>{
+  const btns=qa("button, yt-button-shape button").filter(b=>{
+    const t=textOf(b);
+    return /^(report|next|submit)$/i.test(t)&&!b.hasAttribute('disabled');
+  });
+  return btns[0]||null;
+},6000);
+if(!submit){closeMenus();return {ok:false,error:'report-submit-not-found',path:'ui'};}
+submit.click();
+// a NEXT step leads to sub-reasons — submit through them
+for(let step=0;step<2;step++){
+  const sub=await until(()=>reasonRows()[0]||null,3000).catch(()=>null);
+  const dialogStill=!!q("yt-report-form-modal-renderer, ytd-report-form-modal-renderer, tp-yt-paper-dialog");
+  if(!dialogStill) break;
+  if(sub){
+    sub.click();
+    await S(300);
+    const s2=await until(()=>{const b=qa("button, yt-button-shape button").filter(x=>/^(report|submit)$/i.test(textOf(x))&&!x.hasAttribute('disabled'))[0];return b||null;},4000);
+    if(s2) s2.click();
+  }
+}
+const closed=await until(()=>!q("yt-report-form-modal-renderer, ytd-report-form-modal-renderer, tp-yt-paper-dialog"),8000);
+const toast=!!q("yt-notification-action-renderer, #toast, tp-yt-paper-toast");
+if(closed||toast) return {ok:true,verified:!!closed,path:'ui',detail:{reason:textOf(row).slice(0,60),toast}};
+return {ok:false,verified:false,error:'report-dialog-still-open',path:'ui'};
+`);
+}
+
 /** watch-later / playlist-add — watch page Save dialog. */
 function playlistScript(opts: {
   watchLater: boolean;
@@ -584,6 +757,16 @@ export function requiredUrl(req: BrokerActionRequest): string | null {
         return `https://www.youtube.com/watch?v=${payload?.videoId ?? target.videoId}`;
       }
       return null;
+    // WFX2-B-S comment writes — same watch-page surface
+    case "comment-edit":
+    case "comment-delete":
+    case "comment-heart":
+    case "comment-pin":
+    case "comment-report":
+      if (payload?.videoId || target.videoId) {
+        return `https://www.youtube.com/watch?v=${payload?.videoId ?? target.videoId}`;
+      }
+      return null;
     case "subscribe":
     case "unsubscribe":
     case "bell":
@@ -637,6 +820,32 @@ export function buildScript(req: BrokerActionRequest): { script: string; timeout
     case "comment-like":
       return {
         script: commentLikeScript(payload?.commentText ?? null, target.commentId!, mode ?? "set"),
+        timeoutMs: 45000,
+      };
+    // WFX2-B-S comment writes (⋮ menu DOM paths)
+    case "comment-edit":
+      return {
+        script: commentEditScript(payload?.text ?? "", payload?.commentText ?? null),
+        timeoutMs: 45000,
+      };
+    case "comment-delete":
+      return {
+        script: commentDeleteScript(payload?.commentText ?? null),
+        timeoutMs: 45000,
+      };
+    case "comment-heart":
+      return {
+        script: commentHeartScript(payload?.commentText ?? null),
+        timeoutMs: 45000,
+      };
+    case "comment-pin":
+      return {
+        script: commentPinScript(payload?.commentText ?? null),
+        timeoutMs: 45000,
+      };
+    case "comment-report":
+      return {
+        script: commentReportScript(payload?.commentText ?? null, payload?.reason ?? null),
         timeoutMs: 45000,
       };
     case "playlist-add":

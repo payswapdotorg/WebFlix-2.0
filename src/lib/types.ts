@@ -127,6 +127,70 @@ export type ChannelPageDTO = {
   };
   videos: VideoDTO[];
   shorts: VideoDTO[];
+  /** WFX2-B-S (additive): the response's own tab availability */
+  tabs?: ChannelTabId[];
+  /** WFX2-B-S (additive): memberships are offered (the Join button renderer) */
+  joinable?: boolean;
+  /** WFX2-B-S (additive): channel data walled upstream → last-good may still serve */
+  walled?: boolean;
+  /** WFX2-B-S (additive): the honest-degrade explanation (walled state) */
+  note?: string;
+};
+
+/** The channel page tabs (YouTube's own tab family). */
+export type ChannelTabId =
+  | "home"
+  | "videos"
+  | "shorts"
+  | "live"
+  | "playlists"
+  | "community"
+  | "about";
+
+/** One channel playlist (the Playlists tab's lockup view models). */
+export type ChannelPlaylistDTO = {
+  id: string;
+  title: string;
+  /** "3 videos" badge text, parsed to a count when possible */
+  videoCount: number;
+  videoCountText: string | null;
+  thumbnailUrl: string | null;
+};
+
+/** One community post (the Community/Posts tab's backstagePostRenderer). */
+export type CommunityPostDTO = {
+  id: string;
+  text: string;
+  authorName: string | null;
+  publishedText: string | null;
+  likesText: string | null;
+  replyCountText: string | null;
+  imageUrl: string | null;
+};
+
+/** The About panel (aboutChannelViewModel from the engagement-panel continuation). */
+export type ChannelAboutDTO = {
+  description: string | null;
+  joinedDateText: string | null;
+  viewCountText: string | null;
+  subscriberCountText: string | null;
+  videoCountText: string | null;
+  country: string | null;
+  links: { title: string; url: string | null }[];
+};
+
+/** The per-tab payload (lazy-loaded per tab switch). */
+export type ChannelTabDTO = {
+  tab: ChannelTabId;
+  videos?: VideoDTO[];
+  shorts?: VideoDTO[];
+  playlists?: ChannelPlaylistDTO[];
+  posts?: CommunityPostDTO[];
+  about?: ChannelAboutDTO;
+  /** memberships (Join) info when the tab surface carries it */
+  joinable?: boolean;
+  /** honest degrade: upstream walled and no last-good */
+  walled?: boolean;
 };
 
 export type WatchPageDTO = {

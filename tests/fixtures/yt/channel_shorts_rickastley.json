@@ -1,0 +1,141 @@
+{
+ "note": "sanitized real capture 2026-09-30 (Rick Astley Shorts tab; first 12 shortsLockupViewModels; tracking stripped)",
+ "contents": {
+  "twoColumnBrowseResultsRenderer": {
+   "tabs": [
+    {
+     "tabRenderer": {
+      "title": "Shorts",
+      "selected": true,
+      "content": {
+       "richGridRenderer": {
+        "contents": [
+         {
+          "richItemRenderer": {
+           "content": {
+            "shortsLockupViewModel": {
+             "entityId": "shorts-shelf-item-E_MGy41IYVw",
+             "accessibilityText": "38 years on, and the music video still hits 🕺 # #rickastley #80smusic, 34 thousand views - play Short"
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "shortsLockupViewModel": {
+             "entityId": "shorts-shelf-item-ihRdK3x3cUY",
+             "accessibilityText": "A message from Rick ♥️ #rickastley, 59 thousand views - play Short"
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "shortsLockupViewModel": {
+             "entityId": "shorts-shelf-item-JjI4o2w6D5A",
+             "accessibilityText": "We had a fantastic time in Cologne last night. Thanks for having us! ♥️🇩🇪, 601 thousand views - play Short"
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "shortsLockupViewModel": {
+             "entityId": "shorts-shelf-item-GdbjNGtWPe4",
+             "accessibilityText": "39 years of Never Gonna Give You Up!🕺Next year it’s the big 4-0… how should we celebrate? Team Rick, 94 thousand views "
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "shortsLockupViewModel": {
+             "entityId": "shorts-shelf-item-YJi5uH8YHG8",
+             "accessibilityText": "Copenhagen, you were amazing. Tak 🇩🇰♥️ #rickastley #tivoligardens, 29 thousand views - play Short"
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "shortsLockupViewModel": {
+             "entityId": "shorts-shelf-item-WmXE7IfqXQ8",
+             "accessibilityText": "Fly Me To The Moon 🌙 #rickastley, 69 thousand views - play Short"
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "shortsLockupViewModel": {
+             "entityId": "shorts-shelf-item-S069PVmKXZ4",
+             "accessibilityText": "Last but not least… Angels on My Side ♥️ watch and stream now., 65 thousand views - play Short"
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "shortsLockupViewModel": {
+             "entityId": "shorts-shelf-item-jbHtuMS-7m0",
+             "accessibilityText": "We’re back with another one! Full performance of ‘Dance’ from The O2 is out now. 🕺#rickastley, 74 thousand views - play"
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "shortsLockupViewModel": {
+             "entityId": "shorts-shelf-item-QVpvmDYrnPo",
+             "accessibilityText": "OMG Denmark ! What a night! I would have signed everything if I could have. 🙏❤️😎 #rickastley, 44 thousand views - play"
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "shortsLockupViewModel": {
+             "entityId": "shorts-shelf-item-qB6u-nqQ67w",
+             "accessibilityText": "In 2016, Rick went live talking through his new album ‘50’. 10 years later, he’s doing it again 👀, 54 thousand views - "
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "shortsLockupViewModel": {
+             "entityId": "shorts-shelf-item-Jtnz8GsmWCI",
+             "accessibilityText": "‘Keep Singing’ filmed live from The O2 ♥️First one from a very special night. #rickastley, 51 thousand views - play Shor"
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "shortsLockupViewModel": {
+             "entityId": "shorts-shelf-item-5E1MOlBDWgQ",
+             "accessibilityText": "Summer shows kicked off this week in Sweden and Denmark!! 🇸🇪🇩🇰, 97 thousand views - play Short"
+            }
+           }
+          }
+         }
+        ]
+       }
+      }
+     }
+    }
+   ]
+  }
+ }
+}

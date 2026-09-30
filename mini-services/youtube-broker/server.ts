@@ -75,12 +75,23 @@ export function validateActionRequest(body: unknown): { error: string } | { req:
     "watch-later",
     "not-interested",
   ];
+  const commentMenuKinds: readonly string[] = [
+    "comment-edit",
+    "comment-delete",
+    "comment-heart",
+    "comment-pin",
+    "comment-report",
+  ];
   const errs = [
     videoKinds.includes(kind) ? need("videoId", "videoId") : null,
     kind === "subscribe" || kind === "unsubscribe" || kind === "bell"
       ? need("channelId", "channelId")
       : null,
     kind === "comment-reply" || kind === "comment-like" ? need("commentId", "commentId") : null,
+    commentMenuKinds.includes(kind) ? need("commentId", "commentId") : null,
+    commentMenuKinds.includes(kind) && !(req.target.videoId || req.payload?.videoId)
+      ? `${kind} requires target.videoId or payload.videoId (the watch page for the DOM path)`
+      : null,
     kind === "playlist-add" ? need("playlistId", "playlistId") : null,
   ].filter(Boolean);
   if (errs.length) return { error: errs[0] as string };
@@ -90,6 +101,9 @@ export function validateActionRequest(body: unknown): { error: string } | { req:
   }
   if (kind === "comment-reply" && !req.payload?.text) {
     return { error: "comment-reply requires payload.text" };
+  }
+  if (kind === "comment-edit" && !req.payload?.text) {
+    return { error: "comment-edit requires payload.text (the new body)" };
   }
   if (kind === "bell") {
     const pref = (req.payload?.pref ?? "").toLowerCase();

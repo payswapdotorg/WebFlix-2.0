@@ -1,0 +1,272 @@
+{
+ "note": "sanitized real capture 2026-09-30 (About panel: the channel home response description-…more engagement panel carries a continuation token; browse {continuation} returns aboutChannelViewModel — full stats + links; redirect urls de-tokenized to their q= target)",
+ "onResponseReceivedEndpoints": [
+  {
+   "appendContinuationItemsAction": {
+    "continuationItems": [
+     {
+      "richItemRenderer": {
+       "content": {
+        "sectionListRenderer": {
+         "contents": [
+          {
+           "itemSectionRenderer": {
+            "contents": [
+             {
+              "aboutChannelRenderer": {
+               "aboutChannelViewModel": {
+                "description": "Rick Astley’s Swinging Christmas 2026 🎄 Dec 9th, Royal Albert Hall. SOLD OUT ❤️\n",
+                "country": "United Kingdom",
+                "subscriberCountText": "4.55M subscribers",
+                "viewCountText": "2,570,271,276 views",
+                "joinedDateText": {
+                 "content": "Joined Feb 1, 2015",
+                 "styleRuns": [
+                  {
+                   "startIndex": 0,
+                   "length": 18
+                  }
+                 ]
+                },
+                "videoCountText": "437 videos",
+                "canonicalChannelUrl": "http://www.youtube.com/@RickAstleyYT",
+                "channelId": "UCuAXFkgsw1L7xaCfnd5JJOw",
+                "links": [
+                 {
+                  "channelExternalLinkViewModel": {
+                   "title": {
+                    "content": "Swinging Christmas tickets"
+                   },
+                   "link": {
+                    "content": "lnk.to/RASC26",
+                    "commandRuns": [
+                     {
+                      "onTap": {
+                       "innertubeCommand": {
+                        "urlEndpoint": {
+                         "url": "https://lnk.to/RASC26"
+                        }
+                       }
+                      }
+                     }
+                    ]
+                   }
+                  }
+                 },
+                 {
+                  "channelExternalLinkViewModel": {
+                   "title": {
+                    "content": "New single 'Raindrops'"
+                   },
+                   "link": {
+                    "content": "rickastley.lnk.to/Raindrops",
+                    "commandRuns": [
+                     {
+                      "onTap": {
+                       "innertubeCommand": {
+                        "urlEndpoint": {
+                         "url": "https://rickastley.lnk.to/Raindrops"
+                        }
+                       }
+                      }
+                     }
+                    ]
+                   }
+                  }
+                 },
+                 {
+                  "channelExternalLinkViewModel": {
+                   "title": {
+                    "content": "Website"
+                   },
+                   "link": {
+                    "content": "rickastley.co.uk",
+                    "commandRuns": [
+                     {
+                      "onTap": {
+                       "innertubeCommand": {
+                        "urlEndpoint": {
+                         "url": "https://www.rickastley.co.uk/"
+                        }
+                       }
+                      }
+                     }
+                    ]
+                   }
+                  }
+                 },
+                 {
+                  "channelExternalLinkViewModel": {
+                   "title": {
+                    "content": "Never: The Autobiography "
+                   },
+                   "link": {
+                    "content": "linktr.ee/rickastleynever",
+                    "commandRuns": [
+                     {
+                      "onTap": {
+                       "innertubeCommand": {
+                        "urlEndpoint": {
+                         "url": "https://linktr.ee/rickastleynever"
+                        }
+                       }
+                      }
+                     }
+                    ]
+                   }
+                  }
+                 },
+                 {
+                  "channelExternalLinkViewModel": {
+                   "title": {
+                    "content": "Instagram"
+                   },
+                   "link": {
+                    "content": "instagram.com/officialrickastley",
+                    "commandRuns": [
+                     {
+                      "onTap": {
+                       "innertubeCommand": {
+                        "urlEndpoint": {
+                         "url": "https://www.instagram.com/officialrickastley/"
+                        }
+                       }
+                      }
+                     }
+                    ]
+                   }
+                  }
+                 },
+                 {
+                  "channelExternalLinkViewModel": {
+                   "title": {
+                    "content": "TikTok"
+                   },
+                   "link": {
+                    "content": "tiktok.com/@rickastleyofficial",
+                    "commandRuns": [
+                     {
+                      "onTap": {
+                       "innertubeCommand": {
+                        "urlEndpoint": {
+                         "url": "https://www.tiktok.com/@rickastleyofficial"
+                        }
+                       }
+                      }
+                     }
+                    ]
+                   }
+                  }
+                 },
+                 {
+                  "channelExternalLinkViewModel": {
+                   "title": {
+                    "content": "Facebook"
+                   },
+                   "link": {
+                    "content": "facebook.com/RickAstley",
+                    "commandRuns": [
+                     {
+                      "onTap": {
+                       "innertubeCommand": {
+                        "urlEndpoint": {
+                         "url": "https://www.facebook.com/RickAstley/"
+                        }
+                       }
+                      }
+                     }
+                    ]
+                   }
+                  }
+                 },
+                 {
+                  "channelExternalLinkViewModel": {
+                   "title": {
+                    "content": "Spotify"
+                   },
+                   "link": {
+                    "content": "open.spotify.com/user/rickastleyprofile/playlist/32O0SSXDNWDrMievPkV0Im?si=4kTEsf71RSWznX9X4CLxSw",
+                    "commandRuns": [
+                     {
+                      "onTap": {
+                       "innertubeCommand": {
+                        "urlEndpoint": {
+                         "url": "https://open.spotify.com/user/rickastleyprofile/playlist/32O0SSXDNWDrMievPkV0Im?si=4kTEsf71RSWznX9X4CLxSw"
+                        }
+                       }
+                      }
+                     }
+                    ]
+                   }
+                  }
+                 },
+                 {
+                  "channelExternalLinkViewModel": {
+                   "title": {
+                    "content": "Apple Music"
+                   },
+                   "link": {
+                    "content": "itunes.apple.com/gb/artist/rick-astley/669771",
+                    "commandRuns": [
+                     {
+                      "onTap": {
+                       "innertubeCommand": {
+                        "urlEndpoint": {
+                         "url": "https://itunes.apple.com/gb/artist/rick-astley/669771"
+                        }
+                       }
+                      }
+                     }
+                    ]
+                   }
+                  }
+                 },
+                 {
+                  "channelExternalLinkViewModel": {
+                   "title": {
+                    "content": "YouTube Music"
+                   },
+                   "link": {
+                    "content": "music.youtube.com/channel/UCwZEU0wAwIyZb4x5G_KJp2w",
+                    "commandRuns": []
+                   }
+                  }
+                 },
+                 {
+                  "channelExternalLinkViewModel": {
+                   "title": {
+                    "content": "Deezer"
+                   },
+                   "link": {
+                    "content": "deezer.com/pt/artist/6160",
+                    "commandRuns": [
+                     {
+                      "onTap": {
+                       "innertubeCommand": {
+                        "urlEndpoint": {
+                         "url": "https://www.deezer.com/pt/artist/6160"
+                        }
+                       }
+                      }
+                     }
+                    ]
+                   }
+                  }
+                 }
+                ]
+               }
+              }
+             }
+            ]
+           }
+          }
+         ]
+        }
+       }
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

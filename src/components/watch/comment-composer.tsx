@@ -1,25 +1,43 @@
 "use client";
 
 /**
- * WFX2-W comment composer — avatar + autogrowing textarea + emoji picker
- * (real insert at the caret) + Cancel/Comment buttons disabled-on-empty;
- * optimistic submit with server persistence (moderation default approved).
+ * WFX2 comment composer — YouTube parity (WFX2-B-S):
+ * avatar row + autogrowing textarea ("Comment..." placeholder), char counter
+ * "N/10000" (YouTube's limit), Cancel/Comment buttons disabled until
+ * non-empty, emoji picker; posts via the canonical `/api/comments` route
+ * (direct-first, broker fallback — the server tier owns the routing).
+ *
+ * Signed-out (public mode): the box renders as YouTube's signed-out
+ * "Comment..." affordance — tapping opens the "Sign in to continue to
+ * comment" dialog which links the account flow. Never a fake write.
  */
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { EmojiPicker } from "./emoji-picker";
 import { cn } from "@/lib/utils";
 import { post } from "@/lib/watch/client";
 import type { CommentDto, ViewerDto } from "@/lib/watch/types";
+
+/** YouTube's comment-length limit. */
+export const COMMENT_MAX_LENGTH = 10_000;
 
 export function CommentComposer({
   videoId,
   parentId,
   parentText,
   viewer,
-  placeholder = "Add a comment...",
+  operatorSession = true,
+  placeholder = "Comment...",
   submitLabel = "Comment",
   autoFocus,
   compact,
@@ -32,6 +50,8 @@ export function CommentComposer({
    * DOM for the reply's UI path (WFX2-A-W) */
   parentText?: string;
   viewer: ViewerDto;
+  /** false in public mode → the signed-out affordance (YouTube parity) */
+  operatorSession?: boolean;
   placeholder?: string;
   submitLabel?: string;
   autoFocus?: boolean;
@@ -41,6 +61,8 @@ export function CommentComposer({
 }) {
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [signInOpen, setSignInOpen] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
   const autogrow = () => {
@@ -72,7 +94,8 @@ export function CommentComposer({
     if (!trimmed || busy) return;
     setBusy(true);
     try {
-      const created = await post<CommentDto>(`/api/videos/${videoId}/comments`, {
+      const created = await post<CommentDto>(`/api/comments`, {
+        videoId,
         body: trimmed,
         parentId,
         parentText,
@@ -88,6 +111,50 @@ export function CommentComposer({
   };
 
   const empty = body.trim().length === 0;
+  const showCounter = operatorSession && (focused || body.length > 0);
+
+  // ---- signed-out (public mode): YouTube's signed-out comment box ----
+  if (!operatorSession) {
+    return (
+      <>
+        <div className="flex w-full gap-3">
+          <Avatar className={cn(compact ? "size-6" : "size-9 sm:size-10")}>
+            <AvatarFallback aria-hidden="true">
+              <span className="text-xs text-muted-foreground">?</span>
+            </AvatarFallback>
+          </Avatar>
+          <button
+            type="button"
+            onClick={() => setSignInOpen(true)}
+            className="min-w-0 flex-1 border-b border-border pb-1.5 pt-2 text-left text-sm text-muted-foreground transition hover:border-foreground"
+            aria-label="Comment — sign in to comment"
+          >
+            Comment...
+          </button>
+        </div>
+        <Dialog open={signInOpen} onOpenChange={setSignInOpen}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Sign in to continue to comment</DialogTitle>
+              <DialogDescription>
+                WebFlix comments act on the operator&apos;s YouTube session (single-tenant live
+                mode). No session is configured right now — public reads work, writes need the
+                session.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setSignInOpen(false)} className="rounded-full">
+                Cancel
+              </Button>
+              <Button asChild className="rounded-full">
+                <a href="/account">Sign in</a>
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </>
+    );
+  }
 
   return (
     <div className="flex w-full gap-3">
@@ -101,6 +168,8 @@ export function CommentComposer({
             ref={taRef}
             value={body}
             autoFocus={autoFocus}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
             onChange={(e) => {
               setBody(e.target.value);
               autogrow();
@@ -115,32 +184,42 @@ export function CommentComposer({
             rows={1}
             placeholder={placeholder}
             aria-label={placeholder}
-            maxLength={5000}
+            maxLength={COMMENT_MAX_LENGTH}
             className="w-full resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>
-        <div className="mt-2 flex items-center justify-end gap-1">
-          <EmojiPicker onPick={insertEmoji} />
-          {onCancel && (
+        <div className="mt-2 flex items-center justify-between gap-1">
+          {showCounter && (
+            <span
+              className="text-xs tabular-nums text-muted-foreground"
+              aria-label={`${body.length} of ${COMMENT_MAX_LENGTH} characters`}
+            >
+              {body.length}/{COMMENT_MAX_LENGTH}
+            </span>
+          )}
+          <div className="flex items-center justify-end gap-1">
+            <EmojiPicker onPick={insertEmoji} />
+            {onCancel && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-9 rounded-full px-4"
+                onClick={onCancel}
+              >
+                Cancel
+              </Button>
+            )}
             <Button
               type="button"
-              variant="ghost"
               size="sm"
               className="h-9 rounded-full px-4"
-              onClick={onCancel}
+              disabled={empty || busy}
+              onClick={submit}
             >
-              Cancel
+              {busy ? "Posting…" : submitLabel}
             </Button>
-          )}
-          <Button
-            type="button"
-            size="sm"
-            className="h-9 rounded-full px-4"
-            disabled={empty || busy}
-            onClick={submit}
-          >
-            {busy ? "Posting…" : submitLabel}
-          </Button>
+          </div>
         </div>
       </div>
     </div>

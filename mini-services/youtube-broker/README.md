@@ -62,9 +62,22 @@ Kinds (anything else → `400`):
 | `comment-create`  | `videoId`                 | `text` (required)                                              |
 | `comment-reply`   | `commentId` (+ `videoId`) | `text` (required), `commentText?` (parent text → UI path)      |
 | `comment-like`    | `commentId` (+ `videoId`) | `commentText?`, `mode: set\|toggle`                            |
+| `comment-edit`    | `commentId` (+ `videoId`) | `text` (required, the NEW body), `commentText?` (CURRENT text — the DOM locator) |
+| `comment-delete`  | `commentId` (+ `videoId`) | `commentText?` (DOM locator; ⋮ → Delete → confirm dialog)      |
+| `comment-heart`   | `commentId` (+ `videoId`) | `commentText?` (creator heart toggle — ⋮ → Heart)              |
+| `comment-pin`     | `commentId` (+ `videoId`) | `commentText?` (creator pin toggle — ⋮ → Pin/Unpin)            |
+| `comment-report`  | `commentId` (+ `videoId`) | `commentText?`, `reason?` (report-dialog row label substring)  |
 | `playlist-add`    | `playlistId` (+ `videoId`)| `title?` (row label for the UI path)                           |
 | `watch-later`     | `videoId`                 | `mode: add\|remove\|toggle` (default toggle), `add: bool`      |
 | `not-interested`  | `videoId`                 | — (home-feed action)                                           |
+
+WFX2-B-S note: the five comment-menu kinds locate the comment in the watch
+page's DOM by `payload.commentText` (the CURRENT text) — that is the only
+locator tier for edit/delete/heart/pin/report (the read layer carries no
+edit tokens; the `browse {editCommentParams}` wire form is unverified and
+unreachable from public reads). YouTube itself enforces ownership: Edit /
+Delete appear only on the operator's own comments, Heart / Pin only in
+creator mode.
 
 Response:
 

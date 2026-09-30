@@ -1,11 +1,17 @@
 "use client";
 
 /**
- * WFX2-W comment row — author + age, pinned label, member/creator badges,
+ * WFX2 comment row — author + age, pinned label, member/creator badges,
  * body with …more expansion, like/dislike with count + your-state, creator
- * heart badge, inline reply thread (one nested level rendered; deeper levels
- * collapse to "N replies" expanders), kebab (Edit/Delete/Report + creator
+ * heart badge, inline reply thread, kebab (Edit/Delete/Report + creator
  * Heart/Pin), inline edit mode.
+ *
+ * WFX2-B-S: the writes are YouTube-parity — delete goes through the
+ * confirm dialog (⋮ → Delete → "Delete comment?" → Delete), edit posts the
+ * locator (videoId + current text) with the new body, report opens the
+ * comment-report dialog (reasons list), and in public mode (no operator
+ * session) the write affordances render their signed-out states — the
+ * "Sign in to continue" dialog, never fake writes.
  */
 import { useState } from "react";
 import Link from "next/link";
@@ -28,6 +34,14 @@ import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -38,6 +52,7 @@ import { compactCount, relativeTime } from "@/lib/watch/format";
 import { post, patch, del } from "@/lib/watch/client";
 import type { CommentDto, LikeValue, ViewerDto } from "@/lib/watch/types";
 import { CommentComposer } from "./comment-composer";
+import { CommentReportDialog } from "./comment-report-dialog";
 
 export interface CommentRowProps {
   comment: CommentDto;
@@ -45,6 +60,8 @@ export interface CommentRowProps {
   viewer: ViewerDto;
   viewerIsCreator: boolean;
   creatorName: string;
+  /** false in public mode → signed-out states for the write affordances */
+  operatorSession?: boolean;
   /** nesting depth (0 = top-level; 1 = rendered reply level; 2+ inline) */
   depth: number;
   /** open reply thread state (for depth 0) */
@@ -66,6 +83,7 @@ export function CommentRow({
   viewer,
   viewerIsCreator,
   creatorName,
+  operatorSession = true,
   depth,
   threadReplies,
   threadCursor,
@@ -89,8 +107,16 @@ export function CommentRow({
   const [nestedOpen, setNestedOpen] = useState(false);
   const [nestedReplies, setNestedReplies] = useState<CommentDto[]>([]);
   const [nestedLoading, setNestedLoading] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [signInOpen, setSignInOpen] = useState(false);
 
   const toggleLike = async (value: LikeValue) => {
+    if (!operatorSession) {
+      setSignInOpen(true); // YouTube parity: signed-out → sign-in prompt
+      return;
+    }
     // optimistic
     const prev = { ...like };
     const optimistic = { ...like };
@@ -124,8 +150,22 @@ export function CommentRow({
     const trimmed = editBody.trim();
     if (!trimmed) return;
     try {
-      const updated = await patch<CommentDto>(`/api/comments/${comment.id}`, { body: trimmed });
-      onChanged(updated);
+      const result = await patch<{ ok: boolean; body: string; edited: boolean }>(
+        `/api/comments/${comment.id}`,
+        {
+          body: trimmed,
+          videoId,
+          commentText: comment.body, // the broker's DOM locator (current text)
+        }
+      );
+      onChanged({
+        ...comment,
+        body: result.body,
+        edited: result.edited,
+        publishedText: comment.publishedText
+          ? `${comment.publishedText} (edited)`
+          : comment.publishedText,
+      });
       setEditing(false);
       toast.success("Comment updated");
     } catch (e) {
@@ -134,42 +174,29 @@ export function CommentRow({
   };
 
   const doDelete = async () => {
+    if (deleting) return;
+    setDeleting(true);
     try {
-      await del(`/api/comments/${comment.id}`);
-      onDeleted(comment.id);
-      toast("Comment deleted", {
-        action: {
-          label: "Undo",
-          onClick: async () => {
-            try {
-              await post(`/api/comments/${comment.id}/restore`);
-              toast.success("Comment restored");
-              onChanged(comment);
-            } catch {
-              toast.error("Could not restore the comment");
-            }
-          },
-        },
-        duration: 6000,
+      await del(`/api/comments/${comment.id}`, {
+        videoId,
+        commentText: comment.body,
       });
+      onDeleted(comment.id);
+      setConfirmDelete(false);
+      toast("Comment deleted");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to delete comment");
-    }
-  };
-
-  const doReport = async () => {
-    try {
-      await post(`/api/comments/${comment.id}/report`);
-      onReported(comment.id);
-      toast.success("Comment reported");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to report comment");
+    } finally {
+      setDeleting(false);
     }
   };
 
   const doHeart = async () => {
     try {
-      const r = await post<{ heartedByCreator: boolean }>(`/api/comments/${comment.id}/heart`);
+      const r = await post<{ heartedByCreator: boolean }>(`/api/comments/${comment.id}/heart`, {
+        videoId,
+        commentText: comment.body,
+      });
       onChanged({ ...comment, heartedByCreator: r.heartedByCreator, likes: like.likes });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to heart");
@@ -178,7 +205,10 @@ export function CommentRow({
 
   const doPin = async () => {
     try {
-      const r = await post<{ pinned: boolean }>(`/api/comments/${comment.id}/pin`);
+      const r = await post<{ pinned: boolean }>(`/api/comments/${comment.id}/pin`, {
+        videoId,
+        commentText: comment.body,
+      });
       onChanged({ ...comment, pinned: r.pinned });
       toast.success(r.pinned ? "Comment pinned" : "Comment unpinned");
     } catch (e) {
@@ -266,7 +296,7 @@ export function CommentRow({
                 rows={2}
                 aria-label="Edit comment"
                 className="w-full resize-none bg-transparent text-sm outline-none"
-                maxLength={5000}
+                maxLength={10000}
               />
             </div>
             <div className="mt-2 flex justify-end gap-2">
@@ -281,12 +311,7 @@ export function CommentRow({
               >
                 Cancel
               </Button>
-              <Button
-                size="sm"
-                className="h-8 rounded-full"
-                disabled={!editBody.trim()}
-                onClick={saveEdit}
-              >
+              <Button size="sm" className="h-8 rounded-full" disabled={!editBody.trim()} onClick={saveEdit}>
                 Save
               </Button>
             </div>
@@ -378,7 +403,7 @@ export function CommentRow({
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
-                {comment.isOwn && (
+                {comment.isOwn && operatorSession && (
                   <DropdownMenuItem
                     onClick={() => setEditing(true)}
                     className="cursor-pointer gap-3 py-2.5 text-sm"
@@ -413,18 +438,18 @@ export function CommentRow({
                 )}
                 {!comment.isOwn && (
                   <DropdownMenuItem
-                    onClick={doReport}
+                    onClick={() => (operatorSession ? setReportOpen(true) : setSignInOpen(true))}
                     className="cursor-pointer gap-3 py-2.5 text-sm"
                   >
                     <Flag className="size-4" aria-hidden="true" />
                     Report
                   </DropdownMenuItem>
                 )}
-                {comment.isOwn && (
+                {comment.isOwn && operatorSession && (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
-                      onClick={doDelete}
+                      onClick={() => setConfirmDelete(true)}
                       className="cursor-pointer gap-3 py-2.5 text-sm text-destructive focus:text-destructive"
                     >
                       <Trash2 className="size-4" aria-hidden="true" />
@@ -445,6 +470,7 @@ export function CommentRow({
               parentId={comment.id}
               parentText={comment.body}
               viewer={viewer}
+              operatorSession={operatorSession}
               placeholder="Add a reply..."
               submitLabel="Reply"
               autoFocus
@@ -491,6 +517,7 @@ export function CommentRow({
                     viewer={viewer}
                     viewerIsCreator={viewerIsCreator}
                     creatorName={creatorName}
+                    operatorSession={operatorSession}
                     depth={1}
                     onDeleted={onDeleted}
                     onReported={onReported}
@@ -555,6 +582,7 @@ export function CommentRow({
                       viewer={viewer}
                       viewerIsCreator={viewerIsCreator}
                       creatorName={creatorName}
+                      operatorSession={operatorSession}
                       depth={depth + 1}
                       onDeleted={onDeleted}
                       onReported={onReported}
@@ -567,6 +595,60 @@ export function CommentRow({
           </div>
         )}
       </div>
+
+      {/* delete confirm — YouTube's ⋮ → Delete dialog parity */}
+      <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete comment?</DialogTitle>
+            <DialogDescription>Deleted comments can&apos;t be recovered.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" className="rounded-full" onClick={() => setConfirmDelete(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              className="rounded-full"
+              disabled={deleting}
+              onClick={doDelete}
+            >
+              {deleting ? "Deleting…" : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* report dialog — YouTube's ⋮ → Report flow parity */}
+      <CommentReportDialog
+        open={reportOpen}
+        onOpenChange={setReportOpen}
+        commentId={comment.id}
+        videoId={videoId}
+        commentText={comment.body}
+        onReported={() => onReported(comment.id)}
+      />
+
+      {/* signed-out write gate — YouTube's "Sign in to continue" parity */}
+      <Dialog open={signInOpen} onOpenChange={setSignInOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Sign in to continue</DialogTitle>
+            <DialogDescription>
+              This action acts on the operator&apos;s YouTube session. No session is configured
+              right now (public mode).
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setSignInOpen(false)} className="rounded-full">
+              Cancel
+            </Button>
+            <Button asChild className="rounded-full">
+              <a href="/account">Sign in</a>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </article>
   );
 }

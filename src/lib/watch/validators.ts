@@ -28,6 +28,19 @@ export const commentEditBodySchema = z.object({
   body: z.string().trim().min(1).max(5000),
 });
 
+/** WFX2-B-S live comment-write shapes (YouTube's 10,000-char comment limit). */
+export const commentWriteBodySchema = z.object({
+  body: z.string().trim().min(1, "Comment cannot be empty").max(10_000),
+  videoId: z.string().min(1),
+  /** the comment's CURRENT text — the broker's DOM locator (⋮ → Edit) */
+  commentText: z.string().min(1).optional(),
+});
+
+export const commentDeleteBodySchema = z.object({
+  videoId: z.string().min(1),
+  commentText: z.string().min(1).optional(),
+});
+
 export const commentLikeBodySchema = z.object({
   value: likeValueSchema,
 });
