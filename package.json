@@ -9,7 +9,7 @@
     "start": "DATABASE_URL=file:../db/webflix2.db next start -p 3000",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "bun run test:boot && bun run test:watch && bun run test:liveshorts && bun run test:cutover && bun run test:auth && bun run test:community",
+    "test": "bun run test:boot && bun run test:watch && bun run test:liveshorts && bun run test:cutover && bun run test:auth && bun run test:community && bun run test:notifications",
     "db:push": "DATABASE_URL=file:../db/webflix2.db prisma db push --accept-data-loss",
     "db:generate": "DATABASE_URL=file:../db/webflix2.db prisma generate",
     "db:seed": "DATABASE_URL=file:../db/webflix2.db bun prisma/seed.ts",
@@ -24,7 +24,8 @@
     "acceptance": "bun scripts/acceptance.mjs",
     "acceptance:selftest": "bun scripts/acceptance.mjs --selftest",
     "warm": "bun scripts/warm-cache.mjs",
-    "test:community": "DATABASE_URL=file:../db/boot-test.db bun test --isolate tests/community-posts.test.ts"
+    "test:community": "DATABASE_URL=file:../db/boot-test.db bun test --isolate tests/community-posts.test.ts",
+    "test:notifications": "DATABASE_URL=file:../db/boot-test.db bun test --isolate tests/notifications-center.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "6.3.1",

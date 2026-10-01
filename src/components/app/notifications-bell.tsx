@@ -18,6 +18,12 @@ import type { NotificationDTO } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useWebFlixSession } from "@/hooks/use-webflix-session";
 import { SignedOutScreen } from "@/components/auth/signed-out-screen";
+import {
+  effectiveRead,
+  effectiveUnread,
+  openNotification,
+  useLocalRead,
+} from "@/app/notifications/local-read-store";
 
 type NotificationsPayload = {
   unread: number;
@@ -31,12 +37,27 @@ type NotificationsPayload = {
  * Notifications bell — live unread badge from the API, menu, mark-all-read.
  * WFX2-P2-AU: guests (no WebFlix session) never poll the personal route —
  * the panel opens the youtube.com-style signed-out screen instead.
+ * WFX2-P4-NC (additive): the badge + rows honor the session-local read
+ * overlay (an opened item reads as read and decrements the badge — honest
+ * view state, documented in local-read-store.ts), and the menu carries the
+ * "See all" affordance into the notification center (/notifications).
+ * The API payload contract { unread, items, pollIntervalMs, loginRequired }
+ * is unchanged.
  */
 export function NotificationsBell() {
   const session = useWebFlixSession();
   const authed = session.status === "authenticated";
   const { data, reload } = useApi<NotificationsPayload>(authed ? "/api/notifications" : null);
-  const unread = data?.unread ?? 0;
+  const readIds = useLocalRead((s) => s.readIds);
+  const reconcile = useLocalRead((s) => s.reconcile);
+  const resetOverlay = useLocalRead((s) => s.reset);
+  const unread = effectiveUnread(data?.unread ?? 0, readIds);
+
+  // the overlay only carries ids still unread upstream (each arriving feed
+  // reconciles it against the fresh read flags)
+  useEffect(() => {
+    if (data?.items) reconcile(data.items);
+  }, [data, reconcile]);
 
   // Live badge: poll on the upstream's own cadence (default 60s) + on focus.
   useEffect(() => {
@@ -53,6 +74,7 @@ export function NotificationsBell() {
   async function markAllRead() {
     try {
       await postJson("/api/notifications/read", {});
+      resetOverlay();
       reload();
       toast.success("All notifications marked as read");
     } catch (err) {
@@ -114,7 +136,7 @@ export function NotificationsBell() {
             </p>
           )}
           {(data?.items ?? []).map((n) => (
-            <NotificationRow key={n.id} notification={n} />
+            <NotificationRow key={n.id} notification={n} read={effectiveRead(n, readIds)} />
           ))}
           {!data &&
             Array.from({ length: 4 }).map((_, i) => (
@@ -127,19 +149,31 @@ export function NotificationsBell() {
               </div>
             ))}
         </div>
+        {authed && (
+          <div className="border-t border-border">
+            <Link
+              href="/notifications"
+              data-testid="notifications-see-all"
+              className="block px-4 py-2.5 text-center text-sm font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+            >
+              See all
+            </Link>
+          </div>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
 }
 
-function NotificationRow({ notification: n }: { notification: NotificationDTO }) {
+function NotificationRow({ notification: n, read }: { notification: NotificationDTO; read: boolean }) {
   const href = n.videoId ? `/watch/${n.videoId}` : n.channel ? `/channel/${n.channel.handle}` : "#";
   return (
     <Link
       href={href}
+      onClick={() => openNotification(n.id)}
       className={cn(
         "flex gap-3 px-4 py-3 transition-colors hover:bg-accent/50",
-        !n.read && "bg-primary/[0.06]"
+        !read && "bg-primary/[0.06]"
       )}
     >
       <div className="relative shrink-0">
@@ -162,7 +196,7 @@ function NotificationRow({ notification: n }: { notification: NotificationDTO })
         <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{n.body}</p>
         <p className="mt-0.5 text-[11px] text-muted-foreground">{formatRelativeDate(n.createdAt)}</p>
       </div>
-      {!n.read && <span className="mt-2 size-2 shrink-0 rounded-full bg-primary" aria-label="unread" />}
+      {!read && <span className="mt-2 size-2 shrink-0 rounded-full bg-primary" aria-label="unread" />}
     </Link>
   );
 }
