@@ -155,14 +155,17 @@ describe("GET /api/search/suggest — autocomplete", () => {
 });
 
 describe("GET /api/videos — continuation-cursor pagination", () => {
-  test("default page continues the browse feed (nudge fixture → graceful empty)", async () => {
+  test("default page: nudge browse → search-backed compose (never empty)", async () => {
     const res = await videosRoute(new Request("http://localhost/api/videos"));
     expect(res.status).toBe(200);
     const page = (await res.json()) as any;
-    expect(Array.isArray(page.videos)).toBe(true);
-    expect(page.nextCursor).toBeNull();
+    // the nudge browse maps to nothing — the compose fills the default feed
+    expect(page.videos.length).toBeGreaterThan(0);
+    expect(page.nextCursor).toBeNull(); // a composed page carries no browse continuation
     const browse = upstream.recorded.find((r) => r.url.includes("/youtubei/v1/browse"));
     expect(browse?.body.browseId).toBe("FEwhat_to_watch");
+    const search = upstream.recorded.find((r) => r.url.includes("/youtubei/v1/search"));
+    expect(search?.body.query).toBeTypeOf("string"); // a real compose query went upstream
   });
 
   test("category pages are search-backed (type=video params)", async () => {
@@ -187,19 +190,20 @@ describe("GET /api/videos — continuation-cursor pagination", () => {
 });
 
 describe("GET /api/home — shelves → rails", () => {
-  test("nudge feed maps to the empty-but-valid rail structure", async () => {
+  test("nudge browse + live search → the composed home (never empty, honest source)", async () => {
     const res = await homeRoute(new Request("http://localhost/api/home"));
     expect(res.status).toBe(200);
     const feed = (await res.json()) as any;
     expect(feed.chips[0]).toBe("All");
     expect(feed.chips).toHaveLength(15);
-    expect(feed.hero).toBeNull();
+    expect(feed.source).toBe("search-compose"); // never claims browse when composed
+    expect(feed.hero?.id).toBeTypeOf("string");
     expect(feed.trending).toEqual([]);
     expect(feed.continueWatching).toEqual([]); // no session → omitted gracefully
-    expect(feed.becauseYouWatched).toBeNull();
-    expect(feed.shorts).toEqual([]);
-    expect(feed.recommended).toEqual([]);
-    expect(feed.recommendedCursor).toBeNull();
+    expect(feed.becauseYouWatched?.videos.length).toBeGreaterThan(0);
+    expect(feed.shorts.length).toBeGreaterThan(0);
+    expect(feed.recommended.length).toBeGreaterThan(0);
+    expect(feed.recommendedCursor).toBeNull(); // no browse continuation for a composed feed
   });
 
   test("category mode is search-backed with a continuation cursor", async () => {

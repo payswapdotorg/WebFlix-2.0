@@ -5,10 +5,13 @@ import { rateLimit } from "@/lib/youtube/cache";
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/home?category= — live home feed from browse FEwhat_to_watch:
- * real shelves → hero / shorts shelf / because-you-watched (a real shelf
- * title) / recommended rail + continuation cursor; continue-watching rides
- * the history SSR when a session exists (omitted gracefully otherwise).
+ * GET /api/home?category= — the default home climbs the WFX2-HR ladder:
+ * browse-fresh → Upstash last-good (24h window) → search-backed compose, so
+ * the default "All" feed never serves empty rails while real search data is
+ * available (browse is walled for the server egress; search is not). The DTO
+ * carries `source: "browse" | "last-good" | "search-compose"` so the harness
+ * + UI can distinguish. Category mode is the established search-backed flat
+ * grid; continue-watching rides the history SSR when a session exists.
  */
 export async function GET(req: Request) {
   try {
