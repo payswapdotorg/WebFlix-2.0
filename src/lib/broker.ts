@@ -48,7 +48,9 @@ export type BrokerKind =
   | "post-like"
   | "post-comment-create"
   | "post-comment-like"
-  | "post-create";
+  | "post-create"
+  // WFX2-P3-UP (upload execution) — additive
+  | "upload-execute";
 
 export interface BrokerTarget {
   videoId?: string;
@@ -82,6 +84,13 @@ export interface BrokerPayload {
   imageUrl?: string;
   /** post-create: poll option texts (2-5) */
   pollOptions?: string[];
+  // WFX2-P3-UP (upload execution) — additive
+  /** upload-execute: the staged file name attached to the real file input */
+  fileName?: string;
+  /** upload-execute: the staged file URL the operator tab fetches (the app's /api/upload/stage route) */
+  fileUrl?: string;
+  /** upload-execute: the description the drive fills into the Details step */
+  description?: string;
 }
 
 /** Typed failure for the routes to map (502 offline / 502 action-failed). */
@@ -218,4 +227,125 @@ export async function brokerCommunityRead(
   );
   if (result instanceof BrokerError) return result;
   return result as BrokerCommunityReadSuccess;
+}
+
+// ---------------------------------------------------------------------------
+// WFX2-P3-UP — upload execution (additive; the P2-SO helper pattern)
+// ---------------------------------------------------------------------------
+
+/** The upload-execute success shape (the staged drive's honest result). */
+export interface BrokerUploadExecuteSuccess extends BrokerActionSuccess {
+  ok: true;
+  detail?: {
+    stage?:
+      | "navigating"
+      | "dialog"
+      | "details"
+      | "checks"
+      | "visibility"
+      | "uploading"
+      | "processing"
+      | "published"
+      | (string & {});
+    videoId?: string;
+    watchUrl?: string;
+    note?: string;
+  } & Record<string, unknown>;
+  /** the UNVERIFIED publish's honest note rides TOP-LEVEL on the wire (the
+   *  script's return shape), not inside detail */
+  note?: string;
+}
+
+export interface BrokerUploadExecuteInput {
+  /** the staged file URL the operator tab fetches (the app's staging route) */
+  fileUrl: string;
+  /** the File name the drive attaches to the real file input */
+  fileName: string;
+  title: string;
+  description?: string;
+  visibility: "public" | "unlisted" | "private";
+}
+
+/** How long the app waits on the broker's staged drive — the script's own
+ * ceiling is 300000ms; the margin covers broker-side dispatch + retries. */
+export const UPLOAD_EXECUTE_TIMEOUT_MS = 310_000;
+
+/** Gap between re-invokes when the script reports the honest 'navigating'
+ * intermediate (the tab is landing on the upload page — consumed by the
+ * src/lib/upload/drive loop, NOT this single-shot helper). */
+export const UPLOAD_NAVIGATE_RETRY_MS = 2000;
+
+/**
+ * WFX2-P3-UP — Tier-2 broker WRITE: ONE staged-drive invocation. The REAL
+ * youtube.com upload flow (file input → metadata → Next×3 → visibility →
+ * publish) runs in the logged-in operator tab with the staged file bytes.
+ * Self-contained POST (the P2-SO brokerCommunityRead pattern, video-scaled):
+ * the staged drive legitimately outlives the default broker timeout, so this
+ * helper carries its own fetch + typed error mapping instead of changing
+ * brokerAction's contract.
+ *
+ * A single evaluate cannot survive the script's own navigation, so the first
+ * invocation may honestly report {detail:{stage:'navigating'}} — the
+ * navigate→re-invoke ladder lives in src/lib/upload/drive.ts (the flow
+ * layer). Fails typed (offline / unauthorized / bad-request /
+ * action-failed) — never a synthesized success.
+ */
+export async function brokerUploadExecute(
+  input: BrokerUploadExecuteInput
+): Promise<BrokerUploadExecuteSuccess | BrokerError> {
+  const url = brokerUrl();
+  if (!url || !brokerSecret()) {
+    return new BrokerError("offline", BROKER_OFFLINE_MESSAGE, 502);
+  }
+  let res: Response;
+  try {
+    res = await fetch(`${url}/broker/action`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-broker-secret": brokerSecret(),
+      },
+      body: JSON.stringify({
+        kind: "upload-execute",
+        target: {},
+        payload: {
+          fileUrl: input.fileUrl,
+          fileName: input.fileName,
+          title: input.title,
+          ...(input.description ? { description: input.description } : {}),
+          visibility: input.visibility,
+        },
+      }),
+      signal: AbortSignal.timeout(UPLOAD_EXECUTE_TIMEOUT_MS),
+      cache: "no-store",
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return new BrokerError("offline", BROKER_OFFLINE_MESSAGE, 502, msg);
+  }
+
+  let parsed: unknown = null;
+  try {
+    parsed = await res.json();
+  } catch {
+    /* non-JSON body */
+  }
+
+  if (res.status === 401) {
+    return new BrokerError("unauthorized", "broker rejected the shared secret", 502, parsed);
+  }
+  if (res.status === 400) {
+    const message =
+      (parsed as { error?: string } | null)?.error ?? "broker rejected the action request";
+    return new BrokerError("bad-request", message, 400, parsed);
+  }
+  if (!res.ok) {
+    // the WHOLE 502 body rides as detail: the staged drive nests its honest
+    // stage in body.detail.stage AND its observed DOM in body.dom — the
+    // brokerAction house pattern (detail = dom-only) would drop the stage
+    // the /api/upload/execute route surfaces in the error card
+    const r = parsed as { error?: string } | null;
+    return new BrokerError("action-failed", r?.error ?? "broker action failed", 502, parsed);
+  }
+  return (parsed ?? { ok: true }) as BrokerUploadExecuteSuccess;
 }
