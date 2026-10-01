@@ -47,6 +47,8 @@ import type {
   ChannelTabId,
   ChannelPlaylistDTO,
   CommunityPostDTO,
+  CommunityPollDTO,
+  CommunityPollChoiceDTO,
   ChannelAboutDTO,
 } from "@/lib/types";
 
@@ -125,6 +127,53 @@ export function mapChannelPlaylists(response: unknown, limit = 24): ChannelPlayl
   return out;
 }
 
+/** One poll attachment → CommunityPollDTO (read-only vote display). */
+export function mapBackstagePoll(att: unknown): CommunityPollDTO | null {
+  const poll = (att as any)?.pollRenderer ?? (att as any)?.backstagePollRenderer ?? null;
+  if (!poll || !Array.isArray(poll.choices) || poll.choices.length === 0) return null;
+  const choices: CommunityPollChoiceDTO[] = [];
+  for (const c of poll.choices) {
+    const text = runsText(c?.text);
+    if (!text) continue;
+    // voteCount: a plain number (live results) or absent before results exist;
+    // the per-choice percentage rides votePercentage / votePercentageIfSelected
+    const votes =
+      typeof c?.voteCount === "number"
+        ? c.voteCount
+        : typeof c?.voteCountIfSelected === "number"
+          ? c.voteCountIfSelected
+          : null;
+    const percentText =
+      (typeof c?.votePercentage?.content === "string" ? c.votePercentage.content : null) ??
+      (typeof c?.votePercentageIfSelected?.content === "string"
+        ? c.votePercentageIfSelected.content
+        : null);
+    choices.push({ text, votes, percentText });
+  }
+  if (choices.length === 0) return null;
+  const totalVotesText =
+    (typeof poll?.totalVotes?.simpleText === "string" ? poll.totalVotes.simpleText : null) ??
+    runsText(poll?.totalVotes) ??
+    null;
+  const totalVotes = totalVotesText
+    ? parseCompactCount(totalVotesText.replace(/\s*votes?\s*$/i, ""))
+    : null;
+  return { choices, totalVotesText, totalVotes };
+}
+
+/** All image URLs inside a post's backstageAttachment (single + grid). */
+export function mapBackstageImages(att: unknown): string[] {
+  const out: string[] = [];
+  for (const img of walkTree(att, "backstageImageRenderer")) {
+    const thumbs = img?.image?.thumbnails;
+    if (Array.isArray(thumbs) && thumbs.length) {
+      const url = thumbs[thumbs.length - 1].url;
+      if (typeof url === "string" && url) out.push(url);
+    }
+  }
+  return out;
+}
+
 /** backstagePostRenderer → CommunityPostDTO. */
 export function mapBackstagePost(p: unknown): CommunityPostDTO | null {
   const post = p as any;
@@ -140,14 +189,21 @@ export function mapBackstagePost(p: unknown): CommunityPostDTO | null {
   const image = post?.backstageAttachment?.backstageImageRenderer?.image?.thumbnails;
   const imageUrl =
     Array.isArray(image) && image.length ? (image[image.length - 1].url as string) : null;
+  const images = mapBackstageImages(post?.backstageAttachment);
+  const avatar = post?.authorThumbnail?.thumbnails ?? post?.avatarRenderer?.avatar?.thumbnails ?? null;
+  const authorAvatarUrl =
+    Array.isArray(avatar) && avatar.length ? (avatar[avatar.length - 1].url as string) : null;
   return {
     id,
     text: runsText(post?.contentText),
     authorName: runsText(post?.authorText) || null,
+    authorAvatarUrl,
     publishedText: post?.publishedText?.simpleText ?? null,
     likesText,
     replyCountText,
-    imageUrl,
+    imageUrl: imageUrl ?? (images.length ? images[0] : null),
+    images,
+    poll: post?.backstageAttachment ? mapBackstagePoll(post.backstageAttachment) : null,
   };
 }
 

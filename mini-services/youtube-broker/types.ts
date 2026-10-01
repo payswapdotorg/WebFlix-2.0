@@ -30,6 +30,12 @@ export const ACTION_KINDS = [
   "comment-heart",
   "comment-pin",
   "comment-report",
+  // WFX2-P2-SO (community posts) — additive
+  "community-read",
+  "post-like",
+  "post-comment-create",
+  "post-comment-like",
+  "post-create",
 ] as const;
 
 export type BrokerActionKind = (typeof ACTION_KINDS)[number];
@@ -40,6 +46,8 @@ export interface BrokerTarget {
   channelId?: string;
   commentId?: string;
   playlistId?: string;
+  /** WFX2-P2-SO: the community post the action applies to */
+  postId?: string;
 }
 
 /**
@@ -81,6 +89,27 @@ export interface BrokerTarget {
  *                          videoId (in target), reason? (label substring
  *                          matched against YouTube's report-dialog rows;
  *                          default: the first row).
+ *  WFX2-P2-SO (community posts) — additive:
+ *  - community-read:       payload.handle (required — the @handle whose
+ *                          community tab the browser reads); channelId (in
+ *                          target) when the app knows it. A READ: the
+ *                          executor navigates the logged-in tab to
+ *                          youtube.com/@<handle>/community and returns the
+ *                          page's own window.ytInitialData RAW in
+ *                          detail.data (the app maps it — one mapper, two
+ *                          transports).
+ *  - post-like:            postId (in target), action: "like" |
+ *                          "dislike" | "remove" (desired end state).
+ *  - post-comment-create:  postId (in target), text (required).
+ *  - post-comment-like:    postId + commentId (in target), commentText?
+ *                          (the comment's text — the DOM locator), mode:
+ *                          "set" (default) | "toggle" | "remove".
+ *  - post-create:          payload.handle (required — the OWN channel's
+ *                          community tab hosts the composer), channelId (in
+ *                          target) when known; text (required unless an
+ *                          image or poll carries the post), imageUrl?
+ *                          (fetched into the real composer's file input),
+ *                          pollOptions? (2–5 non-empty option texts).
  */
 export interface BrokerPayload {
   text?: string;
@@ -93,6 +122,11 @@ export interface BrokerPayload {
   visibility?: string;
   paused?: boolean;
   reason?: string;
+  /** WFX2-P2-SO */
+  handle?: string;
+  action?: string;
+  imageUrl?: string;
+  pollOptions?: string[];
 }
 
 export interface BrokerActionRequest {

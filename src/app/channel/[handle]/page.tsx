@@ -22,6 +22,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { VerifiedBadge } from "@/components/app/verified-badge";
+import { CommunityPostCard, CommunityPostSkeleton } from "@/components/community/community-post-card";
+import { PostComposer, CreatePostButton } from "@/components/community/post-composer";
 import { formatSubscribers, formatCount, formatRelativeDate } from "@/lib/format";
 import type {
   ChannelPageDTO,
@@ -94,6 +96,8 @@ export default function ChannelPage() {
   const { handle } = useParams<{ handle: string }>();
   const searchParams = useSearchParams();
   const initialQ = searchParams.get("q") ?? "";
+  /** WFX2-P2-SO: the Studio deep link — open the own-channel composer */
+  const composeDeepLink = searchParams.get("compose") === "1";
   const [searchOpen, setSearchOpen] = useState(Boolean(initialQ));
   const [query, setQuery] = useState(initialQ);
   const [input, setInput] = useState(initialQ);
@@ -107,8 +111,9 @@ export default function ChannelPage() {
       : null
   );
   const [subscribing, setSubscribing] = useState(false);
-  const [tab, setTab] = useState<ChannelTabId>("home");
+  const [tab, setTab] = useState<ChannelTabId>(composeDeepLink ? "community" : "home");
   const [joinOpen, setJoinOpen] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
   const { data: joinInfo } = useApi<JoinInfo>(
     joinOpen && handle ? `/api/channel/${encodeURIComponent(handle)}/join` : null
   );
@@ -119,14 +124,15 @@ export default function ChannelPage() {
   }, [data]);
 
   // remember the last tab per channel: restore on load, persist on change
+  // (the ?compose=1 deep link pins the Community tab — never overridden)
   useEffect(() => {
-    if (!handle || !data) return;
+    if (!handle || !data || composeDeepLink) return;
     const stored = readStoredTab(handle, availableTabs);
     if (stored && stored !== "home") {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- stored-preference hydration (mount-time only)
       setTab(stored);
     }
-  }, [handle, data?.channel?.id, availableTabs]);
+  }, [handle, data?.channel?.id, availableTabs, composeDeepLink]);
 
   const selectTab = useCallback(
     (t: ChannelTabId) => {
@@ -138,9 +144,18 @@ export default function ChannelPage() {
 
   // the lazy tab payload (only the non-seeded tabs fetch)
   const tabNeedsFetch = data !== null && !SEEDED_TABS.includes(tab);
-  const { data: tabData, loading: tabLoading } = useApi<ChannelTabDTO>(
+  const { data: tabData, loading: tabLoading, reload: reloadTab } = useApi<ChannelTabDTO>(
     tabNeedsFetch && handle ? `/api/channel/${encodeURIComponent(handle)}/tab?tab=${tab}` : null
   );
+
+  // the ?compose=1 deep link opens the composer once the tab payload says
+  // this session owns the channel (compose === true — the operator session)
+  useEffect(() => {
+    if (composeDeepLink && tabData?.compose === true) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot deep-link hydration
+      setComposerOpen(true);
+    }
+  }, [composeDeepLink, tabData?.compose]);
 
   async function toggleSubscribe() {
     if (!data) return;
@@ -437,11 +452,16 @@ export default function ChannelPage() {
                   />
                 )}
                 {tab === "community" && (
-                  <LazyTab
-                    tab="community"
+                  <CommunityTabPanel
                     tabData={tabData}
                     tabLoading={tabLoading}
-                    render={(t) => <CommunityTab posts={t.posts ?? []} />}
+                    channelName={data.channel.name}
+                    channelAvatarUrl={data.channel.avatarUrl}
+                    channelHandle={data.channel.handle}
+                    compose={tabData?.compose === true}
+                    composerOpen={composerOpen}
+                    onComposerOpen={setComposerOpen}
+                    onCreated={reloadTab}
                   />
                 )}
                 {tab === "about" && (
@@ -638,50 +658,93 @@ function PlaylistsTab({ playlists }: { playlists: NonNullable<ChannelTabDTO["pla
   );
 }
 
-function CommunityTab({ posts }: { posts: NonNullable<ChannelTabDTO["posts"]> }) {
-  if (posts.length === 0) {
+/**
+ * WFX2-P2-SO — the Community tab panel: the wall-ladder payload's honest
+ * states (walled → the channel page's honest-empty pattern; source → the
+ * rung badge — never a lie about where the posts came from), the full post
+ * cards, and the creator composer on the own channel.
+ */
+function CommunityTabPanel({
+  tabData,
+  tabLoading,
+  channelName,
+  channelAvatarUrl,
+  channelHandle,
+  compose,
+  composerOpen,
+  onComposerOpen,
+  onCreated,
+}: {
+  tabData: ChannelTabDTO | null;
+  tabLoading: boolean;
+  channelName: string;
+  channelAvatarUrl: string | null;
+  channelHandle: string;
+  compose: boolean;
+  composerOpen: boolean;
+  onComposerOpen: (v: boolean) => void;
+  onCreated: () => void;
+}) {
+  if (tabLoading || !tabData) {
     return (
-      <p className="py-10 text-center text-sm text-muted-foreground">
-        This channel hasn&apos;t posted to the Community tab yet.
+      <div className="mx-auto max-w-2xl space-y-4" aria-busy="true" aria-label="Loading community posts">
+        <CommunityPostSkeleton />
+        <CommunityPostSkeleton />
+      </div>
+    );
+  }
+  if (tabData.walled) {
+    return (
+      <p className="py-10 text-center text-sm text-muted-foreground" role="status">
+        This tab&apos;s data is unavailable from this egress right now. A last-known copy serves
+        here once one exists — nothing is fabricated.
       </p>
     );
   }
+  const posts = tabData.posts ?? [];
+  const source = tabData.source ?? null;
   return (
     <div className="mx-auto max-w-2xl space-y-4">
-      {posts.map((post) => (
-        <article
-          key={post.id}
-          className="rounded-xl border border-border p-4"
-          aria-label="Community post"
-        >
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Flag className="size-3.5" aria-hidden="true" />
-            {post.authorName ?? "Channel"} · {post.publishedText ?? ""}
-          </div>
-          {post.text && (
-            <p className="mt-2 whitespace-pre-line text-sm leading-relaxed">{post.text}</p>
-          )}
-          {post.imageUrl && (
-            <div className="mt-3 overflow-hidden rounded-xl">
-              <img src={post.imageUrl} alt="Post attachment" loading="lazy" className="max-h-96 w-full object-cover" />
-            </div>
-          )}
-          <div className="mt-3 flex items-center gap-5 text-xs text-muted-foreground">
-            {post.likesText && (
-              <span className="flex items-center gap-1.5">
-                <ThumbsUp className="size-3.5" aria-hidden="true" />
-                {post.likesText}
-              </span>
-            )}
-            {post.replyCountText && (
-              <span className="flex items-center gap-1.5">
-                <Heart className="size-3.5" aria-hidden="true" />
-                {post.replyCountText}
-              </span>
-            )}
-          </div>
-        </article>
-      ))}
+      {compose && !composerOpen && (
+        <div className="flex justify-end">
+          <CreatePostButton onClick={() => onComposerOpen(true)} />
+        </div>
+      )}
+      {compose && composerOpen && (
+        <PostComposer
+          handle={channelHandle}
+          onClose={() => onComposerOpen(false)}
+          onCreated={() => {
+            onComposerOpen(false);
+            onCreated();
+          }}
+        />
+      )}
+      {posts.length === 0 ? (
+        <p className="py-10 text-center text-sm text-muted-foreground">
+          This channel hasn&apos;t posted to the Community tab yet.
+        </p>
+      ) : (
+        posts.map((post) => (
+          <CommunityPostCard
+            key={post.id}
+            post={post}
+            channelAvatarUrl={channelAvatarUrl}
+            channelName={channelName}
+            channelHandle={channelHandle}
+          />
+        ))
+      )}
+      {source === "broker" && (
+        <p className="text-center text-[11px] text-muted-foreground" role="note">
+          Live posts — read through the logged-in browser (the unwalled channel).
+        </p>
+      )}
+      {source === "last-good" && (
+        <p className="text-center text-[11px] text-muted-foreground" role="note">
+          Serving the last-known copy of this Community tab.
+        </p>
+      )}
     </div>
   );
 }

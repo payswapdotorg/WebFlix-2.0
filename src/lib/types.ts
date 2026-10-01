@@ -180,15 +180,38 @@ export type ChannelPlaylistDTO = {
   thumbnailUrl: string | null;
 };
 
+/** One community-post poll choice (backstageAttachment.pollRenderer.choices[]). */
+export type CommunityPollChoiceDTO = {
+  text: string;
+  /** the real per-choice vote count — null until the response carries results */
+  votes: number | null;
+  /** live passthrough, e.g. "62%" — null until the response carries results */
+  percentText: string | null;
+};
+
+/** One community-post poll (backstageAttachment.pollRenderer). */
+export type CommunityPollDTO = {
+  choices: CommunityPollChoiceDTO[];
+  /** "193 votes" live passthrough (parsed count carried alongside) */
+  totalVotesText: string | null;
+  totalVotes: number | null;
+};
+
 /** One community post (the Community/Posts tab's backstagePostRenderer). */
 export type CommunityPostDTO = {
   id: string;
   text: string;
   authorName: string | null;
+  /** WFX2-P2-SO (additive): the post author's avatar when the payload carries it (null → the channel header's) */
+  authorAvatarUrl?: string | null;
   publishedText: string | null;
   likesText: string | null;
   replyCountText: string | null;
   imageUrl: string | null;
+  /** WFX2-P2-SO (additive): ALL image attachments (single image → [url]; grids in post order) */
+  images?: string[];
+  /** WFX2-P2-SO (additive): the poll attachment when the post carries one */
+  poll?: CommunityPollDTO | null;
 };
 
 /** The About panel (aboutChannelViewModel from the engagement-panel continuation). */
@@ -202,6 +225,19 @@ export type ChannelAboutDTO = {
   links: { title: string; url: string | null }[];
 };
 
+/**
+ * WFX2-P2-SO — which rung of the community ladder produced the Posts tab:
+ *  - "browse"    rung 1: a fresh healthy InnerTube browse (works unwalled);
+ *  - "broker"    rung 2: the Tier-2 broker-read — the logged-in browser's
+ *                own ytInitialData from youtube.com/@handle/community,
+ *                mapped through the SAME backstage mapper (one mapper,
+ *                two transports);
+ *  - "last-good" rung 3: the adapter's Upstash last-good (24h hard window)
+ *                served because every live rung hit the wall.
+ * Never set when the tab is walled (rung 4) — the honest-empty shape.
+ */
+export type CommunityTabSource = "browse" | "broker" | "last-good";
+
 /** The per-tab payload (lazy-loaded per tab switch). */
 export type ChannelTabDTO = {
   tab: ChannelTabId;
@@ -214,6 +250,10 @@ export type ChannelTabDTO = {
   joinable?: boolean;
   /** honest degrade: upstream walled and no last-good */
   walled?: boolean;
+  /** WFX2-P2-SO (additive): the community ladder rung that produced the posts */
+  source?: CommunityTabSource;
+  /** WFX2-P2-SO (additive): the operator session owns this channel (the composer affordance) */
+  compose?: boolean;
 };
 
 export type WatchPageDTO = {

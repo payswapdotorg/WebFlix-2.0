@@ -60,6 +60,7 @@ export function validateActionRequest(body: unknown): { error: string } | { req:
       channelId: target.channelId,
       commentId: target.commentId,
       playlistId: target.playlistId,
+      postId: target.postId,
     },
     payload: payload as BrokerActionRequest["payload"],
   };
@@ -113,6 +114,45 @@ export function validateActionRequest(body: unknown): { error: string } | { req:
   }
   if (req.kind === "playlist-add" && !(req.payload?.videoId ?? req.target.videoId)) {
     return { error: "playlist-add requires target.videoId or payload.videoId" };
+  }
+  // WFX2-P2-SO (community posts)
+  if (kind === "community-read" && !(typeof req.payload?.handle === "string" && req.payload.handle.trim())) {
+    return { error: "community-read requires payload.handle (the @handle whose community tab the browser reads)" };
+  }
+  if (kind === "post-like") {
+    if (!req.target.postId) return { error: "post-like requires target.postId" };
+    const action = String(req.payload?.action ?? "like").toLowerCase();
+    if (!["like", "dislike", "remove"].includes(action)) {
+      return { error: "post-like requires payload.action: like|dislike|remove" };
+    }
+  }
+  if (kind === "post-comment-create") {
+    if (!req.target.postId) return { error: "post-comment-create requires target.postId" };
+    if (!req.payload?.text) return { error: "post-comment-create requires payload.text" };
+  }
+  if (kind === "post-comment-like" && !req.target.commentId) {
+    return { error: "post-comment-like requires target.commentId" };
+  }
+  if (kind === "post-comment-like" && !req.target.postId) {
+    return { error: "post-comment-like requires target.postId" };
+  }
+  if (kind === "post-create") {
+    if (!(typeof req.payload?.handle === "string" && req.payload.handle.trim())) {
+      return { error: "post-create requires payload.handle (the OWN channel's community tab hosts the composer)" };
+    }
+    const text = typeof req.payload?.text === "string" ? req.payload.text.trim() : "";
+    const hasImage = typeof req.payload?.imageUrl === "string" && /^https?:\/\//.test(req.payload.imageUrl);
+    const poll = Array.isArray(req.payload?.pollOptions)
+      ? (req.payload!.pollOptions as unknown[]).filter(
+          (o): o is string => typeof o === "string" && o.trim().length > 0
+        )
+      : [];
+    if (!text && !hasImage && poll.length === 0) {
+      return { error: "post-create requires payload.text, imageUrl, or pollOptions (an empty post is refused)" };
+    }
+    if (req.payload?.pollOptions !== undefined && (poll.length < 2 || poll.length > 5)) {
+      return { error: "post-create pollOptions must carry 2-5 non-empty options" };
+    }
   }
   return { req };
 }

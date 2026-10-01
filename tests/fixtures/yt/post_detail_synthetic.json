@@ -1,0 +1,38 @@
+{
+ "note": "synthetic \u2014 community post detail browse payload for WFX2-P2-SO (browse {browseId: postId} answers the post + its comments continuation, the comment-item-section itemSectionRenderer, same family as the watch page)",
+ "responseContext": {},
+ "contents": {
+  "twoColumnBrowseResultsRenderer": {
+   "tabs": [
+    {
+     "tabRenderer": {
+      "title": "Posts",
+      "selected": true,
+      "content": {
+       "sectionListRenderer": {
+        "contents": [
+         {
+          "itemSectionRenderer": {
+           "sectionIdentifier": "comment-item-section",
+           "contents": [
+            {
+             "continuationItemRenderer": {
+              "continuationEndpoint": {
+               "continuationCommand": {
+                "token": "SYNTHETIC-POST-COMMENTS-TOP-TOKEN"
+               }
+              }
+             }
+            }
+           ]
+          }
+         }
+        ]
+       }
+      }
+     }
+    }
+   ]
+  }
+ }
+}
