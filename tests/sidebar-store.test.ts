@@ -1,6 +1,6 @@
 /// <reference types="bun-types" />
 import { describe, expect, test } from "bun:test";
-import { createSidebarStore, useQueue, SIDEBAR_STORAGE_KEY } from "@/lib/sidebar-store";
+import { createSidebarStore, SIDEBAR_STORAGE_KEY } from "@/lib/sidebar-store";
 
 /** In-memory localStorage shim (zustand persist needs the Storage interface). */
 function memoryStorage() {
@@ -49,15 +49,3 @@ describe("sidebar collapse persistence", () => {
   });
 });
 
-describe("watch queue store (Add to queue)", () => {
-  test("add / dedupe / remove / has", () => {
-    const store = useQueue;
-    store.getState().clear();
-    expect(store.getState().addToQueue("v1")).toBe(true);
-    expect(store.getState().addToQueue("v1")).toBe(false); // duplicate
-    expect(store.getState().has("v1")).toBe(true);
-    store.getState().removeFromQueue("v1");
-    expect(store.getState().has("v1")).toBe(false);
-    expect(store.getState().queue).toHaveLength(0);
-  });
-});

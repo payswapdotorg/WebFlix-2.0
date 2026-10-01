@@ -23,7 +23,9 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useHoverPreview } from "./video-hover-preview";
 import { PlaylistSaveDialog } from "./playlist-save-dialog";
-import { useQueue } from "@/lib/sidebar-store";
+import { addToQueue } from "@/lib/queue/queue-actions";
+import { useWebFlixSession } from "@/hooks/use-webflix-session";
+import { signInHref } from "@/lib/auth/client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatDuration, displayViews, displayPublished, watchProgress } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -44,7 +46,9 @@ export function VideoCard({ video, progress, variant = "grid", className }: Vide
   const [hidden, setHidden] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
   const hover = useHoverPreview(video);
-  const addToQueue = useQueue((s) => s.addToQueue);
+  // WFX2-P4-QT seam (lead-wired at merge): the hover menu's Add to queue
+  // now rides the REAL WL-backed queue — never a fake append.
+  const wfSession = useWebFlixSession();
 
   if (hidden) return null;
 
@@ -83,9 +87,25 @@ export function VideoCard({ video, progress, variant = "grid", className }: Vide
     }
   }
 
-  function onAddToQueue() {
-    const added = addToQueue(video.id);
-    toast[added ? "success" : "info"](added ? "Added to queue" : "Already in the queue");
+  // WFX2-P4-QT: the AU guest gate, then the real watch-later write FIRST
+  // (queue-actions) — the session queue only gains the item after the
+  // server confirms; honest outcomes only.
+  async function onAddToQueue() {
+    if (wfSession.status !== "authenticated") {
+      window.location.assign(signInHref(`/watch/${video.id}`));
+      return;
+    }
+    const outcome = await addToQueue({
+      videoId: video.id,
+      title: video.title,
+      channelName: video.channel.name,
+      thumbnailUrl: video.thumbnailUrl ?? null,
+      durationSec: video.durationSec ?? 0,
+    });
+    if (outcome.status === "appended") toast.success("Added to queue");
+    else if (outcome.status === "already-queued") toast.info("Already in the queue");
+    else if (outcome.status === "full") toast.info("The queue is full");
+    else if (outcome.status === "error") toast.error(outcome.message);
   }
 
   return (

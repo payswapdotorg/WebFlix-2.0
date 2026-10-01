@@ -62,32 +62,3 @@ export function useSidebarHydration() {
   }, []);
 }
 
-/**
- * Watch queue ("Add to queue") — session-scoped, in-memory (matches YouTube,
- * where the queue is a session construct).
- */
-export type QueueState = {
-  queue: string[];
-  addToQueue: (videoId: string) => boolean;
-  removeFromQueue: (videoId: string) => void;
-  clear: () => void;
-  has: (videoId: string) => boolean;
-};
-
-export const useQueue = create<QueueState>()((set, get) => ({
-  queue: [],
-  addToQueue: (videoId) => {
-    if (get().queue.includes(videoId)) return false;
-    set((s) => ({ queue: [...s.queue, videoId] }));
-    return true;
-  },
-  removeFromQueue: (videoId) =>
-    set((s) => ({ queue: s.queue.filter((id) => id !== videoId) })),
-  clear: () => set({ queue: [] }),
-  has: (videoId) => get().queue.includes(videoId),
-}));
-
-/** The current watch queue (ids, in order). */
-export function selectQueue(s: QueueState): string[] {
-  return s.queue;
-}
