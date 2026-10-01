@@ -164,3 +164,76 @@ export async function getUnseenCount(): Promise<{ unread: number; pollIntervalMs
   );
   return mapUnseenCount(response);
 }
+
+// ---------------------------------------------------------------------------
+// WFX2-P4-NC — the notification CENTER (additive deepening; read-side only)
+// ---------------------------------------------------------------------------
+
+/**
+ * Unread-first ordering (the center's display order): a STABLE partition —
+ * unread items first, read items after, each group keeping the upstream's
+ * own relative order (the menu's inbox order is the recency order).
+ */
+export function orderNotificationsUnreadFirst(items: NotificationDTO[]): NotificationDTO[] {
+  return [...items.filter((i) => !i.read), ...items.filter((i) => i.read)];
+}
+
+/** The center's default (and maximum) page size — the menu IS the account's
+ * full inbox, so pages are honest slices of true items, never fabricated. */
+export const CENTER_DEFAULT_PAGE_SIZE = 50;
+export const CENTER_MAX_PAGE_SIZE = 100;
+
+/** Clamp raw query params to the honest bounds (1-based pages, 1..100 size;
+ * absent/invalid values take the defaults — `Number(null)` is 0, so null
+ * must never reach the clamp). */
+export function clampCenterPaging(
+  page: string | null,
+  pageSize: string | null
+): { page: number; pageSize: number } {
+  const p = page !== null && page.trim() !== "" ? Math.floor(Number(page)) : NaN;
+  const s = pageSize !== null && pageSize.trim() !== "" ? Math.floor(Number(pageSize)) : NaN;
+  return {
+    page: Number.isFinite(p) && p >= 1 ? p : 1,
+    pageSize: Number.isFinite(s)
+      ? Math.min(Math.max(s, 1), CENTER_MAX_PAGE_SIZE)
+      : CENTER_DEFAULT_PAGE_SIZE,
+  };
+}
+
+/** Slice one honest page out of the ordered feed. */
+export function pageNotifications(
+  items: NotificationDTO[],
+  page: number,
+  pageSize: number
+): { items: NotificationDTO[]; hasMore: boolean } {
+  const start = (page - 1) * pageSize;
+  const slice = items.slice(start, start + pageSize);
+  return { items: slice, hasMore: start + slice.length < items.length };
+}
+
+/**
+ * WFX2-P4-NC — the per-item read-state refresh: THE MENU RE-READ (the
+ * documented choice for per-item mark-read).
+ *
+ * A cache-bypassed call to the §12-verified menu endpoint returning the
+ * CURRENT per-item read map — the honest source for "did the account's own
+ * activity clear this item". No per-item upstream WRITE is verified
+ * (record_web_notifications_seen 404s — probed live; the broker's
+ * notifications-mark-read opens the bell menu, which clears ALL unseen at
+ * once — wrong granularity for one item, so it stays reserved for the
+ * mark-ALL route). The opened item's read state is therefore the client's
+ * session-local view state (src/app/notifications/local-read-store.ts),
+ * reconciled against this re-read and the feed poll.
+ */
+export async function getNotificationReadStates(): Promise<{
+  readById: Record<string, boolean>;
+  loginRequired: boolean;
+}> {
+  const response = await innertube("notification/get_notification_menu", {
+    notificationsMenuRequestParams: { notificationsMenuRequestType: NOTIF_MENU_TYPE_INBOX },
+  });
+  const menu = mapNotificationMenu(response);
+  const readById: Record<string, boolean> = {};
+  for (const item of menu.items) readById[item.id] = item.read;
+  return { readById, loginRequired: menu.loginRequired };
+}
