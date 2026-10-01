@@ -8,12 +8,16 @@
  * WFX2-P2-AU: WebFlix guests never fire the write actions — like/dislike
  * and Not interested route to /signin (redirect back to this watch page).
  * Share and Show transcript stay public (youtube.com parity).
+ *
+ * WFX2-P4-QT: Add to queue joins the row — the WL-backed queue append
+ * (wired by watch-page: guest gate + the real watch-later write first).
  */
 import { useState } from "react";
 import {
   Bookmark,
   BookmarkCheck,
   Flag,
+  ListPlus,
   MoreVertical,
   Share2,
   ThumbsDown,
@@ -48,6 +52,8 @@ export function ActionRow({
   onSave,
   onToggleTranscript,
   onReport,
+  onAddToQueue,
+  queued = false,
 }: {
   videoId: string;
   likes: number;
@@ -62,6 +68,11 @@ export function ActionRow({
   onSave: () => void;
   onToggleTranscript: () => void;
   onReport: () => void;
+  /** WFX2-P4-QT: the WL-backed queue append (the guest gate + honest states
+   * live in the watch-page wiring). */
+  onAddToQueue: () => void;
+  /** the video is already in the session queue → the pressed affordance */
+  queued?: boolean;
 }) {
   const [state, setState] = useState({ likes, dislikes, yourLike });
   const [synced, setSynced] = useState({ likes, dislikes, yourLike });
@@ -197,6 +208,13 @@ export function ActionRow({
           onSave();
         }}
         pressed={saved}
+      />
+      {/* WFX2-P4-QT: Add to queue — the WL-backed queue append */}
+      <PillButton
+        label="Add to queue"
+        icon={<ListPlus className="size-5" aria-hidden="true" />}
+        onClick={onAddToQueue}
+        pressed={queued}
       />
 
       <DropdownMenu>

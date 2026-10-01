@@ -25,11 +25,19 @@
  *   advancing; wall-clock ticks survive throttled tabs; Esc/space cancel.
  * - The playhead feeds the chat replay (seeking classifier +
  *   reveal gating) at ~1/sec through the player-host store.
+ *
+ * WFX2-P4-QT — the queue: Add to queue joins the action row (guest gate →
+ * the AU signed-out law; the real WL write precedes the session append —
+ * queue-actions), the autoplay countdown takes the queue's next over the
+ * related next (fired consumes the played video — it STAYS in WL), the
+ * queue engine drives continuous play when the miniplayer owns the player,
+ * and the queue list panel mounts under the actions row.
  */
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BadgeCheck, Maximize2, Minimize2, SkipForward } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
@@ -50,6 +58,10 @@ import type {
 } from "@/lib/watch/types";
 import { useWebFlixSession } from "@/hooks/use-webflix-session";
 import { signInHref } from "@/lib/auth/client";
+import { addToQueue } from "@/lib/queue/queue-actions";
+import { useQueueStore, type QueueItem } from "@/lib/queue/queue-store";
+import { startQueueEngine } from "@/lib/queue/queue-engine";
+import { QueuePanel } from "./queue-panel";
 import { AmbientBackdrop } from "./ambient-backdrop";
 import { AutoplayCountdownOverlay } from "./autoplay-countdown-overlay";
 import { SubscribeButton } from "./subscribe-button";
@@ -114,10 +126,26 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
   const autoplayRef = useRef(autoplay);
   const nextVideoRef = useRef<RelatedVideoDto | null>(null);
   const resumeAppliedRef = useRef(false);
+  const queueNextRef = useRef<QueueItem | null>(null);
 
   // player-host state (the persistent player + its playhead)
   const positionSec = usePlayerHost((s) => s.positionSec);
   const hostHasVideo = usePlayerHost((s) => s.videoId === videoId);
+
+  // WFX2-P4-QT: the session queue (WL-backed) — the queue's next takes
+  // priority over the related next in the countdown; the pressed affordance
+  // mirrors membership; the panel renders while the queue exists.
+  const queueItems = useQueueStore((s) => s.items);
+  const queued = useQueueStore((s) => s.has(videoId));
+  const queueNext = useQueueStore((s) => s.nextAfter(videoId));
+
+  // WFX2-P4-QT: the queue engine (continuous play when the miniplayer owns
+  // the player). Idempotent — the subscription lives on the playerHost
+  // singleton for the whole session; a queue can only become non-empty from
+  // a watch page affordance, so the engine is always armed before any ENDED.
+  useEffect(() => {
+    startQueueEngine();
+  }, []);
 
   // bootstrap: session cookie + video detail (fresh mount per video via key)
   useEffect(() => {
@@ -229,19 +257,21 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
     };
   }, [detail, videoId]);
 
-  // WFX2-C-S: player events → the countdown machine.
-  //   ENDED   → arm (once per cycle — the machine's idle guard)
+  // WFX2-P4-QT: player events → the countdown machine.
+  //   ENDED   → arm (once per cycle — the machine's idle guard); the queue's
+  //             next counts as "has next" (queue-first over related)
   //   PLAYING → reset (replay / seek-after-ended restarts the cycle)
   useEffect(() => {
     autoplayRef.current = autoplay;
     nextVideoRef.current = nextVideo;
-  }, [autoplay, nextVideo]);
+    queueNextRef.current = queueNext;
+  }, [autoplay, nextVideo, queueNext]);
   useEffect(() => {
     return playerHost.onEnded(() => {
       dispatch({
         type: "ENDED",
         autoplay: autoplayRef.current,
-        hasNext: nextVideoRef.current !== null,
+        hasNext: nextVideoRef.current !== null || queueNextRef.current !== null,
         now: Date.now(),
       });
     });
@@ -252,12 +282,20 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
     });
   }, []);
 
-  // "fired" (wall-clock deadline or FIRE click) → advance exactly once
+  // "fired" (wall-clock deadline or FIRE click) → advance exactly once.
+  // WFX2-P4-QT: the queue's next wins over the related next; consuming the
+  // played video only leaves the SESSION queue (it stays in Watch Later).
   useEffect(() => {
     if (countdown.status !== "fired") return;
+    const qn = queueNextRef.current;
+    if (qn) {
+      useQueueStore.getState().markPlayed(videoId);
+      router.push(`/watch/${qn.videoId}`);
+      return;
+    }
     const next = nextVideoRef.current;
     if (next) router.push(`/watch/${next.id}`);
-  }, [countdown.status, router]);
+  }, [countdown.status, router, videoId]);
 
   // WFX2-C-S: miniplayer — dock the player bottom-right once scrolled past
   // it (the app shell scrolls an inner container — find the player's real
@@ -331,6 +369,28 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
     playerHost.seekTo(sec);
   }, []);
 
+  // WFX2-P4-QT: Add to queue — the AU guest gate, then the real WL write
+  // BEFORE the session append (queue-actions; honest outcomes only).
+  const onAddToQueue = useCallback(async () => {
+    if (guest) {
+      window.location.assign(signInHref(`/watch/${videoId}`));
+      return;
+    }
+    const v = detail?.video;
+    if (!v) return;
+    const outcome = await addToQueue({
+      videoId,
+      title: v.title,
+      channelName: v.channel.name,
+      thumbnailUrl: v.thumbnailUrl,
+      durationSec: v.durationSec ?? 0,
+    });
+    if (outcome.status === "appended") toast.success("Added to queue");
+    else if (outcome.status === "already-queued") toast.info("Already in the queue");
+    else if (outcome.status === "full") toast.info("The queue is full");
+    else if (outcome.status === "error") toast.error(outcome.message);
+  }, [guest, detail, videoId]);
+
   const chapters = useMemo(
     () => (detail ? parseChapters(detail.video.description, detail.video.durationSec) : []),
     [detail]
@@ -376,14 +436,21 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
   const { video, state } = detail;
   const isLive = video.durationSec === 0;
 
-  const countdownNext = nextVideo
+  const countdownNext = queueNext
     ? {
-        id: nextVideo.id,
-        title: nextVideo.title,
-        channelName: nextVideo.channel.name,
-        thumbnailUrl: nextVideo.thumbnailUrl,
+        id: queueNext.videoId,
+        title: queueNext.title,
+        channelName: queueNext.channelName,
+        thumbnailUrl: queueNext.thumbnailUrl,
       }
-    : null;
+    : nextVideo
+      ? {
+          id: nextVideo.id,
+          title: nextVideo.title,
+          channelName: nextVideo.channel.name,
+          thumbnailUrl: nextVideo.thumbnailUrl,
+        }
+      : null;
 
   const countdownOverlay =
     countdown.status === "counting" && countdownNext ? (
@@ -479,10 +546,13 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
                     <Maximize2 className="size-4" aria-hidden="true" />
                   )}
                 </button>
-                {nextVideo && (
+                {countdownNext && (
                   <button
                     type="button"
-                    onClick={() => router.push(`/watch/${nextVideo.id}`)}
+                    onClick={() => {
+                      if (queueNext) useQueueStore.getState().markPlayed(videoId);
+                      router.push(`/watch/${countdownNext.id}`);
+                    }}
                     aria-label="Play next video"
                     title="Play next"
                     className="flex size-9 items-center justify-center rounded-full bg-secondary text-secondary-foreground transition hover:bg-secondary/70 sm:size-10"
@@ -565,8 +635,16 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
                 onSave={gate(() => setSaveOpen(true))}
                 onToggleTranscript={openTranscript}
                 onReport={gate(() => setReportOpen(true))}
+                onAddToQueue={() => {
+                  void onAddToQueue();
+                }}
+                queued={queued}
               />
             </div>
+
+            {/* WFX2-P4-QT: the queue list panel (mounted while the session
+                queue exists — remove-from-queue is the real WL remove) */}
+            {queueItems.length > 0 && <QueuePanel currentVideoId={videoId} />}
 
             {/* description */}
             <DescriptionBox
@@ -581,9 +659,11 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
               onSeek={seek}
             />
 
-            {/* transcript panel */}
+            {/* transcript panel (keyed per video — fresh language state) */}
             {transcriptOpen && (
               <TranscriptPanel
+                key={videoId}
+                videoId={videoId}
                 cues={cues}
                 getTime={() => playerHost.getPosition()}
                 query={transcriptQuery}
