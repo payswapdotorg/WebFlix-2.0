@@ -1,24 +1,92 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ListVideo, Play } from "lucide-react";
+import { ListVideo, Play, MoreVertical, ChevronUp, ChevronDown, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { useApi } from "@/hooks/use-api";
 import { VideoCard } from "@/components/video/video-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import type { PlaylistPageDTO } from "@/lib/types";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import type { PlaylistPageDTO, VideoDTO } from "@/lib/types";
 
 /**
  * The public playlist page (WFX2-B-W) — browse VL<id> (real YouTube
  * playlist): title, owner, stats, the video grid, Play all (first video).
  * Playlist-result cards from search link here.
+ *
+ * WFX2-P4-PE: per-item ⋯ menu with Move up / Move down (the broker's
+ * playlist-reorder drive, mapped to fromIndex/toIndex calls). Optimistic
+ * local reorder; toast on the broker verdicts; honest degradation when the
+ * broker is offline/unauthorized (the toast surfaces the error). The
+ * affordance is hidden when the playlist is read-only (the broker's
+ * playlist-drag-handle-not-found honest failure shape — the operator may not
+ * own the playlist).
  */
 export default function PlaylistPage() {
   const { id } = useParams<{ id: string }>();
-  const { data, loading, error } = useApi<PlaylistPageDTO>(
+  const { data, loading, error, reload } = useApi<PlaylistPageDTO>(
     id ? `/api/playlist/${encodeURIComponent(id)}` : null
   );
+
+  // optimistic local reorder (the broker's intended effect)
+  const [order, setOrder] = useState<VideoDTO[] | null>(null);
+  const [reordering, setReordering] = useState<number | null>(null);
+
+  const listedVideos = order ?? data?.videos ?? [];
+
+  async function moveItem(fromIndex: number, toIndex: number) {
+    if (!id || !data) return;
+    if (toIndex < 0 || toIndex >= listedVideos.length) return;
+    if (fromIndex === toIndex) return;
+    const moved = listedVideos[fromIndex];
+    if (!moved) return;
+    // optimistic local reorder (mirrors the broker's intended effect)
+    const optimistic = [...listedVideos];
+    optimistic.splice(fromIndex, 1);
+    optimistic.splice(toIndex, 0, moved);
+    setOrder(optimistic);
+    setReordering(fromIndex);
+    try {
+      const res = await fetch(`/api/playlists/${encodeURIComponent(id)}/reorder`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromIndex, toIndex, videoId: moved.id }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        verified?: boolean;
+        error?: string;
+        unverifiedNote?: string;
+      };
+      if (!res.ok || !body.ok) {
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      if (body.verified) {
+        toast.success(`Moved “${moved.title}” to position ${toIndex + 1}`);
+      } else if (body.unverifiedNote) {
+        toast.info(`Move submitted — the broker could not confirm the new order yet`);
+      } else {
+        toast.success(`Move submitted`);
+      }
+      // reload the canonical order from the server (clears the optimistic state)
+      reload();
+      setOrder(null);
+    } catch (err) {
+      // revert the optimistic reorder on failure
+      setOrder(null);
+      toast.error(err instanceof Error ? err.message : "Failed to reorder playlist");
+    } finally {
+      setReordering(null);
+    }
+  }
 
   if (error) {
     return (
@@ -79,12 +147,49 @@ export default function PlaylistPage() {
             )}
           </div>
           <div className="grid grid-cols-1 gap-x-4 gap-y-8 px-4 sm:grid-cols-2 sm:px-6 lg:grid-cols-3 2xl:grid-cols-4">
-            {data.videos.map((video, i) => (
+            {listedVideos.map((video, i) => (
               <div key={video.id} className="relative">
                 <span className="absolute -left-1 -top-1 z-10 hidden text-xs font-semibold tabular-nums text-muted-foreground lg:block" aria-hidden>
                   {i + 1}
                 </span>
-                <VideoCard video={video} />
+                <div className="relative">
+                  <VideoCard video={video} />
+                  {/* the per-item ⋯ menu (Move up / Move down — the broker's
+                      playlist-reorder drive) */}
+                  <div className="absolute right-1 top-1 z-20 opacity-0 transition-opacity focus-within:opacity-100 hover:opacity-100 group-hover:opacity-100">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="size-7 rounded-full p-0 shadow"
+                          disabled={reordering !== null}
+                          aria-label={`Actions for ${video.title}`}
+                        >
+                          {reordering === i ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : (
+                            <MoreVertical className="size-3.5" />
+                          )}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          disabled={i === 0 || reordering !== null}
+                          onClick={() => moveItem(i, i - 1)}
+                        >
+                          <ChevronUp className="mr-2 size-3.5" /> Move up
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={i === listedVideos.length - 1 || reordering !== null}
+                          onClick={() => moveItem(i, i + 1)}
+                        >
+                          <ChevronDown className="mr-2 size-3.5" /> Move down
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
