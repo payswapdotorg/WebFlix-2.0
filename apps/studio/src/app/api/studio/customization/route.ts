@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/session";
-import { fetchOperatorChannel, mainPost } from "@/lib/main-api";
+import { mainPost } from "@/lib/main-api";
 import { rateLimit } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";

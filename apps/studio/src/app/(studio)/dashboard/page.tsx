@@ -18,7 +18,7 @@ const WHATS_NEW = [
 
 export default function DashboardPage() {
   const [videos, setVideos] = useState<NormalizedVideo[] | null>(null);
-  const [channel, setChannel] = useState<ChannelInfo | null>(null);
+  const [, setChannel] = useState<ChannelInfo | null>(null); // channel state kept for the fetch contract; the dashboard renders totals instead
   const [posts, setPosts] = useState<NormalizedPost[] | null>(null);
   const [postsNote, setPostsNote] = useState<string | null>(null);
   const [series, setSeries] = useState<SeriesPoint[] | null>(null);
