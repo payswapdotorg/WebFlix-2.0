@@ -1057,11 +1057,6 @@ export function requiredUrl(req: BrokerActionRequest): string | null {
       }
       return handle ? `https://www.youtube.com/@${handle}/community` : null;
     }
-    // WFX2-P3 — lane-owned kinds module routing (pre-seeded by the lead)
-    case "upload-execute":
-      return uploadExecuteScript(payload);
-    case "live-chat-send":
-      return liveChatSendScript(String(payload?.message ?? ""));
     default:
       return null;
   }
@@ -1206,6 +1201,17 @@ export function buildScript(req: BrokerActionRequest): { script: string; timeout
         timeoutMs: 60000,
       };
     }
+    // WFX2-P3 — lane-owned kinds module routing (pre-seeded by the lead).
+    // CORRECTIVE (P3-UP lane, disclosed): the pre-seed landed this routing
+    // block at the tail of requiredUrl — a {script,timeoutMs} object can
+    // never be a navigation URL (and requiredUrl must be null for
+    // upload-execute: the script owns its navigation). Moved to buildScript,
+    // the placement the pre-seed commit message itself documents. The
+    // live-chat-send case above keeps the watch-page URL in requiredUrl.
+    case "upload-execute":
+      return uploadExecuteScript(payload);
+    case "live-chat-send":
+      return liveChatSendScript(String(payload?.message ?? ""));
     default:
       return null;
   }
