@@ -22,6 +22,9 @@ import type { BrokerActionKind, BrokerActionRequest, BrokerActionResponse } from
 // the bodies live in kinds/ and never require shared-file edits)
 import { uploadExecuteScript } from "./kinds/upload";
 import { liveChatSendScript } from "./kinds/livechat";
+// WFX2-P4-PE — lane-owned kind module (registry routing pre-seeded; the
+// bodies live in kinds/playlistedit.ts and never require shared-file edits)
+import { playlistUpdateScript, playlistReorderScript } from "./kinds/playlistedit";
 
 /* ------------------------------------------------------------------ */
 /* like params protobuf templates (fixture: request_payload_examples)  */
@@ -1031,6 +1034,9 @@ export function requiredUrl(req: BrokerActionRequest): string | null {
       return "https://www.youtube.com/feed/history";
     case "playlist-remove-item":
     case "playlist-delete":
+    // WFX2-P4-PE: both playlist-edit kinds drive the playlist's own page
+    case "playlist-update":
+    case "playlist-reorder":
       return target.playlistId
         ? `https://www.youtube.com/playlist?list=${target.playlistId}`
         : null;
@@ -1212,6 +1218,12 @@ export function buildScript(req: BrokerActionRequest): { script: string; timeout
       return uploadExecuteScript(payload);
     case "live-chat-send":
       return liveChatSendScript(String(payload?.message ?? ""));
+    // WFX2-P4-PE — lane-owned kind module routing (pre-seeded by the lead;
+    // kinds/playlistedit.ts owns the bodies)
+    case "playlist-update":
+      return playlistUpdateScript(payload);
+    case "playlist-reorder":
+      return playlistReorderScript(payload);
     default:
       return null;
   }

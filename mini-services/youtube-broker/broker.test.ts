@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { createBrokerServer, validateActionRequest } from "./server";
 import { uploadExecuteScript } from "./kinds/upload";
 import { liveChatSendScript } from "./kinds/livechat";
+import { playlistUpdateScript, playlistReorderScript } from "./kinds/playlistedit";
 import { createBrokerOptions } from "./options";
 import { secretMatches } from "./auth";
 import { Journal } from "./journal";
@@ -219,4 +220,24 @@ test("P3 kinds: upload-execute + live-chat-send route their real lane drives", (
   expect(lc.script).not.toContain("staged kind");
   const lcBuilt = buildScript({ kind: "live-chat-send", target: {}, payload: { message: "hi" } });
   expect(lcBuilt && lcBuilt.script).toBe(liveChatSendScript("hi").script);
+});
+
+// WFX2-P4 pre-seed: the playlist-edit kinds route to their lane-owned module
+// and answer honestly until the P4-PE lane lands (self-expiring by design).
+test("P4 staged kinds: playlist-update + playlist-reorder route + honest stub", () => {
+  const up = playlistUpdateScript({ playlistId: "PL_test", title: "New name" });
+  expect(up.timeoutMs).toBeGreaterThan(0);
+  expect(up.script).toContain("playlist-update: staged kind");
+  expect(up.script).toContain("title");
+  const ro = playlistReorderScript({ playlistId: "PL_test", fromIndex: 0, toIndex: 2 });
+  expect(ro.script).toContain("playlist-reorder: staged kind");
+  expect(ro.script).toContain("fromIndex");
+  const built = buildScript({ kind: "playlist-update", target: { playlistId: "PLx" }, payload: { title: "T" } });
+  expect(built && built.script).toBe(playlistUpdateScript({ title: "T" }).script);
+  expect(requiredUrl({ kind: "playlist-update", target: { playlistId: "PLx" }, payload: {} })).toBe(
+    "https://www.youtube.com/playlist?list=PLx"
+  );
+  expect(requiredUrl({ kind: "playlist-reorder", target: { playlistId: "PLx" }, payload: {} })).toBe(
+    "https://www.youtube.com/playlist?list=PLx"
+  );
 });

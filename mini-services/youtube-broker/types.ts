@@ -40,6 +40,10 @@ export const ACTION_KINDS = [
   // bodies live in kinds/upload.ts + kinds/livechat.ts (lane-owned modules)
   "upload-execute",
   "live-chat-send",
+  // WFX2-P4-PE (playlist edit) — additive; the executor bodies live in
+  // kinds/playlistedit.ts (the lane-owned module, the P3 pattern)
+  "playlist-update",
+  "playlist-reorder",
 ] as const;
 
 export type BrokerActionKind = (typeof ACTION_KINDS)[number];
