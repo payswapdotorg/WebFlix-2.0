@@ -25,6 +25,17 @@
  *  - channelFromLastGood normalization: space-stripped handle matching +
  *    the cached page's channel NAME match — all exact-normalized.
  *
+ * WFX2-CF-3 (the stability fix — the lead's live verification finding: the
+ * search-result channel attributions VARY between requests, the same query
+ * resolving 44-56% dominant across calls):
+ *  - the resilient resolve — a NULL resolution is the unhealthy shape:
+ *    never cached, never overwrites; the LAST-GOOD resolution serves
+ *    within the resolve key family's default hard window (the
+ *    cutover-routes adapter test patterns); a flaky search can no longer
+ *    poison the window;
+ *  - the composed-page family store rides a plain 2-HOUR TTL — one
+ *    successful compose buys hours of stable serving.
+ *
  * Fixture bytes via setUpstream() + the Upstash fake via setUpstashRest()
  * (the channel-wall.test.ts patterns — never the network). The synthetic
  * fixtures (`_synthetic: true`, *_synth.json — the repo convention):
@@ -87,6 +98,9 @@ function fixtureUpstream() {
   let ssrWalled = false;
   let watchWalled = false;
   let watchOwnerSpoof: string | null = null;
+  // WFX2-CF-3 — the live finding: the SAME query's attributions vary between
+  // requests; when flaky, every search answers the below-threshold capture
+  let searchFlaky = false;
   const impl = async (url: string, init?: RequestInit): Promise<Response> => {
     const body = init?.body ? JSON.parse(String(init.body)) : null;
     recorded.push({ url, body });
@@ -94,6 +108,9 @@ function fixtureUpstream() {
       new Response(JSON.stringify(data), { status: 200, headers: { "Content-Type": "application/json" } });
 
     if (url.includes("/youtubei/v1/search")) {
+      // WFX2-CF-3 — the flaky window: the query that resolved dominant a
+      // moment ago now answers below-threshold attributions (a null resolve)
+      if (searchFlaky) return json(searchLofi);
       const flatQuery = String(body?.query ?? "").toLowerCase().replace(/\s+/g, "");
       if (flatQuery === "rickastleyyt" || flatQuery === "rickastley" || flatQuery === "togetherrickastley") {
         return json(dominantSynth); // the dominant-id name search
@@ -129,6 +146,7 @@ function fixtureUpstream() {
     wall: (v: boolean) => (ssrWalled = v),
     wallWatch: (v: boolean) => (watchWalled = v),
     spoofWatchOwner: (id: string | null) => (watchOwnerSpoof = id),
+    flakySearch: (v: boolean) => (searchFlaky = v),
   };
 }
 
@@ -212,6 +230,15 @@ function familyPage(overrides: Record<string, unknown> = {}) {
 let upstream: ReturnType<typeof fixtureUpstream>;
 const searchCalls = () => upstream.recorded.filter((r) => r.url.includes("/youtubei/v1/search"));
 const nextCalls = () => upstream.recorded.filter((r) => r.url.includes("/youtubei/v1/next"));
+
+/** Await a floating background revalidation (poll until `cond` or timeout). */
+async function until(cond: () => boolean, timeoutMs = 2_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!cond()) {
+    if (Date.now() > deadline) throw new Error("condition not met in time");
+    await Bun.sleep(10);
+  }
+}
 
 beforeEach(() => {
   clearCache();
@@ -377,10 +404,47 @@ describe("the cached resolver (resolveChannelFromSearch)", () => {
     expect(searchCalls().every((c) => !String(c.body?.query ?? "").startsWith("@"))).toBe(true);
   });
 
-  test("below both thresholds the cached null serves — no re-search", async () => {
+  test("below both thresholds the null is honestly returned and NEVER cached (WFX2-CF-3)", async () => {
     expect(await resolveChannelFromSearch("@lofi")).toBeNull();
     expect(await resolveChannelFromSearch("@lofi")).toBeNull();
-    expect(searchCalls()).toHaveLength(1);
+    // the plain cached() poisoned the window for the full 5-minute TTL (a
+    // flaky null degraded every channel page in it); the resilient resolve
+    // honestly re-searches — a null never caches in either layer
+    expect(searchCalls()).toHaveLength(2);
+    expect(await cachePeek(resolveChannelCacheKey("@lofi"))).toBeNull(); // no L1/L2 entry
+  });
+
+  test("the live finding — a flaky null never overwrites a last-good resolution (WFX2-CF-3)", async () => {
+    const rest = fakeRest();
+    setUpstashRest(rest.impl);
+    // the last-good: the resolution a PREVIOUS successful search left in the
+    // resolve family (stale soft, live hard — the default hard window)
+    const good = resolveFromSearchResponse(dominantSynth)!;
+    seedLastGood(rest.store, resolveChannelCacheKey("@RickAstleyYT"), good);
+    // the SAME query now answers below-threshold attributions — the live
+    // flapping (44-56% dominant across calls, sometimes below the rule)
+    upstream.flakySearch(true);
+    // read 1 (cold): the stale L2 last-good serves; read 2 (L1 stale): serves
+    // again + fires the background SWR revalidation into the flaky window
+    expect((await resolveChannelFromSearch("@RickAstleyYT"))?.channelId).toBe(RICK_ID);
+    expect((await resolveChannelFromSearch("@RickAstleyYT"))?.channelId).toBe(RICK_ID);
+    // the flaky re-search genuinely ran — and its null NEVER overwrote the
+    // stored last-good (under the plain cached() the null was the cached
+    // value for the full 5-minute TTL; the window is unpoisonable now)
+    await until(() => searchCalls().length >= 1);
+    expect(
+      JSON.parse(rest.store.get(resolveChannelCacheKey("@RickAstleyYT"))!).value,
+    ).toEqual(good);
+    // the next read still serves the last-good resolution
+    expect((await resolveChannelFromSearch("@RickAstleyYT"))?.channelId).toBe(RICK_ID);
+    expect((await resolveChannelFromSearch("@RickAstleyYT"))?.channelName).toBe("Rick Astley");
+  });
+
+  test("a cold flaky null with NO last-good goes through honestly (never fake data)", async () => {
+    upstream.flakySearch(true);
+    // cold cache — nothing seeded, the honest null returns untouched
+    expect(await resolveChannelFromSearch("@RickAstleyYT")).toBeNull();
+    expect(searchCalls()).toHaveLength(1); // the search genuinely ran
   });
 });
 
@@ -480,6 +544,34 @@ describe("GET /api/channel/[handle] — the search-compose rung", () => {
     expect(secondPage.channel.composed).toBe(true);
     expect(secondPage.channel.id).toBe(RICK_ID);
     expect(upstream.recorded.length).toBe(callsBefore); // zero new upstream calls
+  });
+
+  test("the composed family entries ride the 2-HOUR store window (WFX2-CF-3)", async () => {
+    const rest = fakeRest();
+    setUpstashRest(rest.impl);
+    upstream.wall(true);
+    // a bare-name read composes and stores under BOTH family keys (the
+    // requested key + the resolved real handle's key)
+    const res = await channelRoute(
+      new Request("http://localhost/api/channel/Rick%20Astley"),
+      ctx("Rick Astley")
+    );
+    expect(((await res.json()) as any).channel.composed).toBe(true);
+    const now = Date.now();
+    const keys = [channelPageCacheKey("Rick Astley"), channelPageCacheKey("@RickAstleyYT")];
+    await until(() => keys.every((k) => rest.store.has(k))); // the L2 writes landed
+    for (const key of keys) {
+      const peeked = await cachePeek<{ page: unknown; walled: boolean }>(key);
+      expect(peeked).not.toBeNull();
+      expect(peeked!.fresh).toBe(true);
+      // ~2 hours, NOT the old 5-minute TTL.FEED_MS: one successful compose
+      // buys hours of stable serving
+      expect(peeked!.hardUntil).toBeGreaterThan(now + 110 * 60_000);
+      expect(peeked!.hardUntil).toBeLessThanOrEqual(now + 2 * 3_600_000);
+      // the L2 write carries the same 2-hour window (EX ≈ 7200s)
+      const envelope = JSON.parse(rest.store.get(key)!);
+      expect(envelope.hardUntil - now).toBeGreaterThan(110 * 60_000);
+    }
   });
 
   test("a healthy browse never composes (the first rung stands)", async () => {
