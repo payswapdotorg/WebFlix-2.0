@@ -14,6 +14,12 @@ import { AccountMenu } from "./account-menu";
 import { VoiceSearchDialog } from "./voice-search";
 import { SidebarNav } from "./sidebar";
 import { useSidebar } from "@/lib/sidebar-store";
+import {
+  SUGGEST_LISTBOX_ID,
+  SuggestDropdown,
+  suggestOptionId,
+  useSuggestDropdown,
+} from "@/components/search/suggest-dropdown";
 
 export function Topbar() {
   const router = useRouter();
@@ -23,10 +29,21 @@ export function Topbar() {
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  // P3-SG: youtube.com autocomplete parity — suggestions + recents dropdown
+  // under the search box (additive; the form submit + voice dialog are untouched).
+  const suggest = useSuggestDropdown({
+    query,
+    onCommit: (text) => {
+      setQuery(text);
+      router.push(`/search?q=${encodeURIComponent(text)}`);
+    },
+  });
+
   function submitSearch(e: React.FormEvent) {
     e.preventDefault();
     const q = query.trim();
     if (!q) return;
+    suggest.recordRecent(q); // an executed search is a recent (capped, deduped)
     router.push(`/search?q=${encodeURIComponent(q)}`);
   }
 
@@ -80,8 +97,20 @@ export function Topbar() {
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onFocus={() => suggest.setOpen(true)}
+            onBlur={() => suggest.close()}
+            onKeyDown={(e) => {
+              if (suggest.handleKeyDown(e)) e.preventDefault();
+            }}
             placeholder="Search"
             aria-label="Search videos and channels"
+            role="combobox"
+            aria-expanded={suggest.open}
+            aria-autocomplete="list"
+            aria-controls={SUGGEST_LISTBOX_ID}
+            aria-activedescendant={
+              suggest.activeIndex >= 0 ? suggestOptionId(suggest.activeIndex) : undefined
+            }
             className="h-full flex-1 rounded-l-full border-0 bg-transparent pl-4 text-sm shadow-none focus-visible:ring-0"
           />
           <Button
@@ -91,6 +120,7 @@ export function Topbar() {
           >
             <Search className="size-5" />
           </Button>
+          <SuggestDropdown control={suggest} />
         </div>
         <Button
           type="button"

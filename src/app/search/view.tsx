@@ -14,6 +14,7 @@ import { ChannelResultCard } from "@/components/search/channel-result-card";
 import { PlaylistResultCard } from "@/components/search/playlist-result-card";
 import {
   filtersFromParams,
+  hasActiveFilters,
   searchHref,
   type SearchFilterState,
 } from "@/lib/youtube/search-filters";
@@ -174,11 +175,31 @@ function SearchContent() {
             </p>
           )}
           {data && !hasAnyResults && (
-            <div className="px-4 py-16 text-center sm:px-6">
-              <p className="text-lg font-medium">No results for “{q}”</p>
+            <div className="mx-auto max-w-md px-4 py-16 text-center sm:px-6">
+              {/* P3-SG zero-state parity — youtube.com's no-results copy, honest
+                  tips only (every line is a real, applicable suggestion), and the
+                  actionable filter removal when filters narrow the results. */}
+              <h2 className="text-xl font-semibold">No results found</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Try different keywords or removing some filters — WebFlix searches all of YouTube.
+                Try different keywords or remove search filters.
               </p>
+              <ul className="mx-auto mt-6 max-w-sm space-y-2.5 text-left text-sm text-muted-foreground">
+                <li>Try more general keywords</li>
+                <li>Try fewer keywords</li>
+                <li>Check the spelling — or take the “Did you mean” suggestion above</li>
+                <li>Remove search filters to widen the results</li>
+              </ul>
+              {hasActiveFilters(state) && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-6 rounded-full"
+                  onClick={() => pushState(q, {})}
+                >
+                  Remove all filters
+                </Button>
+              )}
             </div>
           )}
 

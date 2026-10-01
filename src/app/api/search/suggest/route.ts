@@ -4,6 +4,9 @@ import { cached, TTL, rateLimit } from "@/lib/youtube/cache";
 
 export const dynamic = "force-dynamic";
 
+/** P3-SG lane law: 5s upstream timeout — a slow suggest never blocks the box. */
+export const SUGGEST_TIMEOUT_MS = 5_000;
+
 /**
  * GET /api/search/suggest?q= — suggestqueries autocomplete (JSONP body →
  * clean string array). Public endpoint, cached per prefix.
@@ -16,7 +19,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
     const suggestions = await cached(`yt:suggest:${q.toLowerCase()}`, TTL.SUGGEST_MS, () =>
-      autocomplete(q)
+      autocomplete(q, { timeoutMs: SUGGEST_TIMEOUT_MS })
     );
     return NextResponse.json({ query: q, suggestions });
   } catch (err) {
