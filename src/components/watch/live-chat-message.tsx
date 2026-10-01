@@ -7,15 +7,53 @@
  * are colored YouTube-style by badge (owner gold, moderator green, member
  * accent); avatars are plain <img> (external hosts, referrerPolicy
  * "no-referrer" — the codebase pattern for YouTube-hosted images).
+ *
+ * WFX2-P3-LC (additive) — the report affordance: authored rows gain a
+ * right-click context menu with "Report" (youtube.com's chat affordance
+ * family), which opens the report dialog (the comment-report-dialog idiom —
+ * reason rows + Report button). The submit routes through the new report
+ * action (@/lib/livechat/report) and shows its HONEST outcome: the
+ * platform's chat report DOM is not drivable through the current broker
+ * registry, so the dialog says so — never a fake "reported" state.
+ * System notes and banners carry no author → no affordance.
  */
-import { Award, BadgeCheck, Pin } from "lucide-react";
+import { useState } from "react";
+import { Award, BadgeCheck, Flag, Pin } from "lucide-react";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatDuration } from "@/lib/watch/format";
+import {
+  reportLiveChatMessage,
+  type LiveChatReportResult,
+} from "@/lib/livechat/report";
 import type { LiveChatMessageDTO } from "@/lib/youtube/livechat";
 
 /** 15–20% alpha over the super chat color (#rrggbb → #rrggbb2b). */
 const SUPERCHAT_ALPHA = "2b";
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
+/** YouTube's chat report-dialog reason labels (the comment family). */
+export const CHAT_REPORT_REASONS = [
+  "Spam or misleading",
+  "Harassment or bullying",
+  "Hate speech or graphic violence",
+  "Promotes terrorism",
+  "Impersonation",
+] as const;
 
 function superChatTint(color: string | null | undefined): string | null {
   return color && HEX_COLOR_RE.test(color) ? color : null;
@@ -116,12 +154,181 @@ function NameRow({
   );
 }
 
+/**
+ * WFX2-P3-LC — the chat report dialog (the comment-report-dialog idiom:
+ * the reasons radiogroup, single select, Report button). The submit routes
+ * through the new report action and renders its HONEST outcome inline —
+ * the degradation copy when the platform's chat report DOM is unavailable
+ * (the current state), the success copy only when a report really filed.
+ */
+export function LiveChatReportDialog({
+  open,
+  onOpenChange,
+  message,
+  videoId,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  message: LiveChatMessageDTO;
+  videoId: string;
+}) {
+  const [reason, setReason] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [outcome, setOutcome] = useState<LiveChatReportResult | null>(null);
+
+  const submit = async () => {
+    if (!reason || busy) return;
+    setBusy(true);
+    try {
+      const result = await reportLiveChatMessage({
+        videoId,
+        messageId: message.id,
+        body: message.body,
+        reason,
+      });
+      setOutcome(result);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        onOpenChange(v);
+        if (!v) {
+          setReason(null);
+          setOutcome(null);
+        }
+      }}
+    >
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Flag className="size-5" aria-hidden="true" />
+            Report message
+          </DialogTitle>
+          <DialogDescription>
+            Tell us why you&apos;re reporting this chat message.
+          </DialogDescription>
+        </DialogHeader>
+        {outcome ? (
+          <div
+            role="status"
+            data-testid="chat-report-outcome"
+            className={cn(
+              "rounded-lg px-3 py-2.5 text-sm leading-snug",
+              outcome.ok ? "bg-secondary/70" : "bg-secondary/70 text-muted-foreground",
+            )}
+          >
+            {outcome.message}
+          </div>
+        ) : (
+          <div role="radiogroup" aria-label="Report message reason" className="max-h-72 overflow-y-auto">
+            {CHAT_REPORT_REASONS.map((r) => (
+              <button
+                key={r}
+                type="button"
+                role="radio"
+                aria-checked={reason === r}
+                onClick={() => setReason(r)}
+                className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left text-sm transition hover:bg-accent"
+              >
+                <span
+                  className={`flex size-4 items-center justify-center rounded-full border ${
+                    reason === r ? "border-[#f03]" : "border-muted-foreground/60"
+                  }`}
+                  aria-hidden="true"
+                >
+                  {reason === r && <span className="size-2 rounded-full bg-[#f03]" />}
+                </span>
+                {r}
+              </button>
+            ))}
+          </div>
+        )}
+        <DialogFooter>
+          {outcome ? (
+            <Button
+              variant="ghost"
+              className="rounded-full"
+              onClick={() => onOpenChange(false)}
+            >
+              Close
+            </Button>
+          ) : (
+            <>
+              <Button
+                variant="ghost"
+                className="rounded-full"
+                onClick={() => onOpenChange(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                className="rounded-full"
+                disabled={!reason || busy}
+                onClick={submit}
+              >
+                {busy ? "Reporting…" : "Report"}
+              </Button>
+            </>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * WFX2-P3-LC — the report affordance wrapper: the authored row + its
+ * right-click context menu (youtube.com's chat affordance). Rendered only
+ * when the parent supplies the watch surface's videoId (the panel does);
+ * otherwise rows render exactly as before (additive, opt-in).
+ */
+function ReportableRow({
+  message,
+  videoId,
+  children,
+}: {
+  message: LiveChatMessageDTO;
+  videoId?: string;
+  children: React.ReactNode;
+}) {
+  const [reportOpen, setReportOpen] = useState(false);
+  if (!videoId) return <>{children}</>;
+  return (
+    <>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onSelect={() => setReportOpen(true)}>
+            <Flag aria-hidden="true" />
+            Report
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+      <LiveChatReportDialog
+        open={reportOpen}
+        onOpenChange={setReportOpen}
+        message={message}
+        videoId={videoId}
+      />
+    </>
+  );
+}
+
 export function LiveChatMessage({
   message,
   showTimestamps,
+  videoId,
 }: {
   message: LiveChatMessageDTO;
   showTimestamps: boolean;
+  /** WFX2-P3-LC: the watch surface's video id — enables the report affordance */
+  videoId?: string;
 }) {
   const body = message.body?.trim() ?? "";
 
@@ -157,29 +364,31 @@ export function LiveChatMessage({
         : body;
 
     return (
-      <div
-        className={cn(
-          "my-1 rounded-lg p-2",
-          !tint && "border-l-[3px] border-l-primary bg-primary/10",
-        )}
-        style={
-          tint
-            ? {
-                backgroundColor: `${tint}${SUPERCHAT_ALPHA}`,
-                borderLeft: `3px solid ${tint}`,
-              }
-            : undefined
-        }
-      >
-        <div className="flex items-start gap-2">
-          <AuthorAvatar message={message} />
-          <div className="min-w-0 flex-1">
-            <NameRow message={message} showTimestamps={showTimestamps} />
-            {amount && <p className="mt-0.5 text-sm font-bold leading-tight">{amount}</p>}
-            {label && <p className="mt-0.5 break-words text-sm leading-snug">{label}</p>}
+      <ReportableRow message={message} videoId={videoId}>
+        <div
+          className={cn(
+            "my-1 rounded-lg p-2",
+            !tint && "border-l-[3px] border-l-primary bg-primary/10",
+          )}
+          style={
+            tint
+              ? {
+                  backgroundColor: `${tint}${SUPERCHAT_ALPHA}`,
+                  borderLeft: `3px solid ${tint}`,
+                }
+              : undefined
+          }
+        >
+          <div className="flex items-start gap-2">
+            <AuthorAvatar message={message} />
+            <div className="min-w-0 flex-1">
+              <NameRow message={message} showTimestamps={showTimestamps} />
+              {amount && <p className="mt-0.5 text-sm font-bold leading-tight">{amount}</p>}
+              {label && <p className="mt-0.5 break-words text-sm leading-snug">{label}</p>}
+            </div>
           </div>
         </div>
-      </div>
+      </ReportableRow>
     );
   }
 
@@ -190,34 +399,38 @@ export function LiveChatMessage({
         ? message.memberMilestoneText || body
         : body || "Member welcome";
     return (
-      <div className="my-1 rounded-lg bg-secondary/60 px-2 py-1.5 dark:bg-secondary/40">
-        <div className="flex items-start gap-2">
-          <AuthorAvatar message={message} />
-          <div className="min-w-0 flex-1">
-            <NameRow message={message} showTimestamps={showTimestamps} />
-            {chipText && (
-              <div className="mt-0.5">
-                <MemberChip text={chipText} />
-              </div>
-            )}
-            {body && body !== chipText && (
-              <p className="mt-0.5 break-words text-sm leading-snug">{body}</p>
-            )}
+      <ReportableRow message={message} videoId={videoId}>
+        <div className="my-1 rounded-lg bg-secondary/60 px-2 py-1.5 dark:bg-secondary/40">
+          <div className="flex items-start gap-2">
+            <AuthorAvatar message={message} />
+            <div className="min-w-0 flex-1">
+              <NameRow message={message} showTimestamps={showTimestamps} />
+              {chipText && (
+                <div className="mt-0.5">
+                  <MemberChip text={chipText} />
+                </div>
+              )}
+              {body && body !== chipText && (
+                <p className="mt-0.5 break-words text-sm leading-snug">{body}</p>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      </ReportableRow>
     );
   }
 
   // --- plain text ---------------------------------------------------------
   return (
-    <div className="flex items-start gap-2 px-1 py-1">
-      <AuthorAvatar message={message} />
-      <div className="min-w-0 flex-1">
-        <NameRow message={message} showTimestamps={showTimestamps} />
-        {body && <p className="mt-0.5 break-words text-sm leading-snug">{message.body}</p>}
+    <ReportableRow message={message} videoId={videoId}>
+      <div className="flex items-start gap-2 px-1 py-1">
+        <AuthorAvatar message={message} />
+        <div className="min-w-0 flex-1">
+          <NameRow message={message} showTimestamps={showTimestamps} />
+          {body && <p className="mt-0.5 break-words text-sm leading-snug">{message.body}</p>}
+        </div>
       </div>
-    </div>
+    </ReportableRow>
   );
 }
 

@@ -6,15 +6,29 @@
  * Expanded: header (title, participants, replay badge, timestamp toggle,
  * collapse), "Top chat | Live chat" segmented control, newest-at-bottom
  * message list (auto-scroll only when pinned near the bottom, floating
- * "Jump to latest" pill otherwise), and a permanently disabled input
- * (posting ships with the sign-in broker lane).
+ * "Jump to latest" pill otherwise), and — WFX2-P3-LC — the real send flow.
  *
- * All data via useLiveChat → /api/videos/[id]/livechat. The panel
+ * All read data via useLiveChat → /api/videos/[id]/livechat. The panel
  * self-hides (renders null) when the video has no chat. currentTimeSec is
  * the player playhead in seconds — the hook fetches replay frames as it
  * advances; in replay mode only messages at/below the playhead are shown.
+ *
+ * WFX2-P3-LC — the send flow (posting to live chat ships):
+ *  - REPLAY: the input area is hidden entirely (posting to a replayed chat
+ *    is not a thing on youtube.com — chat is live-only);
+ *  - GUEST (no WebFlix account — the P2-AU signed-out law): the input area
+ *    becomes the "Sign in to chat" gate (the comment composer's "Sign in to
+ *    comment" pattern — red Sign in affordance, redirect back to this watch
+ *    page);
+ *  - SIGNED-IN: a live input + send button + Enter. The message echoes
+ *    optimistically (marked pending), reconciled by the broker result:
+ *    success flips the echo to "sent" (and the polled stream later replaces
+ *    it with the real row); failure clears the echo, restores the draft and
+ *    shows the honest error copy (members-only / slow mode / chat disabled —
+ *    youtube.com's own states).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import {
   ChevronLeft,
   ChevronRight,
@@ -27,14 +41,28 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { compactCount } from "@/lib/watch/format";
 import { useLiveChat } from "@/hooks/use-live-chat";
+import { useWebFlixSession } from "@/hooks/use-webflix-session";
+import { signInHref } from "@/lib/auth/client";
+import {
+  buildLiveChatEcho,
+  reconcileEchoes,
+  sendLiveChatMessage,
+  type LiveChatEcho,
+  type LiveChatSendErrorState,
+} from "@/lib/livechat/send";
 import { LiveChatMessage } from "./live-chat-message";
 
 /** Near-bottom threshold (px) that keeps auto-scroll pinned on. */
 const BOTTOM_EPS_PX = 80;
+
+/** youtube.com's live-chat message length limit. */
+export const LIVE_CHAT_MAX_LENGTH = 200;
+
+/** Cap on optimistic echoes kept in the panel state (oldest drop first). */
+const MAX_ECHOES = 20;
 
 /** WFX2-C-S: strict H:MM:SS for the replay offset chip (hours always shown). */
 export function formatOffsetChip(sec: number): string {
@@ -71,6 +99,15 @@ export function LiveChatPanel({
   const [showTimestamps, setShowTimestamps] = useState(false);
   const [newCount, setNewCount] = useState(0);
 
+  // ---- WFX2-P3-LC: the send flow state -----------------------------------
+  const session = useWebFlixSession();
+  /** the AU signed-out law: guest = no WebFlix account session */
+  const guest = session.status === "unauthenticated";
+  const [draft, setDraft] = useState("");
+  const [echoes, setEchoes] = useState<LiveChatEcho[]>([]);
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<LiveChatSendErrorState | null>(null);
+
   const listRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
   const hoverRef = useRef(false);
@@ -91,6 +128,14 @@ export function LiveChatPanel({
       (m) => m.offsetMsec === null || m.offsetMsec === undefined || m.offsetMsec <= edgeMsec,
     );
   }, [visibleMessages, isReplay, currentTimeSec]);
+
+  // WFX2-P3-LC: reconcile the echoes against the polled stream — a sent
+  // echo whose body has streamed is dropped (the real youtube.com row takes
+  // its place); pending echoes always stay. Pure derivation, no effect.
+  const shownEchoes = useMemo(
+    () => reconcileEchoes(echoes, messages),
+    [echoes, messages],
+  );
 
   // newest-at-bottom: stick when the user is within BOTTOM_EPS_PX of the
   // bottom (and not hovering); otherwise count new messages for the
@@ -122,6 +167,33 @@ export function LiveChatPanel({
     atBottomRef.current = true;
     setNewCount(0);
   }, []);
+
+  // ---- WFX2-P3-LC: send ----------------------------------------------------
+  const send = useCallback(async () => {
+    const text = draft.trim();
+    if (!text || sending) return;
+    setSending(true);
+    setSendError(null);
+    const echo = buildLiveChatEcho(text);
+    setEchoes((prev) => [...prev.slice(-(MAX_ECHOES - 1)), echo]);
+    setDraft("");
+    // the echo is the newest row — pin it into view like a streamed message
+    const list = listRef.current;
+    if (list) list.scrollTop = list.scrollHeight;
+    const result = await sendLiveChatMessage(videoId, text);
+    setSending(false);
+    if (result.ok) {
+      setEchoes((prev) =>
+        prev.map((e) => (e.id === echo.id ? { ...e, status: "sent" } : e)),
+      );
+    } else {
+      // honest failure: clear the pending mark (echo out), restore the draft
+      // for retry (youtube.com keeps the text), show the platform's copy
+      setEchoes((prev) => prev.filter((e) => e.id !== echo.id));
+      setSendError(result.error);
+      setDraft(text);
+    }
+  }, [draft, sending, videoId]);
 
   // self-hide: no chat for this video (after the hooks above have run)
   if (state === "unavailable") return null;
@@ -157,6 +229,12 @@ export function LiveChatPanel({
   const showSkeletons =
     (state === "boot" || state === "loading") && messages.length === 0;
   const showErrorCard = state === "error" && messages.length === 0;
+
+  // WFX2-P3-LC: the composer exists only on a LIVE stream — replay hides the
+  // input entirely (posting to a replayed chat is not a thing), and the
+  // boot/error states carry no composer until the stream confirms live.
+  const canPost = state === "live" && !isReplay;
+  const echoName = session.user?.displayName?.trim() || "You";
 
   return (
     <section
@@ -306,7 +384,7 @@ export function LiveChatPanel({
             </div>
           )}
 
-          {!showSkeletons && !showErrorCard && shown.length === 0 && (
+          {!showSkeletons && !showErrorCard && shown.length === 0 && shownEchoes.length === 0 && (
             <p className="px-4 py-10 text-center text-sm text-muted-foreground">
               {isReplay
                 ? "Chat replay appears as the video plays."
@@ -317,7 +395,47 @@ export function LiveChatPanel({
           )}
 
           {shown.map((m) => (
-            <LiveChatMessage key={m.id} message={m} showTimestamps={showTimestamps} />
+            <LiveChatMessage key={m.id} message={m} showTimestamps={showTimestamps} videoId={videoId} />
+          ))}
+
+          {/* WFX2-P3-LC: the optimistic echoes — your messages, marked
+              pending until the broker verdict lands, then "sent" until the
+              polled stream delivers the real row (reconcileEchoes) */}
+          {shownEchoes.map((e) => (
+            <div
+              key={e.id}
+              data-testid="chat-echo"
+              data-status={e.status}
+              aria-label={`Your message${e.status === "pending" ? " (sending)" : " (sent)"}`}
+              className={cn(
+                "flex items-start gap-2 px-1 py-1 transition-opacity",
+                e.status === "pending" && "opacity-70",
+              )}
+            >
+              <span
+                aria-hidden="true"
+                className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-semibold text-primary"
+              >
+                {echoName.slice(0, 1).toUpperCase()}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-baseline gap-1">
+                  <span className="truncate text-xs font-medium text-foreground">
+                    {echoName}
+                  </span>
+                  <span
+                    className="ml-auto shrink-0 pl-1 text-[10px] font-medium text-muted-foreground"
+                    aria-hidden="true"
+                  >
+                    {e.status === "pending" ? "Sending…" : "Sent"}
+                  </span>
+                  <span className="sr-only">
+                    {e.status === "pending" ? "Sending" : "Sent"}
+                  </span>
+                </div>
+                <p className="mt-0.5 break-words text-sm leading-snug">{e.body}</p>
+              </div>
+            </div>
           ))}
         </div>
 
@@ -352,32 +470,64 @@ export function LiveChatPanel({
         )}
       </div>
 
-      {/* input — posting ships with the sign-in broker lane (always off) */}
-      <div className="border-t border-border p-3">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="flex items-center gap-2">
-              <Input
-                disabled
-                placeholder="Say something…"
-                aria-label="Chat message (sign-in required)"
-                className="h-9 flex-1 rounded-full bg-background text-sm"
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                disabled
-                aria-label="Send message (sign-in required)"
-                className="size-9 shrink-0 rounded-full"
-              >
-                <Send className="size-4" aria-hidden="true" />
-              </Button>
-            </div>
-          </TooltipTrigger>
-          <TooltipContent side="top">Sign-in actions arrive with the broker lane</TooltipContent>
-        </Tooltip>
-      </div>
+      {/* WFX2-P3-LC — the input area.
+          Replay: nothing (posting to replayed chat is not a thing on
+          youtube.com). Guest: the AU signed-out law ("Sign in to chat" —
+          the comment composer's "Sign in to comment" pattern). Signed-in on
+          a live stream: the composer + send button + Enter. */}
+      {canPost && guest && (
+        <div className="border-t border-border p-3">
+          <div className="flex h-10 items-center justify-between gap-3 rounded-xl border border-border px-4">
+            <span className="truncate text-sm text-muted-foreground">Sign in to chat</span>
+            <Link
+              href={signInHref(`/watch/${videoId}`)}
+              className="shrink-0 text-sm font-medium text-yt-red hover:underline"
+            >
+              Sign in
+            </Link>
+          </div>
+        </div>
+      )}
+      {canPost && !guest && (
+        <div className="border-t border-border p-3">
+          {sendError && (
+            <p
+              role="alert"
+              data-testid="chat-send-error"
+              className="mb-2 rounded-lg bg-secondary/70 px-3 py-2 text-xs leading-snug text-foreground"
+            >
+              {sendError.copy}
+            </p>
+          )}
+          <div className="flex items-center gap-2">
+            <Input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void send();
+                }
+              }}
+              placeholder="Say something…"
+              aria-label="Chat message"
+              maxLength={LIVE_CHAT_MAX_LENGTH}
+              className="h-9 flex-1 rounded-full bg-background text-sm"
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => void send()}
+              disabled={!draft.trim() || sending}
+              aria-label="Send message"
+              className="size-9 shrink-0 rounded-full"
+            >
+              <Send className="size-4" aria-hidden="true" />
+            </Button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
