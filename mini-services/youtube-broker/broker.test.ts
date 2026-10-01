@@ -222,15 +222,20 @@ test("P3 kinds: upload-execute + live-chat-send route their real lane drives", (
   expect(lcBuilt && lcBuilt.script).toBe(liveChatSendScript("hi").script);
 });
 
-// WFX2-P4 pre-seed: the playlist-edit kinds route to their lane-owned module
-// and answer honestly until the P4-PE lane lands (self-expiring by design).
-test("P4 staged kinds: playlist-update + playlist-reorder route + honest stub", () => {
+// WFX2-P4-PE LANDED (kinds/playlistedit.ts owns the deep script-shape suite).
+// The pre-seed's transitional "staged kind" assertions were self-expiring by
+// design — "answer honestly until the lanes land" — and are replaced by the
+// real-module routing lock (the P3-UP / P3-LC pattern). The deep script-shape
+// + payload-normalization coverage lives in kinds/playlistedit.test.ts.
+test("P4 kinds: playlist-update + playlist-reorder route their real lane drives", () => {
   const up = playlistUpdateScript({ playlistId: "PL_test", title: "New name" });
   expect(up.timeoutMs).toBeGreaterThan(0);
-  expect(up.script).toContain("playlist-update: staged kind");
+  expect(up.script).toContain("ytd-edit-playlist-dialog-renderer");
+  expect(up.script).not.toContain("staged kind");
   expect(up.script).toContain("title");
   const ro = playlistReorderScript({ playlistId: "PL_test", fromIndex: 0, toIndex: 2 });
-  expect(ro.script).toContain("playlist-reorder: staged kind");
+  expect(ro.script).toContain("ytd-playlist-video-renderer");
+  expect(ro.script).not.toContain("staged kind");
   expect(ro.script).toContain("fromIndex");
   const built = buildScript({ kind: "playlist-update", target: { playlistId: "PLx" }, payload: { title: "T" } });
   expect(built && built.script).toBe(playlistUpdateScript({ title: "T" }).script);

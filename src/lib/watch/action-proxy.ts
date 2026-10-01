@@ -629,3 +629,120 @@ export async function proxyCommentReport(
     path: r.path,
   };
 }
+
+/* ------------------------------------------------------------------ */
+/* WFX2-P4-PE — playlist edit (broker playlist-update + playlist-reorder) */
+/* ------------------------------------------------------------------ */
+
+export interface PlaylistUpdateRequest {
+  /** the new title (omitted = leave unchanged) */
+  title?: string;
+  /** the new description (omitted = leave unchanged) */
+  description?: string;
+  /** "public" | "unlisted" | "private" (omitted = leave unchanged) */
+  visibility?: "public" | "unlisted" | "private";
+}
+
+export interface PlaylistUpdateResult {
+  ok: true;
+  effect: string;
+  /** the field map the broker drive filled (only the present ones) */
+  fields: { title: boolean; description: boolean; visibility: boolean };
+  verified: boolean;
+  /** the dialog closed but the header did not re-render the new title */
+  unverifiedNote?: string;
+  /** already:true when the payload carried no fields (no-op) */
+  already?: boolean;
+  path?: string;
+}
+
+/**
+ * Update a playlist's title/description/visibility — broker playlist-update
+ * (the playlist's own edit dialog: ⋮ → Edit → fill → Save; verified when
+ * the header re-renders the new title). Honest verified:false when the
+ * dialog closed but the header did not re-render within the deadline.
+ */
+export async function proxyPlaylistUpdate(
+  playlistId: string,
+  req: PlaylistUpdateRequest
+): Promise<PlaylistUpdateResult> {
+  const payload: Record<string, string> = {};
+  if (typeof req.title === "string") payload.title = req.title;
+  if (typeof req.description === "string") payload.description = req.description;
+  if (typeof req.visibility === "string") payload.visibility = req.visibility;
+  // The lane's kind module accepts "playlist-update" + "playlist-reorder";
+  // the app-side BrokerKind union (src/lib/broker.ts) is owned by the A-W
+  // lane and not in this lane's file ownership, so the cast rides the wire
+  // (the broker's ACTION_KINDS registry has both kinds pre-seeded — the
+  // string is the same; only the TS union needs the cast).
+  const r = await brokerAction(
+    "playlist-update" as never,
+    { playlistId },
+    payload as never
+  );
+  if (!ok(r)) throw fail(r);
+  const fields = {
+    title: typeof req.title === "string",
+    description: typeof req.description === "string",
+    visibility: typeof req.visibility === "string",
+  };
+  const detail = (r.detail ?? {}) as Record<string, unknown>;
+  const stage = typeof detail.stage === "string" ? detail.stage : undefined;
+  const note = typeof detail.note === "string" ? detail.note : undefined;
+  return {
+    ok: true,
+    effect: r.already ? "playlist-update-noop" : "playlist-updated",
+    fields,
+    verified: r.verified ?? false,
+    ...(note ? { unverifiedNote: note } : {}),
+    ...(r.already ? { already: true } : {}),
+    ...(stage ? { path: r.path ?? stage } : { path: r.path }),
+  };
+}
+
+export interface PlaylistReorderResult {
+  ok: true;
+  effect: string;
+  /** the moved videoId sits at toIndex in the re-rendered list (verified) */
+  verified: boolean;
+  /** the drop fired but the list did not re-render the new order within the deadline */
+  unverifiedNote?: string;
+  fromIndex: number;
+  toIndex: number;
+  videoId?: string;
+  path?: string;
+}
+
+/**
+ * Reorder a playlist item — broker playlist-reorder (the playlist page's
+ * real drag handle: pointerdown → stepped pointermove ladder → pointerup;
+ * verified when the moved videoId sits at toIndex in the re-rendered list).
+ * Honest verified:false when the drop fired but the order was not confirmed.
+ */
+export async function proxyPlaylistReorder(
+  playlistId: string,
+  fromIndex: number,
+  toIndex: number,
+  videoId?: string
+): Promise<PlaylistReorderResult> {
+  const payload: Record<string, unknown> = { fromIndex, toIndex };
+  if (typeof videoId === "string" && videoId.length > 0) payload.videoId = videoId;
+  const r = await brokerAction(
+    "playlist-reorder" as never,
+    { playlistId },
+    payload as never
+  );
+  if (!ok(r)) throw fail(r);
+  const detail = (r.detail ?? {}) as Record<string, unknown>;
+  const note = typeof detail.note === "string" ? detail.note : undefined;
+  return {
+    ok: true,
+    effect: "playlist-reordered",
+    verified: r.verified ?? false,
+    ...(note ? { unverifiedNote: note } : {}),
+    fromIndex,
+    toIndex,
+    ...(typeof videoId === "string" && videoId.length > 0 ? { videoId } : {}),
+    path: r.path,
+  };
+}

@@ -2,7 +2,21 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ListVideo, Loader2, Play, Plus, Lock, Globe, EyeOff, Trash2 } from "lucide-react";
+import {
+  ListVideo,
+  Loader2,
+  Play,
+  Plus,
+  Lock,
+  Globe,
+  EyeOff,
+  Trash2,
+  Pencil,
+  Check,
+  X,
+  ChevronUp,
+  ChevronDown,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useApi, postJson } from "@/hooks/use-api";
 import { PersonalSurfaceGate } from "@/components/auth/personal-surface-gate";
@@ -16,6 +30,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { formatDuration } from "@/lib/format";
 import type { PlaylistDTO, VideoDTO } from "@/lib/types";
 
@@ -202,6 +222,7 @@ function PlaylistsContent() {
         playlist={openPlaylist}
         onClose={() => setOpenPlaylist(null)}
         onDelete={deletePlaylist}
+        onUpdated={reload}
       />
     </div>
   );
@@ -211,16 +232,141 @@ function PlaylistDetailsDialog({
   playlist,
   onClose,
   onDelete,
+  onUpdated,
 }: {
   playlist: PlaylistDTO | null;
   onClose: () => void;
   onDelete: (playlist: PlaylistDTO) => void;
+  /** Notify the parent to reload the playlists list (rename/privacy changed) */
+  onUpdated: () => void;
 }) {
-  const { data, loading, error } = useApi<PlaylistItemsPayload>(
+  const { data, loading, error, reload } = useApi<PlaylistItemsPayload>(
     playlist ? `/api/playlists/${encodeURIComponent(playlist.id)}` : null
   );
   const videos = data?.videos ?? [];
   const special = playlist ? playlist.id === "WL" || playlist.id === "LL" : false;
+
+  // the rename + privacy edit affordances (the broker's playlist-update drive)
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editVisibility, setEditVisibility] = useState<"public" | "unlisted" | "private">("private");
+  const [saving, setSaving] = useState(false);
+  // optimistic local reorder (the broker's playlist-reorder drive)
+  const [order, setOrder] = useState<VideoDTO[] | null>(null);
+  const [reordering, setReordering] = useState<number | null>(null);
+
+  // when the playlist changes, reset edit state + optimistic order
+  const [lastPlaylistId, setLastPlaylistId] = useState<string | null>(null);
+  if (playlist && playlist.id !== lastPlaylistId) {
+    setLastPlaylistId(playlist.id);
+    setEditing(false);
+    setOrder(null);
+    setReordering(null);
+  }
+
+  const listedVideos = order ?? videos;
+
+  function startEdit() {
+    if (!playlist) return;
+    setEditTitle(playlist.title);
+    setEditVisibility(playlist.visibility);
+    setEditing(true);
+  }
+
+  async function saveEdit() {
+    if (!playlist) return;
+    const title = editTitle.trim();
+    if (!title) {
+      toast.error("Playlist name cannot be empty");
+      return;
+    }
+    const changed =
+      title !== playlist.title || editVisibility !== playlist.visibility;
+    if (!changed) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload: Record<string, string> = {};
+      if (title !== playlist.title) payload.title = title;
+      if (editVisibility !== playlist.visibility) payload.visibility = editVisibility;
+      const res = await fetch(`/api/playlists/${encodeURIComponent(playlist.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        verified?: boolean;
+        effect?: string;
+        error?: string;
+        unverifiedNote?: string;
+      };
+      if (!res.ok || !body.ok) {
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      if (body.verified) {
+        toast.success(`Updated “${title}” on the YouTube account`);
+      } else if (body.unverifiedNote) {
+        toast.info(`Update submitted — the broker could not confirm the new title yet`);
+      } else {
+        toast.success(`Update submitted`);
+      }
+      setEditing(false);
+      onUpdated();
+      reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update playlist");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function moveItem(fromIndex: number, toIndex: number) {
+    if (!playlist || toIndex < 0 || toIndex >= listedVideos.length) return;
+    if (fromIndex === toIndex) return;
+    const moved = listedVideos[fromIndex];
+    if (!moved) return;
+    // optimistic local reorder (mirrors the broker's intended effect)
+    const optimistic = [...listedVideos];
+    optimistic.splice(fromIndex, 1);
+    optimistic.splice(toIndex, 0, moved);
+    setOrder(optimistic);
+    setReordering(fromIndex);
+    try {
+      const res = await fetch(`/api/playlists/${encodeURIComponent(playlist.id)}/reorder`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromIndex, toIndex, videoId: moved.id }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        verified?: boolean;
+        error?: string;
+        unverifiedNote?: string;
+      };
+      if (!res.ok || !body.ok) {
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      if (body.verified) {
+        toast.success(`Moved “${moved.title}” to position ${toIndex + 1}`);
+      } else if (body.unverifiedNote) {
+        toast.info(`Move submitted — the broker could not confirm the new order yet`);
+      } else {
+        toast.success(`Move submitted`);
+      }
+      // reload the canonical order from the server (clears the optimistic state)
+      reload();
+      setOrder(null);
+    } catch (err) {
+      // revert the optimistic reorder on failure
+      setOrder(null);
+      toast.error(err instanceof Error ? err.message : "Failed to reorder playlist");
+    } finally {
+      setReordering(null);
+    }
+  }
 
   return (
     <Dialog open={!!playlist} onOpenChange={(open) => !open && onClose()}>
@@ -229,12 +375,95 @@ function PlaylistDetailsDialog({
           <>
             <DialogHeader className="px-6 pt-6">
               <DialogTitle className="flex items-center gap-2">
-                {playlist.isWatchLater ? <span>Watch later</span> : <span>{playlist.title}</span>}
+                {playlist.isWatchLater ? (
+                  <span>Watch later</span>
+                ) : editing ? (
+                  <span className="flex w-full items-center gap-2">
+                    <Input
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      aria-label="Playlist name"
+                      maxLength={100}
+                      className="h-8 flex-1"
+                      disabled={saving}
+                    />
+                  </span>
+                ) : (
+                  <span className="flex flex-1 items-center gap-2">
+                    <span className="truncate">{playlist.title}</span>
+                    {!special && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="size-7 shrink-0 p-0"
+                        onClick={startEdit}
+                        aria-label="Rename playlist"
+                      >
+                        <Pencil className="size-3.5" />
+                      </Button>
+                    )}
+                  </span>
+                )}
               </DialogTitle>
               <DialogDescription>
-                {data?.playlist?.videoCount ?? playlist.videoCount} video
-                {(data?.playlist?.videoCount ?? playlist.videoCount) === 1 ? "" : "s"} ·{" "}
-                {playlist.visibility} · YouTube
+                {editing ? (
+                  <span className="flex items-center gap-2">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 gap-1.5 rounded-full px-2 text-xs"
+                          disabled={saving}
+                        >
+                          {editVisibility === "private" && <Lock className="size-3" />}
+                          {editVisibility === "unlisted" && <EyeOff className="size-3" />}
+                          {editVisibility === "public" && <Globe className="size-3" />}
+                          {editVisibility}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        <DropdownMenuItem onClick={() => setEditVisibility("private")}>
+                          <Lock className="mr-2 size-3.5" /> Private
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setEditVisibility("unlisted")}>
+                          <EyeOff className="mr-2 size-3.5" /> Unlisted
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setEditVisibility("public")}>
+                          <Globe className="mr-2 size-3.5" /> Public
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <span className="ml-auto flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="size-7 p-0"
+                        onClick={() => setEditing(false)}
+                        disabled={saving}
+                        aria-label="Cancel edit"
+                      >
+                        <X className="size-3.5" />
+                      </Button>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="size-7 p-0"
+                        onClick={saveEdit}
+                        disabled={saving}
+                        aria-label="Save edit"
+                      >
+                        {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+                      </Button>
+                    </span>
+                  </span>
+                ) : (
+                  <span>
+                    {data?.playlist?.videoCount ?? playlist.videoCount} video
+                    {(data?.playlist?.videoCount ?? playlist.videoCount) === 1 ? "" : "s"} ·{" "}
+                    {playlist.visibility} · YouTube
+                  </span>
+                )}
               </DialogDescription>
             </DialogHeader>
             <div className="max-h-[55vh] overflow-y-auto slim-scrollbar py-2">
@@ -254,33 +483,63 @@ function PlaylistDetailsDialog({
                   session) to read it.
                 </p>
               )}
-              {!loading && !error && !data?.loginRequired && videos.length === 0 && (
+              {!loading && !error && !data?.loginRequired && listedVideos.length === 0 && (
                 <p className="px-6 py-6 text-center text-sm text-muted-foreground">
                   Empty playlist — add videos via the kebab menu on any card.
                 </p>
               )}
-              {videos.map((video, i) => (
-                <Link
+              {listedVideos.map((video, i) => (
+                <div
                   key={`${video.id}-${i}`}
-                  href={`/watch/${video.id}`}
-                  className="flex items-center gap-3 px-6 py-2.5 transition-colors hover:bg-accent/50"
+                  className="group flex items-center gap-3 px-6 py-2.5 transition-colors hover:bg-accent/50"
                 >
                   <span className="w-5 shrink-0 text-xs text-muted-foreground tabular-nums">{i + 1}</span>
-                  <div className="relative aspect-video w-[90px] shrink-0 overflow-hidden rounded-md bg-secondary">
-                    <img
-                      src={video.thumbnailUrl}
-                      alt=""
-                      loading="lazy"
-                      className="absolute inset-0 h-full w-full object-cover"
-                    />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="line-clamp-2 text-sm font-medium leading-snug">{video.title}</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {video.channel.name} · {formatDuration(video.durationSec)}
-                    </p>
-                  </div>
-                </Link>
+                  <Link href={`/watch/${video.id}`} className="flex min-w-0 flex-1 items-center gap-3">
+                    <div className="relative aspect-video w-[90px] shrink-0 overflow-hidden rounded-md bg-secondary">
+                      <img
+                        src={video.thumbnailUrl}
+                        alt=""
+                        loading="lazy"
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="line-clamp-2 text-sm font-medium leading-snug">{video.title}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {video.channel.name} · {formatDuration(video.durationSec)}
+                      </p>
+                    </div>
+                  </Link>
+                  {!special && (
+                    <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="size-6 p-0"
+                        disabled={i === 0 || reordering !== null}
+                        onClick={() => moveItem(i, i - 1)}
+                        aria-label={`Move “${video.title}” up`}
+                        title="Move up"
+                      >
+                        <ChevronUp className="size-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="size-6 p-0"
+                        disabled={i === listedVideos.length - 1 || reordering !== null}
+                        onClick={() => moveItem(i, i + 1)}
+                        aria-label={`Move “${video.title}” down`}
+                        title="Move down"
+                      >
+                        <ChevronDown className="size-3.5" />
+                      </Button>
+                    </div>
+                  )}
+                  {reordering === i && (
+                    <Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />
+                  )}
+                </div>
               ))}
             </div>
             {!special && (
