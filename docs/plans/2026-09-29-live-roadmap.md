@@ -235,3 +235,58 @@ states when a language has no track). Read-side + UI; NO new broker kinds.
 P4-PE → P4-NC → P4-QT (the registry-dependent lane first — the lead
 pre-seeds the broker registry for playlist-update/playlist-reorder on main
 BEFORE dispatch so all three lanes stay file-disjoint).
+
+## PHASE 5 — the account chrome + player depth (2026-10-01, post-P4 close-out survey)
+
+The P4 close-out survey (git tree, 23:55Z): playlist edit + notification center +
+queue/transcript-language all landed. History management (pause/clear/remove)
+already exists (src/app/history/view.tsx). The real remaining gaps in
+user-visibility order — the account chrome youtube.com gives every signed-in
+user, and the player depth the queue deserves:
+
+### P5-YA `wfx2/waveP5-you-account` — The You hub + account-menu depth
+
+youtube.com's /you: the signed-in home base — profile header, then the
+sections (History, Playlists, Your videos, Watch later, Liked videos) with
+live counts/thumbs, the "more from YouTube" rail (Studio real link; Premium
+honest), footer links. PLUS the account-menu depth: Your channel (the
+operator session's channel — real handle), Purchases & memberships (honest
+degradation page), Your data in YouTube (honest), Appearance/Language/
+Restricted Mode/Location (deep links into /settings — SS owns the pages),
+Keyboard shortcuts (the shift+/ overlay, component + menu entry), Settings
+(link), Sign out (exists). Read-side + local only — NO new broker kinds.
+Owns: src/app/you/**, src/components/app/account-menu.tsx, the shortcuts
+overlay, tests.
+
+### P5-SS `wfx2/waveP5-settings-system` — Settings + the system surfaces
+
+The real /settings page (youtube.com's sections wired honestly: Account
+(the WebFlix identity + the operator-session disclosure), Notifications
+(bell prefs that exist), Playback & performance (autoplay default — real,
+tied to the existing autoplay pref), Privacy (restricted mode), Advanced
+(language/location — local), each section honest about what is local vs
+managed on youtube.com). PLUS the system surfaces replacing the sidebar
+toast stubs: Help (honest), Send feedback (real local capture + the honest
+delivery disclosure — never a fake send), Report history (honest state),
+WebFlix Premium (the parity honest-degradation page). Owns:
+src/app/settings/**, src/app/help/**, src/app/feedback/**,
+src/app/report-history/**, src/app/premium/**, the sidebar MORE_NAV
+link conversion (src/components/app/sidebar.tsx), tests.
+
+### P5-MQ `wfx2/waveP5-miniplayer-queue` — Miniplayer queue chrome (the QT seam)
+
+The deferred QT seam request #2, now sanctioned: the miniplayer bar gains
+the queue button + count badge (opens the queue panel), prev/next controls
+(enabled when the session queue has neighbors — the engine's order), and
+the queue panel mounts GLOBALLY (app-shell, next to the player host layer —
+available on every page while a queue exists). The panel already exists
+(QueuePanel); this lane attaches it to the miniplayer chrome and makes the
+mount global. Owns: src/components/player/player-host-layer.tsx (the
+chrome — sanctioned for this lane), src/components/app/app-shell.tsx
+(additive mount only), src/lib/queue/** (additive helpers only), tests.
+
+### Phase 5 merge order
+
+P5-YA → P5-SS → P5-MQ (YA and SS share no files — YA's menu deep-links
+into SS's pages, so SS's routes must exist at merge; the lead resolves the
+link seam. MQ last — it touches the shared app-shell additively).
