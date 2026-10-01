@@ -50,7 +50,7 @@ export type BrokerKind =
   | "post-comment-like"
   | "post-create"
   // WFX2-P3-UP (upload execution) — additive
-  | "upload-execute";
+  | "upload-execute"
   // WFX2-P3-LC (live chat send) — additive
   | "live-chat-send";
 
@@ -352,6 +352,8 @@ export async function brokerUploadExecute(
     return new BrokerError("action-failed", r?.error ?? "broker action failed", 502, parsed);
   }
   return (parsed ?? { ok: true }) as BrokerUploadExecuteSuccess;
+}
+
 /** The live-chat-send success shape (detail.messageId when the broker
  * re-read the message from the chat stream). */
 export interface BrokerLiveChatSendSuccess extends BrokerActionSuccess {
