@@ -209,3 +209,19 @@ Gates (clean env, no Upstash vars): lint 0 / typecheck 0 / **642 green** (619 + 
 | B-S comments-write | `cc9a7568` | merged (b517e2e) |
 | C-S replay-polish | `7dfbe7a1` | merged (aa2a759) |
 | C-W cutover | — | merged + live |
+
+## 2026-10-01 — PHASE 3 claims staked by the ACTIVE console (operator standing order: resident watch until the roadmap is complete)
+
+| Lane | Branch | Scope | Claimed | Binding | Status |
+|---|---|---|---|---|---|
+| P3-UP | wfx2/waveP3-upload | upload-execute broker kind + the real /upload flow + staged progress | 2026-10-01 lead | 4h+standing | DISPATCHED |
+| P3-LC | wfx2/waveP3-livechat-send | live-chat-send broker kind + panel input + honest errors | 2026-10-01 lead | 4h+standing | DISPATCHED |
+| P3-SG | wfx2/waveP3-search-suggest | suggest dropdown + keyboard nav + recents + zero-state parity | 2026-10-01 lead | 4h+standing | DISPATCHED |
+
+- Base: main @ ebcb6af (phase-2 complete). Merge order P3-UP → P3-LC → P3-SG.
+- RESILIENCE LAWS (2026-10-01 stream-instability lessons, binding on every
+  Phase-3 worker): snapshot-commit after setup; commit + PUSH the branch at
+  every milestone; the completion report INLINE in the chat at the end;
+  bracketed dynamic-route paths typed fresh (never copied from displayed
+  output — the §15 display-ghost); small single commands when the executor
+  wedges; the batch-store narrative is the recovery source of last resort.

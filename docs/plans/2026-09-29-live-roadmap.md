@@ -141,3 +141,50 @@ Phase 2 opens three parallel lanes on base 4f88a4a:
 P2-SO → P2-AU → P2-ST (lead resolves conflicts; lanes are file-disjoint by
 design: SO = channel/watch components + broker kinds, AU = auth lib/account/
 gating, ST = apps/studio only).
+
+# PHASE 3 — 2026-10-01 (the executable-actions close-out: upload, live chat, search depth)
+
+Base: main @ ebcb6af (phase-2 complete: 754 root + 25 studio tests green;
+both deployments live). Three parallel lanes, file-disjoint by design:
+
+### P3-UP `wfx2/waveP3-upload` — Real upload execution
+
+- Today /upload honestly hands off (metadata → YouTube Studio deep-link).
+  Phase 3 makes the upload itself EXECUTE through the Tier-2 broker: the
+  `upload-execute` broker kind (a staged CDP drive of youtube.com/upload:
+  file select → metadata → Next×3 → visibility → publish, with a progress
+  journal and honest intermediate states: uploading → processing → published).
+- The /upload page gains the real flow: file picker (accept video/*),
+  metadata form (title/description/visibility), staged progress UI, the
+  published result deep-links to the real video. Honest degradation when
+  the broker is offline (the current hand-off remains the fallback rung).
+- The broker kind ships in its own module (`kinds/upload.ts`) — the lead
+  pre-seeds the kind registry (types + executor routing + stub) so this
+  lane touches ONLY its own module file. A tiny valid MP4 ships with the
+  tests (synthetic, provenance-marked).
+
+### P3-LC `wfx2/waveP3-livechat-send` — Live chat participation
+
+- The live chat input is explicitly disabled today ("ships with the
+  sign-in broker lane"). Phase 3 ships it: the `live-chat-send` broker kind
+  (type into the real live chat composer on youtube.com and send), the
+  panel input enabled post-auth (guest gate = the AU signed-out law),
+  optimistic echo with server-truth reconciliation, honest error states
+  (member-only chat, slow mode, chat disabled), report action on chat
+  messages (creator + viewer parity).
+- Owns `kinds/livechat.ts` (pre-seeded stub), live-chat-panel/message
+  components, the send lib + tests.
+
+### P3-SG `wfx2/waveP3-search-suggest` — Search suggestions + depth
+
+- The topbar search gains youtube.com's autocomplete: a suggestions
+  dropdown while typing (the suggest API), keyboard navigation (arrows +
+  enter + esc), recent searches (local storage, honest), and the
+  zero-results / "did you mean" parity states on the search page.
+- Owns the topbar (additive), the new suggest component + lib + API route,
+  search-page zero-state, tests.
+
+### Phase 3 merge order
+
+P3-UP → P3-LC → P3-SG (broker-module lanes first; the lead pre-seeds the
+shared broker registry on main BEFORE dispatch so lanes stay file-disjoint).
