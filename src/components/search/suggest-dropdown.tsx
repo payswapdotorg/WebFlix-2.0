@@ -18,7 +18,7 @@
  * `useSuggestDropdown` owns the logic; the topbar only wires focus/blur/
  * keydown and renders `<SuggestDropdown control={…} />`.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Clock, Search, Trash2 } from "lucide-react";
 
 export const RECENTS_STORAGE_KEY = "webflix-recent-searches";
@@ -114,33 +114,40 @@ export interface UseSuggestDropdownOptions {
 
 export function useSuggestDropdown(opts: UseSuggestDropdownOptions): SuggestController {
   const { query, debounceMs = DEFAULT_DEBOUNCE_MS } = opts;
-  const [open, setOpen] = useState(false);
+  const [open, setOpenState] = useState(false);
+  /** The last suggestion list landed (kept with its query — derived away below). */
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [recents, setRecents] = useState<string[]>([]);
-  const [activeIndex, setActiveIndex] = useState(-1);
+  /** Keyboard navigation: the active row + the query it belongs to (derived
+   * away when the query changes — no reset effect, no stale index). */
+  const [nav, setNav] = useState<{ query: string; index: number } | null>(null);
 
-  const onCommitRef = useRef(opts.onCommit);
-  useEffect(() => {
-    onCommitRef.current = opts.onCommit;
-  });
-  const recentsRef = useRef(recents);
-  recentsRef.current = recents;
+  // Opening hydrates the recents from storage in the event handler itself
+  // (SSR-safe: focus only fires client-side; always the honest current
+  // storage state — another tab's writes show up too).
+  const setOpen = useCallback((next: boolean) => {
+    if (next) {
+      setRecents(readRecents(safeStorage()));
+      setOpenState(true);
+    } else {
+      setOpenState(false);
+      setNav(null);
+    }
+  }, []);
 
-  // Recents hydrate whenever the dropdown opens (SSR-safe, always the
-  // honest current storage state — another tab's writes show up too).
-  useEffect(() => {
-    if (open) setRecents(readRecents(safeStorage()));
-  }, [open]);
+  const close = useCallback(() => {
+    setOpenState(false);
+    setNav(null);
+  }, []);
 
   // Suggestions: debounced fetch, cancelled on new input / close. The abort
   // + stale guard together give the cancel semantics: only the newest
-  // input's response may render, and an in-flight request is aborted.
+  // input's response may land, and an in-flight request is aborted. State
+  // only updates inside the async callbacks (never synchronously in the
+  // effect body); stale lists are derived away at render time.
   useEffect(() => {
     const q = query.trim();
-    if (!open || !q) {
-      setSuggestions([]);
-      return;
-    }
+    if (!open || !q) return;
     const controller = new AbortController();
     let stale = false;
     const timer = setTimeout(() => {
@@ -168,9 +175,10 @@ export function useSuggestDropdown(opts: UseSuggestDropdownOptions): SuggestCont
     };
   }, [query, open, debounceMs]);
 
-  // Rows: with input → prefix-matched recents + suggestions (deduped against
-  // the shown recents); with an empty box → the recents themselves (youtube
-  // shows recents on focus; suggestions only ever come from real input).
+  // Rows (derived): with input → prefix-matched recents + suggestions that
+  // prefix-match the CURRENT query (a stale list for an older prefix keeps
+  // showing — youtube.com's own behavior — but never a mismatched one);
+  // with an empty box → the recents themselves.
   const rows = useMemo<SuggestRow[]>(() => {
     if (!open) return [];
     const q = query.trim().toLowerCase();
@@ -178,25 +186,20 @@ export function useSuggestDropdown(opts: UseSuggestDropdownOptions): SuggestCont
       ? recents.filter((r) => r.toLowerCase().startsWith(q))
       : recents;
     const shown = new Set(recentMatches.map((r) => r.toLowerCase()));
-    const fresh = suggestions.filter((s) => !shown.has(s.toLowerCase()));
+    const fresh =
+      q && suggestions.length > 0
+        ? suggestions.filter(
+            (s) => s.toLowerCase().startsWith(q) && !shown.has(s.toLowerCase())
+          )
+        : [];
     return [
       ...recentMatches.map((text): SuggestRow => ({ kind: "recent", text })),
       ...fresh.map((text): SuggestRow => ({ kind: "suggestion", text })),
     ];
   }, [open, query, recents, suggestions]);
 
-  // A new query or reopen resets the active row; a shrinking row list
-  // clamps (below) so the active index can never point past the end.
-  useEffect(() => {
-    setActiveIndex(-1);
-  }, [query, open]);
-
-  const active = activeIndex >= 0 && activeIndex < rows.length ? activeIndex : -1;
-
-  const close = useCallback(() => {
-    setOpen(false);
-    setActiveIndex(-1);
-  }, []);
+  const active =
+    nav && nav.query === query && nav.index >= 0 && nav.index < rows.length ? nav.index : -1;
 
   const commitRow = useCallback(
     (index: number) => {
@@ -204,27 +207,27 @@ export function useSuggestDropdown(opts: UseSuggestDropdownOptions): SuggestCont
       if (!row) return;
       const next = pushRecent(recents, row.text);
       writeRecents(safeStorage(), next);
-      recentsRef.current = next;
       setRecents(next);
-      setOpen(false);
-      setActiveIndex(-1);
-      onCommitRef.current(row.text);
+      setOpenState(false);
+      setNav(null);
+      opts.onCommit(row.text);
     },
-    [rows, recents]
+    [rows, recents, opts.onCommit]
   );
 
-  const recordRecent = useCallback((searchQuery: string) => {
-    const q = searchQuery.trim();
-    if (!q) return;
-    const next = pushRecent(recentsRef.current, q);
-    writeRecents(safeStorage(), next);
-    recentsRef.current = next;
-    setRecents(next);
-  }, []);
+  const recordRecent = useCallback(
+    (searchQuery: string) => {
+      const q = searchQuery.trim();
+      if (!q) return;
+      const next = pushRecent(recents, q);
+      writeRecents(safeStorage(), next);
+      setRecents(next);
+    },
+    [recents]
+  );
 
   const clearRecents = useCallback(() => {
     writeRecents(safeStorage(), []);
-    recentsRef.current = [];
     setRecents([]);
   }, []);
 
@@ -233,10 +236,13 @@ export function useSuggestDropdown(opts: UseSuggestDropdownOptions): SuggestCont
       if (!open || rows.length === 0) return false;
       switch (e.key) {
         case "ArrowDown":
-          setActiveIndex(active < 0 ? 0 : (active + 1) % rows.length);
+          setNav({ query, index: active < 0 ? 0 : (active + 1) % rows.length });
           return true;
         case "ArrowUp":
-          setActiveIndex(active < 0 ? rows.length - 1 : (active - 1 + rows.length) % rows.length);
+          setNav({
+            query,
+            index: active < 0 ? rows.length - 1 : (active - 1 + rows.length) % rows.length,
+          });
           return true;
         case "Enter":
           if (active >= 0) {
@@ -254,7 +260,7 @@ export function useSuggestDropdown(opts: UseSuggestDropdownOptions): SuggestCont
           return false;
       }
     },
-    [open, rows, active, commitRow, close]
+    [open, rows, active, query, commitRow, close]
   );
 
   return {
