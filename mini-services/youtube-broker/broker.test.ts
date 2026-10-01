@@ -197,7 +197,7 @@ describe("fail-closed without secret", () => {
 // assertions pin the pre-seed's own documented intent — buildScript routes
 // the kind modules, requiredUrl is null for upload-execute (the script owns
 // its navigation).
-test("P3 kinds: upload-execute routes the real staged drive; live-chat-send still honest-staged", () => {
+test("P3 kinds: upload-execute + live-chat-send route their real lane drives", () => {
   const routingPayload = {
     fileName: "clip.mp4",
     title: "T",
@@ -210,7 +210,13 @@ test("P3 kinds: upload-execute routes the real staged drive; live-chat-send stil
   const built = buildScript({ kind: "upload-execute", target: {}, payload: routingPayload });
   expect(built && built.script).toBe(up.script);
   expect(requiredUrl({ kind: "upload-execute", target: {}, payload: {} })).toBeNull();
+  // WFX2-P3-LC LANDED (kinds/livechat.ts owns the deep fake-DOM suite). The
+  // pre-seed's transitional "staged kind" assertion was self-expiring by
+  // design — replaced by the real-drive routing lock (the P3-UP pattern).
   const lc = liveChatSendScript("hello from WebFlix");
-  expect(lc.script).toContain("live-chat-send: staged kind");
-  expect(lc.script).toContain('"messageLen":18');
+  expect(lc.timeoutMs).toBeGreaterThan(0);
+  expect(lc.script).toContain("yt-live-chat-text-input-field-renderer");
+  expect(lc.script).not.toContain("staged kind");
+  const lcBuilt = buildScript({ kind: "live-chat-send", target: {}, payload: { message: "hi" } });
+  expect(lcBuilt && lcBuilt.script).toBe(liveChatSendScript("hi").script);
 });

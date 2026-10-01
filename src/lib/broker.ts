@@ -51,6 +51,8 @@ export type BrokerKind =
   | "post-create"
   // WFX2-P3-UP (upload execution) — additive
   | "upload-execute";
+  // WFX2-P3-LC (live chat send) — additive
+  | "live-chat-send";
 
 export interface BrokerTarget {
   videoId?: string;
@@ -91,6 +93,8 @@ export interface BrokerPayload {
   fileUrl?: string;
   /** upload-execute: the description the drive fills into the Details step */
   description?: string;
+  /** WFX2-P3-LC: live-chat-send message text */
+  message?: string;
 }
 
 /** Typed failure for the routes to map (502 offline / 502 action-failed). */
@@ -348,4 +352,29 @@ export async function brokerUploadExecute(
     return new BrokerError("action-failed", r?.error ?? "broker action failed", 502, parsed);
   }
   return (parsed ?? { ok: true }) as BrokerUploadExecuteSuccess;
+/** The live-chat-send success shape (detail.messageId when the broker
+ * re-read the message from the chat stream). */
+export interface BrokerLiveChatSendSuccess extends BrokerActionSuccess {
+  ok: true;
+  detail?:
+    | ({ messageId?: string | null; author?: string | null; note?: string } & Record<
+        string,
+        unknown
+      >)
+    | undefined;
+}
+
+/**
+ * WFX2-P3-LC — Tier-2 broker WRITE: send a live-chat message by typing it
+ * into the REAL live-chat composer in the logged-in tab (the watch page of
+ * `videoId`; the broker presses Enter and verifies the message landed in
+ * the stream). Fails typed (offline / action-failed) — the honest error
+ * strings are the executor's taxonomy: chat-members-only, chat-slow-mode,
+ * chat-disabled, live-chat-composer-not-found, live-chat-send-failed.
+ */
+export async function brokerLiveChatSend(
+  videoId: string,
+  message: string
+): Promise<BrokerLiveChatSendSuccess | BrokerError> {
+  return brokerAction("live-chat-send", { videoId }, { message });
 }
