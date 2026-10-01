@@ -64,21 +64,30 @@ describe("GET /api/home — shape (every rail present + typed, live mapping)", (
     ).toBe(true);
   });
 
-  test("the recorded unauthenticated feed (feedNudge) maps to honest empty rails", async () => {
+  test("the recorded unauthenticated feed (feedNudge) composes from real search — never empty", async () => {
     // YouTube's own logged-out response for FEwhat_to_watch is a nudge —
-    // no shelves, no hero, no continue-watching without a session.
+    // no shelves, no hero. WFX2-HR rung 3: with browse walled and no
+    // last-good, the home composes from REAL search results instead of
+    // serving empty rails (search is not walled).
     const feed = (await (await getHome(new Request("http://localhost/api/home"))).json()) as HomeFeedDTO;
-    expect(feed.hero).toBeNull();
-    expect(feed.recommended).toEqual([]);
-    expect(feed.shorts).toEqual([]);
-    expect(feed.continueWatching).toEqual([]);
-    expect(feed.becauseYouWatched).toBeNull();
-    expect(feed.chips[0]).toBe("All");
-    // the browse call actually went upstream with the right browseId
+    // the browse call actually went upstream with the right browseId FIRST (ladder order)
     const browse = recorded.find((r) => r.url.includes("/youtubei/v1/browse"));
     expect(browse?.body.browseId).toBe("FEwhat_to_watch");
     expect(browse?.body.context.client.clientName).toBe("WEB");
     expect(browse?.body.context.client.clientVersion).toBe("2.20260925.08.00");
+    // …then the compose fired and filled every rail from real search data
+    expect(feed.source).toBe("search-compose");
+    expect(feed.hero?.id).toBeTypeOf("string");
+    expect(feed.recommended.length).toBeGreaterThan(0);
+    expect(feed.shorts.length).toBeGreaterThan(0);
+    expect(feed.becauseYouWatched?.videos.length).toBeGreaterThan(0);
+    expect(feed.chips[0]).toBe("All");
+    const composeQueries = recorded
+      .filter((r) => r.url.includes("/youtubei/v1/search"))
+      .map((r) => r.body.query);
+    expect(composeQueries).toContain("most viewed youtube videos");
+    expect(composeQueries).toContain("trending music");
+    expect(composeQueries).toContain("popular gaming");
   });
 
   test("category mode is search-backed: recommended fills from real search results", async () => {
@@ -121,12 +130,17 @@ describe("GET /api/home — shape (every rail present + typed, live mapping)", (
 });
 
 describe("GET /api/videos — continuation-token pagination (live)", () => {
-  test("default page: browse feed + honest empty when YouTube nudges", async () => {
+  test("default page: browse walled → search-backed compose (never empty)", async () => {
     const res1 = await listVideosRoute(new Request("http://localhost/api/videos"));
     expect(res1.status).toBe(200);
     const page1 = (await res1.json()) as VideoPageDTO;
-    expect(Array.isArray(page1.videos)).toBe(true);
-    expect(page1.nextCursor === null || typeof page1.nextCursor === "string").toBe(true);
+    // the nudge browse maps to nothing — the compose fills the default feed
+    expect(page1.videos.length).toBeGreaterThan(0);
+    expect(page1.nextCursor).toBeNull(); // a composed page carries no browse continuation
+    const browse = recorded.find((r) => r.url.includes("/youtubei/v1/browse"));
+    expect(browse?.body.browseId).toBe("FEwhat_to_watch");
+    const search = recorded.find((r) => r.url.includes("/youtubei/v1/search"));
+    expect(search?.body.query).toBeTypeOf("string");
   });
 
   test("category page: search-backed, cursor POSTs the continuation upstream", async () => {

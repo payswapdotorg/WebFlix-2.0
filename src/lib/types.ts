@@ -51,6 +51,18 @@ export type ContinueVideoDTO = VideoDTO & {
   watchedAt: string;
 };
 
+/**
+ * WFX2-HR — which rung of the home ladder produced the payload:
+ *  - "browse"         rung 1: a fresh healthy browse (FEwhat_to_watch) answer;
+ *  - "last-good"      rung 2: the adapter's Upstash last-good (24h hard window)
+ *                      served because the egress is walled (SWR-stale counts);
+ *  - "search-compose" rung 3: real search data composed into the default home
+ *                      (also the honest label for the search-backed category
+ *                      mode, whose grid is likewise composed from search).
+ * Never "browse" when the payload was composed — the harness + UI can trust it.
+ */
+export type HomeFeedSource = "browse" | "last-good" | "search-compose";
+
 export type HomeFeedDTO = {
   hero: VideoDTO | null;
   trending: VideoDTO[];
@@ -60,6 +72,8 @@ export type HomeFeedDTO = {
   recommended: VideoDTO[];
   recommendedCursor: string | null;
   chips: string[];
+  /** WFX2-HR — the ladder rung that produced this feed (see HomeFeedSource). */
+  source: HomeFeedSource;
 };
 
 export type VideoPageDTO = {

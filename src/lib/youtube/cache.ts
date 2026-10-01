@@ -21,7 +21,7 @@ import {
   resetCacheEngine,
 } from "./upstash-cache";
 
-export { cachedResilient } from "./upstash-cache";
+export { cachedResilient, cachePeek } from "./upstash-cache";
 export type { ResilientOptions } from "./upstash-cache";
 
 /** TTL constants (architecture doc: search 10m, feeds 5m, watch meta longer). */

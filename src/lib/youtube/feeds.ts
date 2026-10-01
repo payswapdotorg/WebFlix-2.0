@@ -7,14 +7,31 @@
  *  - browse FEtrending is REJECTED server-side (400) → trending is SSR-only;
  *  - SSR surfaces always send cookie auth when a session exists;
  *  - the trending category pages are the semantic URLs /feed/trending/music|gaming|movies.
+ *
+ * WFX2-HR — the default home ("All" mode) and the /api/videos default feed
+ * climb a three-rung ladder and NEVER serve empty rails while real search
+ * data is available (search is NOT walled for the server egress — verified
+ * live, while browse FEwhat_to_watch is):
+ *   rung 1  browse-fresh     — the healthy FEwhat_to_watch answer;
+ *   rung 2  browse-last-good — the adapter's Upstash last-good (24h window)
+ *                              served when the wall shape hits;
+ *   rung 3  search-compose   — REAL search results merged + deduped into the
+ *                              home rails (curated general-interest queries,
+ *                              the existing shorts seed, and a second-pass
+ *                              because-you-watched rail seeded by the top
+ *                              results' channels). Every call reuses the
+ *                              existing cached search keys — no new uncached
+ *                              upstream paths.
  */
 import { innertubeBrowse, innertubeSearch } from "./innertube";
+import { upstreamFetch } from "./upstream";
 import { fetchYtInitialData } from "./ssr";
-import { cached, cachedResilient, TTL } from "./cache";
+import { cached, cachedResilient, cachePeek, TTL } from "./cache";
 import { hasSession } from "./session";
-import { mapVideos, mapShorts, walkTree, runsText } from "./mappers";
+import { mapVideos, mapShorts, walkTree, runsText, viewsFromTexts, watchUrl, shortsThumbnailUrl } from "./mappers";
+import { getShortsSeed, type ShortDTO, type ShortsFeedDTO } from "./shorts";
 import { buildSearchParam, parseSearchFilters } from "./filters";
-import type { ContinueVideoDTO, HomeFeedDTO, VideoDTO } from "@/lib/types";
+import type { ContinueVideoDTO, HomeFeedDTO, HomeFeedSource, VideoDTO } from "@/lib/types";
 import { HOME_CHIPS } from "@/lib/categories";
 
 // ---------------------------------------------------------------------------
@@ -54,6 +71,9 @@ function homeResponseIsEmpty(response: unknown): boolean {
   );
 }
 
+/** The home browse entry's cache key (shared by the ladder's source probe). */
+const HOME_BROWSE_CACHE_KEY = "yt:home:feed";
+
 /**
  * The home browse response — the cutover's production fix for empty rails:
  * Upstash-backed (L1+L2), stale-while-revalidate past the 5-minute soft TTL,
@@ -65,7 +85,7 @@ function homeResponseIsEmpty(response: unknown): boolean {
  */
 function fetchHomeBrowseResponse(): Promise<unknown> {
   return cachedResilient(
-    "yt:home:feed",
+    HOME_BROWSE_CACHE_KEY,
     TTL.FEED_MS,
     () => innertubeBrowse({ browseId: "FEwhat_to_watch" }),
     { isEmpty: homeResponseIsEmpty, hardTtlMs: TTL.HOME_HARD_MS },
@@ -87,10 +107,23 @@ export async function getHomeFeed(rawCategory: string | null): Promise<HomeFeedD
       recommended: page.videos,
       recommendedCursor: page.nextCursor,
       chips: HOME_CHIPS,
+      source: "search-compose", // the category grid is composed from real search data
     };
   }
 
-  const response = await fetchHomeBrowseResponse();
+  // rungs 1–2 live inside the resilient cache (browse-fresh, then last-good);
+  // a hard upstream failure with no last-good throws — the compose catches it.
+  let response: unknown;
+  try {
+    response = await fetchHomeBrowseResponse();
+  } catch {
+    return composeHomeFeedFromSearch(); // rung 3 — both browse rungs missed
+  }
+  if (homeResponseIsEmpty(response)) {
+    // the walled 200-but-empty shape with no last-good → rung 3
+    return composeHomeFeedFromSearch();
+  }
+
   const shelves = mapHomeShelves(response);
   const feedVideos = mapVideos(response, { dedupe: true });
   const shorts = mapShorts(response, 12);
@@ -124,6 +157,12 @@ export async function getHomeFeed(rawCategory: string | null): Promise<HomeFeedD
   // continue watching: history SSR (session only; omit gracefully otherwise)
   const continueWatching = hasSession() ? await getContinueWatching() : [];
 
+  // rungs 1–2 served a healthy payload — label which one (read-only probe:
+  // a fresh entry is rung 1's answer; a stale-but-hard-valid entry was served
+  // by the last-good/SWR path → rung 2)
+  const peek = await cachePeek<unknown>(HOME_BROWSE_CACHE_KEY);
+  const source: HomeFeedSource = peek?.fresh ? "browse" : "last-good";
+
   return {
     hero,
     trending: [], // the home response carries no "trending" shelf; the page links to /trending
@@ -133,6 +172,7 @@ export async function getHomeFeed(rawCategory: string | null): Promise<HomeFeedD
     recommended,
     recommendedCursor,
     chips: HOME_CHIPS,
+    source,
   };
 }
 
@@ -142,6 +182,211 @@ function feedContinuationToken(response: unknown): string | null {
     if (typeof token === "string" && token) return token;
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// WFX2-HR rung 3 — the search-backed compose (never empty while search lives)
+// ---------------------------------------------------------------------------
+
+/**
+ * Curated general-interest queries mirroring youtube's signed-out category
+ * mix — live-verified to yield ~21 video results each through the unwalled
+ * search endpoint (probe, 2026-10-02). Each page rides the EXISTING search
+ * cache keys (yt:searchpage:…), so the compose is itself Upstash-cached.
+ */
+const HOME_COMPOSE_QUERIES: readonly string[] = [
+  "most viewed youtube videos",
+  "trending music",
+  "popular gaming",
+];
+
+/**
+ * Fixed per-query page size so every compose consumer (home rails, /api/videos
+ * default feed) reads the SAME cached search pages — one upstream page per
+ * query serves the whole ladder.
+ */
+const COMPOSE_PAGE_LIMIT = 24;
+
+/** The compose's because-you-watched rail size (browse-mode parity: 12). */
+const COMPOSE_BYW_LIMIT = 12;
+
+/** The compose's shorts rail size (browse-mode parity: 12). */
+const COMPOSE_SHORTS_LIMIT = 12;
+
+/**
+ * The merged first-pass pool: every compose query's REAL search results,
+ * merged in query order and de-duplicated by id. Per-query failures are
+ * tolerated (best-effort merge); only when EVERY query fails — search itself
+ * is down — does this throw, surfacing the honest upstream error.
+ */
+async function composeSearchVideos(): Promise<VideoDTO[]> {
+  const pages = await Promise.all(
+    HOME_COMPOSE_QUERIES.map((query) =>
+      getSearchVideoPage(query, { type: "video" }, undefined, COMPOSE_PAGE_LIMIT)
+        .then((page) => page.videos)
+        .catch(() => null),
+    ),
+  );
+  const okPages = pages.filter((videos): videos is VideoDTO[] => videos !== null);
+  if (okPages.length === 0) {
+    throw new Error("home compose: every search query failed (search is down)");
+  }
+  const seen = new Set<string>();
+  const merged: VideoDTO[] = [];
+  for (const videos of okPages) {
+    for (const video of videos) {
+      if (seen.has(video.id)) continue;
+      seen.add(video.id);
+      merged.push(video);
+    }
+  }
+  return merged;
+}
+
+/**
+ * The existing shorts seed (unwalled — already live on /api/shorts) mapped to
+ * the home shorts-card DTO. Rides the SAME "shorts:seed" cache entry the
+ * shorts route uses, and threads the shared upstream seam so fixture tests
+ * stay hermetic. Best-effort: a seed failure leaves the rail honestly empty.
+ */
+async function composeShortsRail(): Promise<VideoDTO[]> {
+  try {
+    const seed = await cachedResilient(
+      "shorts:seed",
+      TTL.SHORTS_SEED_MS,
+      () => getShortsSeed(seamShortsFetcher()),
+      { isEmpty: (f) => (f as ShortsFeedDTO).items.length === 0 },
+    );
+    return seed.items.slice(0, COMPOSE_SHORTS_LIMIT).map(shortSeedToVideo);
+  } catch {
+    return []; // honest empty rail — the compose itself still serves
+  }
+}
+
+/**
+ * The shared upstream seam as a `typeof fetch` fetcher for the shorts module
+ * (its helpers default to the global fetch; the seam routes them through the
+ * injected test fake, keeping the no-live-network law for the compose path).
+ */
+function seamShortsFetcher(): typeof fetch {
+  return Object.assign(
+    (url: RequestInfo | URL, init?: RequestInit) => upstreamFetch()(String(url), init),
+    { preconnect: () => {} },
+  );
+}
+
+/** One seed item → the canonical shorts-card VideoDTO (browse-mode parity). */
+function shortSeedToVideo(s: ShortDTO): VideoDTO {
+  return {
+    id: s.id,
+    title: s.title,
+    description: "",
+    thumbnailUrl: shortsThumbnailUrl(s.id),
+    videoUrl: watchUrl(s.id),
+    durationSec: null,
+    views: viewsFromTexts(s.viewsText, null),
+    viewsText: s.viewsText,
+    publishedText: null,
+    likes: 0,
+    dislikes: 0,
+    visibility: "public",
+    isMembersOnly: false,
+    membersTier: null,
+    category: "All",
+    isShort: true,
+    isLive: false,
+    premieredAt: null,
+    createdAt: null,
+    badges: [],
+    channel: {
+      id: s.channel.id,
+      handle: s.channel.handle ?? s.channel.id,
+      name: s.channel.name ?? s.channel.handle ?? s.channel.id,
+      avatarUrl: s.channel.avatarUrl ?? "",
+      verified: false,
+      subscriberCount: 0,
+    },
+  };
+}
+
+/**
+ * The anonymous because-you-watched rail: a second-pass query set seeded by
+ * the first pass's top results (query = the top videos' REAL channel names —
+ * honest anonymous-mode parity with youtube's signed-out home). Best-effort:
+ * failures or empty second passes leave the rail absent.
+ */
+async function composeBecauseYouWatched(
+  merged: VideoDTO[],
+  heroId: string
+): Promise<HomeFeedDTO["becauseYouWatched"]> {
+  const top = merged.find((v) => v.id === heroId) ?? merged.find((v) => !v.isShort && !v.isLive);
+  if (!top) return null;
+  const seedQueries: string[] = [];
+  for (const video of merged) {
+    if (video.isShort || video.isLive) continue;
+    const channel = video.channel.name.trim();
+    if (channel && !seedQueries.includes(channel)) seedQueries.push(channel);
+    if (seedQueries.length >= 2) break; // bounded second pass (2 cached pages)
+  }
+  if (seedQueries.length === 0) return null;
+  const pages = await Promise.all(
+    seedQueries.map((query) =>
+      getSearchVideoPage(query, { type: "video" }, undefined, COMPOSE_BYW_LIMIT)
+        .then((page) => page.videos)
+        .catch(() => null),
+    ),
+  );
+  const seen = new Set<string>([heroId]);
+  const videos: VideoDTO[] = [];
+  for (const page of pages) {
+    if (!page) continue;
+    for (const video of page) {
+      if (video.isShort || seen.has(video.id)) continue;
+      seen.add(video.id);
+      videos.push(video);
+    }
+  }
+  if (videos.length === 0) return null;
+  return { label: top.title, videos: videos.slice(0, COMPOSE_BYW_LIMIT) };
+}
+
+/**
+ * Rung 3 — the full default home composed from REAL search data: hero = the
+ * top pick of the merged set, shorts = the existing seed, becauseYouWatched =
+ * the second-pass channel rail, recommended = the rest of the merge. No
+ * browse continuation exists for a composed feed — the cursor stays null
+ * (a search token would be misrouted by the All-mode cursor path).
+ */
+async function composeHomeFeedFromSearch(): Promise<HomeFeedDTO> {
+  const merged = await composeSearchVideos(); // throws only when search itself fails
+
+  const hero = merged.find((v) => !v.isShort && !v.isLive) ?? null;
+  const heroId = hero?.id ?? "";
+
+  const [shorts, becauseYouWatched, continueWatching] = await Promise.all([
+    composeShortsRail(),
+    composeBecauseYouWatched(merged, heroId),
+    hasSession() ? getContinueWatching() : Promise.resolve([]),
+  ]);
+
+  const railIds = new Set<string>([
+    heroId,
+    ...shorts.map((s) => s.id),
+    ...(becauseYouWatched?.videos.map((v) => v.id) ?? []),
+  ]);
+  const recommended = merged.filter((v) => !railIds.has(v.id) && !v.isShort).slice(0, 24);
+
+  return {
+    hero,
+    trending: [],
+    continueWatching,
+    becauseYouWatched,
+    shorts,
+    recommended,
+    recommendedCursor: null,
+    chips: HOME_CHIPS,
+    source: "search-compose",
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -247,7 +492,10 @@ export async function getBrowseVideoPage(
 
 /** /api/videos implementation — `q=` and category routes search (search is
  * NOT walled for Vercel egress — this is the `/api/videos?q=music` production
- * fix), the default page rides the resilient home browse cache. */
+ * fix); the default page climbs the SAME home ladder: browse-fresh →
+ * browse-last-good → search-compose (it shares the home feed's compose pages
+ * and cache keys, so the default feed is never empty while search lives).
+ * Cursor pages stay browse continuations — a continuation must never compose. */
 export async function listLiveVideos(opts: {
   cursor?: string | null;
   category?: string | null;
@@ -263,5 +511,17 @@ export async function listLiveVideos(opts: {
   if (category !== "All") {
     return getSearchVideoPage(category, { type: "video" }, opts.cursor ?? undefined, limit);
   }
-  return getBrowseVideoPage(opts.cursor ?? undefined, limit);
+  if (!opts.cursor) {
+    // rungs 1–2: the resilient home browse cache (fresh, then last-good)
+    try {
+      const page = await getBrowseVideoPage(undefined, limit);
+      if (page.videos.length > 0) return page;
+    } catch {
+      // hard browse failure with no last-good — fall through to rung 3
+    }
+    // rung 3: the search-backed compose (shared cache keys with the home feed)
+    const merged = await composeSearchVideos();
+    return { videos: merged.slice(0, limit), nextCursor: null };
+  }
+  return getBrowseVideoPage(opts.cursor, limit);
 }
