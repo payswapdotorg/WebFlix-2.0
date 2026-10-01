@@ -17,7 +17,7 @@
  *    signed-in home page's ytcfg CHANNEL_ID bootstrap),
  *    studio_analytics_synth.html (a Studio analytics page's embedded state).
  */
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 import { setUpstream } from "@/lib/youtube/innertube";
@@ -30,13 +30,25 @@ import {
 
 import { GET as studioRoute } from "@/app/api/studio/route";
 import { GET as uploadGet, POST as uploadPost } from "@/app/api/upload/route";
+import { mintSessionCookie } from "./helpers";
 
 const FIXTURE_DIR = "tests/fixtures/yt";
 const load = (name: string): any => JSON.parse(readFileSync(`${FIXTURE_DIR}/${name}.json`, "utf8"));
 const readHtml = (name: string): string => readFileSync(`${FIXTURE_DIR}/${name}.html`, "utf8");
 
-/** NextRequest-compatible request factory (the routes type against NextRequest). */
-const req = (url: string, init?: RequestInit): never => new Request(url, init) as never;
+/** NextRequest-compatible request factory (the routes type against NextRequest).
+ * WFX2-P2-AU: carries the minted WebFlix session cookie — the studio and
+ * upload routes sit behind the auth gate; these tests exercise the
+ * signed-in surface. */
+let AUTH_COOKIE = "";
+beforeAll(async () => {
+  AUTH_COOKIE = await mintSessionCookie();
+});
+const req = (url: string, init?: RequestInit): never =>
+  new Request(url, {
+    ...init,
+    headers: { ...((init?.headers as Record<string, string>) ?? {}), cookie: AUTH_COOKIE },
+  }) as never;
 
 const HOME_YTCFG_HTML = readHtml("ssr_home_ytcfg_synth");
 const HOME_NO_CHANNEL_HTML = HOME_YTCFG_HTML.replace(

@@ -7,11 +7,16 @@
  * non-empty, emoji picker; posts via the canonical `/api/comments` route
  * (direct-first, broker fallback — the server tier owns the routing).
  *
- * Signed-out (public mode): the box renders as YouTube's signed-out
- * "Comment..." affordance — tapping opens the "Sign in to continue to
- * comment" dialog which links the account flow. Never a fake write.
+ * Signed-out states, two honest layers (WFX2-P2-AU):
+ *  - WebFlix GUEST (no account session) → youtube.com's watch-page
+ *    "Sign in to comment" box — the red Sign in affordance links /signin
+ *    with the redirect back to this watch page;
+ *  - public mode (operator session not configured) → the "Comment..."
+ *    affordance → "Sign in to continue to comment" dialog.
+ * Never a fake write, either way.
  */
 import { useRef, useState } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -26,6 +31,7 @@ import {
 import { EmojiPicker } from "./emoji-picker";
 import { cn } from "@/lib/utils";
 import { post } from "@/lib/watch/client";
+import { signInHref } from "@/lib/auth/client";
 import type { CommentDto, ViewerDto } from "@/lib/watch/types";
 
 /** YouTube's comment-length limit. */
@@ -37,6 +43,7 @@ export function CommentComposer({
   parentText,
   viewer,
   operatorSession = true,
+  guest = false,
   placeholder = "Comment...",
   submitLabel = "Comment",
   autoFocus,
@@ -52,6 +59,8 @@ export function CommentComposer({
   viewer: ViewerDto;
   /** false in public mode → the signed-out affordance (YouTube parity) */
   operatorSession?: boolean;
+  /** WFX2-P2-AU: no WebFlix account session → the "Sign in to comment" box */
+  guest?: boolean;
   placeholder?: string;
   submitLabel?: string;
   autoFocus?: boolean;
@@ -112,6 +121,28 @@ export function CommentComposer({
 
   const empty = body.trim().length === 0;
   const showCounter = operatorSession && (focused || body.length > 0);
+
+  // ---- WebFlix guest: youtube.com's exact "Sign in to comment" box ----
+  if (guest) {
+    return (
+      <div className="flex w-full gap-3">
+        <Avatar className={cn(compact ? "size-6" : "size-9 sm:size-10")}>
+          <AvatarFallback aria-hidden="true">
+            <span className="text-xs text-muted-foreground">?</span>
+          </AvatarFallback>
+        </Avatar>
+        <div className="flex h-10 min-w-0 flex-1 items-center justify-between gap-3 rounded-xl border border-border px-4">
+          <span className="truncate text-sm text-muted-foreground">Sign in to comment</span>
+          <Link
+            href={signInHref(`/watch/${videoId}`)}
+            className="shrink-0 text-sm font-medium text-yt-red hover:underline"
+          >
+            Sign in
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   // ---- signed-out (public mode): YouTube's signed-out comment box ----
   if (!operatorSession) {

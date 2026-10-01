@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { json, errorResponse } from "@/lib/watch/api";
 import { proxyNotInterested } from "@/lib/watch/action-proxy";
+import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,7 @@ export const dynamic = "force-dynamic";
  * video-card kebab consumes (+ok/effect).
  */
 export async function POST(req: NextRequest) {
+  if (!(await getSessionUser(req))) return authRequiredResponse();
   try {
     let body: Record<string, unknown> = {};
     try {

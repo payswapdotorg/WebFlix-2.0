@@ -3,6 +3,7 @@ import { json, errorResponse } from "@/lib/watch/api";
 import { resolveViewer } from "@/lib/watch/session";
 import { reportVideo } from "@/lib/watch/video-service";
 import { reportBodySchema } from "@/lib/watch/validators";
+import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,7 @@ export const dynamic = "force-dynamic";
  * review queue (video stays visible, matching youtube.com).
  */
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  if (!(await getSessionUser(req))) return authRequiredResponse();
   try {
     const { id } = await ctx.params;
     const viewer = await resolveViewer(req.headers);

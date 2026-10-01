@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { VerifiedBadge } from "@/components/app/verified-badge";
 import { formatSubscribers } from "@/lib/format";
 import type { ChannelLite, SubscriptionsPageDTO, VideoDTO } from "@/lib/types";
+import { PersonalSurfaceGate } from "@/components/auth/personal-surface-gate";
 
 type SubscriptionsPayload = {
   channels: ChannelLite[];
@@ -19,8 +20,17 @@ type SubscriptionsPayload = {
   session: boolean;
 };
 
-/** Subscriptions — the operator's REAL subscriptions feed (SSR /feed/subscriptions). */
+/** Subscriptions — the operator's REAL subscriptions feed (SSR /feed/subscriptions).
+ * WFX2-P2-AU: guests get the youtube.com signed-out screen (the gate). */
 export default function SubscriptionsPage() {
+  return (
+    <PersonalSurfaceGate surface="subscriptions">
+      <SubscriptionsContent />
+    </PersonalSurfaceGate>
+  );
+}
+
+function SubscriptionsContent() {
   const { data, loading, error } = useApi<SubscriptionsPayload>("/api/subscriptions");
   const [extraVideos, setExtraVideos] = useState<VideoDTO[]>([]);
   const [paging, setPaging] = useState<{ cursor: string | null; loading: boolean }>({

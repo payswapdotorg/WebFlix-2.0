@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { json, errorResponse } from "@/lib/watch/api";
 import { resolveViewer } from "@/lib/watch/session";
 import { proxyCommentCreate, proxyCommentReply } from "@/lib/watch/action-proxy";
+import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,7 @@ export const MAX_COMMENT_LENGTH = 10_000;
  * comment's real id/author come from YouTube on the next live read.
  */
 export async function POST(req: NextRequest) {
+  if (!(await getSessionUser(req))) return authRequiredResponse();
   try {
     let body: Record<string, unknown> = {};
     try {

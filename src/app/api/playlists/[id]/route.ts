@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getPlaylistItems, isSpecialPlaylistId } from "@/lib/youtube/playlists";
 import { rateLimit } from "@/lib/youtube/cache";
 import { brokerAction, brokerOk, BrokerError } from "@/lib/broker";
+import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +45,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
  * cannot be deleted — honest 400.
  */
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  if (!(await getSessionUser(req))) return authRequiredResponse();
   try {
     const { id } = await ctx.params;
     if (!id || !/^[\w-]{2,64}$/.test(id)) {

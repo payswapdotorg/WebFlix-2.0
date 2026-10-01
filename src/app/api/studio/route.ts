@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { hasSession } from "@/lib/youtube/session";
 import { rateLimit } from "@/lib/youtube/cache";
 import { getStudioData, DEFAULT_ENRICH_LIMIT, MAX_ENRICH_LIMIT } from "@/lib/youtube/studio";
+import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,7 @@ export const dynamic = "force-dynamic";
  * cached upstream reads).
  */
 export async function GET(req: NextRequest) {
+  if (!(await getSessionUser(req))) return authRequiredResponse();
   try {
     if (!(await rateLimit(`studio:${req.headers.get("x-forwarded-for") ?? "local"}`, { limit: 30 }))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });

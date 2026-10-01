@@ -4,6 +4,7 @@ import { hasSession } from "@/lib/youtube/session";
 import { rateLimit } from "@/lib/youtube/cache";
 import { errorResponse, json } from "@/lib/watch/api";
 import { proxySubscriptionStateMachine } from "@/lib/watch/action-proxy";
+import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ export const dynamic = "force-dynamic";
  * promo → { channels: [], videos: [], loginRequired: true } — honest.
  */
 export async function GET(req: NextRequest) {
+  if (!(await getSessionUser(req))) return authRequiredResponse();
   try {
     if (!(await rateLimit(`subscriptions:${req.headers.get("x-forwarded-for") ?? "local"}`))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
@@ -46,6 +48,7 @@ export async function GET(req: NextRequest) {
  * displayed count alone). Plus ok/effect/path.
  */
 export async function POST(req: NextRequest) {
+  if (!(await getSessionUser(req))) return authRequiredResponse();
   try {
     let body: Record<string, unknown> = {};
     try {

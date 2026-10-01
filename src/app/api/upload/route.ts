@@ -7,6 +7,7 @@ import {
   YOUTUBE_TITLE_MAX,
   YOUTUBE_DESCRIPTION_MAX,
 } from "@/lib/youtube/studio";
+import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,7 @@ const handoffSchema = z.object({
  * YouTube upload URL. No upload simulation anywhere in this flow.
  */
 export async function GET(req: NextRequest) {
+  if (!(await getSessionUser(req))) return authRequiredResponse();
   try {
     if (!(await rateLimit(`upload:${req.headers.get("x-forwarded-for") ?? "local"}`, { limit: 60 }))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
@@ -62,6 +64,7 @@ export async function GET(req: NextRequest) {
  * does: hand off to YouTube.
  */
 export async function POST(req: NextRequest) {
+  if (!(await getSessionUser(req))) return authRequiredResponse();
   try {
     if (!(await rateLimit(`upload-post:${req.headers.get("x-forwarded-for") ?? "local"}`, { limit: 30 }))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });

@@ -3,6 +3,7 @@ import { json, errorResponse, ApiError } from "@/lib/watch/api";
 import { proxyCommentHeart } from "@/lib/watch/action-proxy";
 import { getWatchMetadata } from "@/lib/youtube/watch";
 import { operatorIsCreator } from "@/lib/youtube/operator";
+import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,7 @@ export const dynamic = "force-dynamic";
  * Response: {ok, effect, heartedByCreator, path?}.
  */
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  if (!(await getSessionUser(req))) return authRequiredResponse();
   try {
     const { id } = await ctx.params;
     let body: Record<string, unknown> = {};

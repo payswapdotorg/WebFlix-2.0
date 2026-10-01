@@ -8,11 +8,12 @@
  * hasSession() is true (personal mode); it is deleted in the public-mode
  * describes so the honest login-required degradation is exercised.
  */
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 import { setUpstream } from "@/lib/youtube/innertube";
 import { clearCache } from "@/lib/youtube/cache";
+import { mintSessionCookie } from "./helpers";
 
 import { GET as historyRoute, DELETE as historyDelete, PATCH as historyPatch } from "@/app/api/history/route";
 import { GET as playlistsRoute } from "@/app/api/playlists/route";
@@ -25,8 +26,18 @@ import { GET as subscriptionsRoute } from "@/app/api/subscriptions/route";
 const FIXTURE_DIR = "tests/fixtures/yt";
 const load = (name: string): any => JSON.parse(readFileSync(`${FIXTURE_DIR}/${name}.json`, "utf8"));
 
-/** NextRequest-compatible request factory (the routes type against NextRequest). */
-const req = (url: string, init?: RequestInit): never => new Request(url, init) as never;
+/** NextRequest-compatible request factory (the routes type against NextRequest).
+ * WFX2-P2-AU: every request carries the minted WebFlix session cookie —
+ * these tests exercise the SIGNED-IN surface behind the auth gate. */
+let AUTH_COOKIE = "";
+beforeAll(async () => {
+  AUTH_COOKIE = await mintSessionCookie();
+});
+const req = (url: string, init?: RequestInit): never =>
+  new Request(url, {
+    ...init,
+    headers: { ...((init?.headers as Record<string, string>) ?? {}), cookie: AUTH_COOKIE },
+  }) as never;
 
 interface Recorded {
   method: string;
@@ -452,7 +463,9 @@ describe("GET /api/notifications — the verified endpoints", () => {
 describe("POST /api/notifications/read — broker tier", () => {
   test("without the broker → the honest offline 502", async () => {
     delete process.env.BROKER_URL;
-    const res = await notificationsReadRoute();
+    const res = await notificationsReadRoute(
+      req("http://localhost/api/notifications/read", { method: "POST" })
+    );
     expect(res.status).toBe(502);
     const body = (await res.json()) as { error: string };
     expect(body.error).toContain("offline");

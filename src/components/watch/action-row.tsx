@@ -4,6 +4,10 @@
  * WFX2-W action row — like/dislike segmented control with live counts +
  * optimistic toggle (one like OR one dislike; swap allowed), Share, Save,
  * and the kebab (Report / Show transcript / Not interested).
+ *
+ * WFX2-P2-AU: WebFlix guests never fire the write actions — like/dislike
+ * and Not interested route to /signin (redirect back to this watch page).
+ * Share and Show transcript stay public (youtube.com parity).
  */
 import { useState } from "react";
 import {
@@ -20,6 +24,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { post } from "@/lib/watch/client";
+import { signInHref } from "@/lib/auth/client";
 import { compactCount } from "@/lib/watch/format";
 import type { LikeValue } from "@/lib/watch/types";
 import {
@@ -36,6 +41,7 @@ export function ActionRow({
   dislikes,
   yourLike,
   savedWatchLater,
+  guest = false,
   onLikeResult,
   onSavedChange,
   onShare,
@@ -48,6 +54,8 @@ export function ActionRow({
   dislikes: number;
   yourLike: LikeValue | null;
   savedWatchLater: boolean;
+  /** WFX2-P2-AU: no WebFlix account → writes route to the sign-in prompt */
+  guest?: boolean;
   onLikeResult: (r: { likes: number; dislikes: number; yourLike: LikeValue | null }) => void;
   onSavedChange?: (watchLater: boolean) => void;
   onShare: () => void;
@@ -71,6 +79,11 @@ export function ActionRow({
 
   const toggleLike = async (value: LikeValue) => {
     if (busy) return;
+    if (guest) {
+      // WFX2-P2-AU: the account gate — never a guest write
+      window.location.assign(signInHref(`/watch/${videoId}`));
+      return;
+    }
     setBusy(true);
     // optimistic: same → unset; other → swap; none → set
     const optimistic = { ...state };
@@ -114,6 +127,10 @@ export function ActionRow({
   };
 
   const notInterested = async () => {
+    if (guest) {
+      window.location.assign(signInHref(`/watch/${videoId}`));
+      return;
+    }
     try {
       await post(`/api/videos/${videoId}/not-interested`);
       toast.success("We won't recommend this video to you");

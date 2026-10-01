@@ -6,6 +6,7 @@ import { brokerAction, brokerOk, BrokerError } from "@/lib/broker";
 import { resolveViewer } from "@/lib/watch/session";
 import { listPlaylists, createPlaylist } from "@/lib/watch/playlist-service";
 import type { PlaylistDTO } from "@/lib/types";
+import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,7 @@ function brokerErrorResponse(err: BrokerError): NextResponse {
  *    broker-side save-dialog state lands in a later wave).
  */
 export async function GET(req: NextRequest) {
+  if (!(await getSessionUser(req))) return authRequiredResponse();
   try {
     if (!(await rateLimit(`playlists:${req.headers.get("x-forwarded-for") ?? "local"}`))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
@@ -58,6 +60,7 @@ export async function GET(req: NextRequest) {
  * path remains only as the honest offline fallback for the Save dialog.
  */
 export async function POST(req: NextRequest) {
+  if (!(await getSessionUser(req))) return authRequiredResponse();
   try {
     let body: Record<string, unknown> = {};
     try {

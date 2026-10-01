@@ -3,6 +3,7 @@ import { json, errorResponse } from "@/lib/watch/api";
 import { resolveViewer } from "@/lib/watch/session";
 import { proxyCommentReply, proxyCommentEdit, proxyCommentDelete } from "@/lib/watch/action-proxy";
 import { commentWriteBodySchema, commentDeleteBodySchema } from "@/lib/watch/validators";
+import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,7 @@ export const dynamic = "force-dynamic";
  * Response: the synthesized CommentDto (+ok/effect) with 201.
  */
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  if (!(await getSessionUser(req))) return authRequiredResponse();
   try {
     const { id } = await ctx.params;
     let body: Record<string, unknown> = {};
@@ -49,6 +51,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
  * body into the row it already holds (the row's id/author stay).
  */
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  if (!(await getSessionUser(req))) return authRequiredResponse();
   try {
     const { id } = await ctx.params;
     let raw: unknown;
@@ -80,6 +83,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
  * Response: {ok, deleted: true, effect, path?}.
  */
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  if (!(await getSessionUser(req))) return authRequiredResponse();
   try {
     const { id } = await ctx.params;
     let raw: unknown = {};

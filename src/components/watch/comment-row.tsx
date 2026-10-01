@@ -12,6 +12,9 @@
  * comment-report dialog (reasons list), and in public mode (no operator
  * session) the write affordances render their signed-out states — the
  * "Sign in to continue" dialog, never fake writes.
+ *
+ * WFX2-P2-AU: WebFlix guests (no account session) get the sign-in prompt
+ * (routed to /signin with the redirect back) instead of any write firing.
  */
 import { useState } from "react";
 import Link from "next/link";
@@ -50,6 +53,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { compactCount, relativeTime } from "@/lib/watch/format";
 import { post, patch, del } from "@/lib/watch/client";
+import { signInHref } from "@/lib/auth/client";
 import type { CommentDto, LikeValue, ViewerDto } from "@/lib/watch/types";
 import { CommentComposer } from "./comment-composer";
 import { CommentReportDialog } from "./comment-report-dialog";
@@ -62,6 +66,8 @@ export interface CommentRowProps {
   creatorName: string;
   /** false in public mode → signed-out states for the write affordances */
   operatorSession?: boolean;
+  /** WFX2-P2-AU: no WebFlix account → writes route to the sign-in prompt */
+  guest?: boolean;
   /** nesting depth (0 = top-level; 1 = rendered reply level; 2+ inline) */
   depth: number;
   /** open reply thread state (for depth 0) */
@@ -84,6 +90,7 @@ export function CommentRow({
   viewerIsCreator,
   creatorName,
   operatorSession = true,
+  guest = false,
   depth,
   threadReplies,
   threadCursor,
@@ -112,9 +119,19 @@ export function CommentRow({
   const [reportOpen, setReportOpen] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
 
+  /** WFX2-P2-AU: the account gate — guests go to /signin (redirect back);
+   * public-mode operator gaps keep the honest "Sign in to continue" dialog. */
+  const promptSignIn = () => {
+    if (guest) {
+      window.location.assign(signInHref(`/watch/${videoId}`));
+      return;
+    }
+    setSignInOpen(true);
+  };
+
   const toggleLike = async (value: LikeValue) => {
-    if (!operatorSession) {
-      setSignInOpen(true); // YouTube parity: signed-out → sign-in prompt
+    if (guest || !operatorSession) {
+      promptSignIn(); // YouTube parity: signed-out → sign-in prompt
       return;
     }
     // optimistic
@@ -192,6 +209,10 @@ export function CommentRow({
   };
 
   const doHeart = async () => {
+    if (guest) {
+      promptSignIn();
+      return;
+    }
     try {
       const r = await post<{ heartedByCreator: boolean }>(`/api/comments/${comment.id}/heart`, {
         videoId,
@@ -204,6 +225,10 @@ export function CommentRow({
   };
 
   const doPin = async () => {
+    if (guest) {
+      promptSignIn();
+      return;
+    }
     try {
       const r = await post<{ pinned: boolean }>(`/api/comments/${comment.id}/pin`, {
         videoId,
@@ -403,7 +428,7 @@ export function CommentRow({
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
-                {comment.isOwn && operatorSession && (
+                {comment.isOwn && operatorSession && !guest && (
                   <DropdownMenuItem
                     onClick={() => setEditing(true)}
                     className="cursor-pointer gap-3 py-2.5 text-sm"
@@ -438,14 +463,14 @@ export function CommentRow({
                 )}
                 {!comment.isOwn && (
                   <DropdownMenuItem
-                    onClick={() => (operatorSession ? setReportOpen(true) : setSignInOpen(true))}
+                    onClick={() => (!operatorSession || guest ? promptSignIn() : setReportOpen(true))}
                     className="cursor-pointer gap-3 py-2.5 text-sm"
                   >
                     <Flag className="size-4" aria-hidden="true" />
                     Report
                   </DropdownMenuItem>
                 )}
-                {comment.isOwn && operatorSession && (
+                {comment.isOwn && operatorSession && !guest && (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
@@ -471,6 +496,7 @@ export function CommentRow({
               parentText={comment.body}
               viewer={viewer}
               operatorSession={operatorSession}
+              guest={guest}
               placeholder="Add a reply..."
               submitLabel="Reply"
               autoFocus

@@ -6,6 +6,31 @@
  */
 import { beforeAll } from "bun:test";
 import { spawnSync } from "node:child_process";
+import { encode } from "next-auth/jwt";
+import { DEV_AUTH_SECRET_FALLBACK } from "@/lib/auth/secret";
+
+/**
+ * WFX2-P2-AU — mint a stock NextAuth session cookie for tests.
+ *
+ * The personal + write API routes now carry the auth gate (guest → 401);
+ * route tests pass this cookie to exercise their signed-in behavior. The
+ * token is minted with the REAL next-auth/jwt encoder and the active secret
+ * (env-configured, dev fallback in env-clean runs) — the same decode the
+ * gate performs. No network, no fake auth.
+ */
+export async function mintSessionCookie(claims?: Record<string, unknown>): Promise<string> {
+  const token = await encode({
+    token: {
+      sub: "u_wfx2_test",
+      name: "Test Operator",
+      email: "operator@webflix.test",
+      avatarSeed: 12,
+      ...claims,
+    },
+    secret: process.env.NEXTAUTH_SECRET ?? DEV_AUTH_SECRET_FALLBACK,
+  });
+  return `next-auth.session-token=${token}`;
+}
 
 let schemaReady = false;
 

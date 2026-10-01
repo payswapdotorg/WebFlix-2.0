@@ -9,6 +9,10 @@
  * WFX2-B-S: `operatorSession` (from /api/watch/session) drives the
  * signed-out composer state ("Comment..." box → "Sign in to continue to
  * comment") and the row-level write gates in public mode.
+ *
+ * WFX2-P2-AU: `guest` (no WebFlix account session) drives the account
+ * gates — the youtube.com "Sign in to comment" composer box and the
+ * sign-in prompt on row-level writes.
  */
 import { useCallback, useEffect, useState } from "react";
 import { ArrowDownUp, MessageSquare } from "lucide-react";
@@ -37,6 +41,7 @@ export function CommentsSection({
   viewerIsCreator,
   creatorName,
   operatorSession = true,
+  guest = false,
 }: {
   videoId: string;
   viewer: ViewerDto;
@@ -44,6 +49,8 @@ export function CommentsSection({
   creatorName: string;
   /** false in public mode → YouTube-parity signed-out states */
   operatorSession?: boolean;
+  /** WFX2-P2-AU: no WebFlix account → account gates on every write */
+  guest?: boolean;
 }) {
   const [items, setItems] = useState<CommentDto[] | null>(null);
   const [total, setTotal] = useState(0);
@@ -225,6 +232,7 @@ export function CommentsSection({
           videoId={videoId}
           viewer={viewer}
           operatorSession={operatorSession}
+          guest={guest}
           onSubmitted={(c) => {
             // optimistic: appears instantly; the server row IS the row
             setItems((prev) => [c, ...(prev ?? [])]);
@@ -263,6 +271,7 @@ export function CommentsSection({
               viewerIsCreator={viewerIsCreator}
               creatorName={creatorName}
               operatorSession={operatorSession}
+              guest={guest}
               depth={0}
               threadReplies={threads[c.id]?.replies}
               threadCursor={threads[c.id]?.cursor}
