@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getChannelTab } from "@/lib/youtube/channel-tabs";
+import { getCommunityTab } from "@/lib/youtube/community";
 import { rateLimit } from "@/lib/youtube/cache";
 import type { ChannelTabDTO, ChannelTabId } from "@/lib/types";
 
@@ -26,6 +27,11 @@ const TAB_IDS: ChannelTabId[] = [
  * cached, last-good serves when the wall hits, and a cold walled read
  * answers HTTP 200 with `{tab, walled: true}` — the channel page renders its
  * honest unavailable state, never a fake one.
+ *
+ * WFX2-P2-SO: the Community tab climbs the wall ladder
+ * (browse-fresh → Tier-2 broker-read → Upstash last-good → honest empty) and
+ * answers the mapped posts with the additive `source` rung flag + `compose`
+ * (the operator session owns this channel — the composer affordance).
  */
 export async function GET(
   req: Request,
@@ -44,7 +50,10 @@ export async function GET(
         { status: 400 }
       );
     }
-    const payload: ChannelTabDTO = await getChannelTab(handle, tab as ChannelTabId);
+    const payload: ChannelTabDTO =
+      tab === "community"
+        ? await getCommunityTab(handle)
+        : await getChannelTab(handle, tab as ChannelTabId);
     return NextResponse.json(payload);
   } catch (err) {
     console.error("GET /api/channel/[handle]/tab failed", err);

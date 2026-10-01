@@ -42,13 +42,21 @@ export type BrokerKind =
   | "comment-delete"
   | "comment-heart"
   | "comment-pin"
-  | "comment-report";
+  | "comment-report"
+  // WFX2-P2-SO (community posts) — additive
+  | "community-read"
+  | "post-like"
+  | "post-comment-create"
+  | "post-comment-like"
+  | "post-create";
 
 export interface BrokerTarget {
   videoId?: string;
   channelId?: string;
   commentId?: string;
   playlistId?: string;
+  /** WFX2-P2-SO: the community post the action applies to */
+  postId?: string;
 }
 
 export interface BrokerPayload {
@@ -65,6 +73,15 @@ export interface BrokerPayload {
   paused?: boolean;
   /** comment-report: YouTube report-dialog reason label (substring match) */
   reason?: string;
+  // WFX2-P2-SO (community posts) — additive
+  /** community-read: the @handle whose community tab the browser reads */
+  handle?: string;
+  /** post-like: "like" | "dislike" | "remove" (desired end state) */
+  action?: string;
+  /** post-create: image attachment URL (fetched into the real composer) */
+  imageUrl?: string;
+  /** post-create: poll option texts (2-5) */
+  pollOptions?: string[];
 }
 
 /** Typed failure for the routes to map (502 offline / 502 action-failed). */
@@ -176,4 +193,29 @@ export function brokerOk(
 ): (BrokerActionSuccess & { ok: true }) | null {
   if (result instanceof BrokerError) return null;
   return { ...(result as BrokerActionSuccess), ok: true as const };
+}
+
+/** The community-read success shape (the browser's own payload in detail.data). */
+export interface BrokerCommunityReadSuccess extends BrokerActionSuccess {
+  ok: true;
+  detail?: { data?: unknown; url?: string; postsFound?: number } & Record<string, unknown>;
+}
+
+/**
+ * WFX2-P2-SO — Tier-2 broker READ: the logged-in browser's own
+ * youtube.com/@handle/community payload (window.ytInitialData), returned raw
+ * for the app-side mapper (one mapper, two transports). Fails typed (offline
+ * / action-failed) — never a synthesized payload.
+ */
+export async function brokerCommunityRead(
+  handle: string,
+  channelId?: string
+): Promise<BrokerCommunityReadSuccess | BrokerError> {
+  const result = await brokerAction(
+    "community-read",
+    { ...(channelId ? { channelId } : {}) },
+    { handle }
+  );
+  if (result instanceof BrokerError) return result;
+  return result as BrokerCommunityReadSuccess;
 }

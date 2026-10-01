@@ -1,0 +1,293 @@
+{
+ "note": "synthetic \u2014 browser community-tab ytInitialData shape for WFX2-P2-SO (the Tier-2 broker-read transport fixture; modeled on the sanitized channel_posts capture: twoColumnBrowseResultsRenderer > Posts tabRenderer > richGrid items; poll + image-collection attachment variants)",
+ "responseContext": {
+  "mainAppWebResponseContext": {
+   "loggedOut": false
+  }
+ },
+ "contents": {
+  "twoColumnBrowseResultsRenderer": {
+   "tabs": [
+    {
+     "tabRenderer": {
+      "title": "Posts",
+      "selected": true,
+      "content": {
+       "richGridRenderer": {
+        "contents": [
+         {
+          "richItemRenderer": {
+           "content": {
+            "backstagePostRenderer": {
+             "postId": "UgkxSYNTHETICbrowser01",
+             "contentText": {
+              "runs": [
+               {
+                "text": "Which song should the next cover be? Vote below!"
+               }
+              ]
+             },
+             "authorText": {
+              "runs": [
+               {
+                "text": "Rick Astley"
+               }
+              ]
+             },
+             "authorThumbnail": {
+              "thumbnails": [
+               {
+                "url": "https://yt3.ggpht.com/synthetic-avatar=s48-c-k-c0x00ffffff-no-rj",
+                "width": 48,
+                "height": 48
+               }
+              ]
+             },
+             "publishedText": {
+              "simpleText": "3 days ago"
+             },
+             "voteCount": {
+              "accessibility": {
+               "accessibilityData": {
+                "label": "1.2K likes"
+               }
+              }
+             },
+             "actionButtons": {
+              "commentActionButtonsRenderer": {
+               "replyButton": {
+                "buttonRenderer": {
+                 "text": {
+                  "accessibility": {
+                   "accessibilityData": {
+                    "label": "87 comments"
+                   }
+                  },
+                  "simpleText": "87"
+                 }
+                }
+               }
+              }
+             },
+             "backstageAttachment": {
+              "pollRenderer": {
+               "choices": [
+                {
+                 "text": {
+                  "runs": [
+                   {
+                    "text": "Together Forever"
+                   }
+                  ]
+                 },
+                 "voteCount": 620,
+                 "votePercentage": {
+                  "content": "62%"
+                 }
+                },
+                {
+                 "text": {
+                  "runs": [
+                   {
+                    "text": "Never Gonna Give You Up"
+                   }
+                  ]
+                 },
+                 "voteCount": 280,
+                 "votePercentage": {
+                  "content": "28%"
+                 }
+                },
+                {
+                 "text": {
+                  "runs": [
+                   {
+                    "text": "Keep Singing"
+                   }
+                  ]
+                 },
+                 "voteCount": 100,
+                 "votePercentage": {
+                  "content": "10%"
+                 }
+                }
+               ],
+               "totalVotes": {
+                "simpleText": "1K votes"
+               }
+              }
+             }
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "backstagePostRenderer": {
+             "postId": "UgkxSYNTHETICbrowser02",
+             "contentText": {
+              "runs": [
+               {
+                "text": "Tour rehearsals \u2014 behind the scenes."
+               }
+              ]
+             },
+             "authorText": {
+              "runs": [
+               {
+                "text": "Rick Astley"
+               }
+              ]
+             },
+             "authorThumbnail": {
+              "thumbnails": [
+               {
+                "url": "https://yt3.ggpht.com/synthetic-avatar=s48-c-k-c0x00ffffff-no-rj",
+                "width": 48,
+                "height": 48
+               }
+              ]
+             },
+             "publishedText": {
+              "simpleText": "1 week ago"
+             },
+             "voteCount": {
+              "accessibility": {
+               "accessibilityData": {
+                "label": "890 likes"
+               }
+              }
+             },
+             "actionButtons": {
+              "commentActionButtonsRenderer": {
+               "replyButton": {
+                "buttonRenderer": {
+                 "text": {
+                  "accessibility": {
+                   "accessibilityData": {
+                    "label": "34 comments"
+                   }
+                  },
+                  "simpleText": "34"
+                 }
+                }
+               }
+              }
+             },
+             "backstageAttachment": {
+              "imageCollectionRenderer": {
+               "images": [
+                {
+                 "backstageImageRenderer": {
+                  "image": {
+                   "thumbnails": [
+                    {
+                     "url": "https://yt3.ggpht.com/synthetic-grid-1.jpg",
+                     "width": 1280,
+                     "height": 720
+                    }
+                   ]
+                  }
+                 }
+                },
+                {
+                 "backstageImageRenderer": {
+                  "image": {
+                   "thumbnails": [
+                    {
+                     "url": "https://yt3.ggpht.com/synthetic-grid-2.jpg",
+                     "width": 1280,
+                     "height": 720
+                    }
+                   ]
+                  }
+                 }
+                },
+                {
+                 "backstageImageRenderer": {
+                  "image": {
+                   "thumbnails": [
+                    {
+                     "url": "https://yt3.ggpht.com/synthetic-grid-3.jpg",
+                     "width": 1280,
+                     "height": 720
+                    }
+                   ]
+                  }
+                 }
+                }
+               ]
+              }
+             }
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "backstagePostRenderer": {
+             "postId": "UgkxSYNTHETICbrowser03",
+             "contentText": {
+              "runs": [
+               {
+                "text": "Thank you all for 4M subscribers \u2014 incredible."
+               }
+              ]
+             },
+             "authorText": {
+              "runs": [
+               {
+                "text": "Rick Astley"
+               }
+              ]
+             },
+             "authorThumbnail": {
+              "thumbnails": [
+               {
+                "url": "https://yt3.ggpht.com/synthetic-avatar=s48-c-k-c0x00ffffff-no-rj",
+                "width": 48,
+                "height": 48
+               }
+              ]
+             },
+             "publishedText": {
+              "simpleText": "2 weeks ago"
+             },
+             "voteCount": {
+              "accessibility": {
+               "accessibilityData": {
+                "label": "4.4K likes"
+               }
+              }
+             },
+             "actionButtons": {
+              "commentActionButtonsRenderer": {
+               "replyButton": {
+                "buttonRenderer": {
+                 "text": {
+                  "accessibility": {
+                   "accessibilityData": {
+                    "label": "129 comments"
+                   }
+                  },
+                  "simpleText": "129"
+                 }
+                }
+               }
+              }
+             }
+            }
+           }
+          }
+         }
+        ]
+       }
+      }
+     }
+    }
+   ]
+  }
+ }
+}

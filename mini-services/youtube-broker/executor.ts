@@ -737,6 +737,249 @@ return {ok:!!menu,verified:false,path:'ui',detail:{menuOpened:!!menu,unseenAfter
 }
 
 /* ------------------------------------------------------------------ */
+/* WFX2-P2-SO — community posts (the Tier-2 read + post interactions)  */
+/* ------------------------------------------------------------------ */
+
+/** In-page deep walk: count nodes that carry the given child key. */
+const COUNT_KEY = (key: string) => `
+const countKey=(o)=>{let n=0;const walk=(v)=>{if(!v||typeof v!=='object')return;if(Array.isArray(v)){for(const x of v)walk(x);return;}if(${JSON.stringify(key)} in v)n++;for(const x of Object.values(v))walk(x);};walk(o);return n;};`;
+
+/** The response-own tab titles present in a browse-shaped payload. */
+const TAB_TITLES = () => `
+const tabTitles=(o)=>{const out=[];const walk=(v)=>{if(!v||typeof v!=='object'||out.length)return;if(Array.isArray(v)){for(const x of v)walk(x);return;}if(v.tabRenderer&&typeof v.tabRenderer.title==='string')out.push(v.tabRenderer.title);for(const x of Object.values(v))walk(x);};walk(o);return out;};`;
+
+/**
+ * community-read — the logged-in browser's OWN community-tab payload. The
+ * executor has already navigated the tab to youtube.com/@<handle>/community
+ * (a full page load — window.ytInitialData is the fresh browse answer); this
+ * extracts it RAW (detail.data) for the app-side mapper — ONE mapper, TWO
+ * transports. Healthy = backstage post rows OR the response's own
+ * Posts/Community tab strip (a channel-not-found redirect carries neither —
+ * honest failure, never a faked empty community tab).
+ */
+function communityReadScript(): string {
+  return script(`
+${COUNT_KEY("backstagePostRenderer")}
+${TAB_TITLES()}
+const data=window.ytInitialData||null;
+if(!data) return {ok:false,error:'ytInitialData-not-found',path:'ui',dom:${domState()}};
+const postsFound=countKey(data);
+const titles=tabTitles(data);
+if(postsFound===0&&!titles.some(t=>t==='Posts'||t==='Community')){
+  return {ok:false,error:'community-tab-not-rendered',path:'ui',dom:{...${domState()},tabTitles:titles}};
+}
+return {ok:true,verified:postsFound>0,path:'ui',detail:{data:window.ytInitialData,url:location.href,postsFound,tabTitles:titles}};
+`);
+}
+
+const POST_SCOPE_SEL =
+  "'ytd-backstage-post-thread-renderer, ytd-backstage-post-renderer'";
+const POST_LIKE_SEL =
+  "\"#like-button button, #like-button yt-button-shape button, like-button-view-model button, ytd-toggle-button-renderer[id='like-button'] button\"";
+const POST_DISLIKE_SEL =
+  "\"#dislike-button button, #dislike-button yt-button-shape button, dislike-button-view-model button, ytd-toggle-button-renderer[id='dislike-button'] button\"";
+
+/**
+ * post-like — the real like/dislike toggle on the post (/post/<postId>),
+ * aria-pressed verified end-state (the watch-page likeScript semantics; no
+ * protobuf template exists for backstage votes — an unverified click is an
+ * honest failure, never a claimed success).
+ */
+function postLikeScript(action: "like" | "dislike" | "remove"): string {
+  return script(`
+const post=await until(()=>q(${POST_SCOPE_SEL}),15000);
+if(!post) return {ok:false,error:'post-not-found',path:'ui',dom:${domState()}};
+const likeBtn=await until(()=>post.querySelector(${POST_LIKE_SEL}),8000);
+if(!likeBtn) return {ok:false,error:'post-like-button-not-found',path:'ui',dom:${domState()}};
+const dislikeBtn=post.querySelector(${POST_DISLIKE_SEL});
+const was={like:pressed(likeBtn),dislike:dislikeBtn?pressed(dislikeBtn):false};
+const action=${j(action)};
+if(action==='remove'){
+  if(!was.like&&!was.dislike) return {ok:true,verified:true,already:true,rating:null,path:'ui'};
+  const btn=was.like?likeBtn:(dislikeBtn||likeBtn);
+  btn.click();
+  const cleared=await until(()=>!pressed(was.like?likeBtn:(dislikeBtn||likeBtn)),6000);
+  if(cleared) return {ok:true,verified:true,rating:null,path:'ui'};
+  return {ok:false,verified:false,error:'post-rating-did-not-clear',path:'ui',dom:{was}};
+}
+const btn=action==='like'?likeBtn:dislikeBtn;
+if(!btn) return {ok:false,error:'post-'+action+'-button-not-found',path:'ui',dom:${domState()}};
+if(was[action]) return {ok:true,verified:true,already:true,rating:action,path:'ui'};
+btn.click();
+const flipped=await until(()=>pressed(btn),6000);
+if(flipped) return {ok:true,verified:true,rating:action,path:'ui'};
+return {ok:false,verified:false,error:'post-like-state-unchanged (no fetch-fallback template for backstage votes)',path:'ui',dom:{was}};
+`);
+}
+
+/**
+ * post-comment-create — the /post/<postId> comments simplebox → editor →
+ * submit DOM path (the same component family the watch page uses; no
+ * verified templated fetch fallback for backstage comments — an unverified
+ * submit is honestly reported, never claimed).
+ */
+function postCommentCreateScript(text: string): string {
+  const needle = text.slice(0, 40);
+  return script(`
+const commentsAnchor=await until(()=>q("#comments, ytd-comments"),8000);
+if(commentsAnchor) commentsAnchor.scrollIntoView({block:'start'});
+const box=await until(()=>q("ytd-comment-simplebox-renderer #placeholder-area, #comment-dialog #placeholder-area, #placeholder-area"),15000);
+if(!box) return {ok:false,error:'post-comment-box-not-found',path:'ui',dom:${domState()}};
+box.click();
+const editor=await until(()=>q("#contenteditable-root"),6000);
+if(!editor) return {ok:false,error:'post-comment-editor-not-found',path:'ui',dom:${domState()}};
+editor.focus();
+document.execCommand('selectAll',false,null);
+document.execCommand('insertText',false,${j(text)});
+const submit=await until(()=>{
+  const b=q("#submit-button button, #submit-button a, #submit-button yt-button-shape button, ytd-comment-dialog #submit-button");
+  if(!b) return null;
+  if(b.hasAttribute('disabled')) return null;
+  const ad=b.getAttribute('aria-disabled');
+  return ad==='true'||ad==='false'?null:b;
+},8000);
+if(!submit) return {ok:false,error:'post-comment-submit-not-ready',path:'ui',dom:{editorText:textOf(editor).slice(0,80)}};
+submit.click();
+const needle=${j(needle)};
+const found=await until(()=>qa("ytd-comment-renderer #content-text").some(el=>textOf(el).includes(needle)),15000);
+if(found) return {ok:true,verified:true,path:'ui'};
+const dialogClosed=!q("#contenteditable-root");
+if(dialogClosed) return {ok:true,verified:false,path:'ui',detail:{note:'editor closed after submit; comment not yet visible in list (sort order)'}};
+return {ok:false,verified:false,error:'post-comment-not-visible-after-submit',path:'ui'};
+`);
+}
+
+/**
+ * post-comment-like — locate the comment by text in the /post/<postId>
+ * comments DOM, click its real like button, verify the aria-pressed flip.
+ */
+function postCommentLikeScript(commentText: string | null, mode: string): string {
+  const needle = commentText ? commentText.slice(0, 60) : null;
+  return script(`
+const parentNeedle=${j(needle)};
+if(!parentNeedle) return {ok:false,error:'commentText-required',path:'ui',note:'post-comment-like locates the comment by text; pass payload.commentText'};
+const commentsAnchor=q("#comments, ytd-comments");
+if(commentsAnchor) commentsAnchor.scrollIntoView({block:'start'});
+const comment=await until(()=>qa("ytd-comment-renderer").find(el=>{
+  const t=textOf(el.querySelector("#content-text"));
+  return t&&(t.startsWith(parentNeedle)||parentNeedle.startsWith(t.slice(0,parentNeedle.length)));
+}),15000);
+if(!comment) return {ok:false,error:'post-comment-not-in-dom',path:'ui',dom:{needle:parentNeedle}};
+const likeBtn=comment.querySelector("#like-button button, #like-button yt-button-shape button");
+if(!likeBtn) return {ok:false,error:'post-comment-like-button-not-found',path:'ui'};
+const was=pressed(likeBtn);
+const mode=${j(mode)};
+const want=mode==='toggle'?!was:mode==='remove'?false:true;
+if(was===want) return {ok:true,verified:true,already:true,liked:want,path:'ui'};
+likeBtn.click();
+const done=await until(()=>pressed(likeBtn)===want,6000);
+if(done) return {ok:true,verified:true,liked:want,path:'ui'};
+return {ok:false,verified:false,error:'post-comment-like-state-unchanged',path:'ui',dom:{was}};
+`);
+}
+
+/**
+ * post-create — the OWN channel's backstage composer (the real create flow
+ * on youtube.com/@<handle>/community): the create box → the post dialog →
+ * text/image/poll fill → POST. The image rides a page-context fetch → blob →
+ * the dialog's own file input (a real upload through the real pipeline);
+ * poll options fill the dialog's own option fields. Verified end-state: the
+ * dialog closes AND the new post renders in the feed; honest failures at
+ * every step with the observed DOM.
+ */
+function postCreateScript(text: string, imageUrl: string | null, pollOptions: string[]): string {
+  const needle = text.slice(0, 40);
+  return script(`
+const CREATE_SEL="ytd-backstage-post-create-renderer #create-icon button, ytd-backstage-post-create-renderer button, button[aria-label*='Create a post' i], #create-icon button, ytd-backstage-post-create-renderer a";
+const createBtn=await until(()=>q(CREATE_SEL),15000);
+if(!createBtn) return {ok:false,error:'create-post-button-not-found (own channel community tab only)',path:'ui',dom:${domState()}};
+createBtn.click();
+const dialog=await until(()=>q("ytd-backstage-post-dialog-renderer, backstage-post-dialog"),10000);
+if(!dialog) return {ok:false,error:'post-composer-dialog-not-found',path:'ui',dom:{url:location.href}};
+const pollOptions=${j(pollOptions)};
+const text=${j(text)};
+const imageUrl=${j(imageUrl)};
+if(pollOptions.length){
+  const pollBtn=await until(()=>dialog.querySelector("#poll-button button, #poll-button, yt-button-renderer[aria-label*='poll' i] button, button[aria-label*='poll' i]"),8000);
+  if(!pollBtn) return {ok:false,error:'poll-button-not-found',path:'ui',dom:{dialog:textOf(dialog).slice(0,140)}};
+  pollBtn.click();
+  await S(600);
+}
+if(imageUrl){
+  const imgBtn=await until(()=>dialog.querySelector("#image-button button, #image-button, button[aria-label*='image' i], yt-image-select-button-renderer button"),8000);
+  if(imgBtn) imgBtn.click();
+  await S(500);
+  const input=await until(()=>dialog.querySelector("input[type=file]"),8000);
+  if(!input) return {ok:false,error:'image-file-input-not-found',path:'ui',dom:{dialog:textOf(dialog).slice(0,140)}};
+  try{
+    const res=await fetch(imageUrl,{mode:'cors'});
+    if(!res.ok) return {ok:false,error:'image-fetch-failed',path:'ui',detail:{status:res.status}};
+    const blob=await res.blob();
+    const ext=((blob.type.split('/')[1]||'jpeg').replace(/[^a-z0-9]/gi,'')||'jpeg');
+    const file=new File([blob],'image.'+ext,{type:blob.type||'image/jpeg'});
+    const dt=new DataTransfer();
+    dt.items.add(file);
+    input.files=dt.files;
+    input.dispatchEvent(new Event('change',{bubbles:true}));
+  }catch(e){
+    return {ok:false,error:'image-attach-failed',path:'ui',detail:{message:String((e&&e.message)||e)}};
+  }
+  await S(800);
+}
+const editor=await until(()=>dialog.querySelector("#contenteditable-root"),8000);
+if(!editor) return {ok:false,error:'post-editor-not-found',path:'ui',dom:{dialog:textOf(dialog).slice(0,140)}};
+if(text){
+  editor.focus();
+  document.execCommand('selectAll',false,null);
+  document.execCommand('insertText',false,text);
+}
+if(pollOptions.length){
+  // the option fields: the dialog's own editable rows (the main editor is
+  // the first #contenteditable-root — the options are the trailing ones);
+  // text inputs are the fallback family
+  const need=pollOptions.length+(text?1:0);
+  let fields=await until(()=>{
+    const all=qa("#contenteditable-root",dialog);
+    return all.length>=need?all:null;
+  },6000);
+  if(!fields){
+    fields=await until(()=>{
+      const inputs=qa("input[type=text], input.poll-option",dialog).filter(i=>!i.disabled);
+      return inputs.length>=pollOptions.length?inputs:null;
+    },4000);
+  }
+  if(!fields) return {ok:false,error:'poll-option-fields-not-found',path:'ui',dom:{editors:qa("#contenteditable-root",dialog).length,inputs:qa("input[type=text]",dialog).length}};
+  const opts=fields.slice(Math.max(0,fields.length-pollOptions.length));
+  for(let i=0;i<opts.length;i++){
+    const f=opts[i];
+    f.focus();
+    if(f.isContentEditable){
+      document.execCommand('selectAll',false,null);
+      document.execCommand('insertText',false,pollOptions[i]);
+    }else{
+      f.value=pollOptions[i];
+      f.dispatchEvent(new Event('input',{bubbles:true}));
+    }
+  }
+}
+const submit=await until(()=>{
+  const b=dialog.querySelector("#submit-button button, #submit-button yt-button-shape button, #submit-button a");
+  if(!b) return null;
+  if(b.hasAttribute('disabled')) return null;
+  return b;
+},10000);
+if(!submit) return {ok:false,error:'post-submit-not-ready',path:'ui',dom:{editorText:textOf(editor).slice(0,80)}};
+submit.click();
+const needle=${j(needle)};
+const dialogGone=await until(()=>!q("ytd-backstage-post-dialog-renderer #contenteditable-root, backstage-post-dialog #contenteditable-root"),10000);
+const inFeed=needle?await until(()=>qa("ytd-backstage-post-renderer, ytd-backstage-post-thread-renderer").some(el=>textOf(el).includes(needle)),12000):null;
+if(inFeed) return {ok:true,verified:true,path:'ui',detail:{dialogClosed:!!dialogGone}};
+if(dialogGone) return {ok:true,verified:false,path:'ui',detail:{note:'composer closed after submit; the new post is not yet visible in the feed (render lag)'}};
+return {ok:false,verified:false,error:'post-not-visible-after-submit',path:'ui',dom:${domState()}};
+`);
+}
+
+/* ------------------------------------------------------------------ */
 /* executor entry point                                                */
 /* ------------------------------------------------------------------ */
 
@@ -788,6 +1031,25 @@ export function requiredUrl(req: BrokerActionRequest): string | null {
       return "https://www.youtube.com/feed/playlists";
     case "notifications-mark-read":
       return "https://www.youtube.com/";
+    // WFX2-P2-SO — community posts (additive)
+    case "community-read": {
+      const handle = String(payload?.handle ?? "").replace(/^@/, "").trim();
+      if (target.channelId && !handle) {
+        return `https://www.youtube.com/channel/${target.channelId}/community`;
+      }
+      return handle ? `https://www.youtube.com/@${handle}/community` : null;
+    }
+    case "post-like":
+    case "post-comment-create":
+    case "post-comment-like":
+      return target.postId ? `https://www.youtube.com/post/${target.postId}` : null;
+    case "post-create": {
+      const handle = String(payload?.handle ?? "").replace(/^@/, "").trim();
+      if (target.channelId && !handle) {
+        return `https://www.youtube.com/channel/${target.channelId}/community`;
+      }
+      return handle ? `https://www.youtube.com/@${handle}/community` : null;
+    }
     default:
       return null;
   }
@@ -900,6 +1162,38 @@ export function buildScript(req: BrokerActionRequest): { script: string; timeout
       return { script: playlistDeleteScript(target.playlistId!), timeoutMs: 30000 };
     case "notifications-mark-read":
       return { script: notificationsMarkReadScript(), timeoutMs: 30000 };
+    // WFX2-P2-SO — community posts (additive)
+    case "community-read":
+      return { script: communityReadScript(), timeoutMs: 45000 };
+    case "post-like": {
+      const action = String(payload?.action ?? "like").toLowerCase();
+      const normalized: "like" | "dislike" | "remove" =
+        action === "dislike" || action === "remove" ? action : "like";
+      return { script: postLikeScript(normalized), timeoutMs: 30000 };
+    }
+    case "post-comment-create":
+      return { script: postCommentCreateScript(payload?.text ?? ""), timeoutMs: 45000 };
+    case "post-comment-like":
+      return {
+        script: postCommentLikeScript(payload?.commentText ?? null, payload?.mode ?? "set"),
+        timeoutMs: 45000,
+      };
+    case "post-create": {
+      const text = (payload?.text ?? "").trim();
+      const imageUrl =
+        typeof payload?.imageUrl === "string" && /^https?:\/\//.test(payload.imageUrl)
+          ? payload.imageUrl
+          : null;
+      const pollOptions = Array.isArray(payload?.pollOptions)
+        ? (payload!.pollOptions as unknown[])
+            .filter((o): o is string => typeof o === "string" && o.trim().length > 0)
+            .map((o) => o.trim())
+        : [];
+      return {
+        script: postCreateScript(text, imageUrl, pollOptions),
+        timeoutMs: 60000,
+      };
+    }
     default:
       return null;
   }

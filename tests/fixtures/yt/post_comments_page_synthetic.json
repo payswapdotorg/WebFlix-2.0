@@ -1,0 +1,173 @@
+{
+ "note": "synthetic — community post comments continuation page for WFX2-P2-SO (reloadContinuationItemsCommand with commentsHeaderRenderer sort menu + commentThreadRenderer rows + commentEntityPayload mutations — the comments_dQw4 family, browse continuation form) [station fix: comment items wrapped in commentThreadRenderer envelopes per the locked mapCommentsPage contract]",
+ "responseContext": {},
+ "onResponseReceivedEndpoints": [
+  {
+   "reloadContinuationItemsCommand": {
+    "targetId": "comments-section",
+    "continuationItems": [
+     {
+      "commentsHeaderRenderer": {
+       "countText": {
+        "runs": [
+         {
+          "text": "2 Comments"
+         }
+        ]
+       },
+       "sortMenu": {
+        "sortFilterSubMenuRenderer": {
+         "subMenuItems": [
+          {
+           "title": "Top",
+           "selected": true,
+           "serviceEndpoint": {
+            "continuationCommand": {
+             "token": "SYNTHETIC-POST-COMMENTS-TOP-TOKEN"
+            }
+           }
+          },
+          {
+           "title": "Newest",
+           "serviceEndpoint": {
+            "continuationCommand": {
+             "token": "SYNTHETIC-POST-COMMENTS-NEW-TOKEN"
+            }
+           }
+          }
+         ]
+        }
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "reloadContinuationItemsCommand": {
+    "targetId": "comments-section",
+    "continuationItems": [
+     {
+      "commentThreadRenderer": {
+       "commentViewModel": {
+        "commentViewModel": {
+         "commentKey": "ckey1",
+         "toolbarStateKey": "tbkey1",
+         "commentId": "UgySYNTHETICpostComment1"
+        }
+       },
+       "replies": {
+        "commentRepliesRenderer": {
+         "subThreads": [
+          {
+           "continuationItemRenderer": {
+            "continuationEndpoint": {
+             "continuationCommand": {
+              "token": "SYNTHETIC-POST-REPLIES-TOKEN"
+             }
+            }
+           }
+          }
+         ]
+        }
+       }
+      }
+     },
+     {
+      "commentThreadRenderer": {
+       "commentViewModel": {
+        "commentViewModel": {
+         "commentKey": "ckey2",
+         "toolbarStateKey": "tbkey2",
+         "commentId": "UgySYNTHETICpostComment2"
+        }
+       }
+      }
+     }
+    ]
+   }
+  }
+ ],
+ "frameworkUpdates": {
+  "entityBatchUpdate": {
+   "mutations": [
+    {
+     "entityKey": "ckey1",
+     "type": "ENTITY_TYPE_MUTATION_PAYLOAD_TYPE_OPTIONAL",
+     "payload": {
+      "commentEntityPayload": {
+       "key": "ckey1",
+       "properties": {
+        "commentId": "UgySYNTHETICpostComment1",
+        "content": {
+         "content": "Never gonna give this poll up!"
+        },
+        "publishedTime": "2 hours ago",
+        "authorButtonA11y": "@fanone",
+        "toolbarStateKey": "ckey1-toolbar"
+       },
+       "author": {
+        "channelId": "UCsyntheticfan1",
+        "displayName": "@fanone",
+        "avatarThumbnailUrl": "https://yt3.ggpht.com/synthetic-c1=s48-c-k-c0x00ffffff-no-rj",
+        "isVerified": false,
+        "isCurrentUser": false,
+        "isCreator": false,
+        "channelCommand": {
+         "innertubeCommand": {
+          "browseEndpoint": {
+           "browseId": "UCsyntheticfan1",
+           "canonicalBaseUrl": "/@fanone"
+          }
+         }
+        }
+       },
+       "toolbar": {
+        "likeCountNotliked": "12",
+        "replyCount": "1"
+       }
+      }
+     }
+    },
+    {
+     "entityKey": "ckey2",
+     "type": "ENTITY_TYPE_MUTATION_PAYLOAD_TYPE_OPTIONAL",
+     "payload": {
+      "commentEntityPayload": {
+       "key": "ckey2",
+       "properties": {
+        "commentId": "UgySYNTHETICpostComment2",
+        "content": {
+         "content": "Voted — Together Forever all the way."
+        },
+        "publishedTime": "1 day ago",
+        "authorButtonA11y": "@fantwo",
+        "toolbarStateKey": "ckey2-toolbar"
+       },
+       "author": {
+        "channelId": "UCsyntheticfan2",
+        "displayName": "@fantwo",
+        "avatarThumbnailUrl": "https://yt3.ggpht.com/synthetic-c2=s48-c-k-c0x00ffffff-no-rj",
+        "isVerified": false,
+        "isCurrentUser": false,
+        "isCreator": false,
+        "channelCommand": {
+         "innertubeCommand": {
+          "browseEndpoint": {
+           "browseId": "UCsyntheticfan2",
+           "canonicalBaseUrl": "/@fantwo"
+          }
+         }
+        }
+       },
+       "toolbar": {
+        "likeCountNotliked": "5",
+        "replyCount": "0"
+       }
+      }
+     }
+    }
+   ]
+  }
+ }
+}
