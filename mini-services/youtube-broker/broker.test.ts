@@ -9,6 +9,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createBrokerServer, validateActionRequest } from "./server";
+import { uploadExecuteScript } from "./kinds/upload";
+import { liveChatSendScript } from "./kinds/livechat";
 import { createBrokerOptions } from "./options";
 import { secretMatches } from "./auth";
 import { Journal } from "./journal";
@@ -184,4 +186,15 @@ describe("fail-closed without secret", () => {
       s2.stop(true);
     }
   });
+});
+
+// WFX2-P3 pre-seed: the staged kinds route to their lane-owned modules and
+// answer honestly until the lanes land (upload-execute / live-chat-send).
+test("P3 staged kinds: upload-execute + live-chat-send route + honest stub", () => {
+  const up = uploadExecuteScript({ fileName: "clip.mp4", title: "T" });
+  expect(up.timeoutMs).toBeGreaterThan(0);
+  expect(up.script).toContain("upload-execute: staged kind");
+  const lc = liveChatSendScript("hello from WebFlix");
+  expect(lc.script).toContain("live-chat-send: staged kind");
+  expect(lc.script).toContain('\"messageLen\":18');
 });

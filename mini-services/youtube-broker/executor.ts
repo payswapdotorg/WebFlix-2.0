@@ -18,6 +18,10 @@
  */
 import { CdpConnection } from "./cdp";
 import type { BrokerActionKind, BrokerActionRequest, BrokerActionResponse } from "./types";
+// WFX2-P3 — lane-owned kind modules (the registry routing is pre-seeded here;
+// the bodies live in kinds/ and never require shared-file edits)
+import { uploadExecuteScript } from "./kinds/upload";
+import { liveChatSendScript } from "./kinds/livechat";
 
 /* ------------------------------------------------------------------ */
 /* like params protobuf templates (fixture: request_payload_examples)  */
@@ -1010,6 +1014,9 @@ export function requiredUrl(req: BrokerActionRequest): string | null {
         return `https://www.youtube.com/watch?v=${payload?.videoId ?? target.videoId}`;
       }
       return null;
+    // WFX2-P3-LC: the live chat composer lives on the live watch page
+    case "live-chat-send":
+      return target.videoId ? `https://www.youtube.com/watch?v=${target.videoId}` : null;
     case "subscribe":
     case "unsubscribe":
     case "bell":
@@ -1050,6 +1057,11 @@ export function requiredUrl(req: BrokerActionRequest): string | null {
       }
       return handle ? `https://www.youtube.com/@${handle}/community` : null;
     }
+    // WFX2-P3 — lane-owned kinds module routing (pre-seeded by the lead)
+    case "upload-execute":
+      return uploadExecuteScript(payload);
+    case "live-chat-send":
+      return liveChatSendScript(String(payload?.message ?? ""));
     default:
       return null;
   }

@@ -36,6 +36,10 @@ export const ACTION_KINDS = [
   "post-comment-create",
   "post-comment-like",
   "post-create",
+  // WFX2-P3 (upload execution + live chat send) — additive; the executor
+  // bodies live in kinds/upload.ts + kinds/livechat.ts (lane-owned modules)
+  "upload-execute",
+  "live-chat-send",
 ] as const;
 
 export type BrokerActionKind = (typeof ACTION_KINDS)[number];
@@ -127,6 +131,10 @@ export interface BrokerPayload {
   action?: string;
   imageUrl?: string;
   pollOptions?: string[];
+  /** WFX2-P3-UP: upload-execute staged-drive fields */
+  fileName?: string;
+  /** WFX2-P3-LC: live-chat-send message text */
+  message?: string;
 }
 
 export interface BrokerActionRequest {
