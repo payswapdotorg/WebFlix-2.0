@@ -79,3 +79,65 @@ A-B (spine) merges first if ready; A-S and A-W merge after (they touch watch-pag
 - YouTube is the user-data source of truth; WebFlix stores UI prefs only.
 - Every action on WebFlix = same exact effect on youtube.com (verify via the broker browser).
 - UI contract: the ZTube-derived shell (now branded WebFlix), dark default + light, responsive, sticky footer law, semantic HTML.
+
+---
+
+# PHASE 2 — 2026-10-01 (operator directive: social completion, authentication, standalone studio)
+
+Phase 1 is COMPLETE (38/38 acceptance @ 4f88a4a, 672 tests, production live).
+Phase 2 opens three parallel lanes on base 4f88a4a:
+
+### P2-SO `wfx2/waveP2-social` — Community posts + social completion
+
+- Channel Community ("Posts") tab surfaced end-to-end: text/image/poll posts,
+  like/dislike + comments on posts (broker writes), share. The mapper exists
+  (`mapBackstagePost` in `channel-tabs.ts`) but renders nowhere today.
+- THE WALL: community-tab browse answers `{"tab":"community","walled":true}` in
+  production (the same IP-class browse wall as home). Ladder: browse-fresh →
+  Tier-2 broker-read (navigate the logged-in browser to the channel posts tab,
+  extract `ytInitialData`, map through the existing mapper) → Upstash last-good
+  (24h) → honest-empty.
+- Creator post composer (text/image/poll) via broker backstage create,
+  reachable from own-channel Community tab + deep-linked from Studio.
+- Broker kinds are additive: `community-read`, `post-like`, `post-comment-*`,
+  `post-create` follow the established executor pattern.
+
+### P2-AU `wfx2/waveP2-auth` — The WebFlix authentication system
+
+- NextAuth v4 (already a dependency): credentials provider, JWT sessions,
+  scrypt password hashing (node:crypto), user store in the Upstash adapter
+  (`wf:auth:user:<email>` key schema) with in-memory fallback for dev/tests.
+- Sign-in/sign-up pages in Google-account visual parity; header avatar menu
+  (account / sign out) vs guest "Sign in" button.
+- Gating parity with youtube.com signed-out: personal surfaces
+  (history/liked/playlists/subscriptions/notifications/account/studio) show
+  YouTube-style signed-out screens; comment composer gates "Sign in to
+  comment"; like/subscribe/save prompt sign-in. Signed-in = current behavior
+  (WebFlix identity fronts the single operator YouTube broker session — the
+  single-tenant law stays; UI copy states it honestly).
+
+### P2-ST `wfx2/waveP2-studio-app` — Standalone Creator Studio
+
+- `apps/studio` — its own Next.js 16 app in this repo (own package.json,
+  src/, tests). The lead pre-created the Vercel project `studio-webflix`
+  (rootDirectory `apps/studio`, deploys main) with MAIN_APP_URL + UPSTASH_* +
+  NEON_DATABASE_URL env seeded → https://studio-webflix.vercel.app
+- studio.youtube.com parity shell: left nav (Dashboard/Content/Analytics/
+  Community/Subtitles/Copyright/Earn/Customization/Audio library/Settings),
+  topbar (channel picker, Create → Upload/Go live/New post deep links,
+  notifications, account).
+- Real surfaces: Dashboard (latest video + recents + channel analytics
+  summary), Content table (videos/shorts/live/posts + filters + row menus),
+  Analytics (overview/content/audience tabs, charts, ranges), Comments
+  moderation (published/held/spam + approve/delete/heart), Customization.
+  Honest degradation: Revenue (no YPP), Audio library, Subtitles, Copyright.
+- Data: server-side proxy to the main app's APIs (MAIN_APP_URL, Upstash-cached
+  where hot). Auth: WebFlix sign-in required (same `wf:auth:user:` key schema
+  as P2-AU — per-domain session cookies accepted parity). The lane does NOT
+  touch `src/` (the lead adds the main-app /studio redirect at merge).
+
+### Phase 2 merge order
+
+P2-SO → P2-AU → P2-ST (lead resolves conflicts; lanes are file-disjoint by
+design: SO = channel/watch components + broker kinds, AU = auth lib/account/
+gating, ST = apps/studio only).
