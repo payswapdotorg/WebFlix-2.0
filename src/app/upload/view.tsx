@@ -1,8 +1,15 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useReducer, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ExternalLink, Info, UploadCloud } from "lucide-react";
+import {
+  ExternalLink,
+  FileVideo,
+  Info,
+  Loader2,
+  UploadCloud,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,21 +26,47 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { useApi, postJson } from "@/hooks/use-api";
 import type { UploadContextDTO, UploadHandoffDTO } from "@/lib/types";
+import {
+  canPublish,
+  initialUploadFlowState,
+  uploadFlowNext,
+  type UploadExecuteResponseDTO,
+} from "@/lib/upload/flow";
+import UploadResultCard from "./upload-result";
 
 const YOUTUBE_UPLOAD_URL = "https://www.youtube.com/upload";
 const YOUTUBE_TITLE_MAX = 100;
 const YOUTUBE_DESCRIPTION_MAX = 5000;
 
+const STAGE_MB_CAP = 256;
+
+function formatBytes(n: number): string {
+  if (n >= 1024 * 1024 * 1024) return `${(n / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(n / 1024))} KB`;
+}
+
 /**
- * Upload — gathers the video metadata (title, description, visibility, tags,
- * thumbnail) and HANDS OFF to YouTube's real upload flow: the bundle is
- * copied to the clipboard and https://www.youtube.com/upload opens in a new
- * tab. WebFlix does NOT upload and never pretends a video was published —
- * the button does exactly what it says.
+ * WFX2-P3-UP — the REAL upload flow: pick the video (accept="video/*"),
+ * gather the metadata (prefilled from the current fields), Publish — the
+ * file is staged in memory and the session broker drives the operator's
+ * logged-in YouTube tab through youtube.com/upload (file input → metadata →
+ * Next×3 → visibility → publish), with staged progress (uploading →
+ * processing → published) from the broker's honest response. The published
+ * card deep-links the REAL video.
+ *
+ * The fallback law (unchanged): when the broker is OFFLINE or refuses, the
+ * hand-off rung carries the user — the metadata bundle + YouTube's upload
+ * page. Nothing is ever claimed that YouTube did not confirm: an unverified
+ * publish says so, a refused publish renders the broker's honest error.
  */
 export default function UploadPage() {
   const router = useRouter();
   const { data: context, loading } = useApi<UploadContextDTO>("/api/upload");
+  const [flow, dispatch] = useReducer(uploadFlowNext, undefined, initialUploadFlowState);
+  const [file, setFile] = useState<File | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [bundleCopied, setBundleCopied] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [handoff, setHandoff] = useState<UploadHandoffDTO | null>(null);
   const bundleRef = useRef<HTMLTextAreaElement>(null);
@@ -46,8 +79,77 @@ export default function UploadPage() {
     isShort: false,
   });
 
-  async function submit(e: React.FormEvent) {
+  const busy = flow.phase === "staging" || flow.phase === "executing";
+
+  const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
+    setForm((f) => ({ ...f, [key]: value }));
+
+  async function copyText(text: string): Promise<boolean> {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** The real drive: stage the file → execute the broker publish → settle. */
+  async function publish(e: React.FormEvent) {
     e.preventDefault();
+    if (!file) return;
+    dispatch({ type: "publish-started" });
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const stageRes = await fetch("/api/upload/stage", { method: "POST", body: fd });
+      const stageJson = (await stageRes.json().catch(() => ({}))) as {
+        stageId?: string;
+        error?: string;
+      };
+      if (!stageRes.ok || !stageJson.stageId) {
+        const error = stageJson.error ?? `could not stage the file (HTTP ${stageRes.status})`;
+        dispatch({ type: "stage-failed", error });
+        toast.error(error);
+        return;
+      }
+      dispatch({ type: "stage-succeeded", stageId: stageJson.stageId });
+      dispatch({ type: "execute-started" });
+      const result = await postJson<UploadExecuteResponseDTO>("/api/upload/execute", {
+        stageId: stageJson.stageId,
+        title: form.title,
+        description: form.description,
+        visibility: form.visibility,
+        tags: form.tags
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean),
+        thumbnailUrl: form.thumbnailUrl || null,
+        isShort: form.isShort,
+      });
+      dispatch({ type: "execute-settled", result });
+      if (result.outcome === "published") {
+        toast.success(
+          result.verified === true
+            ? "Published — the video is live on YouTube."
+            : "Publish clicked — confirmation not observed (the video may still be processing)."
+        );
+      } else if (result.outcome === "fallback") {
+        toast.info("The session broker is offline — the hand-off bundle is ready below.");
+      } else {
+        toast.error(result.message ?? "The publish was refused.");
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "the publish failed";
+      dispatch({
+        type: "execute-settled",
+        result: { outcome: "error", message },
+      });
+      toast.error(message);
+    }
+  }
+
+  /** The hand-off rung (the pre-P3 flow, verbatim): bundle → YouTube. */
+  async function handoffSubmit() {
     setSubmitting(true);
     try {
       const result = await postJson<UploadHandoffDTO>("/api/upload", {
@@ -62,35 +164,20 @@ export default function UploadPage() {
         isShort: form.isShort,
       });
       setHandoff(result);
-      // copy the bundle (clipboard API with a select-and-copy fallback)
-      let copied = false;
-      try {
-        await navigator.clipboard.writeText(result.bundle);
-        copied = true;
-      } catch {
-        const el = bundleRef.current;
-        if (el) {
-          el.focus();
-          el.select();
-          copied = document.execCommand("copy");
-        }
+      const copied = await copyText(result.bundle);
+      if (!copied && bundleRef.current) {
+        bundleRef.current.focus();
+        bundleRef.current.select();
+        document.execCommand("copy");
       }
-      // open the real YouTube upload flow in a new tab
       window.open(result.handoffUrl, "_blank", "noopener,noreferrer");
-      toast.success(
-        copied
-          ? "Metadata bundle copied — YouTube's upload page is open in a new tab. Paste the bundle into the upload form."
-          : "YouTube's upload page is open in a new tab — copy the bundle below into the upload form."
-      );
+      toast.success("Metadata bundle copied — YouTube's upload page is open in a new tab.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not build the hand-off");
     } finally {
       setSubmitting(false);
     }
   }
-
-  const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
-    setForm((f) => ({ ...f, [key]: value }));
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6 pb-16 sm:px-6">
@@ -103,8 +190,8 @@ export default function UploadPage() {
         ) : context?.channel ? (
           <p>
             Gathering metadata to publish as{" "}
-            <span className="font-medium text-foreground">{context.channel.name}</span> —
-            the upload itself happens on YouTube.
+            <span className="font-medium text-foreground">{context.channel.name}</span> — the
+            upload itself happens on YouTube.
           </p>
         ) : (
           <p>
@@ -117,8 +204,9 @@ export default function UploadPage() {
       <div className="mt-4 flex items-start gap-2 rounded-xl border border-dashed border-border bg-secondary/30 p-4 text-sm">
         <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
         <p>
-          WebFlix hands off — it does not upload. Your metadata travels via a copy-to-clipboard
-          bundle into{" "}
+          Publish drives the REAL upload: WebFlix stages your file and the session broker operates
+          the logged-in YouTube tab through youtube.com&apos;s upload dialog. When the broker is
+          offline or refuses, the honest hand-off remains — the metadata bundle into{" "}
           <a
             href={YOUTUBE_UPLOAD_URL}
             target="_blank"
@@ -127,12 +215,65 @@ export default function UploadPage() {
           >
             YouTube&apos;s upload page <ExternalLink className="inline size-3.5" />
           </a>
-          , which owns the file upload, processing and publishing. Nothing is stored or
-          simulated on WebFlix.
+          . WebFlix never claims a publish YouTube did not confirm.
         </p>
       </div>
 
-      <form onSubmit={submit} className="mt-6 space-y-5">
+      <form onSubmit={publish} className="mt-6 space-y-5">
+        <div className="space-y-2">
+          <Label htmlFor="file">Video file</Label>
+          <label
+            className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-secondary/30 p-6 text-center text-sm transition-colors hover:bg-secondary/50"
+            data-testid="upload-file-picker"
+          >
+            <FileVideo className="size-6 text-muted-foreground" aria-hidden="true" />
+            {file ? (
+              <span data-testid="upload-file-name">
+                <span className="font-medium text-foreground">{file.name}</span>
+                <span className="text-muted-foreground"> · {formatBytes(file.size)}</span>
+              </span>
+            ) : (
+              <span className="text-muted-foreground">
+                Click to choose a video file (MP4, MOV, WebM…)
+              </span>
+            )}
+            <input
+              id="file"
+              ref={fileRef}
+              type="file"
+              accept="video/*"
+              className="sr-only"
+              disabled={busy}
+              onChange={(e) => {
+                const f = e.target.files?.[0] ?? null;
+                if (f) {
+                  setFile(f);
+                  dispatch({ type: "file-picked", fileName: f.name, sizeBytes: f.size });
+                }
+              }}
+            />
+          </label>
+          {file && !busy ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="rounded-full"
+              onClick={() => {
+                setFile(null);
+                if (fileRef.current) fileRef.current.value = "";
+                dispatch({ type: "file-cleared" });
+              }}
+            >
+              <X className="size-4" aria-hidden="true" /> Remove file
+            </Button>
+          ) : null}
+          <p className="text-xs text-muted-foreground">
+            The file is staged in memory (capped at {STAGE_MB_CAP}MB) and fetched by the operator
+            tab — larger uploads should use the hand-off below.
+          </p>
+        </div>
+
         <div className="space-y-2">
           <Label htmlFor="title">
             Title{" "}
@@ -147,6 +288,7 @@ export default function UploadPage() {
             value={form.title}
             onChange={(e) => set("title", e.target.value)}
             placeholder="Building a $5000 Gaming PC — Ultimate 2026 Guide"
+            disabled={busy}
           />
         </div>
 
@@ -164,6 +306,7 @@ export default function UploadPage() {
             value={form.description}
             onChange={(e) => set("description", e.target.value)}
             placeholder="Tell viewers about your video…"
+            disabled={busy}
           />
         </div>
 
@@ -175,9 +318,11 @@ export default function UploadPage() {
             onChange={(e) => set("tags", e.target.value)}
             placeholder="pc build, gaming, 2026"
             aria-describedby="tags-hint"
+            disabled={busy}
           />
           <p id="tags-hint" className="text-xs text-muted-foreground">
-            Added to the bundle — paste them into YouTube&apos;s tags field.
+            Hand-off fields (like tags and thumbnail) ride the bundle — the broker drive fills
+            title, description and visibility.
           </p>
         </div>
 
@@ -191,10 +336,11 @@ export default function UploadPage() {
             onChange={(e) => set("thumbnailUrl", e.target.value)}
             placeholder="https://…/image.jpg"
             aria-describedby="thumb-hint"
+            disabled={busy}
           />
           <p id="thumb-hint" className="text-xs text-muted-foreground">
-            Noted in the bundle — YouTube&apos;s real thumbnail upload happens in the upload
-            form (or later in Studio).
+            Noted in the bundle — YouTube&apos;s real thumbnail upload happens in the upload form
+            (or later in Studio).
           </p>
         </div>
 
@@ -204,6 +350,7 @@ export default function UploadPage() {
             <Select
               value={form.visibility}
               onValueChange={(v) => set("visibility", v as typeof form.visibility)}
+              disabled={busy}
             >
               <SelectTrigger id="visibility" className="w-full">
                 <SelectValue />
@@ -220,6 +367,7 @@ export default function UploadPage() {
               id="isShort"
               checked={form.isShort}
               onCheckedChange={(v) => set("isShort", v === true)}
+              disabled={busy}
             />
             <Label htmlFor="isShort" className="cursor-pointer font-normal">
               This is a Short (vertical)
@@ -233,18 +381,92 @@ export default function UploadPage() {
             variant="ghost"
             className="rounded-full"
             onClick={() => router.back()}
+            disabled={busy}
           >
             Cancel
           </Button>
           <Button
-            type="submit"
-            disabled={submitting || form.title.trim().length === 0}
-            className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
+            type="button"
+            variant="outline"
+            className="rounded-full"
+            onClick={handoffSubmit}
+            disabled={submitting || busy || form.title.trim().length === 0}
           >
-            {submitting ? "Building hand-off…" : "Hand off to YouTube"}
+            {submitting ? "Building hand-off…" : "Hand off without uploading"}
+          </Button>
+          <Button
+            type="submit"
+            disabled={busy || !canPublish(flow, form.title)}
+            className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
+            data-testid="upload-publish-button"
+          >
+            {busy ? (
+              <>
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" /> Publishing…
+              </>
+            ) : (
+              "Publish"
+            )}
           </Button>
         </div>
       </form>
+
+      {(flow.phase === "staging" || flow.phase === "executing") && (
+        <section
+          aria-live="polite"
+          className="mt-6 rounded-xl border border-border bg-secondary/30 p-4 sm:p-5"
+          data-testid="upload-progress"
+        >
+          <h2 className="flex items-center gap-2 text-base font-semibold">
+            <Loader2 className="size-5 animate-spin" aria-hidden="true" />
+            {flow.phase === "staging" ? "Staging the file…" : "Publishing through the session broker"}
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Uploading and processing happen on YouTube — this can take several minutes. Keep this
+            tab open; the result below is the broker&apos;s honest report, not a timer&apos;s guess.
+          </p>
+          <ol className="mt-4 flex flex-wrap items-center gap-2 text-sm" aria-label="Publish stages">
+            {(["Uploading", "Processing", "Published"] as const).map((label, i) => (
+              <li
+                key={label}
+                className="flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1"
+              >
+                {i < 2 ? (
+                  <span className="size-2 animate-pulse rounded-full bg-amber-500" aria-hidden="true" />
+                ) : (
+                  <span className="size-2 rounded-full bg-muted-foreground/40" aria-hidden="true" />
+                )}
+                <span className={i < 2 ? "text-foreground" : "text-muted-foreground"}>{label}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
+      {flow.result && flow.phase !== "staging" && flow.phase !== "executing" && (
+        <UploadResultCard
+          result={flow.result}
+          copied={bundleCopied}
+          onCopyBundle={async () => {
+            const text = flow.result?.handoff?.bundle ?? "";
+            const ok = await copyText(text);
+            setBundleCopied(ok);
+            if (ok) toast.success("Bundle copied");
+            else toast.error("Clipboard unavailable — select the bundle and copy manually");
+          }}
+        />
+      )}
+
+      {flow.phase === "error" && !flow.result && flow.error && (
+        <section
+          aria-live="polite"
+          className="mt-6 rounded-xl border border-red-500/40 bg-red-500/5 p-4 sm:p-5"
+          data-testid="upload-stage-error-card"
+        >
+          <h2 className="text-base font-semibold">The publish could not start</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{flow.error}</p>
+        </section>
+      )}
 
       {handoff && (
         <section className="mt-8" aria-live="polite">
@@ -277,15 +499,13 @@ export default function UploadPage() {
               variant="outline"
               className="rounded-full"
               onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(handoff.bundle);
-                  toast.success("Bundle copied");
-                } catch {
-                  bundleRef.current?.focus();
-                  bundleRef.current?.select();
+                const ok = await copyText(handoff.bundle);
+                if (!ok && bundleRef.current) {
+                  bundleRef.current.focus();
+                  bundleRef.current.select();
                   document.execCommand("copy");
-                  toast.success("Bundle copied");
                 }
+                toast.success("Bundle copied");
               }}
             >
               Copy bundle

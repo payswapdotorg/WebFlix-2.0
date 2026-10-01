@@ -14,7 +14,7 @@ import { liveChatSendScript } from "./kinds/livechat";
 import { createBrokerOptions } from "./options";
 import { secretMatches } from "./auth";
 import { Journal } from "./journal";
-import { buildLikeParams } from "./executor";
+import { buildLikeParams, buildScript, requiredUrl } from "./executor";
 
 const dir = mkdtempSync(join(tmpdir(), "broker-test-"));
 const journalPath = join(dir, "actions.jsonl");
@@ -188,13 +188,29 @@ describe("fail-closed without secret", () => {
   });
 });
 
-// WFX2-P3 pre-seed: the staged kinds route to their lane-owned modules and
-// answer honestly until the lanes land (upload-execute / live-chat-send).
-test("P3 staged kinds: upload-execute + live-chat-send route + honest stub", () => {
-  const up = uploadExecuteScript({ fileName: "clip.mp4", title: "T" });
+// WFX2-P3: upload-execute LANDED (the P3-UP lane — kinds/upload.test.ts owns
+// the deep script-shape suite). The pre-seed's transitional assertion
+// ("upload-execute: staged kind") was self-expiring by design — "answer
+// honestly until the lanes land" — and is replaced by the real-module
+// routing lock. live-chat-send still routes to its honest staged stub until
+// the P3-LC lane lands. CORRECTIVE (P3-UP lane, disclosed): the routing
+// assertions pin the pre-seed's own documented intent — buildScript routes
+// the kind modules, requiredUrl is null for upload-execute (the script owns
+// its navigation).
+test("P3 kinds: upload-execute routes the real staged drive; live-chat-send still honest-staged", () => {
+  const routingPayload = {
+    fileName: "clip.mp4",
+    title: "T",
+    fileUrl: "http://127.0.0.1:3000/upload/stage?id=abc",
+  };
+  const up = uploadExecuteScript(routingPayload);
   expect(up.timeoutMs).toBeGreaterThan(0);
-  expect(up.script).toContain("upload-execute: staged kind");
+  expect(up.script).toContain("https://www.youtube.com/upload");
+  expect(up.script).not.toContain("staged kind");
+  const built = buildScript({ kind: "upload-execute", target: {}, payload: routingPayload });
+  expect(built && built.script).toBe(up.script);
+  expect(requiredUrl({ kind: "upload-execute", target: {}, payload: {} })).toBeNull();
   const lc = liveChatSendScript("hello from WebFlix");
   expect(lc.script).toContain("live-chat-send: staged kind");
-  expect(lc.script).toContain('\"messageLen\":18');
+  expect(lc.script).toContain('"messageLen":18');
 });
