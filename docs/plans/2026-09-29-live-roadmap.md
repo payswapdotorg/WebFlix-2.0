@@ -188,3 +188,50 @@ both deployments live). Three parallel lanes, file-disjoint by design:
 
 P3-UP → P3-LC → P3-SG (broker-module lanes first; the lead pre-seeds the
 shared broker registry on main BEFORE dispatch so lanes stay file-disjoint).
+
+## PHASE 4 — write-surface completion + watch depth (2026-10-01, post-P3 survey)
+
+The P3 close-out survey (git tree, 20:38Z): playlist create/add/remove/delete + notifications
+bell/menu + share/chapters/shorts-rail/trending-categories all EXIST. The real remaining gaps
+vs youtube.com, in user-visibility order:
+
+### P4-PE `wfx2/waveP4-playlist-edit` — Playlist edit depth (the last big write gap)
+
+The playlist editor youtube.com owners get: RENAME (title), PRIVACY switch
+(public/unlisted/private), DESCRIPTION edit, and ITEM REORDER (move a video
+up/down the list). Two NEW broker kinds — `playlist-update` (PATCH title /
+description / visibility on the playlist's own edit dialog) and
+`playlist-reorder` (drag-equivalent: move item N to position M on the
+playlist page's real reorder affordance). The lead pre-seeds the kinds
+registry + `kinds/playlistedit.ts` staged stubs on main BEFORE dispatch
+(the P3 pattern). UI: edit affordances on /playlists (rename + privacy) and
+the /playlist/[id] item menu (reorder). Honest states throughout; the
+existing playlist kinds' error taxonomy is the pattern.
+
+### P4-NC `wfx2/waveP4-notifications-center` — The notification center
+
+The bell today: unread badge + menu + mark-all-read. youtube.com's depth:
+the CENTER (the bell's "See all" / the dedicated feed page) with full-item
+rendering (video thumb, channel, snippet, age), per-item unread dots +
+mark-ONE-read (the real client's unseen clearing on open), unread-first
+ordering, the poll cadence, and the empty/promo states. Read-side
+InnerTube (the verified notification endpoints, research §12) + the
+notifications-mark-read kind already in the registry. NO new broker kinds —
+this lane is read-depth + UI.
+
+### P4-QT `wfx2/waveP4-queue-transcript` — Watch-page depth: queue + transcript language
+
+Two youtube.com watch affordances WebFlix lacks: (a) ADD TO QUEUE — the
+hover-menu/watch-action affordance that appends to the WL-backed inline
+queue (the miniplayer's queue mode: continuous play, the queue list panel,
+remove-from-queue); the watch-later + playlist-add kinds EXIST — the lane
+wires the queue UX over them, never a fake append; (b) TRANSCRIPT LANGUAGE
+— the transcript panel's language selector (the InnerTube caption-tracks
+list for the video; per-language transcript fetch; honest unavailable
+states when a language has no track). Read-side + UI; NO new broker kinds.
+
+### Phase 4 merge order
+
+P4-PE → P4-NC → P4-QT (the registry-dependent lane first — the lead
+pre-seeds the broker registry for playlist-update/playlist-reorder on main
+BEFORE dispatch so all three lanes stay file-disjoint).
