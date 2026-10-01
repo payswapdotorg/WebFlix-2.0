@@ -1,7 +1,8 @@
 /**
  * WFX2-C-F channel search-compose — the channel family's wall-proof third
  * rung. WFX2-CF-2 (the lead's live-verification followup): the dominance
- * rule + the watch-meta header enrichment.
+ * rule + the watch-meta header enrichment. WFX2-CF-3 (the stability fix):
+ * the resilient resolve + the 2-hour composed-page store.
  *
  * youtube.com walls the channel-read family for ALL server egress (verified
  * live by the lead — evidence across the wave-C probes): the `@handle` SSR
@@ -23,9 +24,11 @@
  *    null (the honest degrade stands). Never attribute by name similarity
  *    — only by the id that actually owns the results; and when the
  *    requested handle IS a "UC…" id, that exact id must be the dominant
- *    one. Cached under `yt:channel:resolve:<normalized>` (adapter
- *    TTL + the adapter's default last-good) so repeated channel reads
- *    never re-search.
+ *    one. Resilient under `yt:channel:resolve:<normalized>` (WFX2-CF-3: a
+ *    NULL resolution is the unhealthy shape — never cached, never
+ *    overwrites; the last-good resolution serves within the resolve key
+ *    family's default hard window) so a flaky search can never poison the
+ *    window.
  *  - composeChannelPage(handle): the composed ChannelPageDTO — the REAL
  *    fields the search results carry (id, name, handle, avatar, verified)
  *    flagged `composed: true`. WFX2-CF-2 watch-meta enrichment: the top
@@ -42,12 +45,15 @@
  *  - storeComposedPage: keeps the composed page in the `yt:channel:page:*`
  *    family (the requested handle's key + the resolved real handle's key
  *    when that key holds no live entry) so repeated reads and the
- *    search-route channelFromLastGood lookup both work.
+ *    search-route channelFromLastGood lookup both work. WFX2-CF-3: a
+ *    plain 2-hour TTL — one successful compose buys hours of stable
+ *    serving.
  *
- * Every upstream call rides the adapter (`cached`) — no uncached paths.
+ * Every upstream call rides the adapter (`cached`/`cachedResilient`) — no
+ * uncached paths.
  */
 import { innertubeSearch } from "./innertube";
-import { cached, TTL } from "./cache";
+import { cachedResilient, TTL } from "./cache";
 import { cacheJsonSet, cachePeek } from "./upstash-cache";
 import { mapVideos, walkTree, lastThumbnailUrl } from "./mappers";
 import { getVideoDetail } from "./watch";
@@ -206,10 +212,21 @@ export function resolveFromSearchResponse(
  * Resolve "@handle" / bare name / "UC…" through a NAME search on the handle
  * (the "@" stripped): the dominant channel of the results IS the channel
  * (the WFX2-CF-2 dominance rule — see resolveFromSearchResponse). Rides the
- * adapter under `yt:channel:resolve:<normalized>` (feed TTL, the adapter's
- * default last-good — a null resolution is an honest value, cached so
- * repeated channel reads never re-search). Null below both the dominance
- * and supermajority thresholds.
+ * adapter under `yt:channel:resolve:<normalized>` (feed TTL + the resolve
+ * key family's default hard window).
+ *
+ * WFX2-CF-3 — the resilient resolve (the live finding: the search-result
+ * channel attributions VARY between requests — the same query resolves
+ * 44-56% dominant across calls, sometimes above the dominance rule,
+ * sometimes below): a NULL resolution is the unhealthy shape. Under the
+ * plain `cached()` a flaky null got cached for the full 5-minute TTL and
+ * every channel page in that window degraded — production flapped between
+ * the composed page and the honest degrade across lambda instances. The
+ * standard adapter contract instead: a null is NEVER cached and never
+ * overwrites; the LAST-GOOD resolution serves within the default hard
+ * window, so a flaky search can no longer poison it (a genuinely
+ * below-threshold handle honestly re-searches each read). Null below both
+ * the dominance and supermajority thresholds.
  */
 export async function resolveChannelFromSearch(
   handle: string
@@ -219,10 +236,15 @@ export async function resolveChannelFromSearch(
   const query = cleaned.startsWith("@") ? cleaned.slice(1) : cleaned;
   if (!query) return null;
   const isUcId = /^UC[\w-]{20,}$/.test(cleaned);
-  return cached(resolveChannelCacheKey(cleaned), TTL.FEED_MS, async () => {
-    const response = await innertubeSearch({ query });
-    return resolveFromSearchResponse(response, isUcId ? cleaned : undefined);
-  });
+  return cachedResilient(
+    resolveChannelCacheKey(cleaned),
+    TTL.FEED_MS,
+    async () => {
+      const response = await innertubeSearch({ query });
+      return resolveFromSearchResponse(response, isUcId ? cleaned : undefined);
+    },
+    { isEmpty: (v) => v === null }
+  );
 }
 
 /**
@@ -321,18 +343,30 @@ interface PageFamilyEntry {
 }
 
 /**
+ * WFX2-CF-3 — the composed-page family store window: a plain 2-hour TTL.
+ * One successful compose buys hours of stable serving (the live finding: a
+ * 5-minute entry re-ran the whole ladder — the walled browse re-attempt +
+ * the flaky resolve — every 5 minutes and the page flapped). On expiry the
+ * ladder still re-attempts the browse first: the wall stands → the
+ * resilient resolve serves the last-good resolution → re-compose + re-store.
+ */
+const COMPOSED_STORE_MS = 2 * 3_600_000;
+
+/**
  * Keep the composed page in the `yt:channel:page:*` family: the requested
  * handle's key AND the resolved real handle's key when that key holds no
- * live entry (never clobbers a stored browse last-good). A plain TTL — after
- * it expires the next read honestly re-attempts the browse ladder first.
+ * live entry (never clobbers a stored browse last-good). A plain 2-hour
+ * TTL (WFX2-CF-3) — after it expires the next read honestly re-attempts
+ * the browse ladder first (the wall stands → the resilient resolve serves
+ * → re-compose + re-store).
  */
 export async function storeComposedPage(handle: string, page: ChannelPageDTO): Promise<void> {
   const entry: PageFamilyEntry = { page, walled: false };
-  await cacheJsonSet(pageCacheKey(handle), entry, TTL.FEED_MS);
+  await cacheJsonSet(pageCacheKey(handle), entry, COMPOSED_STORE_MS);
   const requestedKey = pageCacheKey(handle);
   const realKey = pageCacheKey(page.channel.handle);
   if (realKey !== requestedKey) {
     const existing = await cachePeek<PageFamilyEntry>(realKey);
-    if (!existing) await cacheJsonSet(realKey, entry, TTL.FEED_MS);
+    if (!existing) await cacheJsonSet(realKey, entry, COMPOSED_STORE_MS);
   }
 }
