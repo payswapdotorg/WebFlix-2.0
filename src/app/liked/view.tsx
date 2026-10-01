@@ -6,6 +6,7 @@ import { useApi } from "@/hooks/use-api";
 import { VideoCard } from "@/components/video/video-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { VideoDTO } from "@/lib/types";
+import { PersonalSurfaceGate } from "@/components/auth/personal-surface-gate";
 
 type LikedPayload = {
   videos: VideoDTO[];
@@ -14,8 +15,17 @@ type LikedPayload = {
   session: boolean;
 };
 
-/** Liked videos — the operator's REAL Liked playlist (YouTube's own `LL`). */
+/** Liked videos — the operator's REAL Liked playlist (YouTube's own `LL`).
+ * WFX2-P2-AU: guests get the youtube.com signed-out screen (the gate). */
 export default function LikedPage() {
+  return (
+    <PersonalSurfaceGate surface="liked">
+      <LikedContent />
+    </PersonalSurfaceGate>
+  );
+}
+
+function LikedContent() {
   const { data, loading, error } = useApi<LikedPayload>("/api/liked");
   const videos = data?.videos ?? [];
 

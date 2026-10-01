@@ -16,6 +16,8 @@ import { useApi, postJson } from "@/hooks/use-api";
 import { formatRelativeDate } from "@/lib/format";
 import type { NotificationDTO } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useWebFlixSession } from "@/hooks/use-webflix-session";
+import { SignedOutScreen } from "@/components/auth/signed-out-screen";
 
 type NotificationsPayload = {
   unread: number;
@@ -25,13 +27,20 @@ type NotificationsPayload = {
   session?: boolean;
 };
 
-/** Notifications bell — live unread badge from the API, menu, mark-all-read. */
+/**
+ * Notifications bell — live unread badge from the API, menu, mark-all-read.
+ * WFX2-P2-AU: guests (no WebFlix session) never poll the personal route —
+ * the panel opens the youtube.com-style signed-out screen instead.
+ */
 export function NotificationsBell() {
-  const { data, reload } = useApi<NotificationsPayload>("/api/notifications");
+  const session = useWebFlixSession();
+  const authed = session.status === "authenticated";
+  const { data, reload } = useApi<NotificationsPayload>(authed ? "/api/notifications" : null);
   const unread = data?.unread ?? 0;
 
   // Live badge: poll on the upstream's own cadence (default 60s) + on focus.
   useEffect(() => {
+    if (!authed) return;
     const interval = setInterval(reload, Math.max(30_000, data?.pollIntervalMs ?? 60_000));
     const onFocus = () => reload();
     window.addEventListener("focus", onFocus);
@@ -39,7 +48,7 @@ export function NotificationsBell() {
       clearInterval(interval);
       window.removeEventListener("focus", onFocus);
     };
-  }, [reload, data?.pollIntervalMs]);
+  }, [reload, data?.pollIntervalMs, authed]);
 
   async function markAllRead() {
     try {
@@ -74,17 +83,26 @@ export function NotificationsBell() {
       <DropdownMenuContent align="end" className="w-[380px] max-w-[92vw] p-0">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <DropdownMenuLabel className="p-0 text-base font-semibold">Notifications</DropdownMenuLabel>
-          <button
-            type="button"
-            onClick={markAllRead}
-            className="text-xs text-muted-foreground transition-colors hover:text-foreground"
-            data-testid="mark-all-read"
-          >
-            Mark all as read
-          </button>
+          {authed && (
+            <button
+              type="button"
+              onClick={markAllRead}
+              className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+              data-testid="mark-all-read"
+            >
+              Mark all as read
+            </button>
+          )}
         </div>
         <div className="max-h-96 overflow-y-auto slim-scrollbar">
-          {data?.loginRequired && (
+          {session.status === "unauthenticated" && (
+            <SignedOutScreen
+              compact
+              message="Sign in to see your notifications on WebFlix"
+              redirect="/"
+            />
+          )}
+          {authed && data?.loginRequired && (
             <p className="px-4 py-6 text-center text-sm text-muted-foreground">
               Notifications are personal — sign in (configure the YouTube session) to read
               them. Empty is also valid when the account has none.

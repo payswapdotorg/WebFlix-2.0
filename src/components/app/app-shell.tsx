@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense } from "react";
+import { usePathname } from "next/navigation";
 import { ThemeProvider } from "next-themes";
 import { Topbar } from "./topbar";
 import { Sidebar } from "./sidebar";
@@ -17,6 +18,24 @@ import { PlayerHostLayer } from "@/components/player/player-host-layer";
  */
 export function AppShell({ children }: { children: React.ReactNode }) {
   const collapsed = useSidebar((s) => s.collapsed);
+  const pathname = usePathname();
+  // WFX2-P2-AU: the account pages render standalone — Google-account
+  // sign-in parity (accounts.google.com carries no YouTube chrome)
+  const bare = pathname === "/signin" || pathname === "/signup";
+
+  if (bare) {
+    return (
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="dark"
+        enableSystem={false}
+        disableTransitionOnChange
+      >
+        {children}
+      </ThemeProvider>
+    );
+  }
+
   return (
     <ThemeProvider
       attribute="class"

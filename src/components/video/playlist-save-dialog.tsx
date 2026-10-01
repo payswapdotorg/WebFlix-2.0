@@ -13,10 +13,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { postJson, useApi } from "@/hooks/use-api";
+import { useWebFlixSession } from "@/hooks/use-webflix-session";
+import { signInHref } from "@/lib/auth/client";
 import type { PlaylistDTO } from "@/lib/types";
 
 /** "Save to playlist" — the operator's real YouTube playlists + create-new
- * (list via the live /api/playlists read; adds via the broker write lane). */
+ * (list via the live /api/playlists read; adds via the broker write lane).
+ * WFX2-P2-AU: WebFlix guests see the honest account gate — saving is a
+ * personal write, so the dialog links /signin instead of a 401 toast. */
 export function PlaylistSaveDialog({
   open,
   onOpenChange,
@@ -28,8 +32,10 @@ export function PlaylistSaveDialog({
   videoId: string;
   videoTitle: string;
 }) {
+  const session = useWebFlixSession();
+  const authed = session.status === "authenticated";
   const { data, reload } = useApi<{ playlists: PlaylistDTO[]; loginRequired: boolean }>(
-    open ? "/api/playlists" : null
+    open && authed ? "/api/playlists" : null
   );
   const playlists = data?.playlists ?? null;
   const [newTitle, setNewTitle] = useState("");
@@ -80,6 +86,16 @@ export function PlaylistSaveDialog({
           <DialogDescription className="line-clamp-1">{videoTitle}</DialogDescription>
         </DialogHeader>
         <div className="max-h-64 space-y-1 overflow-y-auto slim-scrollbar">
+          {session.status === "unauthenticated" && (
+            <div className="px-3 py-6 text-center">
+              <p className="text-sm text-muted-foreground">
+                Sign in to save videos to your playlists on WebFlix.
+              </p>
+              <Button asChild className="mt-3 rounded-full bg-yt-red text-white hover:bg-yt-red/90">
+                <a href={signInHref(window.location.pathname)}>Sign in</a>
+              </Button>
+            </div>
+          )}
           {(playlists ?? []).map((p) => (
             <button
               key={p.id}
@@ -108,24 +124,26 @@ export function PlaylistSaveDialog({
             </p>
           )}
         </div>
-        <form
-          className="flex gap-2 border-t border-border pt-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void createAndAdd();
-          }}
-        >
-          <Input
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            placeholder="New playlist name"
-            aria-label="New playlist name"
-            maxLength={100}
-          />
-          <Button type="submit" disabled={!newTitle.trim() || creating} variant="secondary">
-            <Plus className="size-4" /> Create
-          </Button>
-        </form>
+        {authed && (
+          <form
+            className="flex gap-2 border-t border-border pt-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void createAndAdd();
+            }}
+          >
+            <Input
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              placeholder="New playlist name"
+              aria-label="New playlist name"
+              maxLength={100}
+            />
+            <Button type="submit" disabled={!newTitle.trim() || creating} variant="secondary">
+              <Plus className="size-4" /> Create
+            </Button>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   );

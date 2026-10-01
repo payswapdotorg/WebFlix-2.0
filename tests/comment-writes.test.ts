@@ -9,7 +9,7 @@
  * Same mock pattern as action-routes.test.ts (real modules captured and
  * re-installed in afterAll — bun's mock.module is process-wide).
  */
-import { afterAll, beforeEach, describe, expect, test, mock } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, test, mock } from "bun:test";
 import type { NextRequest } from "next/server";
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -122,8 +122,15 @@ import { PATCH as patchComment, DELETE as deleteComment } from "@/app/api/commen
 import { POST as postHeart } from "@/app/api/comments/[id]/heart/route";
 import { POST as postPin } from "@/app/api/comments/[id]/pin/route";
 import { POST as postReport } from "@/app/api/comments/[id]/report/route";
+import { mintSessionCookie } from "./helpers";
 
 const OFFLINE_MSG = "action backend offline — the lead's broker must be running";
+
+let AUTH_COOKIE = "";
+beforeAll(async () => {
+  // WFX2-P2-AU: these write routes sit behind the auth gate — sign in
+  AUTH_COOKIE = await mintSessionCookie();
+});
 
 beforeEach(() => {
   brokerCalls.length = 0;
@@ -147,7 +154,7 @@ afterAll(() => {
 const req = (body: unknown, method = "POST", url = "http://localhost/api/x"): NextRequest =>
   new Request(url, {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", cookie: AUTH_COOKIE },
     body: body === undefined ? undefined : JSON.stringify(body),
   }) as unknown as NextRequest;
 

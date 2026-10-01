@@ -3,6 +3,7 @@ import { getHistoryFeed } from "@/lib/youtube/history";
 import { hasSession } from "@/lib/youtube/session";
 import { rateLimit } from "@/lib/youtube/cache";
 import { brokerAction, brokerOk, BrokerError } from "@/lib/broker";
+import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -11,8 +12,11 @@ export const dynamic = "force-dynamic";
  * (SSR /feed/history + browse continuations), grouped by the page's own day
  * headers. Public mode (no YT_COOKIES): the SSR page answers the sign-in
  * promo → { groups: [], loginRequired: true } — honest, never fake rows.
+ * WFX2-P2-AU: guests (no WebFlix session) get the uniform 401 before any
+ * upstream call — the client degrades on it (the signed-out screen).
  */
 export async function GET(req: NextRequest) {
+  if (!(await getSessionUser(req))) return authRequiredResponse();
   try {
     if (!(await rateLimit(`history:${req.headers.get("x-forwarded-for") ?? "local"}`))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
@@ -48,6 +52,7 @@ function brokerErrorResponse(err: BrokerError): NextResponse {
  * ALL watch history (broker kind `history-clear-all`).
  */
 export async function DELETE(req: NextRequest) {
+  if (!(await getSessionUser(req))) return authRequiredResponse();
   try {
     const videoId = new URL(req.url).searchParams.get("videoId") ?? "";
     if (videoId && !/^[\w-]{6,20}$/.test(videoId)) {
@@ -76,6 +81,7 @@ export async function DELETE(req: NextRequest) {
  * `search-history-pause`, Tier-2).
  */
 export async function PATCH(req: NextRequest) {
+  if (!(await getSessionUser(req))) return authRequiredResponse();
   try {
     let body: Record<string, unknown> = {};
     try {

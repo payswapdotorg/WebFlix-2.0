@@ -48,6 +48,8 @@ import type {
   VideoDetailDto,
   ViewerDto,
 } from "@/lib/watch/types";
+import { useWebFlixSession } from "@/hooks/use-webflix-session";
+import { signInHref } from "@/lib/auth/client";
 import { AmbientBackdrop } from "./ambient-backdrop";
 import { AutoplayCountdownOverlay } from "./autoplay-countdown-overlay";
 import { SubscribeButton } from "./subscribe-button";
@@ -70,6 +72,18 @@ const AUTOPLAY_KEY = "wfx2-autoplay";
 
 export function WatchPage({ videoId, startAt }: { videoId: string; startAt: number | null }) {
   const router = useRouter();
+  // WFX2-P2-AU: the account gate source of truth — guests get the
+  // youtube.com write prompts (composer box, like/subscribe/save/report
+  // routing to /signin), signed-in users get EXACTLY the prior behavior.
+  const wfSession = useWebFlixSession();
+  const guest = wfSession.status === "unauthenticated";
+  const gate = (open: () => void) => () => {
+    if (guest) {
+      window.location.assign(signInHref(`/watch/${videoId}`));
+      return;
+    }
+    open();
+  };
   const [detail, setDetail] = useState<VideoDetailDto | null>(null);
   const [viewer, setViewer] = useState<ViewerDto | null>(null);
   const [operatorSession, setOperatorSession] = useState(true);
@@ -516,6 +530,7 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
                   initialSubscribed={state.subscribed}
                   initialBell={state.bell}
                   subscriberCount={subCount ?? video.channel.subscriberCount}
+                  guest={guest}
                   onCountChange={setSubCount}
                 />
               </div>
@@ -526,6 +541,7 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
                 dislikes={video.dislikes}
                 yourLike={state.like}
                 savedWatchLater={state.savedWatchLater}
+                guest={guest}
                 onLikeResult={(r) => {
                   // server truth → page-level state (honest counts)
                   setDetail((d) =>
@@ -546,9 +562,9 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
                   setCurrentTime(playerHost.getPosition());
                   setShareOpen(true);
                 }}
-                onSave={() => setSaveOpen(true)}
+                onSave={gate(() => setSaveOpen(true))}
                 onToggleTranscript={openTranscript}
-                onReport={() => setReportOpen(true)}
+                onReport={gate(() => setReportOpen(true))}
               />
             </div>
 
@@ -585,6 +601,7 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
                 viewerIsCreator={state.isCreator}
                 creatorName={video.channel.name}
                 operatorSession={operatorSession}
+                guest={guest}
               />
             )}
           </div>

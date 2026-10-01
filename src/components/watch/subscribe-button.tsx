@@ -5,12 +5,16 @@
  * Subscribe → Subscribed (bell icon) → bell menu (All/Personalized/None),
  * persisted per channel via POST /api/subscriptions. Clicking "Subscribed"
  * opens the unsubscribe confirm; the bell opens preference modes.
+ *
+ * WFX2-P2-AU: WebFlix guests never fire a subscription write — the
+ * subscribe click routes to /signin (redirect back to this watch page).
  */
 import { useState } from "react";
 import { Bell, BellOff, BellRing, Check } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { post } from "@/lib/watch/client";
+import { signInHref } from "@/lib/auth/client";
 import { compactCount } from "@/lib/watch/format";
 import type { SubscriptionResultDto } from "@/lib/watch/types";
 
@@ -20,6 +24,7 @@ export function SubscribeButton({
   initialSubscribed,
   initialBell,
   subscriberCount,
+  guest = false,
   onCountChange,
 }: {
   channelId: string;
@@ -29,6 +34,8 @@ export function SubscribeButton({
   /** the currently displayed count — the live route echoes it ± 1; when
    * unknown it answers -1 and the count display stays untouched (WFX2-A-W) */
   subscriberCount?: number;
+  /** WFX2-P2-AU: no WebFlix account → the click routes to the sign-in prompt */
+  guest?: boolean;
   onCountChange?: (n: number) => void;
 }) {
   const [subscribed, setSubscribed] = useState(initialSubscribed);
@@ -39,6 +46,12 @@ export function SubscribeButton({
 
   const apply = async (bellValue: "all" | "personalized" | "none" | "off") => {
     if (busy) return;
+    if (guest) {
+      // WFX2-P2-AU: the account gate — never a guest subscription write
+      // (redirect back to the surface the click happened on)
+      window.location.assign(signInHref(window.location.pathname));
+      return;
+    }
     setBusy(true);
     try {
       const result = await post<SubscriptionResultDto>("/api/subscriptions", {

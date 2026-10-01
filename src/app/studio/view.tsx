@@ -22,6 +22,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCount, formatRelativeDate } from "@/lib/format";
 import type { StudioPageDTO, StudioVideoDTO } from "@/lib/types";
+import { PersonalSurfaceGate } from "@/components/auth/personal-surface-gate";
 
 /** The real per-video Studio editor URL (pure — client-safe). */
 function studioVideoEditUrl(videoId: string): string {
@@ -36,8 +37,19 @@ type StudioPayload = StudioPageDTO & { loginRequired?: boolean };
  * otherwise — NEVER fake numbers), the real public videos with real public
  * stats, and the real channel branding — all with deep links out to the
  * authoritative studio.youtube.com pages.
+ *
+ * WFX2-P2-AU: guests get the youtube.com signed-out screen (the gate) —
+ * the creator surface is account-gated like youtube.com's studio.
  */
 export default function StudioPage() {
+  return (
+    <PersonalSurfaceGate surface="studio">
+      <StudioContent />
+    </PersonalSurfaceGate>
+  );
+}
+
+function StudioContent() {
   const { data, loading, error, reload } = useApi<StudioPayload>("/api/studio");
 
   return (

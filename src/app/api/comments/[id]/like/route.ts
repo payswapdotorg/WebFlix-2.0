@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { json, errorResponse } from "@/lib/watch/api";
 import { proxyCommentLike } from "@/lib/watch/action-proxy";
 import type { LikeValue } from "@/lib/watch/types";
+import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,7 @@ export const dynamic = "force-dynamic";
  * contract the comment rows consume.
  */
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  if (!(await getSessionUser(req))) return authRequiredResponse();
   try {
     const { id } = await ctx.params;
     let body: Record<string, unknown> = {};

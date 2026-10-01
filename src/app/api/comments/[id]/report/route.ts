@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { json, errorResponse } from "@/lib/watch/api";
 import { proxyCommentReport } from "@/lib/watch/action-proxy";
 import { hasSession } from "@/lib/youtube/session";
+import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,7 @@ export const COMMENT_REPORT_REASONS = [
  * Response: {ok, effect, reported: true, reason?, path?}.
  */
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  if (!(await getSessionUser(req))) return authRequiredResponse();
   try {
     const { id } = await ctx.params;
     let body: Record<string, unknown> = {};

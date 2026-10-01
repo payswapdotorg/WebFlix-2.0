@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { brokerAction, brokerOk, BrokerError } from "@/lib/broker";
+import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,8 @@ export const dynamic = "force-dynamic";
  * path is verified for mark-read (record_web_notifications_seen 404s —
  * probed live from this sandbox) — the broker is the honest mechanism.
  */
-export async function POST() {
+export async function POST(req: NextRequest) {
+  if (!(await getSessionUser(req))) return authRequiredResponse();
   try {
     const result = await brokerAction("notifications-mark-read", {});
     if (!brokerOk(result)) {

@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { watchProgress } from "@/lib/format";
 import type { ContinueVideoDTO, HistoryGroupDTO } from "@/lib/types";
+import { PersonalSurfaceGate } from "@/components/auth/personal-surface-gate";
 
 type HistoryPayload = {
   groups: HistoryGroupDTO[];
@@ -27,8 +28,17 @@ type HistoryPayload = {
   session: boolean;
 };
 
-/** History — the operator's REAL YouTube watch history (SSR /feed/history). */
+/** History — the operator's REAL YouTube watch history (SSR /feed/history).
+ * WFX2-P2-AU: guests get the youtube.com signed-out screen (the gate). */
 export default function HistoryPage() {
+  return (
+    <PersonalSurfaceGate surface="history">
+      <HistoryContent />
+    </PersonalSurfaceGate>
+  );
+}
+
+function HistoryContent() {
   const { data, loading, error, reload } = useApi<HistoryPayload>("/api/history");
   const [clearing, setClearing] = useState(false);
   const [pausing, setPausing] = useState(false);

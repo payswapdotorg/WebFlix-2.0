@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ListVideo, Loader2, Play, Plus, Lock, Globe, EyeOff, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useApi, postJson } from "@/hooks/use-api";
+import { PersonalSurfaceGate } from "@/components/auth/personal-surface-gate";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,8 +33,17 @@ type PlaylistItemsPayload = {
   special: boolean;
 };
 
-/** Playlists — the operator's REAL YouTube playlists (SSR /feed/playlists). */
+/** Playlists — the operator's REAL YouTube playlists (SSR /feed/playlists).
+ * WFX2-P2-AU: guests get the youtube.com signed-out screen (the gate). */
 export default function PlaylistsPage() {
+  return (
+    <PersonalSurfaceGate surface="playlists">
+      <PlaylistsContent />
+    </PersonalSurfaceGate>
+  );
+}
+
+function PlaylistsContent() {
   const { data, loading, error, reload } = useApi<PlaylistsPayload>("/api/playlists");
   const [newTitle, setNewTitle] = useState("");
   const [creating, setCreating] = useState(false);

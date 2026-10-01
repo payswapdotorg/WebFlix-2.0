@@ -10,7 +10,7 @@
  * The real modules are captured up front and re-installed in `afterAll`,
  * making this file's mocks effectively file-scoped again.
  */
-import { afterAll, beforeEach, describe, expect, test, mock } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, test, mock } from "bun:test";
 
 /* ------------------------------------------------------------------ */
 /* capture the REAL modules before the mocks replace them (restore)    */
@@ -89,8 +89,15 @@ mock.module("@/lib/youtube-direct", () => ({
 import { POST as postLike } from "@/app/api/videos/[id]/like/route";
 import { POST as postSubscribe } from "@/app/api/subscribe/route";
 import { POST as postWatchLater } from "@/app/api/playlists/watch-later/route";
+import { mintSessionCookie } from "./helpers";
 
 const OFFLINE_MSG = "action backend offline — the lead's broker must be running";
+
+let AUTH_COOKIE = "";
+beforeAll(async () => {
+  // WFX2-P2-AU: these write routes sit behind the auth gate — sign in
+  AUTH_COOKIE = await mintSessionCookie();
+});
 
 beforeEach(() => {
   brokerCalls.length = 0;
@@ -114,7 +121,7 @@ import type { NextRequest } from "next/server";
 const req = (body: unknown, url = "http://localhost/api/x"): NextRequest =>
   new Request(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", cookie: AUTH_COOKIE },
     body: JSON.stringify(body),
   }) as unknown as NextRequest;
 
