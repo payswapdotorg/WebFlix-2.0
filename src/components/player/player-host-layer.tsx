@@ -11,13 +11,25 @@
  * - renders the YouTube-geometry miniplayer chrome (bottom-right ~400x225,
  *   progress bar, title/channel, close + expand) that the wrapper lands in
  *   whenever no watch page owns the player (survival matrix).
+ *
+ * WFX2-P5-MQ — the queue chrome: the bar gains the queue button + count
+ * badge (ListVideo — hidden with the whole queue chrome while the queue
+ * is empty, the honest zero state), prev/next controls (enabled ONLY when
+ * the session queue has neighbors in the ENGINE'S order — next is the
+ * store's own nextAfter, the exact order the queue engine and the
+ * watch-page countdown drive; prev is the item before now-playing), and
+ * the queue-drawer toggle. The drawer itself is QueueDrawer (queue-drawer.tsx,
+ * globally mounted in the AppShell next to this layer).
  */
 import { useCallback, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Maximize2, X } from "lucide-react";
+import { ListVideo, Maximize2, SkipBack, SkipForward, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { playerHost, usePlayerHost } from "@/lib/player/player-host";
+import { useQueueStore } from "@/lib/queue/queue-store";
+import { selectPrevBefore, selectNext, selectPrev } from "@/lib/queue/queue-neighbors";
+import { useQueueDrawer } from "@/components/player/queue-drawer";
 import { YoutubePlayer } from "@/components/watch/youtube-player";
 
 export function PlayerHostLayer() {
@@ -56,6 +68,54 @@ export function PlayerHostLayer() {
 
   const onClose = useCallback(() => {
     playerHost.close(); // the ONLY destroy path
+  }, []);
+
+  // WFX2-P5-MQ: the session queue — the count badge + the neighbors in the
+  // engine's order (reactive reads drive enablement; the click handlers
+  // below re-read fresh state — the engine/watch-page ref idiom).
+  const queueCount = useQueueStore((s) => s.items.length);
+  const nextItem = useQueueStore((s) => s.nextAfter(videoId));
+  const prevItem = useQueueStore((s) => selectPrevBefore(s.items, videoId));
+  const drawerOpen = useQueueDrawer((s) => s.open);
+  const toggleDrawer = useQueueDrawer((s) => s.toggle);
+
+  // WFX2-P5-MQ: Next — the SAME advance the queue engine drives on ENDED
+  // (queue-engine.ts) and the watch page's fired countdown drives
+  // (watch-page.tsx): the store's nextAfter (ONE order opinion), the played
+  // video leaves the SESSION queue (markPlayed — it stays in Watch Later;
+  // no-op when unqueued), and the mini takes the next video over in place
+  // (attach + re-mini in the SAME task — the engine's no-flash pattern).
+  const onQueueNext = useCallback(() => {
+    const currentId = usePlayerHost.getState().videoId;
+    const next = selectNext(currentId);
+    if (!next) return;
+    if (currentId !== null) useQueueStore.getState().markPlayed(currentId);
+    playerHost.attach({
+      videoId: next.videoId,
+      title: next.title,
+      channelName: next.channelName,
+      thumbnailUrl: next.thumbnailUrl,
+      durationSec: next.durationSec,
+    });
+    playerHost.setMini(true);
+  }, []);
+
+  // WFX2-P5-MQ: Prev — the item before now-playing (insertion order).
+  // Going back never consumes: the current item KEEPS its queue slot (only
+  // the played/advanced video leaves the session queue — the engine's law;
+  // nothing before the head, no wraparound).
+  const onQueuePrev = useCallback(() => {
+    const currentId = usePlayerHost.getState().videoId;
+    const prev = selectPrev(currentId);
+    if (!prev) return;
+    playerHost.attach({
+      videoId: prev.videoId,
+      title: prev.title,
+      channelName: prev.channelName,
+      thumbnailUrl: prev.thumbnailUrl,
+      durationSec: prev.durationSec,
+    });
+    playerHost.setMini(true);
   }, []);
 
   return (
@@ -118,6 +178,51 @@ export function PlayerHostLayer() {
                 {meta?.channelName ?? ""}
               </p>
             </div>
+            {/* WFX2-P5-MQ: the queue chrome — renders ONLY while a queue
+                exists (the honest zero state: no badge, no prev/next, no
+                queue button when the queue is empty). */}
+            {queueCount > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={onQueuePrev}
+                  disabled={!prevItem}
+                  aria-label="Previous video in queue"
+                  title="Previous"
+                  className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
+                >
+                  <SkipBack className="size-4" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  onClick={onQueueNext}
+                  disabled={!nextItem}
+                  aria-label="Next video in queue"
+                  title="Next"
+                  className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
+                >
+                  <SkipForward className="size-4" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  onClick={toggleDrawer}
+                  aria-expanded={drawerOpen}
+                  aria-label={`Queue — ${queueCount} ${queueCount === 1 ? "video" : "videos"}`}
+                  title="Queue"
+                  className="relative flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <ListVideo className="size-4" aria-hidden="true" />
+                  {/* the count badge (hidden with the whole button on the
+                      empty queue — the youtube.com zero state) */}
+                  <span
+                    aria-hidden="true"
+                    className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-yt-red px-1 text-[10px] font-semibold leading-none tabular-nums text-white"
+                  >
+                    {queueCount}
+                  </span>
+                </button>
+              </>
+            )}
             <button
               type="button"
               onClick={onExpand}
