@@ -225,3 +225,17 @@ Gates (clean env, no Upstash vars): lint 0 / typecheck 0 / **642 green** (619 + 
   bracketed dynamic-route paths typed fresh (never copied from displayed
   output — the §15 display-ghost); small single commands when the executor
   wedges; the batch-store narrative is the recovery source of last resort.
+
+## 2026-10-02 — PHASE 5 claims SETTLED (the account chrome + player depth; lead-verified)
+
+| Lane | Branch | Scope | Claimed | Binding | Status |
+|---|---|---|---|---|---|
+| P5-YA | `wfx2/waveP5-you-account` 866a1c7 | the /you hub (profile header, History/Playlists/Your-videos/Watch-later/Liked real reads + honest states, the More-from rail), account-menu depth, shift+/ shortcuts overlay, /account/purchases + /account/data | 2026-10-02 report | §resilience | **VERIFIED 985/985** → merged 9ad0de3 |
+| P5-SS | `wfx2/waveP5-settings-system` eae9819 | the real /settings (LOCAL vs MANAGED, Account/Notifications/Playback-the-real-wfx2-autoplay/Appearance-next-themes/Privacy-honest/Advanced), /help /feedback(JSONL local) /report-history(real rows) /premium(honest no-tier), sidebar MORE_NAV links | 2026-10-02 report | §resilience | **VERIFIED 961/961** → merged d2b4c20 |
+| P5-MQ | `wfx2/waveP5-miniplayer-queue` 4ff5bfe | mini bar queue button + badge + prev/next (the engine's single order), the attached queue drawer (QueuePanel additive widening, real WL remove), the app-shell global mount, lib/queue neighbor selectors | 2026-10-02 commit-embedded report | §resilience | **VERIFIED 952/952** → merged 98b5873 |
+
+- Merge order honored: YA → SS → MQ. Two union conflicts resolved (app-shell dual mounts; test chains unioned). Post-merge gates: **1034/1034 root tests (932 + 53 + 29 + 20), lint 0, typecheck 0**.
+- Production: main @ 98b5873, Vercel auto-deploy verified 2026-10-02 19:39Z — /you /settings /help /premium /feedback /report-history /account/purchases /account/data all 200 with real content.
+- Status ledger truth: P3 lanes (UP/LC/SG) and P4 lanes (PE/NC/QT) all landed in earlier mains (their merges are in git history; this entry records the phase-5 close).
+- **ROADMAP COMPLETE**: the goal states G1–G6 (live watch / discovery / actions / streams+chat / personal surfaces / cutover) are all achieved and production-verified. The 2026-09-29 live roadmap's phases are delivered through Phase 5.
+- OPERATOR NOTE: the work-order clone-line token saw plaintext exposure across dispatch retries (flagged by the YA worker) — rotate it.
