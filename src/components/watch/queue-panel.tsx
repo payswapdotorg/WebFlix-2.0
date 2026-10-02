@@ -9,6 +9,12 @@
  * out of scope (per the lane contract). Placement: the watch page's primary
  * column (the miniplayer chrome itself is player-lane-owned — see the lane
  * report's seam request for the global mount).
+ *
+ * WFX2-P5-MQ (additive): currentVideoId widens to string | null — the
+ * miniplayer queue drawer reuses this panel and passes the player host's
+ * now-playing id (null while no player lives). Watch-page callers pass a
+ * string exactly as before (the widening is backward-compatible); the
+ * now-playing highlight simply matches nothing while it is null.
  */
 import { useState } from "react";
 import Link from "next/link";
@@ -19,7 +25,7 @@ import { useQueueStore, type QueueItem } from "@/lib/queue/queue-store";
 import { removeFromQueue } from "@/lib/queue/queue-actions";
 import { formatDuration } from "@/lib/watch/format";
 
-export function QueuePanel({ currentVideoId }: { currentVideoId: string }) {
+export function QueuePanel({ currentVideoId }: { currentVideoId: string | null }) {
   const items = useQueueStore((s) => s.items);
   const [open, setOpen] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);

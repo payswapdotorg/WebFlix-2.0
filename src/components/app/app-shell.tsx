@@ -9,6 +9,7 @@ import { SiteFooter } from "./footer";
 import { useSidebar } from "@/lib/sidebar-store";
 import { VideoHoverPreviewLayer } from "@/components/video/video-hover-preview";
 import { PlayerHostLayer } from "@/components/player/player-host-layer";
+import { QueueDrawer } from "@/components/player/queue-drawer";
 
 /**
  * WebFlix app shell: fixed topbar, collapsible sidebar, scrollable main column.
@@ -65,6 +66,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* WFX2-C-S: the persistent player host — ABOVE the route tree so the
           player (and its miniplayer) survives every navigation. */}
       <PlayerHostLayer />
+      {/* WFX2-P5-MQ: the miniplayer-attached queue drawer — the global mount
+          (next to the player host layer), so the queue chrome works on EVERY
+          page while the miniplayer is alive with a queue. Additive only. */}
+      <QueueDrawer />
       <VideoHoverPreviewLayer />
     </ThemeProvider>
   );
