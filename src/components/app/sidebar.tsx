@@ -32,7 +32,6 @@ import {
   MessageSquarePlus,
   type LucideIcon,
 } from "lucide-react";
-import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useApi } from "@/hooks/use-api";
 import { useSidebarHydration } from "@/lib/sidebar-store";
@@ -60,12 +59,12 @@ const YOU_NAV: NavItem[] = [
   { href: "/studio", label: "Creator Studio", icon: Clapperboard },
 ];
 
-const MORE_NAV: { label: string; icon: LucideIcon; toast: string }[] = [
-  { label: "Settings", icon: Settings, toast: "Settings ships in Wave 4 (WFX2-P)" },
-  { label: "WebFlix Premium", icon: Crown, toast: "WebFlix Premium ships in Wave 4 (WFX2-P)" },
-  { label: "Report history", icon: Flag, toast: "Report history ships in Wave 4 (WFX2-P)" },
-  { label: "Help", icon: HelpCircle, toast: "Help ships in Wave 4 (WFX2-P)" },
-  { label: "Send feedback", icon: MessageSquarePlus, toast: "Feedback ships in Wave 4 (WFX2-P)" },
+const MORE_NAV: NavItem[] = [
+  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/premium", label: "WebFlix Premium", icon: Crown },
+  { href: "/report-history", label: "Report history", icon: Flag },
+  { href: "/help", label: "Help", icon: HelpCircle },
+  { href: "/feedback", label: "Send feedback", icon: MessageSquarePlus },
 ];
 
 const CATEGORY_ICON_MAP: Record<string, LucideIcon> = {
@@ -220,20 +219,9 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 
       <Divider />
       <SectionHeader>More from WebFlix</SectionHeader>
-      {MORE_NAV.map((item) => {
-        const Icon = item.icon;
-        return (
-          <button
-            key={item.label}
-            type="button"
-            onClick={() => toast(item.toast)}
-            className="flex w-full items-center gap-6 rounded-lg px-3 py-2 text-left text-sm text-foreground/90 transition-colors hover:bg-accent/60"
-          >
-            <Icon className="size-[22px] shrink-0" strokeWidth={1.8} />
-            <span>{item.label}</span>
-          </button>
-        );
-      })}
+      {MORE_NAV.map((item) => (
+        <NavRow key={item.href} item={item} active={isActive(item.href)} onNavigate={onNavigate} />
+      ))}
 
       <Divider />
       <div className="flex flex-wrap gap-x-3 gap-y-1 px-3 pt-2 text-[11px] text-muted-foreground">
