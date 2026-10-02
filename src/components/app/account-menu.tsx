@@ -1,21 +1,40 @@
 "use client";
 
 /**
- * WFX2-P2-AU — the header account surface, youtube.com parity:
+ * WFX2-P5-YA — the header account surface, youtube.com parity:
  *  - guest → the outlined "Sign in" pill (avatar-and-in icon), linking
- *    /signin with the current surface as the redirect;
- *  - signed-in → the initial-based avatar (avatarSeed hue) with the
- *    account dropdown: display name, email, Your account, WebFlix Studio,
- *    Sign out (the stock NextAuth signout route).
+ *    /signin with the current surface as the redirect (unchanged);
+ *  - signed-in → the initial-based avatar (avatarSeed hue) with the deepened
+ *    account dropdown (youtube.com's items, honest):
+ *      Your account · Your channel (the operator session's REAL channel
+ *      handle, read lazily from /api/studio only while the menu is open —
+ *      honest hidden state when the channel is unresolved) · WebFlix Studio ·
+ *      Purchases & memberships (the honest page) · Your data in YouTube (the
+ *      honest page) · Appearance / Language / Restricted Mode / Location
+ *      (deep links into /settings — SS owns the pages, href only) ·
+ *      Keyboard shortcuts (the shift+/ overlay) · Settings · Sign out.
  *
- * The demo-account menu this replaces read /api/me; the WebFlix identity
- * now fronts everything (the honest operator-session wording stays on the
- * account page).
+ * Nothing is fabricated: an item whose data does not exist stays hidden or
+ * degrades honestly.
  */
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Clapperboard, LogOut, UserRound } from "lucide-react";
+import {
+  AtSign,
+  Clapperboard,
+  Database,
+  Keyboard,
+  Languages,
+  LogOut,
+  MapPin,
+  Monitor,
+  Settings as SettingsIcon,
+  Shield,
+  ShoppingBag,
+  UserRound,
+  type LucideIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -25,8 +44,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useApi } from "@/hooks/use-api";
 import { useWebFlixSession } from "@/hooks/use-webflix-session";
 import { signInHref, signOutFromWebFlix } from "@/lib/auth/client";
+import { openKeyboardShortcuts } from "@/components/app/keyboard-shortcuts";
+import type { StudioPageDTO } from "@/lib/types";
 
 /** The initial-based avatar — the avatarSeed hue decides its color. */
 export function SessionAvatar({
@@ -50,10 +72,38 @@ export function SessionAvatar({
   );
 }
 
+/** A dropdown link item (the DropdownMenuItem asChild + Link idiom). */
+function MenuLink({
+  href,
+  icon: Icon,
+  children,
+}: {
+  href: string;
+  icon: LucideIcon;
+  children: React.ReactNode;
+}) {
+  return (
+    <DropdownMenuItem asChild>
+      <Link href={href} className="cursor-pointer">
+        <Icon className="size-4" aria-hidden="true" /> {children}
+      </Link>
+    </DropdownMenuItem>
+  );
+}
+
 export function AccountMenu() {
   const session = useWebFlixSession();
   const pathname = usePathname();
   const [signingOut, setSigningOut] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // The operator channel's REAL handle — read only while the menu is open
+  // (the lazy useApi(null) idiom). Honest null in public mode → the
+  // "Your channel" item stays hidden until a real handle exists.
+  const { data: studio } = useApi<StudioPageDTO & { loginRequired: boolean }>(
+    menuOpen && session.user ? "/api/studio?enrich=0" : null
+  );
+  const channelHandle = studio?.channel?.handle || null;
 
   if (session.status === "unauthenticated") {
     // the youtube-style outlined pill: circle avatar-and-in icon + "Sign in"
@@ -99,7 +149,7 @@ export function AccountMenu() {
   };
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
@@ -120,19 +170,59 @@ export function AccountMenu() {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link href="/account" className="cursor-pointer">
-            <UserRound className="size-4" /> Your account
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/studio" className="cursor-pointer">
-            <Clapperboard className="size-4" /> WebFlix Studio
-          </Link>
-        </DropdownMenuItem>
+        <MenuLink href="/account" icon={UserRound}>
+          Your account
+        </MenuLink>
+        {channelHandle && (
+          <MenuLink href={`/channel/${channelHandle}`} icon={AtSign}>
+            Your channel
+          </MenuLink>
+        )}
+        <MenuLink href="/studio" icon={Clapperboard}>
+          WebFlix Studio
+        </MenuLink>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={(e) => { e.preventDefault(); void doSignOut(); }} className="cursor-pointer">
-          <LogOut className="size-4" /> {signingOut ? "Signing out…" : "Sign out"}
+        <MenuLink href="/account/purchases" icon={ShoppingBag}>
+          Purchases &amp; memberships
+        </MenuLink>
+        <MenuLink href="/account/data" icon={Database}>
+          Your data in YouTube
+        </MenuLink>
+        <DropdownMenuSeparator />
+        {/* deep links — SS owns /settings (href only, never an import) */}
+        <MenuLink href="/settings" icon={Monitor}>
+          Appearance
+        </MenuLink>
+        <MenuLink href="/settings" icon={Languages}>
+          Language
+        </MenuLink>
+        <MenuLink href="/settings" icon={Shield}>
+          Restricted Mode
+        </MenuLink>
+        <MenuLink href="/settings" icon={MapPin}>
+          Location
+        </MenuLink>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onSelect={() => openKeyboardShortcuts()}
+          className="cursor-pointer"
+          data-testid="menu-keyboard-shortcuts"
+        >
+          <Keyboard className="size-4" aria-hidden="true" /> Keyboard shortcuts
+        </DropdownMenuItem>
+        <MenuLink href="/settings" icon={SettingsIcon}>
+          Settings
+        </MenuLink>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onSelect={(e) => {
+            e.preventDefault();
+            void doSignOut();
+          }}
+          className="cursor-pointer"
+        >
+          <LogOut className="size-4" aria-hidden="true" />{" "}
+          {signingOut ? "Signing out…" : "Sign out"}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

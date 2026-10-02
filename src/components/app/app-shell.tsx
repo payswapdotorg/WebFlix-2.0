@@ -9,6 +9,7 @@ import { SiteFooter } from "./footer";
 import { useSidebar } from "@/lib/sidebar-store";
 import { VideoHoverPreviewLayer } from "@/components/video/video-hover-preview";
 import { PlayerHostLayer } from "@/components/player/player-host-layer";
+import { KeyboardShortcutsMount } from "./keyboard-shortcuts";
 
 /**
  * WebFlix app shell: fixed topbar, collapsible sidebar, scrollable main column.
@@ -66,6 +67,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           player (and its miniplayer) survives every navigation. */}
       <PlayerHostLayer />
       <VideoHoverPreviewLayer />
+      <KeyboardShortcutsMount />
     </ThemeProvider>
   );
 }
