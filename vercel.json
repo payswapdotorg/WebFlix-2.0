@@ -1,6 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "$schemaNote": "buildCommand: production runs Postgres (Neon) — the postgres schema twin is swapped in at build time and the prisma client regenerated against it. Dev/tests keep SQLite via prisma/schema.prisma (the swap happens only in Vercel's fresh build container and is never committed).",
   "buildCommand": "cp prisma/schema.postgres.prisma prisma/schema.prisma && prisma generate && next build",
   "git": {
     "deploymentEnabled": {
