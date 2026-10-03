@@ -111,6 +111,7 @@ mock.module("next/navigation", () => ({
 
 import { setupTestDb, mintSessionCookie } from "./helpers";
 import { db } from "../src/lib/db";
+import type { CommentDto } from "@/lib/watch/types";
 import { setUpstream } from "@/lib/youtube/innertube";
 import { clearCache } from "@/lib/youtube/cache";
 
@@ -571,7 +572,7 @@ async function typeInto(ta: HTMLTextAreaElement, value: string) {
 }
 
 describe("WFX2-P6-CR UI — the WebFlix origin chip (comment-row)", () => {
-  const rowProps = (comment: Record<string, unknown>) => ({
+  const rowProps = (comment: CommentDto) => ({
     comment,
     videoId: VIDEO_ID,
     viewer: VIEWER,
@@ -628,7 +629,7 @@ describe("WFX2-P6-CR UI — the composer's local-write disclosure", () => {
       | undefined;
 
   test("local:true response → 'Comment posted on WebFlix' toast", async () => {
-    stubFetch((body: any) => ({ id: "loc1", ...COMMENT({ body: body?.body, local: true }) }));
+    stubFetch((body: any) => ({ ...COMMENT({ body: body?.body, local: true }), id: "loc1" }));
     const { CommentComposer } = await import("@/components/watch/comment-composer");
     await mount(
       <CommentComposer videoId={VIDEO_ID} viewer={VIEWER} onSubmitted={() => {}} />
@@ -642,7 +643,7 @@ describe("WFX2-P6-CR UI — the composer's local-write disclosure", () => {
   });
 
   test("reply local:true response → 'Reply posted on WebFlix'; YouTube-path writes stay silent", async () => {
-    stubFetch((body: any) => ({ id: "loc2", ...COMMENT({ body: body?.body, parentId: "p1", local: true }) }));
+    stubFetch((body: any) => ({ ...COMMENT({ body: body?.body, parentId: "p1", local: true }), id: "loc2" }));
     const { CommentComposer } = await import("@/components/watch/comment-composer");
     await mount(
       <CommentComposer videoId={VIDEO_ID} parentId="p1" parentText="parent" viewer={VIEWER} onSubmitted={() => {}} submitLabel="Reply" />
@@ -656,7 +657,7 @@ describe("WFX2-P6-CR UI — the composer's local-write disclosure", () => {
 
     // the YouTube path (no local flag) keeps the existing silent success
     toasts.length = 0;
-    stubFetch((body: any) => ({ id: "yt1", ...COMMENT({ body: body?.body }) }));
+    stubFetch((body: any) => ({ ...COMMENT({ body: body?.body }), id: "yt1" }));
     await mount(
       <CommentComposer videoId={VIDEO_ID} viewer={VIEWER} onSubmitted={() => {}} />
     );
@@ -672,7 +673,7 @@ describe("WFX2-P6-CR UI — the composer's local-write disclosure", () => {
     const sent: any[] = [];
     globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
       sent.push(typeof init?.body === "string" ? JSON.parse(init.body) : null);
-      return new Response(JSON.stringify({ id: "x", ...COMMENT() }), {
+      return new Response(JSON.stringify({ ...COMMENT(), id: "x" }), {
         status: 201,
         headers: { "Content-Type": "application/json" },
       });
