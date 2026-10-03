@@ -62,9 +62,30 @@ export interface DirectFetch {
   (input: string, init: RequestInit): Promise<Response>;
 }
 
+/** Shared options for the direct write calls (WFX2-P6-CR: named — the
+ * createComment body now branches on createCommentParams). */
+export interface DirectCallOptions {
+  fetchImpl?: DirectFetch;
+  cookies?: string;
+  now?: number;
+}
+
+export interface CreateCommentOptions extends DirectCallOptions {
+  /**
+   * WFX2-P6-CR — the reply thread's createCommentParams (from the live
+   * payload's replyCommand). Present → this POST is a REPLY: the same
+   * /comment/create_comment endpoint, the body carrying createCommentParams
+   * (which encodes the thread) instead of the bare videoId.
+   */
+  createCommentParams?: string;
+}
+
 /**
  * Direct comment create — POST /youtubei/v1/comment/create_comment with
  * cookie auth + SAPISIDHASH (the subscribe-lane pattern; WFX2-B-S).
+ * WFX2-P6-CR: opts.createCommentParams turns the call into a REPLY (same
+ * endpoint; YouTube.js's create-comment reply recipe — the params come from
+ * the live payload's toolbar replyCommand).
  * The response carries the created comment as entity mutations (the UI DTO
  * is synthesized by the caller — the next live read carries the real row).
  * Returns {ok:false, error:"direct-not-configured"} when YT_COOKIES lacks
@@ -73,7 +94,7 @@ export interface DirectFetch {
 export async function createComment(
   videoId: string,
   text: string,
-  opts: { fetchImpl?: DirectFetch; cookies?: string; now?: number } = {}
+  opts: CreateCommentOptions = {}
 ): Promise<DirectActionResult> {
   const rawCookies = opts.cookies ?? process.env.YT_COOKIES?.trim() ?? "";
   const sapisid = parseCookies(rawCookies)["SAPISID"];
@@ -82,6 +103,16 @@ export async function createComment(
   }
   const timeSec = Math.floor((opts.now ?? Date.now()) / 1000);
   const doFetch = opts.fetchImpl ?? ((input: string, init: RequestInit) => fetch(input, init));
+  const body: Record<string, unknown> = {
+    context: { client: { clientName: "WEB", clientVersion: CLIENT_VERSION, hl: "en", gl: "US" } },
+    commentText: text,
+  };
+  if (opts.createCommentParams) {
+    // reply: the params encode the comment thread (YouTube.js recipe)
+    body.createCommentParams = opts.createCommentParams;
+  } else {
+    body.videoId = videoId;
+  }
   const res = await doFetch(`${ORIGIN}/youtubei/v1/comment/create_comment?prettyPrint=false`, {
     method: "POST",
     headers: {
@@ -95,17 +126,27 @@ export async function createComment(
       "X-Youtube-Client-Version": CLIENT_VERSION,
       "User-Agent": `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36`,
     },
-    body: JSON.stringify({
-      context: { client: { clientName: "WEB", clientVersion: CLIENT_VERSION, hl: "en", gl: "US" } },
-      videoId,
-      commentText: text,
-    }),
+    body: JSON.stringify(body),
     cache: "no-store",
   });
   if (!res.ok) {
     return { ok: false, status: res.status, error: `direct create_comment returned ${res.status}` };
   }
   return { ok: true, status: res.status };
+}
+
+/**
+ * Direct comment REPLY — createComment with the thread's
+ * createCommentParams (WFX2-P6-CR). Same endpoint/auth as createComment;
+ * the params ride the body instead of the bare videoId.
+ */
+export async function createReply(
+  videoId: string,
+  createCommentParams: string,
+  text: string,
+  opts: DirectCallOptions = {}
+): Promise<DirectActionResult> {
+  return createComment(videoId, text, { ...opts, createCommentParams });
 }
 
 /**
@@ -117,7 +158,7 @@ export async function createComment(
 export async function subscribeChannel(
   channelId: string,
   on: boolean,
-  opts: { fetchImpl?: DirectFetch; cookies?: string; now?: number } = {}
+  opts: DirectCallOptions = {}
 ): Promise<DirectActionResult> {
   const rawCookies = opts.cookies ?? process.env.YT_COOKIES?.trim() ?? "";
   const sapisid = parseCookies(rawCookies)["SAPISID"];

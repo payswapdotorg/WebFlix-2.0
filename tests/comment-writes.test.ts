@@ -2,15 +2,22 @@
 /**
  * WFX2-B-S tests — the comment WRITE routes with the broker client, the
  * direct path, the creator-mode guards and the session module MOCKED (no
- * network, no live CDP, no DB): the ok paths, direct-first vs broker
- * fallback, honest 502 offline mapping, the needs-session degrade, and the
+ * network, no live CDP): the ok paths, direct-first vs broker fallback,
+ * honest 502 offline mapping, the needs-session degrade, and the
  * creator-only heart/pin guard.
+ *
+ * WFX2-P6-CR adds: the direct REPLY rung (replyParams → createReply with
+ * createCommentParams; honest skip when the payload served the sign-in
+ * modal), and the LOCAL rung catch (both YouTube tiers offline + a WebFlix
+ * session → the honest WebFlix store, local:true — the real test DB backs
+ * it via setupTestDb).
  *
  * Same mock pattern as action-routes.test.ts (real modules captured and
  * re-installed in afterAll — bun's mock.module is process-wide).
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, test, mock } from "bun:test";
 import type { NextRequest } from "next/server";
+import { setupTestDb, mintSessionCookie } from "./helpers";
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const realBroker = { ...require("@/lib/broker") } as Record<string, unknown>;
@@ -57,7 +64,7 @@ mock.module("@/lib/broker", () => ({
   brokerTimeoutMs: () => 15000,
 }));
 
-const directCalls: { videoId: string; text: string }[] = [];
+const directCalls: { videoId: string; text: string; createCommentParams?: string }[] = [];
 let directResponse: unknown = { ok: true };
 let directConfigured = false;
 
@@ -75,8 +82,12 @@ mock.module("@/lib/youtube-direct", () => ({
   sapisidhash: () => "0_hash",
   subscribeChannel: async () => ({ ok: true }),
   getSubscribedState: async () => null,
-  createComment: async (videoId: string, text: string) => {
-    directCalls.push({ videoId, text });
+  createComment: async (videoId: string, text: string, opts?: { createCommentParams?: string }) => {
+    directCalls.push({ videoId, text, ...(opts?.createCommentParams ? { createCommentParams: opts.createCommentParams } : {}) });
+    return directResponse;
+  },
+  createReply: async (videoId: string, createCommentParams: string, text: string) => {
+    directCalls.push({ videoId, text, createCommentParams });
     return directResponse;
   },
 }));
@@ -122,7 +133,6 @@ import { PATCH as patchComment, DELETE as deleteComment } from "@/app/api/commen
 import { POST as postHeart } from "@/app/api/comments/[id]/heart/route";
 import { POST as postPin } from "@/app/api/comments/[id]/pin/route";
 import { POST as postReport } from "@/app/api/comments/[id]/report/route";
-import { mintSessionCookie } from "./helpers";
 
 const OFFLINE_MSG = "action backend offline — the lead's broker must be running";
 
@@ -131,6 +141,8 @@ beforeAll(async () => {
   // WFX2-P2-AU: these write routes sit behind the auth gate — sign in
   AUTH_COOKIE = await mintSessionCookie();
 });
+
+setupTestDb();
 
 beforeEach(() => {
   brokerCalls.length = 0;
@@ -194,6 +206,18 @@ describe("POST /api/comments — comment create (direct-first, broker fallback)"
     expect(brokerCalls[0].kind).toBe("comment-create");
   });
 
+  test("broker offline + WebFlix session → the LOCAL rung catches honestly (201 local:true)", async () => {
+    brokerResponse = new MockBrokerError("offline", OFFLINE_MSG, 502);
+    const res = await postComment(
+      req({ videoId: "dQw4w9WgXcQ", body: "kept on WebFlix", video: { title: "t" } })
+    );
+    expect(res.status).toBe(201); // never a dead end — the honest local store
+    const body = (await res.json()) as { local?: boolean; path?: string; effect?: string };
+    expect(body.local).toBe(true); // origin disclosed — NOT a YouTube write
+    expect(body.path).toBe("local");
+    expect(body.effect).toBe("comment-created");
+  });
+
   test("reply shape: parentId + parentText → broker comment-reply with commentText locator", async () => {
     const res = await postComment(
       req({ videoId: "dQw4w9WgXcQ", body: "a reply", parentId: "Ugx123", parentText: "parent text" })
@@ -211,12 +235,64 @@ describe("POST /api/comments — comment create (direct-first, broker fallback)"
     ]);
   });
 
-  test("broker offline → 502 with the honest offline message", async () => {
+  test("WFX2-P6-CR reply rung: replyParams + direct configured → createReply (params on the wire), no broker, no local row", async () => {
+    directConfigured = true;
+    const res = await postComment(
+      req({
+        videoId: "dQw4w9WgXcQ",
+        body: "direct reply",
+        parentId: "Ugx123",
+        parentText: "parent text",
+        replyParams: "Eh1VZ3pnZTM0MGRCZy1yZXBseXBhcmFtcw==",
+      })
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { path?: string; local?: boolean; effect?: string };
+    expect(body.path).toBe("direct");
+    expect(body.local).toBeUndefined(); // a YouTube write — never claimed local
+    expect(body.effect).toBe("comment-replied");
+    expect(directCalls).toEqual([
+      { videoId: "dQw4w9WgXcQ", text: "direct reply", createCommentParams: "Eh1VZ3pnZTM0MGRCZy1yZXBseXBhcmFtcw==" },
+    ]);
+    expect(brokerCalls).toHaveLength(0);
+    const db = (await import("../src/lib/db")).db;
+    expect(await db.comment.count({ where: { videoId: "dQw4w9WgXcQ", body: "direct reply" } })).toBe(0);
+  });
+
+  test("WFX2-P6-CR reply rung: no replyParams (sign-in modal) → the direct rung is skipped honestly", async () => {
+    directConfigured = true;
+    const res = await postComment(
+      req({ videoId: "dQw4w9WgXcQ", body: "no params", parentId: "Ugx123", parentText: "p" })
+    );
+    expect(res.status).toBe(201);
+    expect(directCalls).toHaveLength(0); // never attempted without the wire parameter
+    expect(brokerCalls[0].kind).toBe("comment-reply");
+  });
+
+  test("WFX2-P6-CR reply rung: direct fails → broker fails → LOCAL (shadow parent + reply persisted)", async () => {
+    directConfigured = true;
+    directResponse = { ok: false, status: 401 }; // the expired-session reality
     brokerResponse = new MockBrokerError("offline", OFFLINE_MSG, 502);
-    const res = await postComment(req({ videoId: "dQw4w9WgXcQ", body: "x" }));
-    expect(res.status).toBe(502);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe(OFFLINE_MSG);
+    const res = await postComment(
+      req({
+        videoId: "dQw4w9WgXcQ",
+        body: "honest local reply",
+        parentId: "UgxShadow1",
+        parentText: "the live parent text",
+      })
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { local?: boolean; path?: string; parentId?: string | null };
+    expect(body.local).toBe(true);
+    expect(body.path).toBe("local");
+    expect(body.parentId).toBe("UgxShadow1");
+    const db = (await import("../src/lib/db")).db;
+    // the shadow parent anchors the YouTube thread; the reply persists under it
+    const anchor = await db.comment.findUniqueOrThrow({ where: { id: "UgxShadow1" } });
+    expect(anchor.body).toBe("the live parent text");
+    const reply = await db.comment.findFirstOrThrow({ where: { videoId: "dQw4w9WgXcQ", body: "honest local reply" } });
+    expect(reply.parentId).toBe("UgxShadow1");
+    expect(reply.moderation).toBe("approved");
   });
 
   test("empty body / missing videoId / over-limit body → 400", async () => {

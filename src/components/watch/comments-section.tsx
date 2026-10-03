@@ -13,6 +13,13 @@
  * WFX2-P2-AU: `guest` (no WebFlix account session) drives the account
  * gates — the youtube.com "Sign in to comment" composer box and the
  * sign-in prompt on row-level writes.
+ *
+ * WFX2-P6-CR: `viewer` is nullable — the section renders for ANONYMOUS
+ * viewers too (YouTube parity: comments are visible logged-out; the
+ * composer/row gates own the write states). `video` (the watch payload's
+ * snapshot) rides to the composer so local-rung writes can mirror the
+ * real video/channel as shadow rows; local:true rows carry the WebFlix
+ * origin chip.
  */
 import { useCallback, useEffect, useState } from "react";
 import { ArrowDownUp, MessageSquare } from "lucide-react";
@@ -25,7 +32,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { api } from "@/lib/watch/client";
 import { compactCount } from "@/lib/watch/format";
-import type { CommentDto, CommentsPageDto, PageDto, ViewerDto } from "@/lib/watch/types";
+import type {
+  CommentDto,
+  CommentsPageDto,
+  CommentVideoSnapshotDto,
+  PageDto,
+  ViewerDto,
+} from "@/lib/watch/types";
 import { CommentComposer } from "./comment-composer";
 import { CommentRow } from "./comment-row";
 
@@ -42,15 +55,19 @@ export function CommentsSection({
   creatorName,
   operatorSession = true,
   guest = false,
+  video,
 }: {
   videoId: string;
-  viewer: ViewerDto;
+  /** WFX2-P6-CR: nullable — anonymous viewers still read the comments */
+  viewer: ViewerDto | null;
   viewerIsCreator: boolean;
   creatorName: string;
   /** false in public mode → YouTube-parity signed-out states */
   operatorSession?: boolean;
   /** WFX2-P2-AU: no WebFlix account → account gates on every write */
   guest?: boolean;
+  /** WFX2-P6-CR: the watch payload's snapshot (the local rung's shadow rows) */
+  video?: CommentVideoSnapshotDto;
 }) {
   const [items, setItems] = useState<CommentDto[] | null>(null);
   const [total, setTotal] = useState(0);
@@ -233,6 +250,7 @@ export function CommentsSection({
           viewer={viewer}
           operatorSession={operatorSession}
           guest={guest}
+          video={video}
           onSubmitted={(c) => {
             // optimistic: appears instantly; the server row IS the row
             setItems((prev) => [c, ...(prev ?? [])]);
@@ -272,6 +290,7 @@ export function CommentsSection({
               creatorName={creatorName}
               operatorSession={operatorSession}
               guest={guest}
+              video={video}
               depth={0}
               threadReplies={threads[c.id]?.replies}
               threadCursor={threads[c.id]?.cursor}

@@ -8,7 +8,8 @@
  * everything else (the `_u` attestation tier — §18/§19).
  */
 import { ApiError } from "./api";
-import type { CommentAuthorDto, CommentDto, LikeValue } from "./types";
+import type { CommentAuthorDto, CommentDto, CommentVideoSnapshotDto, LikeValue } from "./types";
+import type { WebFlixSessionUser } from "@/lib/auth/types";
 import {
   BROKER_OFFLINE_MESSAGE,
   BrokerError,
@@ -17,10 +18,12 @@ import {
 } from "@/lib/broker";
 import {
   createComment,
+  createReply,
   subscribeChannel,
   getSubscribedState,
   directAuthConfigured,
 } from "@/lib/youtube-direct";
+import { writeLocalComment } from "./local-comments";
 
 export { BROKER_OFFLINE_MESSAGE };
 
@@ -262,6 +265,28 @@ export interface CommentViewer {
   avatarUrl: string;
 }
 
+/** The synthesized comment DTO the composer UI expects from a write tier. */
+export type CommentWriteResult = CommentDto & {
+  ok: true;
+  effect: string;
+  path?: string;
+  /** WFX2-P6-CR: true → the row lives in the honest WebFlix store */
+  local?: boolean;
+};
+
+/**
+ * WFX2-P6-CR — the write-tier extras the routes pass through:
+ *  - replyParams: the parent comment's live replyParams (direct reply rung);
+ *  - sessionUser: the WebFlix account — the local rung's author bridge
+ *    (absent → the local rung is skipped: no identity, no honest local write);
+ *  - video: the watch payload's video snapshot (the local rung's shadow rows).
+ */
+export interface CommentWriteOpts {
+  replyParams?: string;
+  sessionUser?: WebFlixSessionUser | null;
+  video?: CommentVideoSnapshotDto;
+}
+
 /** Synthesize the CommentDto the composer UI expects from a broker/direct post. */
 function synthComment(
   videoId: string,
@@ -270,7 +295,7 @@ function synthComment(
   parentId: string | null,
   /** the execution path honestly reported by the tier (ui | fetch | none | direct) */
   path: "ui" | "fetch" | "none" | "direct" = "ui"
-): CommentDto & { ok: true; effect: string; path?: string } {
+): CommentWriteResult {
   const author: CommentAuthorDto = {
     id: viewer.id,
     handle: viewer.handle,
@@ -300,13 +325,57 @@ function synthComment(
   };
 }
 
-/** Create a comment — direct-first (InnerTube create_comment + SAPISIDHASH,
- * the subscribe-lane pattern), broker fallback (the DOM UI path). */
+/**
+ * The honest LOCAL rung — the third tier, reached only when BOTH YouTube
+ * tiers failed (offline/refused, never after a success). Persists in the
+ * WebFlix store with full origin disclosure (local:true + path "local");
+ * a store failure maps to an honest 502 (nothing was written anywhere).
+ */
+async function localRung(args: {
+  videoId: string;
+  text: string;
+  parentId?: string;
+  parentText?: string;
+  opts: CommentWriteOpts;
+}): Promise<CommentWriteResult> {
+  if (!args.opts.sessionUser) throw failOffline();
+  try {
+    return await writeLocalComment({
+      videoId: args.videoId,
+      text: args.text,
+      ...(args.parentId ? { parentId: args.parentId } : {}),
+      ...(args.parentText ? { parentText: args.parentText } : {}),
+      sessionUser: args.opts.sessionUser,
+      ...(args.opts.video ? { videoSnapshot: args.opts.video } : {}),
+    });
+  } catch (e) {
+    if (e instanceof ApiError) throw e; // honest validation (e.g. wrong-video parent)
+    throw new ApiError(
+      502,
+      "action backend offline and the WebFlix store is unreachable — comment not posted"
+    );
+  }
+}
+
+/** The offline ApiError both YouTube tiers failed into. */
+function failOffline(): ApiError {
+  return new ApiError(502, BROKER_OFFLINE_MESSAGE);
+}
+
+/**
+ * Create a comment — the three-rung chain (WFX2-P6-CR):
+ *   1. direct (InnerTube create_comment + SAPISIDHASH — the subscribe-lane
+ *      pattern),
+ *   2. broker (the DOM UI path),
+ *   3. LOCAL (the honest WebFlix store, local:true — only after BOTH
+ *      YouTube tiers failed; never claims a YouTube write).
+ */
 export async function proxyCommentCreate(
   videoId: string,
   text: string,
-  viewer: CommentViewer
-): Promise<CommentDto & { ok: true; effect: string; path?: string }> {
+  viewer: CommentViewer,
+  opts: CommentWriteOpts = {}
+): Promise<CommentWriteResult> {
   if (directAuthConfigured()) {
     const direct = await createComment(videoId, text);
     if (direct.ok) {
@@ -314,25 +383,47 @@ export async function proxyCommentCreate(
     }
   }
   const r = await brokerAction("comment-create", { videoId }, { text });
-  if (!ok(r)) throw fail(r);
-  return synthComment(videoId, text, viewer, null, r.path ?? "ui");
+  if (ok(r)) return synthComment(videoId, text, viewer, null, r.path ?? "ui");
+  // both YouTube tiers refused → the honest local rung
+  if (opts.sessionUser) return localRung({ videoId, text, opts });
+  throw fail(r);
 }
 
-/** Reply to a comment (broker comment-reply; UI path needs parent text). */
+/**
+ * Reply to a comment — the three-rung chain (WFX2-P6-CR):
+ *   1. direct when the parent's live replyParams exists + the session is
+ *      configured (create_comment with createCommentParams — the YouTube.js
+ *      reply recipe); honest skip when replyParams is null (YouTube served
+ *      the sign-in modal — the session expired),
+ *   2. broker (comment-reply; the UI path needs the parent text),
+ *   3. LOCAL (the honest WebFlix store — the shadow parent anchors the
+ *      YouTube thread; local:true disclosure).
+ */
 export async function proxyCommentReply(
   videoId: string,
   parentId: string,
   text: string,
   viewer: CommentViewer,
-  parentText?: string
-): Promise<CommentDto & { ok: true; effect: string; path?: string }> {
+  parentText?: string,
+  opts: CommentWriteOpts = {}
+): Promise<CommentWriteResult> {
+  if (opts.replyParams && directAuthConfigured()) {
+    const direct = await createReply(videoId, opts.replyParams, text);
+    if (direct.ok) {
+      return synthComment(videoId, text, viewer, parentId, "direct");
+    }
+  }
   const r = await brokerAction(
     "comment-reply",
     { commentId: parentId, videoId },
     { text, ...(parentText ? { commentText: parentText } : {}) }
   );
-  if (!ok(r)) throw fail(r);
-  return synthComment(videoId, text, viewer, parentId, r.path ?? "ui");
+  if (ok(r)) return synthComment(videoId, text, viewer, parentId, r.path ?? "ui");
+  // both YouTube tiers refused → the honest local rung
+  if (opts.sessionUser) {
+    return localRung({ videoId, text, parentId, parentText, opts });
+  }
+  throw fail(r);
 }
 
 export interface CommentLikeRequest {

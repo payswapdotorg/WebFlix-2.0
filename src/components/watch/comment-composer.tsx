@@ -14,6 +14,12 @@
  *  - public mode (operator session not configured) → the "Comment..."
  *    affordance → "Sign in to continue to comment" dialog.
  * Never a fake write, either way.
+ *
+ * WFX2-P6-CR: `viewer` is nullable (anonymous viewers still read); the
+ * submit forwards the parent's live replyParams + the watch payload's
+ * video snapshot (the direct + local rungs' parameters); a local:true
+ * response (the honest WebFlix store — never claims a YouTube write) gets
+ * the disclosed "posted on WebFlix" success toast.
  */
 import { useRef, useState } from "react";
 import Link from "next/link";
@@ -32,7 +38,7 @@ import { EmojiPicker } from "./emoji-picker";
 import { cn } from "@/lib/utils";
 import { post } from "@/lib/watch/client";
 import { signInHref } from "@/lib/auth/client";
-import type { CommentDto, ViewerDto } from "@/lib/watch/types";
+import type { CommentDto, CommentVideoSnapshotDto, ViewerDto } from "@/lib/watch/types";
 
 /** YouTube's comment-length limit. */
 export const COMMENT_MAX_LENGTH = 10_000;
@@ -41,9 +47,11 @@ export function CommentComposer({
   videoId,
   parentId,
   parentText,
+  replyParams,
   viewer,
   operatorSession = true,
   guest = false,
+  video,
   placeholder = "Comment...",
   submitLabel = "Comment",
   autoFocus,
@@ -56,11 +64,17 @@ export function CommentComposer({
   /** the parent comment's text — lets the broker locate it in the YouTube
    * DOM for the reply's UI path (WFX2-A-W) */
   parentText?: string;
-  viewer: ViewerDto;
+  /** WFX2-P6-CR: the parent's live replyParams — the direct reply rung's
+   * wire parameter (null when YouTube served the sign-in modal) */
+  replyParams?: string | null;
+  /** WFX2-P6-CR: nullable — anonymous viewers get the gate states below */
+  viewer: ViewerDto | null;
   /** false in public mode → the signed-out affordance (YouTube parity) */
   operatorSession?: boolean;
   /** WFX2-P2-AU: no WebFlix account session → the "Sign in to comment" box */
   guest?: boolean;
+  /** WFX2-P6-CR: the watch payload's snapshot (the local rung's shadow rows) */
+  video?: CommentVideoSnapshotDto;
   placeholder?: string;
   submitLabel?: string;
   autoFocus?: boolean;
@@ -103,15 +117,22 @@ export function CommentComposer({
     if (!trimmed || busy) return;
     setBusy(true);
     try {
-      const created = await post<CommentDto>(`/api/comments`, {
+      const created = await post<CommentDto & { local?: boolean }>(`/api/comments`, {
         videoId,
         body: trimmed,
         parentId,
         parentText,
+        ...(replyParams ? { replyParams } : {}),
+        ...(video ? { video } : {}),
       });
       onSubmitted(created);
       setBody("");
       if (taRef.current) taRef.current.style.height = "auto";
+      // WFX2-P6-CR: disclose the local store's origin honestly; YouTube-path
+      // writes keep their existing (silent) success behavior
+      if (created.local) {
+        toast.success(parentId ? "Reply posted on WebFlix" : "Comment posted on WebFlix");
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to post comment");
     } finally {
@@ -190,8 +211,8 @@ export function CommentComposer({
   return (
     <div className="flex w-full gap-3">
       <Avatar className={cn(compact ? "size-6" : "size-9 sm:size-10")}>
-        <AvatarImage src={viewer.avatarUrl} alt="" />
-        <AvatarFallback>{viewer.name.slice(0, 1).toUpperCase()}</AvatarFallback>
+        <AvatarImage src={viewer?.avatarUrl ?? ""} alt="" />
+        <AvatarFallback>{(viewer?.name ?? "?").slice(0, 1).toUpperCase()}</AvatarFallback>
       </Avatar>
       <div className="min-w-0 flex-1">
         <div className="flex items-center border-b border-border pb-1.5 transition focus-within:border-foreground">

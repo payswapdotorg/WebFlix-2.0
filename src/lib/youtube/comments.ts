@@ -16,6 +16,10 @@
  *    heartState (TOOLBAR_HEART_STATE_HEARTED — creator hearts) and likeState
  *    (TOOLBAR_LIKE_STATE_LIKE/DISLIKE — the session viewer's own rating),
  *    keyed by commentViewModel.toolbarStateKey.
+ *  - WFX2-P6-CR: engagementToolbarSurfaceEntityPayload (same mutations)
+ *    carries replyCommand.innertubeCommand.createCommentEndpoint
+ *    .createCommentParams — the direct reply rung's wire parameter, keyed by
+ *    commentViewModel.toolbarSurfaceKey (absent → sign-in modal → null DTO).
  *  - sort: commentsHeaderRenderer.sortMenu.sortFilterSubMenuRenderer
  *    .subMenuItems[{title:"Top"|"Newest", serviceEndpoint.continuationCommand.token}]
  *  - replies: commentThreadRenderer.replies.commentRepliesRenderer.subThreads[0]
@@ -69,6 +73,27 @@ function toolbarStatesFrom(response: unknown): ToolbarStates {
   return { like, hearted };
 }
 
+/**
+ * WFX2-P6-CR — replyParams per toolbarSurfaceKey, from the toolbar SURFACE
+ * mutations: `.replyCommand.innertubeCommand.createCommentEndpoint
+ * .createCommentParams` (the direct reply rung's wire parameter, researched
+ * from YouTube.js and verified against the live payload shape). With the
+ * operator session expired YouTube serves the sign-in modal instead
+ * (`prepareAccountCommand`) — then the surface simply carries no
+ * replyCommand and this map stays empty for that key (honest null DTOs).
+ */
+function replyParamsFrom(response: unknown): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const surface of walkTree(response, "engagementToolbarSurfaceEntityPayload")) {
+    const key = surface?.key;
+    const params =
+      surface?.replyCommand?.innertubeCommand?.createCommentEndpoint?.createCommentParams;
+    if (typeof key !== "string" || !key) continue;
+    if (typeof params === "string" && params) out.set(key, params);
+  }
+  return out;
+}
+
 /** Pure mapper for one comments continuation page. */
 export function mapCommentsPage(response: unknown, parentId: string | null): CommentsPage {
   // entity payloads keyed for lookup
@@ -78,6 +103,8 @@ export function mapCommentsPage(response: unknown, parentId: string | null): Com
   }
   // toolbar states (creator heart + viewer like — the response's own state)
   const toolbar = toolbarStatesFrom(response);
+  // replyParams per toolbarSurfaceKey (WFX2-P6-CR — the direct reply rung)
+  const replyParams = replyParamsFrom(response);
 
   const threads: any[] = [];
   let nextCursor: string | null = null;
@@ -111,7 +138,7 @@ export function mapCommentsPage(response: unknown, parentId: string | null): Com
   for (const thread of threads) {
     const cvm = thread?.commentViewModel?.commentViewModel ?? thread?.commentViewModel ?? {};
     const entity = entities.get(cvm?.commentKey ?? "") ?? null;
-    const dto = mapCommentEntity(entity, cvm, thread, parentId, toolbar);
+    const dto = mapCommentEntity(entity, cvm, thread, parentId, toolbar, replyParams);
     if (dto) items.push(dto);
   }
 
@@ -123,7 +150,8 @@ function mapCommentEntity(
   cvm: any,
   thread: any,
   parentId: string | null,
-  toolbar: ToolbarStates
+  toolbar: ToolbarStates,
+  replyParams: Map<string, string>
 ): CommentDto | null {
   const id = entity?.properties?.commentId ?? cvm?.commentId;
   if (typeof id !== "string" || !id) return null;
@@ -188,6 +216,9 @@ function mapCommentEntity(
     replies: undefined,
     replyNextCursor: null,
     repliesToken,
+    // WFX2-P6-CR: the direct reply rung's parameter (null when YouTube
+    // serves the sign-in modal — session expired — or the payload has none)
+    replyParams: replyParams.get(cvm?.toolbarSurfaceKey ?? "") ?? null,
   };
 }
 
