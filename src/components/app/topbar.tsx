@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Flame, Menu, Mic, Search, Video } from "lucide-react";
+import { Flame, Menu, Mic, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -11,6 +11,7 @@ import { WebFlixLogo } from "./logo";
 import { ThemeToggle } from "./theme-toggle";
 import { NotificationsBell } from "./notifications-bell";
 import { AccountMenu } from "./account-menu";
+import { CreateMenu } from "./create-menu";
 import { VoiceSearchDialog } from "./voice-search";
 import { SidebarNav } from "./sidebar";
 import { useSidebar } from "@/lib/sidebar-store";
@@ -146,31 +147,13 @@ export function Topbar() {
         <Search className="size-5" />
       </Button>
 
-      {/* right: actions */}
+      {/* right: actions — youtube.com order: CREATE, then the rest (the
+          P6-UP pill replaces the old "Upload video" text-link + mobile icon) */}
       <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
-        <Button
-          asChild
-          variant="ghost"
-          className="hidden rounded-full px-3 text-sm font-medium md:inline-flex"
-        >
-          <Link href="/upload" aria-label="Upload video">
-            <Video className="mr-2 size-5" /> Upload video
-          </Link>
-        </Button>
+        <CreateMenu />
         <Button asChild variant="ghost" size="icon" className="rounded-full" title="Trending">
           <Link href="/trending" aria-label="Trending">
             <Flame className="size-5" />
-          </Link>
-        </Button>
-        <Button
-          asChild
-          variant="ghost"
-          size="icon"
-          className="rounded-full md:hidden"
-          title="Upload video"
-        >
-          <Link href="/upload" aria-label="Upload video">
-            <Video className="size-5" />
           </Link>
         </Button>
         <NotificationsBell />

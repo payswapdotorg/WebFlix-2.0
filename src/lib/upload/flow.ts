@@ -3,6 +3,12 @@
  * /api/upload/execute route returns (pure — the view drives it, the tests walk
  * it; no fetch, no broker import).
  *
+ * WFX2-P6-UP — the state gained the wizard's step ladder + the Checks
+ * animation state (YouTube's studio upload dialog). Strictly ADDITIVE: the
+ * phase names and every existing event keep their exact semantics — the API
+ * paths (/api/upload, /stage, /execute) and the honest ladder below are
+ * untouched.
+ *
  * The honest ladder (never a fake success):
  *   idle → staging → executing → published   (broker confirmed the publish —
  *                                             verified, or honestly
@@ -49,8 +55,27 @@ export type UploadFlowPhase =
   | "fallback"
   | "error";
 
+/**
+ * WFX2-P6-UP — the wizard's step ladder (YouTube's studio upload dialog):
+ *   0 = the drag-and-drop file target (no dialog yet)
+ *   1 = Details (title + description — Next needs a non-empty title)
+ *   2 = Video elements (tags + the honest WebFlix/hand-off fields)
+ *   3 = Checks (the local file/metadata validation animation)
+ *   4 = Visibility (Private/Unlisted/Public cards + Save)
+ */
+export type UploadWizardStep = 0 | 1 | 2 | 3 | 4;
+
+/** The Checks step's honest animation state — "passed" means the LOCAL
+ * validation ran (file + metadata); YouTube's copyright checks never run
+ * here and are never claimed to. */
+export type UploadChecksState = "idle" | "running" | "passed";
+
 export interface UploadFlowState {
   phase: UploadFlowPhase;
+  /** the wizard's current step (P6-UP; 0 until a file is picked) */
+  step: UploadWizardStep;
+  /** the Checks step's animation state (P6-UP) */
+  checks: UploadChecksState;
   fileName: string | null;
   sizeBytes: number | null;
   stageId: string | null;
@@ -61,6 +86,8 @@ export interface UploadFlowState {
 export function initialUploadFlowState(): UploadFlowState {
   return {
     phase: "idle",
+    step: 0,
+    checks: "idle",
     fileName: null,
     sizeBytes: null,
     stageId: null,
@@ -72,6 +99,10 @@ export function initialUploadFlowState(): UploadFlowState {
 export type UploadFlowEvent =
   | { type: "file-picked"; fileName: string; sizeBytes: number }
   | { type: "file-cleared" }
+  | { type: "step-next" }
+  | { type: "step-back" }
+  | { type: "step-jump"; to: UploadWizardStep }
+  | { type: "checks-completed" }
   | { type: "publish-started" }
   | { type: "stage-succeeded"; stageId: string }
   | { type: "stage-failed"; error: string }
@@ -86,13 +117,38 @@ export function uploadFlowNext(
 ): UploadFlowState {
   switch (event.type) {
     case "file-picked":
+      // a fresh file opens the dialog at Details (YouTube's behavior) and
+      // resets any prior terminal state — a new drive may start
       return {
         ...initialUploadFlowState(),
+        step: 1,
         fileName: event.fileName,
         sizeBytes: event.sizeBytes,
       };
     case "file-cleared":
       return initialUploadFlowState();
+    case "step-next": {
+      const step = Math.min(4, state.step + 1) as UploadWizardStep;
+      // stepping INTO Checks starts its animation; other steps keep the state
+      return { ...state, step, checks: step === 3 ? "running" : state.checks };
+    }
+    case "step-back": {
+      const step = Math.max(1, state.step - 1) as UploadWizardStep;
+      // backing below Checks resets its animation (a re-entry re-runs it)
+      return { ...state, step, checks: step < 3 ? "idle" : state.checks };
+    }
+    case "step-jump": {
+      // the header chips jump BACKWARD only (forward needs each step's Next)
+      if (event.to < 1 || event.to >= state.step) return state;
+      return {
+        ...state,
+        step: event.to,
+        checks: event.to < 3 ? "idle" : state.checks,
+      };
+    }
+    case "checks-completed":
+      // the honest auto-advance: the local validation finished → Visibility
+      return { ...state, checks: "passed", step: 4 };
     case "publish-started":
       return { ...state, phase: "staging", result: null, error: null };
     case "stage-succeeded":
@@ -117,7 +173,9 @@ export function uploadFlowNext(
   }
 }
 
-/** The Publish button's honest gate: a staged-capable file + a non-empty title. */
+/** The Publish/Save button's honest gate: a staged-capable file + a
+ * non-empty title, from a resting phase (the wizard's Save on the Visibility
+ * step rides exactly this rule). */
 export function canPublish(state: UploadFlowState, title: string): boolean {
   return (
     state.fileName !== null &&
@@ -126,3 +184,17 @@ export function canPublish(state: UploadFlowState, title: string): boolean {
     (state.phase === "idle" || state.phase === "error" || state.phase === "fallback")
   );
 }
+
+/** The Details step's honest gate — YouTube refuses to advance without a
+ * title; so does the wizard's Next (the disabled button says why). */
+export function detailsStepReady(title: string): boolean {
+  return title.trim().length > 0;
+}
+
+/** The wizard step's display names (the header chips + the a11y labels). */
+export const UPLOAD_STEPS: readonly { id: UploadWizardStep; label: string }[] = [
+  { id: 1, label: "Details" },
+  { id: 2, label: "Video elements" },
+  { id: 3, label: "Checks" },
+  { id: 4, label: "Visibility" },
+];
