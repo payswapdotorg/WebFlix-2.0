@@ -11,6 +11,18 @@
  *    modal state, never fabricated tiers);
  *  - the walled tab honest degrade ({tab, walled: true} — HTTP 200).
  *
+ * WFX2-P6-CH — the Videos tab's sort chips:
+ *  - mapChannelSortChips: both live-verified chip-bar shapes (the 2026
+ *    chipViewModel.tapCommand.innertubeCommand.continuationCommand.token
+ *    form + the legacy chipCloudChipRenderer fallback), label-dedup, dead
+ *    chips never surface, no chip bar → [];
+ *  - the wiring: ?tab=videos surfaces the payload's own chip bar;
+ *    ?tab=videos&chip=<token> refetches via browse {continuation} (the
+ *    re-marked bar + the sorted grid; each chip token its own cache entry);
+ *    absent chip bar → sortChips stays absent (honest omission);
+ *  - the page DTO (/api/channel/[handle]) carries the videos browse's chips
+ *    and the BARE handle (the doubled-@ fix).
+ *
  * Fixture bytes via the test-only setUpstream() seam (lane law — never the
  * network).
  */
@@ -21,6 +33,7 @@ import { setUpstream } from "@/lib/youtube/innertube";
 import { clearCache } from "@/lib/youtube/cache";
 import { GET as tabRoute } from "@/app/api/channel/[handle]/tab/route";
 import { GET as joinRoute } from "@/app/api/channel/[handle]/join/route";
+import { GET as channelRoute } from "@/app/api/channel/[handle]/route";
 import {
   mapPlaylistLockup,
   mapBackstagePost,
@@ -30,6 +43,7 @@ import {
   extractRedirectTarget,
   aboutContinuationToken,
   tabParamFromResponse,
+  mapChannelSortChips,
 } from "@/lib/youtube/channel-tabs";
 import { channelJoinable, channelTabsFromResponse } from "@/lib/youtube/mappers";
 
@@ -318,8 +332,329 @@ describe("GET /api/channel/[handle]/tab — per-tab browse", () => {
 });
 
 // ---------------------------------------------------------------------------
-// the Join route — the honest membership degrade
+// WFX2-P6-CH — the Videos tab's sort chips
 // ---------------------------------------------------------------------------
+
+/**
+ * A SYNTHETIC chip bar injected on the real sanitized capture — the
+ * live-verified 2026 shape (richGridRenderer.header.chipBarViewModel
+ * .chips[].chipViewModel with tapCommand.innertubeCommand
+ * .continuationCommand.token; see ChannelSortChipDTO in types.ts). The
+ * tokens are shape-real placeholders ("SORT_LATEST" family); at runtime the
+ * tokens come from the live payload itself.
+ */
+function withChipBar(base: any, selected: string): any {
+  const clone = JSON.parse(JSON.stringify(base));
+  const chips = ["Latest", "Popular", "Oldest"].map((label) => ({
+    chipViewModel: {
+      text: label,
+      selected: label === selected,
+      tapCommand: {
+        innertubeCommand: {
+          continuationCommand: { token: `SORT_${label.toUpperCase()}` },
+        },
+      },
+    },
+  }));
+  const tabs = clone.contents.twoColumnBrowseResultsRenderer.tabs;
+  const videosTab = tabs.find((t: any) => t?.tabRenderer?.title === "Videos");
+  videosTab.tabRenderer.content = {
+    richGridRenderer: { header: { chipBarViewModel: { chips } }, contents: [] },
+  };
+  return clone;
+}
+
+/** The real capture with the upstream header's handle text replaced (the
+ * doubled-@ forms the live bug carried: "@name" / "@/name"). */
+function withUpstreamHandle(base: any, handle: string): any {
+  const clone = JSON.parse(JSON.stringify(base));
+  const rows =
+    clone.header.pageHeaderRenderer.content.pageHeaderViewModel.metadata.contentMetadataViewModel
+      .metadataRows;
+  for (const row of rows) {
+    for (const part of row?.metadataParts ?? []) {
+      if (String(part?.text?.content ?? "").startsWith("@")) {
+        part.text.content = handle;
+        return clone;
+      }
+    }
+  }
+  return clone;
+}
+
+describe("mapChannelSortChips (WFX2-P6-CH — both chip-bar shapes)", () => {
+  test("the 2026 chipViewModel shape maps: label, token, selected marker, document order", () => {
+    const response = withChipBar(load("channel_rickastley"), "Latest");
+    const chips = mapChannelSortChips(response);
+    expect(chips).toHaveLength(3);
+    expect(chips.map((c) => c.label)).toEqual(["Latest", "Popular", "Oldest"]);
+    expect(chips[0]).toMatchObject({ label: "Latest", token: "SORT_LATEST", selected: true });
+    expect(chips[1]).toMatchObject({ label: "Popular", token: "SORT_POPULAR", selected: false });
+    expect(chips[2]).toMatchObject({ label: "Oldest", token: "SORT_OLDEST", selected: false });
+  });
+
+  test("the legacy chipCloudChipRenderer shape maps (isSelected marker, runs text)", () => {
+    const legacy = {
+      feedFilterChipBarRenderer: {
+        contents: [
+          {
+            chipCloudChipRenderer: {
+              text: { simpleText: "Latest" },
+              isSelected: true,
+              navigationEndpoint: { continuationCommand: { token: "LEG_LATEST" } },
+            },
+          },
+          {
+            chipCloudChipRenderer: {
+              text: { runs: [{ text: "Popular" }] },
+              navigationEndpoint: { continuationCommand: { token: "LEG_POPULAR" } },
+            },
+          },
+        ],
+      },
+    };
+    expect(mapChannelSortChips(legacy)).toEqual([
+      { label: "Latest", token: "LEG_LATEST", selected: true },
+      { label: "Popular", token: "LEG_POPULAR", selected: false },
+    ]);
+  });
+
+  test("dead chips never surface (no token / no label) + label dedup across shapes", () => {
+    const response = {
+      richGridRenderer: {
+        header: {
+          chipBarViewModel: {
+            chips: [
+              {
+                chipViewModel: {
+                  text: "Latest",
+                  selected: true,
+                  tapCommand: {
+                    innertubeCommand: { continuationCommand: { token: "T1" } },
+                  },
+                },
+              },
+              { chipViewModel: { text: "Popular" } }, // no token → dead
+              {
+                chipViewModel: {
+                  // no label → dead
+                  tapCommand: { innertubeCommand: { continuationCommand: { token: "T2" } } },
+                },
+              },
+              {
+                chipViewModel: {
+                  text: "Latest", // duplicate label → deduped
+                  tapCommand: {
+                    innertubeCommand: { continuationCommand: { token: "T3" } },
+                  },
+                },
+              },
+            ],
+          },
+        },
+      },
+    };
+    expect(mapChannelSortChips(response)).toEqual([
+      { label: "Latest", token: "T1", selected: true },
+    ]);
+  });
+
+  test("no chip bar → [] (the honest empty — the UI hides the chip row)", () => {
+    expect(mapChannelSortChips(load("channel_rickastley"))).toEqual([]);
+    expect(mapChannelSortChips({})).toEqual([]);
+    expect(mapChannelSortChips({ contents: { twoColumnBrowseResultsRenderer: { tabs: [] } } })).toEqual([]);
+  });
+});
+
+describe("GET /api/channel/[handle]/tab — the sort-chip wiring (WFX2-P6-CH)", () => {
+  /** Chip-bearing upstream: the videos browse answers the chip bar; a
+   * continuation answers the re-marked bar (the sorted grid). */
+  function chipFixtureUpstream() {
+    const recorded: Recorded[] = [];
+    const channel = load("channel_rickastley");
+    const videosLatest = withChipBar(channel, "Latest");
+    const videosPopular = withChipBar(channel, "Popular");
+
+    const htmlFor = (data: unknown) =>
+      `<!doctype html><html><head></head><body><script>var ytInitialData = ${JSON.stringify(
+        data
+      )};</script></body></html>`;
+
+    const impl = async (url: string, init?: RequestInit): Promise<Response> => {
+      const body = init?.body ? JSON.parse(String(init.body)) : null;
+      recorded.push({ url, body });
+      const json = (data: unknown) =>
+        new Response(JSON.stringify(data), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+
+      if (url.includes("/youtubei/v1/browse")) {
+        // the clicked chip's own continuation (browse {continuation})
+        if (body?.continuation) {
+          return json(String(body.continuation) === "SORT_POPULAR" ? videosPopular : videosLatest);
+        }
+        const params = String(body?.params ?? "");
+        if (params.startsWith("EgZ2aWRlb3")) return json(videosLatest); // the videos tab
+        return json(channel); // channel home
+      }
+      // SSR channel page (the @handle resolution path)
+      if (url.includes("youtube.com/@")) {
+        return new Response(htmlFor(channel), {
+          status: 200,
+          headers: { "Content-Type": "text/html" },
+        });
+      }
+      return new Response("not found", { status: 404 });
+    };
+    return { impl, recorded };
+  }
+
+  let chipUpstream: ReturnType<typeof chipFixtureUpstream>;
+
+  beforeEach(() => {
+    chipUpstream = chipFixtureUpstream();
+    setUpstream(chipUpstream.impl);
+  });
+
+  test("?tab=videos surfaces the payload's own chip bar (Latest selected on the default fetch)", async () => {
+    const res = await tabRoute(
+      new Request("http://localhost/api/channel/@RickAstleyYT/tab?tab=videos"),
+      tabCtx("@RickAstleyYT")
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.tab).toBe("videos");
+    expect(data.videos.length).toBeGreaterThan(0);
+    expect(data.sortChips).toHaveLength(3);
+    expect(data.sortChips[0]).toMatchObject({ label: "Latest", token: "SORT_LATEST", selected: true });
+    expect(data.sortChips[1]).toMatchObject({ label: "Popular", token: "SORT_POPULAR", selected: false });
+  });
+
+  test("?tab=videos&chip=SORT_POPULAR — browse {continuation}: the re-marked bar + the sorted grid", async () => {
+    const res = await tabRoute(
+      new Request("http://localhost/api/channel/@RickAstleyYT/tab?tab=videos&chip=SORT_POPULAR"),
+      tabCtx("@RickAstleyYT")
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.tab).toBe("videos");
+    expect(data.videos.length).toBeGreaterThan(0);
+    // the response re-marks the chosen sort
+    expect(data.sortChips).toHaveLength(3);
+    const popular = data.sortChips.find((c: any) => c.label === "Popular");
+    const latest = data.sortChips.find((c: any) => c.label === "Latest");
+    expect(popular.selected).toBe(true);
+    expect(latest.selected).toBe(false);
+    // the fetch was the chip's own continuation (no browseId, no params)
+    const cont = chipUpstream.recorded.find(
+      (r) => r.url.includes("/youtubei/v1/browse") && r.body?.continuation
+    );
+    expect(cont).toBeDefined();
+    expect(cont!.body.continuation).toBe("SORT_POPULAR");
+    expect(cont!.body.browseId).toBeUndefined();
+    expect(cont!.body.params).toBeUndefined();
+  });
+
+  test("each chip token is its own cache entry (a chip read never aliases the default tab)", async () => {
+    await tabRoute(
+      new Request("http://localhost/api/channel/@RickAstleyYT/tab?tab=videos"),
+      tabCtx("@RickAstleyYT")
+    );
+    const afterDefault = chipUpstream.recorded.length;
+    // the default entry is cached, but the chip read must still browse
+    await tabRoute(
+      new Request("http://localhost/api/channel/@RickAstleyYT/tab?tab=videos&chip=SORT_POPULAR"),
+      tabCtx("@RickAstleyYT")
+    );
+    const contCalls = chipUpstream.recorded.filter(
+      (r) => r.url.includes("/youtubei/v1/browse") && r.body?.continuation
+    );
+    expect(contCalls).toHaveLength(1);
+    // and the same chip read is cached on repeat (no new upstream calls)
+    const afterChip = chipUpstream.recorded.length;
+    const again = await tabRoute(
+      new Request("http://localhost/api/channel/@RickAstleyYT/tab?tab=videos&chip=SORT_POPULAR"),
+      tabCtx("@RickAstleyYT")
+    );
+    expect(again.status).toBe(200);
+    expect(chipUpstream.recorded.length).toBe(afterChip);
+    expect(afterChip).toBeGreaterThan(afterDefault);
+  });
+
+  test("no chip bar upstream → sortChips stays absent (honest omission — never fabricated chips)", async () => {
+    // the default fixture upstream (no chip bar anywhere in the payload)
+    setUpstream(fixtureUpstream().impl);
+    const res = await tabRoute(
+      new Request("http://localhost/api/channel/@RickAstleyYT/tab?tab=videos"),
+      tabCtx("@RickAstleyYT")
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.tab).toBe("videos");
+    expect(data.videos.length).toBeGreaterThan(0);
+    expect(data.sortChips).toBeUndefined();
+  });
+
+  test("the page DTO (/api/channel/[handle]) carries the videos browse's chips + the BARE handle", async () => {
+    // the upstream header carries the doubled-@ form the live bug showed
+    const channel = withUpstreamHandle(load("channel_rickastley"), "@/RickAstleyYT");
+    const videosLatest = withChipBar(channel, "Latest");
+    const recorded: Recorded[] = [];
+    const htmlFor = (data: unknown) =>
+      `<!doctype html><html><head></head><body><script>var ytInitialData = ${JSON.stringify(
+        data
+      )};</script></body></html>`;
+    const impl = async (url: string, init?: RequestInit): Promise<Response> => {
+      const body = init?.body ? JSON.parse(String(init.body)) : null;
+      recorded.push({ url, body });
+      const json = (data: unknown) =>
+        new Response(JSON.stringify(data), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      if (url.includes("/youtubei/v1/browse")) {
+        const params = String(body?.params ?? "");
+        if (params.startsWith("EgZ2aWRlb3")) return json(videosLatest); // the videos tab
+        return json(channel); // channel home
+      }
+      if (url.includes("youtube.com/@")) {
+        return new Response(htmlFor(channel), {
+          status: 200,
+          headers: { "Content-Type": "text/html" },
+        });
+      }
+      return new Response("not found", { status: 404 });
+    };
+    setUpstream(impl);
+
+    const res = await channelRoute(
+      new Request("http://localhost/api/channel/@RickAstleyYT"),
+      tabCtx("@RickAstleyYT")
+    );
+    expect(res.status).toBe(200);
+    const page = (await res.json()) as any;
+    // the bare-handle law: "@/RickAstleyYT" upstream → "RickAstleyYT" on the
+    // DTO (the page prefixes the single "@" itself)
+    expect(page.channel.handle).toBe("RickAstleyYT");
+    // the chips ride the same videos-tab browse the videos rail came from
+    expect(page.sortChips).toHaveLength(3);
+    expect(page.sortChips[0]).toMatchObject({ label: "Latest", token: "SORT_LATEST", selected: true });
+  });
+
+  test("the page DTO hides sortChips when the videos browse carries no chip bar", async () => {
+    // the default fixture upstream (no chip bar anywhere in the payload)
+    setUpstream(fixtureUpstream().impl);
+    const res = await channelRoute(
+      new Request("http://localhost/api/channel/@RickAstleyYT"),
+      tabCtx("@RickAstleyYT")
+    );
+    expect(res.status).toBe(200);
+    const page = (await res.json()) as any;
+    expect(page.channel.handle).toBe("RickAstleyYT");
+    expect(page.sortChips).toBeUndefined();
+  });
+});
 
 describe("GET /api/channel/[handle]/join — memberships (Join)", () => {
   test("channel without memberships → joinable: false", async () => {

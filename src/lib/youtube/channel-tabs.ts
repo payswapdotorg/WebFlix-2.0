@@ -50,6 +50,7 @@ import type {
   CommunityPollDTO,
   CommunityPollChoiceDTO,
   ChannelAboutDTO,
+  ChannelSortChipDTO,
 } from "@/lib/types";
 
 /** Live-verified tab-param constants (full forms — the fallback family). */
@@ -258,6 +259,51 @@ export function extractRedirectTarget(url: string): string | null {
 }
 
 /**
+ * WFX2-P6-CH — one chip's continuation token from either chip-bar shape:
+ *  - the 2026 view-model form: chipViewModel.tapCommand.innertubeCommand
+ *    .continuationCommand.token (live-verified on the channel Videos tab —
+ *    see ChannelSortChipDTO in types.ts);
+ *  - the legacy renderer form: chipCloudChipRenderer.navigationEndpoint
+ *    .continuationCommand.token (the trending chip family — the same
+ *    extractor law as trending-categories.ts, with the continuation token
+ *    where that page family carries browseEndpoint params).
+ */
+function chipContinuationToken(chip: any): string | null {
+  const token =
+    chip?.tapCommand?.innertubeCommand?.continuationCommand?.token ??
+    chip?.navigationEndpoint?.continuationCommand?.token ??
+    null;
+  return typeof token === "string" && token ? token : null;
+}
+
+/**
+ * The Videos tab's sort chips (Latest / Popular / Oldest) from a tab payload
+ * — both chip-bar shapes, document order, de-duplicated by label. A chip is
+ * surfaced ONLY when its label AND continuation token are really there
+ * (never a dead chip); a payload with no chip bar maps to [] (the UI hides
+ * the chip row — honest omission).
+ */
+export function mapChannelSortChips(response: unknown): ChannelSortChipDTO[] {
+  const out: ChannelSortChipDTO[] = [];
+  const seen = new Set<string>();
+  for (const chip of walkTree(response, "chipViewModel")) {
+    const label = typeof chip?.text === "string" ? chip.text : "";
+    const token = chipContinuationToken(chip);
+    if (!label || !token || seen.has(label)) continue;
+    seen.add(label);
+    out.push({ label, token, selected: chip?.selected === true });
+  }
+  for (const chip of walkTree(response, "chipCloudChipRenderer")) {
+    const label = runsText(chip?.text);
+    const token = chipContinuationToken(chip);
+    if (!label || !token || seen.has(label)) continue;
+    seen.add(label);
+    out.push({ label, token, selected: chip?.isSelected === true });
+  }
+  return out;
+}
+
+/**
  * The About panel's continuation token — the channel home response's
  * description "…more" tap (descriptionPreviewViewModel.rendererContext
  * .commandContext.onTap.showEngagementPanel) carries the panel whose
@@ -282,32 +328,54 @@ const unhealthy = (t: ChannelTabDTO) => t.walled === true;
 
 /** One channel tab's payload — the cutover resilience contract: the walled
  * marker is never cached; a last-good tab serves when the wall hits; cold +
- * walled → the honest `{tab, walled: true}` (HTTP 200 at the route). */
+ * walled → the honest `{tab, walled: true}` (HTTP 200 at the route).
+ *
+ * WFX2-P6-CH: `chip` (Videos tab only) swaps the fetch to the clicked chip's
+ * own continuation — browse {continuation} — whose response carries the
+ * sorted grid + the re-marked chip bar (the chosen sort selected). Each
+ * chip token is its own cache entry (Popular and Oldest must never alias
+ * Latest's cached grid). */
 export async function getChannelTab(
   handle: string,
-  tab: ChannelTabId
+  tab: ChannelTabId,
+  chip?: string
 ): Promise<ChannelTabDTO> {
   if (tab === "about") return getChannelAbout(handle);
   const cleaned = decodeURIComponent(handle).trim();
-  const key = `yt:channel:tab:${cleaned.toLowerCase()}:${tab}`;
-  return cachedResilient(key, TTL.FEED_MS, () => computeChannelTab(cleaned, tab), {
+  const chipToken = tab === "videos" && chip ? chip : null;
+  const key = chipToken
+    ? `yt:channel:tab:${cleaned.toLowerCase()}:videos:chip:${chipToken}`
+    : `yt:channel:tab:${cleaned.toLowerCase()}:${tab}`;
+  return cachedResilient(key, TTL.FEED_MS, () => computeChannelTab(cleaned, tab, chipToken), {
     isEmpty: (t: unknown) => unhealthy(t as ChannelTabDTO),
   });
 }
 
-async function computeChannelTab(cleaned: string, tab: ChannelTabId): Promise<ChannelTabDTO> {
+async function computeChannelTab(
+  cleaned: string,
+  tab: ChannelTabId,
+  chipToken: string | null
+): Promise<ChannelTabDTO> {
   try {
-    const lookup = await resolveChannel(cleaned);
-    if (!lookup || !lookup.header) return { tab, walled: true } as ChannelTabDTO;
-    const ownParam = tabParamFromResponse(lookup.homeResponse, tab);
-    const params =
-      ownParam ??
-      (tab === "home"
-        ? null
-        : CHANNEL_TAB_PARAMS[tab as keyof typeof CHANNEL_TAB_PARAMS] ?? null);
-    const response = await innertubeBrowse(
-      params ? { browseId: lookup.browseId, params } : { browseId: lookup.browseId }
-    );
+    let response: unknown;
+    if (chipToken) {
+      // WFX2-P6-CH — the clicked chip's own continuation (the live-verified
+      // chip fetch family: browse {continuation}); no channel resolve is
+      // needed — the token IS the addressed state
+      response = await innertubeBrowse({ continuation: chipToken });
+    } else {
+      const lookup = await resolveChannel(cleaned);
+      if (!lookup || !lookup.header) return { tab, walled: true } as ChannelTabDTO;
+      const ownParam = tabParamFromResponse(lookup.homeResponse, tab);
+      const params =
+        ownParam ??
+        (tab === "home"
+          ? null
+          : CHANNEL_TAB_PARAMS[tab as keyof typeof CHANNEL_TAB_PARAMS] ?? null);
+      response = await innertubeBrowse(
+        params ? { browseId: lookup.browseId, params } : { browseId: lookup.browseId }
+      );
+    }
     const joinable = channelJoinable(response);
     const dto: ChannelTabDTO = { tab, joinable };
     switch (tab) {
@@ -318,6 +386,14 @@ async function computeChannelTab(cleaned: string, tab: ChannelTabId): Promise<Ch
       case "videos":
       case "live":
         dto.videos = mapVideos(response, { dedupe: true, limit: 48 }).filter((v) => !v.isShort);
+        if (tab === "videos") {
+          // WFX2-P6-CH: the tab payload's own chip bar (the default fetch
+          // marks Latest; a chip-continuation fetch re-marks the chosen
+          // sort). Absent chip bar → the field stays absent (the UI hides
+          // the chip row — honest omission).
+          const chips = mapChannelSortChips(response);
+          if (chips.length > 0) dto.sortChips = chips;
+        }
         break;
       case "shorts":
         dto.shorts = mapShorts(response, 48);

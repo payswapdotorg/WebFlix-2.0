@@ -465,7 +465,9 @@ describe("GET /api/channel/[handle] — the search-compose rung", () => {
     expect(page.channel.composed).toBe(true);
     expect(page.channel.id).toBe(RICK_ID);
     expect(page.channel.name).toBe("Rick Astley");
-    expect(page.channel.handle).toBe("@RickAstleyYT");
+    // WFX2-P6-CH — the bare-handle law: the composed page DTO normalizes
+    // the resolution's "@RickAstleyYT" to the bare handle
+    expect(page.channel.handle).toBe("RickAstleyYT");
     // WFX2-CF-2: the header is watch-enriched — the resolved channel's top
     // video went through the unwalled watch path, whose `next` payload
     // carries the REAL subs/avatar/verified
@@ -558,7 +560,9 @@ describe("GET /api/channel/[handle] — the search-compose rung", () => {
     );
     expect(((await res.json()) as any).channel.composed).toBe(true);
     const now = Date.now();
-    const keys = [channelPageCacheKey("Rick Astley"), channelPageCacheKey("@RickAstleyYT")];
+    // WFX2-P6-CH: the real-handle family key is the BARE form now (the
+    // composed page DTO normalizes its handle)
+    const keys = [channelPageCacheKey("Rick Astley"), channelPageCacheKey("RickAstleyYT")];
     await until(() => keys.every((k) => rest.store.has(k))); // the L2 writes landed
     for (const key of keys) {
       const peeked = await cachePeek<{ page: unknown; walled: boolean }>(key);
@@ -609,7 +613,9 @@ describe("the watch-meta header enrichment (WFX2-CF-2)", () => {
     // the header carries the watch payload's REAL owner fields
     expect(page.channel.subscriberCount).toBe(4_550_000);
     expect(page.channel.subscriberCountText).toBe("4.55M subscribers");
-    expect(page.channel.handle).toBe("@RickAstleyYT");
+    // WFX2-P6-CH — the bare-handle law: the composed page DTO normalizes
+    // the resolution's "@RickAstleyYT" to the bare handle
+    expect(page.channel.handle).toBe("RickAstleyYT");
     expect(page.channel.avatarUrl).toContain("rick-compose-watch-synth-avatar");
     expect(page.channel.verified).toBe(true);
     // the fields no path carries stay honest — never invented
@@ -635,7 +641,9 @@ describe("the watch-meta header enrichment (WFX2-CF-2)", () => {
     expect(page.channel.subscriberCountText).toBeNull();
     // the search-carried fields survive untouched
     expect(page.channel.avatarUrl).toContain("rick-compose-synth-avatar");
-    expect(page.channel.handle).toBe("@RickAstleyYT");
+    // WFX2-P6-CH — the bare-handle law: the composed page DTO normalizes
+    // the resolution's "@RickAstleyYT" to the bare handle
+    expect(page.channel.handle).toBe("RickAstleyYT");
     expect(page.channel.verified).toBe(true);
   });
 
@@ -808,7 +816,9 @@ describe("GET /api/search — composed pages serve the channel rows", () => {
     expect(nameData.channels[0]).toMatchObject({
       id: RICK_ID,
       name: "Rick Astley",
-      handle: "@RickAstleyYT",
+      // WFX2-P6-CH — the bare-handle law: the composed page DTO normalizes
+      // its handle, and the family row passes it through
+      handle: "RickAstleyYT",
       // WFX2-CF-2: the watch-enriched composed page serves the rows — the
       // REAL subscriber data, not the honest-null degrade
       subscriberCount: 4_550_000,

@@ -28,6 +28,7 @@ import { formatSubscribers, formatCount, formatRelativeDate } from "@/lib/format
 import type {
   ChannelPageDTO,
   ChannelSearchDTO,
+  ChannelSortChipDTO,
   ChannelTabDTO,
   ChannelTabId,
 } from "@/lib/types";
@@ -57,6 +58,20 @@ interface JoinInfo {
  * - The "Search this channel" flow (WFX2-B-W) stays untouched.
  * - The walled channel read honest-degrades (walled: true) — a clear
  *   unavailable state, never a blank page.
+ *
+ * WFX2-P6-CH (channel YouTube-parity):
+ * - The Videos tab's sort chips (Latest / Popular / Oldest) render when the
+ *   tab payload carries them (absent → no chip row — honest omission);
+ *   clicking a chip refetches the grid via the chip's own continuation
+ *   token (?tab=videos&chip=<token> — browse {continuation}); the chip list
+ *   itself is reused, only the grid data changes; the response re-marks the
+ *   selected chip.
+ * - The header shows the BARE handle with a single leading "@" (the DTO
+ *   normalizes upstream "@name"/"@/name" forms — the doubled "@/@name" bug
+ *   is dead), the live subscriber text (typed-absent when the payload
+ *   carries none — composed pages show it only after the real watch
+ *   enrichment), the video count on the same line, and the truncated
+ *   description snippet with the "…more" affordance into the About tab.
  */
 
 const ALL_TABS: { id: ChannelTabId; label: string }[] = [
@@ -118,6 +133,17 @@ export default function ChannelPage() {
     joinOpen && handle ? `/api/channel/${encodeURIComponent(handle)}/join` : null
   );
 
+  // WFX2-P6-CH — the Videos tab's sort: the clicked chip's own continuation
+  // token (null → the tab's default order). The url swaps per chip so the
+  // useApi render-phase reset re-fetches; the chip list itself is REUSED
+  // (never refetched per click — only the grid data changes).
+  const [sortToken, setSortToken] = useState<string | null>(null);
+  const chipUrl =
+    tab === "videos" && sortToken && handle
+      ? `/api/channel/${encodeURIComponent(handle)}/tab?tab=videos&chip=${encodeURIComponent(sortToken)}`
+      : null;
+  const { data: chipData, loading: chipLoading, error: chipError } = useApi<ChannelTabDTO>(chipUrl);
+
   const availableTabs = useMemo<ChannelTabId[]>(() => {
     const own = data?.tabs?.length ? data.tabs : ALL_TABS.map((t) => t.id);
     return ALL_TABS.filter((t) => own.includes(t.id)).map((t) => t.id);
@@ -156,6 +182,17 @@ export default function ChannelPage() {
       setComposerOpen(true);
     }
   }, [composeDeepLink, tabData?.compose]);
+
+  // WFX2-P6-CH — the sort-chip bar's derived state (never synced): the chip
+  // LIST is the last chip-read's re-marked bar when it carried one, else the
+  // page payload's own bar; the selected chip is the clicked token while a
+  // chip read is in flight or landed (the response re-marks the same chip),
+  // else the payload's own selected marker (Latest on the default fetch).
+  const sortChips: ChannelSortChipDTO[] = (
+    chipData?.sortChips?.length ? chipData.sortChips : data?.sortChips
+  ) ?? [];
+  const selectedSortToken =
+    sortToken ?? (sortChips.find((c) => c.selected === true)?.token ?? null);
 
   async function toggleSubscribe() {
     if (!data) return;
@@ -243,73 +280,18 @@ export default function ChannelPage() {
             )}
           </div>
 
-          {/* header */}
-          <div className="flex flex-wrap items-center gap-4 px-4 py-4 sm:px-6">
-            <img
-              src={data.channel.avatarUrl}
-              alt={data.channel.name}
-              className="size-20 rounded-full object-cover sm:size-24"
-            />
-            <div className="min-w-0 flex-1">
-              <h1 className="flex items-center gap-2 text-xl font-bold sm:text-3xl">
-                <span className="truncate">{data.channel.name}</span>
-                {data.channel.verified && <VerifiedBadge className="size-5" />}
-              </h1>
-              <p className="mt-1 text-sm text-muted-foreground">
-                @/{data.channel.handle}
-                {/* WFX2-C-F: composed pages carry no subscriber data (the
-                    channel-read wall) — honest omission, never a fake 0 */}
-                {!data.channel.composed && (
-                  <>
-                    {" · "}
-                    <span className="font-medium text-foreground">
-                      {formatSubscribers(data.channel.subscriberCount)}
-                    </span>
-                  </>
-                )}{" "}
-                · {formatCount(data.channel.videoCount)} videos
-              </p>
-              <p className="mt-1 line-clamp-1 text-sm text-muted-foreground">
-                {data.channel.description}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              {data.channel.isOwner ? (
-                <Button asChild variant="secondary" className="rounded-full">
-                  <Link href="/studio">Your channel — open Studio</Link>
-                </Button>
-              ) : (
-                <>
-                  {data.joinable && (
-                    <Button
-                      onClick={() => setJoinOpen(true)}
-                      className="rounded-full"
-                      aria-label={`Join ${data.channel.name}`}
-                    >
-                      Join
-                    </Button>
-                  )}
-                  <Button
-                    onClick={toggleSubscribe}
-                    disabled={subscribing}
-                    className={`rounded-full ${
-                      data.channel.isSubscribed
-                        ? "bg-secondary text-foreground hover:bg-accent"
-                        : "bg-foreground text-background hover:bg-foreground/90"
-                    }`}
-                  >
-                    {data.channel.isSubscribed ? (
-                      <>
-                        <Bell className="mr-2 size-4" /> Subscribed
-                      </>
-                    ) : (
-                      "Subscribe"
-                    )}
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
+          {/* header (WFX2-P6-CH: the completed youtube.com composition —
+              name + verified badge, the bare handle with ONE leading "@",
+              live subscriber text + video count on the same line, the
+              truncated description snippet with the …more affordance) */}
+          <ChannelHeaderBlock
+            channel={data.channel}
+            joinable={data.joinable}
+            subscribing={subscribing}
+            onToggleSubscribe={toggleSubscribe}
+            onJoin={() => setJoinOpen(true)}
+            onMore={availableTabs.includes("about") ? () => selectTab("about") : null}
+          />
 
           {/* search-this-channel mode: results REPLACE the tab content (WFX2-B-W, untouched) */}
           {searchOpen ? (
@@ -427,7 +409,51 @@ export default function ChannelPage() {
               <div className="mt-6" role="tabpanel" aria-label={`${tab} tab`}>
                 {tab === "home" && <HomeTab data={data} />}
                 {tab === "videos" && (
-                  <VideosTab videos={data.videos} emptyNote="This channel hasn't uploaded any videos yet." />
+                  <div className="space-y-4">
+                    {/* WFX2-P6-CH — the sort-chip row: ONLY when the tab
+                        payload really carries chips (absent → no row —
+                        honest omission, never fabricated
+                        Latest/Popular/Oldest) */}
+                    {sortChips.length > 0 && (
+                      <SortChipBar
+                        chips={sortChips}
+                        selectedToken={selectedSortToken}
+                        onSelect={setSortToken}
+                        loading={chipLoading}
+                      />
+                    )}
+                    {sortToken === null ? (
+                      <VideosTab videos={data.videos} emptyNote="This channel hasn't uploaded any videos yet." />
+                    ) : chipLoading ? (
+                      <div
+                        className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4"
+                        aria-busy="true"
+                        aria-label="Loading sorted videos"
+                      >
+                        {Array.from({ length: 8 }).map((_, i) => (
+                          <div key={i} className="space-y-2">
+                            <Skeleton className="aspect-video w-full rounded-xl" />
+                            <Skeleton className="h-4 w-2/3" />
+                            <Skeleton className="h-3 w-1/3" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : chipError ? (
+                      <p className="py-10 text-center text-sm text-muted-foreground" role="alert">
+                        This sort is unavailable right now — {chipError}
+                      </p>
+                    ) : chipData?.walled ? (
+                      <p className="py-10 text-center text-sm text-muted-foreground" role="status">
+                        This tab&apos;s data is unavailable from this egress right now. A last-known copy
+                        serves here once one exists — nothing is fabricated.
+                      </p>
+                    ) : (
+                      <VideosTab
+                        videos={chipData?.videos ?? []}
+                        emptyNote="This channel has no videos in this order."
+                      />
+                    )}
+                  </div>
                 )}
                 {tab === "shorts" && <ShortsTab shorts={data.shorts} />}
                 {tab === "live" && (
@@ -452,12 +478,19 @@ export default function ChannelPage() {
                   />
                 )}
                 {tab === "community" && (
+                  /* WFX2-P6-CH — the broker family speaks the "@name" form:
+                     the DTO's bare handle is re-prefixed here (a UC… id
+                     fallback passes through as-is) */
                   <CommunityTabPanel
                     tabData={tabData}
                     tabLoading={tabLoading}
                     channelName={data.channel.name}
                     channelAvatarUrl={data.channel.avatarUrl}
-                    channelHandle={data.channel.handle}
+                    channelHandle={
+                      isChannelIdHandle(data.channel.handle)
+                        ? data.channel.handle
+                        : `@${data.channel.handle}`
+                    }
                     compose={tabData?.compose === true}
                     composerOpen={composerOpen}
                     onComposerOpen={setComposerOpen}
@@ -547,6 +580,174 @@ export default function ChannelPage() {
 }
 
 /* ------------------------------ tab bodies ------------------------------ */
+
+/**
+ * WFX2-P6-CH — does the (bare) handle stand for a "UC…" channel id? The
+ * header mapper falls back to the id when the payload carries no @handle;
+ * such a value is an id, not a handle, and renders as-is (never dressed up
+ * with a fake "@"). Exported for the component tests.
+ */
+export function isChannelIdHandle(handle: string): boolean {
+  return /^UC[\w-]{20,}$/.test(handle);
+}
+
+/**
+ * WFX2-P6-CH — the channel header block (youtube.com parity composition):
+ * avatar → name + verified badge (when the DTO carries one) → handle,
+ * subscriber count AND video count on the same line → the truncated
+ * description snippet with the "…more" affordance (into the About tab) →
+ * Subscribe/Join. Exported for the component tests.
+ *
+ * Honesty law: the subscriber segment renders ONLY when real data exists —
+ * the live passthrough text ("4.55M subscribers") wins; the parsed count
+ * formats only when the text is absent but the count is real; composed
+ * pages carry real text only after the watch enrichment, so before it BOTH
+ * are absent and the segment hides (typed-absent, never a fake
+ * "0 subscribers"). The description row hides entirely when the payload
+ * carries none.
+ */
+export function ChannelHeaderBlock({
+  channel,
+  joinable,
+  subscribing,
+  onToggleSubscribe,
+  onJoin,
+  onMore,
+}: {
+  channel: ChannelPageDTO["channel"];
+  joinable?: boolean;
+  subscribing: boolean;
+  onToggleSubscribe: () => void;
+  onJoin: () => void;
+  /** the "…more" description affordance — null when no About tab exists (hidden) */
+  onMore: (() => void) | null;
+}) {
+  // the bare-handle law: the DTO normalizes upstream "@name"/"@/name" forms,
+  // so the header prefixes the ONE "@" itself — the doubled "@/@name" the
+  // live bug showed can never render
+  const subscriberText =
+    channel.subscriberCountText ??
+    (channel.subscriberCount > 0 ? formatSubscribers(channel.subscriberCount) : null);
+  return (
+    <div className="flex flex-wrap items-center gap-4 px-4 py-4 sm:px-6">
+      <img
+        src={channel.avatarUrl}
+        alt={channel.name}
+        className="size-20 rounded-full object-cover sm:size-24"
+      />
+      <div className="min-w-0 flex-1">
+        <h1 className="flex items-center gap-2 text-xl font-bold sm:text-3xl">
+          <span className="truncate">{channel.name}</span>
+          {channel.verified && <VerifiedBadge className="size-5" />}
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {isChannelIdHandle(channel.handle) ? channel.handle : `@${channel.handle}`}
+          {subscriberText !== null && (
+            <>
+              {" · "}
+              <span className="font-medium text-foreground">{subscriberText}</span>
+            </>
+          )}{" "}
+          · {formatCount(channel.videoCount)} videos
+        </p>
+        {channel.description && (
+          <div className="mt-1 flex items-start gap-1">
+            <p className="line-clamp-1 text-sm text-muted-foreground">{channel.description}</p>
+            {onMore && (
+              <button
+                type="button"
+                onClick={onMore}
+                aria-label={`More about ${channel.name}`}
+                className="shrink-0 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+              >
+                …more
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+      <div className="flex items-center gap-2">
+        {channel.isOwner ? (
+          <Button asChild variant="secondary" className="rounded-full">
+            <Link href="/studio">Your channel — open Studio</Link>
+          </Button>
+        ) : (
+          <>
+            {joinable && (
+              <Button onClick={onJoin} className="rounded-full" aria-label={`Join ${channel.name}`}>
+                Join
+              </Button>
+            )}
+            <Button
+              onClick={onToggleSubscribe}
+              disabled={subscribing}
+              className={`rounded-full ${
+                channel.isSubscribed
+                  ? "bg-secondary text-foreground hover:bg-accent"
+                  : "bg-foreground text-background hover:bg-foreground/90"
+              }`}
+            >
+              {channel.isSubscribed ? (
+                <>
+                  <Bell className="mr-2 size-4" /> Subscribed
+                </>
+              ) : (
+                "Subscribe"
+              )}
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * WFX2-P6-CH — the Videos tab's sort-chip bar (youtube.com parity): one
+ * house-style pill per chip (Latest / Popular / Oldest), the selected chip
+ * visually marked (aria-pressed) + keyboard accessible (native buttons).
+ * Exported for the component tests.
+ */
+export function SortChipBar({
+  chips,
+  selectedToken,
+  onSelect,
+  loading,
+}: {
+  chips: ChannelSortChipDTO[];
+  /** the token of the chip that renders selected (null → none marked) */
+  selectedToken: string | null;
+  onSelect: (token: string) => void;
+  loading?: boolean;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="Sort videos"
+      aria-busy={loading ? true : undefined}
+      className="flex flex-wrap gap-2"
+    >
+      {chips.map((chip) => {
+        const selected = chip.token === selectedToken;
+        return (
+          <button
+            key={chip.token}
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onSelect(chip.token)}
+            className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+              selected
+                ? "bg-foreground text-background"
+                : "bg-secondary text-secondary-foreground hover:bg-accent hover:text-foreground"
+            }`}
+          >
+            {chip.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 function HomeTab({ data }: { data: ChannelPageDTO }) {
   return (

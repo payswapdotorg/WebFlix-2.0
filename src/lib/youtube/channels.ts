@@ -15,6 +15,7 @@ import { fetchYtInitialData } from "./ssr";
 import { cached, cachedResilient, TTL } from "./cache";
 import { cachePeek } from "./upstash-cache";
 import { composeChannelPage, storeComposedPage } from "./channel-compose";
+import { mapChannelSortChips } from "./channel-tabs";
 import { hasSession } from "./session";
 import {
   mapChannelHeader,
@@ -24,6 +25,7 @@ import {
   findFirst,
   channelTabsFromResponse,
   channelJoinable,
+  bareChannelHandle,
   type ChannelHeaderDTO,
 } from "./mappers";
 import type { ChannelPageDTO } from "@/lib/types";
@@ -127,10 +129,15 @@ export async function getChannelPage(handle: string): Promise<ChannelPageDTO | n
   }
 
   const header = lookup.header;
-  return {
+  const page: ChannelPageDTO = {
     channel: {
       id: header.id || lookup.browseId,
-      handle: header.handle || lookup.handle,
+      // WFX2-P6-CH — the bare-handle law: whatever @-prefixed form the
+      // upstream header (or the resolve fallback) carries, the page DTO
+      // hands every consumer a BARE handle ("@name"/"@/name"/"/ name" →
+      // "name"); the page UI prefixes the "@" itself, so the header can
+      // never show the doubled "@/@name" the live bug carried
+      handle: bareChannelHandle(header.handle || lookup.handle),
       name: header.name,
       avatarUrl: header.avatarUrl,
       verified: header.verified,
@@ -149,6 +156,14 @@ export async function getChannelPage(handle: string): Promise<ChannelPageDTO | n
     tabs: channelTabsFromResponse(lookup.homeResponse),
     joinable: channelJoinable(lookup.homeResponse),
   };
+  // WFX2-P6-CH: the Videos tab's own sort chips (Latest / Popular / Oldest)
+  // — parsed off the SAME videos-tab browse payload the videos rail came
+  // from. Surfaced ONLY when the payload really carries a chip bar: no
+  // chips upstream → the field stays absent (the UI hides the chip row —
+  // honest omission, never fabricated Latest/Popular/Oldest).
+  const sortChips = mapChannelSortChips(videosResponse);
+  if (sortChips.length > 0) page.sortChips = sortChips;
+  return page;
 }
 
 /**
