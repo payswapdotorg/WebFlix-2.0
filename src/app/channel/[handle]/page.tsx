@@ -31,15 +31,8 @@ import type {
   ChannelSortChipDTO,
   ChannelTabDTO,
   ChannelTabId,
+  ChannelJoinDTO,
 } from "@/lib/types";
-
-/** The join route's response shape. */
-interface JoinInfo {
-  joinable: boolean;
-  tiers: { title: string; priceText: string; perksText: string | null }[] | null;
-  signinRequired: boolean;
-  note: string | null;
-}
 
 /**
  * Channel page — YouTube deep parity (WFX2-B-S):
@@ -72,6 +65,18 @@ interface JoinInfo {
  *   carries none — composed pages show it only after the real watch
  *   enrichment), the video count on the same line, and the truncated
  *   description snippet with the "…more" affordance into the About tab.
+ *
+ * WFX2-P7-CH (the Membership tab + the Join sheet completion):
+ * - The Membership tab renders ONLY when the channel's own tab list carries
+ *   it AND the channel is joinable; its tiers come from the SAME join
+ *   surface the sheet walks (the shared memberships-panel helper — one
+ *   walk, no divergence), rendered YouTube-style: a "Join this channel"
+ *   header line + tier cards (title, priceText, perk rows split on
+ *   newlines/commas — null perksText → no perk rows, honest empty).
+ * - The Join sheet's tier cards each carry a "Join on YouTube" CTA — the
+ *   real channel's join page (bare-handle URL, external link) — with the
+ *   one-line honest explainer: checkout + payment happen on YouTube;
+ *   WebFlix shows the real tiers and never processes or fakes a payment.
  */
 
 const ALL_TABS: { id: ChannelTabId; label: string }[] = [
@@ -81,11 +86,24 @@ const ALL_TABS: { id: ChannelTabId; label: string }[] = [
   { id: "live", label: "Live" },
   { id: "playlists", label: "Playlists" },
   { id: "community", label: "Community" },
+  { id: "membership", label: "Membership" },
   { id: "about", label: "About" },
 ];
 
 /** Tabs whose first page is seeded from the main channel payload. */
 const SEEDED_TABS: ChannelTabId[] = ["home", "videos", "shorts"];
+
+/**
+ * WFX2-P7-CH — perksText → perk rows: split on newlines/commas, trim, drop
+ * empty rows (a null perksText never reaches here — no perk rows, the
+ * honest empty).
+ */
+function splitPerkRows(perksText: string): string[] {
+  return perksText
+    .split(/[\n,]+/)
+    .map((row) => row.trim())
+    .filter((row) => row.length > 0);
+}
 
 const tabStorageKey = (handle: string) => `wfx2:channel:tab:${handle}`;
 
@@ -129,7 +147,7 @@ export default function ChannelPage() {
   const [tab, setTab] = useState<ChannelTabId>(composeDeepLink ? "community" : "home");
   const [joinOpen, setJoinOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
-  const { data: joinInfo } = useApi<JoinInfo>(
+  const { data: joinInfo } = useApi<ChannelJoinDTO>(
     joinOpen && handle ? `/api/channel/${encodeURIComponent(handle)}/join` : null
   );
 
@@ -146,7 +164,17 @@ export default function ChannelPage() {
 
   const availableTabs = useMemo<ChannelTabId[]>(() => {
     const own = data?.tabs?.length ? data.tabs : ALL_TABS.map((t) => t.id);
-    return ALL_TABS.filter((t) => own.includes(t.id)).map((t) => t.id);
+    return ALL_TABS.filter((t) => {
+      // WFX2-P7-CH — the Membership tab renders ONLY when the channel's own
+      // tab list carries it AND the channel is really joinable (the Join
+      // button renderer) — never a guessed membership surface. The own-list
+      // check is explicit (never the ALL_TABS fallback), so a tabs-less
+      // payload never surfaces the tab.
+      if (t.id === "membership") {
+        return data?.tabs?.includes("membership") === true && data?.joinable === true;
+      }
+      return own.includes(t.id);
+    }).map((t) => t.id);
   }, [data]);
 
   // remember the last tab per channel: restore on load, persist on change
@@ -497,6 +525,12 @@ export default function ChannelPage() {
                     onCreated={reloadTab}
                   />
                 )}
+                {tab === "membership" && (
+                  /* WFX2-P7-CH — the Membership tab: the tier surface from the
+                     SAME join walk the sheet consumes (the tab route's
+                     membership branch → the shared helper) */
+                  <MembershipTabPanel tabData={tabData} tabLoading={tabLoading} />
+                )}
                 {tab === "about" && (
                   <LazyTab
                     tab="about"
@@ -518,7 +552,13 @@ export default function ChannelPage() {
         </>
       )}
 
-      {/* Join sheet — real tiers when reachable, honest degrade otherwise */}
+      {/* Join sheet — real tiers when reachable, honest degrade otherwise.
+          WFX2-P7-CH: each tier card carries its own "Join on YouTube" CTA
+          (the real channel's join page — bare handle, external link), with
+          the one-line honest explainer: checkout + payment happen on
+          YouTube; WebFlix shows the real tiers and never processes or fakes
+          a payment (the old in-app "Join" button is gone — it faked a
+          checkout this app never performs). */}
       <Sheet open={joinOpen} onOpenChange={setJoinOpen}>
         <SheetContent side="bottom" className="mx-auto max-h-[80vh] overflow-y-auto sm:max-w-md sm:rounded-t-2xl">
           <SheetHeader>
@@ -548,11 +588,26 @@ export default function ChannelPage() {
                     {tier.perksText && (
                       <p className="mt-1 text-xs text-muted-foreground">{tier.perksText}</p>
                     )}
+                    {data?.channel && (
+                      <Button asChild variant="secondary" className="mt-3 w-full rounded-full">
+                        <a
+                          href={`https://www.youtube.com/${data.channel.handle}/join`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`Join ${data.channel.name} on YouTube — ${tier.title}`}
+                        >
+                          Join on YouTube <ExternalLink className="size-4" aria-hidden="true" />
+                        </a>
+                      </Button>
+                    )}
                   </div>
                 ))}
-                <Button asChild className="w-full rounded-full">
-                  <a href="/account">Join</a>
-                </Button>
+                {data?.channel && (
+                  <p className="text-center text-xs text-muted-foreground" role="note">
+                    Checkout and payment happen on YouTube — WebFlix shows the real tiers and
+                    never processes or fakes a payment.
+                  </p>
+                )}
               </>
             )}
             {joinInfo?.signinRequired && (
@@ -944,6 +999,112 @@ function CommunityTabPanel({
       {source === "last-good" && (
         <p className="text-center text-[11px] text-muted-foreground" role="note">
           Serving the last-known copy of this Community tab.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * WFX2-P7-CH — the Membership tab panel (youtube.com parity): a "Join this
+ * channel" header line, then the REAL tier cards from the memberships panel
+ * (the channel's own tier order) — title, priceText, and the perk rows
+ * (perksText split on newlines/commas; null perksText → no perk rows, the
+ * honest empty).
+ *
+ * Honest states, verbatim the app's law: session absent → YouTube's own
+ * logged-out copy ("Sign in to become a member.") with the Join sheet's
+ * sign-in affordance (the /account pattern); tiers unreadable from the
+ * session → the honest note line; the walled/unavailable read → the tab
+ * family's standard degrade copy. NEVER a fabricated tier, NEVER a
+ * fabricated price — a tier row renders ONLY when the panel really
+ * carried it.
+ */
+function MembershipTabPanel({
+  tabData,
+  tabLoading,
+}: {
+  tabData: ChannelTabDTO | null;
+  tabLoading: boolean;
+}) {
+  if (tabLoading || !tabData) {
+    return (
+      <div
+        className="mx-auto grid max-w-5xl grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+        aria-busy="true"
+        aria-label="Loading membership tiers"
+      >
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-44 w-full rounded-xl" />
+        ))}
+      </div>
+    );
+  }
+  if (tabData.walled) {
+    return (
+      <p className="py-10 text-center text-sm text-muted-foreground" role="status">
+        This tab&apos;s data is unavailable from this egress right now. A last-known copy serves
+        here once one exists — nothing is fabricated.
+      </p>
+    );
+  }
+  const join = tabData.membership ?? null;
+  const tiers = join?.tiers ?? null;
+  const hasTiers = !!tiers && tiers.length > 0;
+  return (
+    <div className="mx-auto max-w-5xl">
+      <h2 className="text-base font-semibold">Join this channel</h2>
+      {hasTiers && (
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {tiers!.map((tier, i) => {
+            const perks = tier.perksText ? splitPerkRows(tier.perksText) : [];
+            return (
+              <div key={i} className="rounded-xl border border-border p-4">
+                <p className="text-sm font-semibold">{tier.title}</p>
+                <p className="mt-0.5 text-sm font-medium text-foreground">{tier.priceText}</p>
+                {perks.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {perks.map((perk, j) => (
+                      <li
+                        key={j}
+                        className="flex items-start gap-1.5 text-xs text-muted-foreground"
+                      >
+                        <Check className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                        <span>{perk}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {!hasTiers && join?.signinRequired && (
+        /* session absent — YouTube's own logged-out Join modal copy + the
+           sheet's sign-in affordance (the /account pattern) */
+        <div className="mt-4 max-w-sm space-y-3">
+          <p className="text-sm text-muted-foreground">{join.note}</p>
+          <p className="text-xs text-muted-foreground">
+            WebFlix joins act on the operator&apos;s YouTube session (single-tenant live
+            mode) — no session is configured right now.
+          </p>
+          <Button asChild className="w-full rounded-full">
+            <a href="/account">Sign in</a>
+          </Button>
+        </div>
+      )}
+      {!hasTiers && join && !join.signinRequired && join.joinable === false && (
+        <p className="mt-4 py-6 text-center text-sm text-muted-foreground">
+          This channel doesn&apos;t offer memberships.
+        </p>
+      )}
+      {!hasTiers && !join?.signinRequired && join?.joinable !== false && (
+        /* tiers unreadable from the session — the honest note line (never a
+           fabricated tier, never a fabricated price); join null (a malformed
+           payload) degrades to the same honest note */
+        <p className="mt-4 py-6 text-center text-sm text-muted-foreground">
+          {join?.note ?? "Membership tiers are not readable from this session right now."}
         </p>
       )}
     </div>

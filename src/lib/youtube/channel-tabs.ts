@@ -28,6 +28,11 @@
  *    offers memberships. Tier data requires the signed-in memberships panel
  *    (operator session) — public mode honestly reports `joinable` with no
  *    tiers (never fabricated).
+ *  - WFX2-P7-CH — the Membership tab: the channel's own tab list carries a
+ *    "Membership" tab title (TAB_TITLE_TO_ID maps it); the tab's tier data
+ *    rides the SAME join surface /join walks (getChannelJoin — the single
+ *    shared memberships-panel walk; getChannelMembershipTab is a thin shaper
+ *    over it, so the tab and the sheet can never diverge).
  */
 import { innertubeBrowse } from "./innertube";
 import { cachedResilient, TTL } from "./cache";
@@ -45,6 +50,8 @@ import {
 import type {
   ChannelTabDTO,
   ChannelTabId,
+  ChannelJoinDTO,
+  ChannelMembershipTierDTO,
   ChannelPlaylistDTO,
   CommunityPostDTO,
   CommunityPollDTO,
@@ -53,8 +60,15 @@ import type {
   ChannelSortChipDTO,
 } from "@/lib/types";
 
-/** Live-verified tab-param constants (full forms — the fallback family). */
-export const CHANNEL_TAB_PARAMS: Record<Exclude<ChannelTabId, "home" | "about">, string> = {
+// WFX2-P7-CH: ChannelJoinDTO moved to types.ts (ChannelTabDTO.membership
+// references it) — re-exported here so existing importers keep working.
+export type { ChannelJoinDTO };
+
+/** Live-verified tab-param constants (full forms — the fallback family).
+ * WFX2-P7-CH: "membership" has NO browse-tab param — its data rides the
+ * join surface (the shared memberships-panel walk), so it is excluded here
+ * and branches off in the tab route before getChannelTab. */
+export const CHANNEL_TAB_PARAMS: Record<Exclude<ChannelTabId, "home" | "about" | "membership">, string> = {
   videos: "EgZ2aWRlb3PyBgQKAjoA",
   shorts: "EgZzaG9ydHPyBgUKA5oBAA%3D%3D",
   live: "EgdzdHJlYW1z8gYECgJ6AA%3D%3D",
@@ -62,7 +76,9 @@ export const CHANNEL_TAB_PARAMS: Record<Exclude<ChannelTabId, "home" | "about">,
   community: "EgVwb3N0c_IGBAoCSgA%3D",
 };
 
-/** Map the response's tab titles to our tab ids (Community tab = "Posts"). */
+/** Map the response's tab titles to our tab ids (Community tab = "Posts").
+ * WFX2-P7-CH: "Membership" → the membership tab id, kept in lockstep with
+ * mappers.ts's TAB_TITLE_TO_ID (the tab list's source of truth). */
 const TAB_TITLE_TO_ID: Record<string, ChannelTabId> = {
   Home: "home",
   Videos: "videos",
@@ -71,6 +87,7 @@ const TAB_TITLE_TO_ID: Record<string, ChannelTabId> = {
   Playlists: "playlists",
   Posts: "community",
   Community: "community",
+  Membership: "membership",
 };
 /** The response-own tab param for one of our tab ids (null → fallback). */
 export function tabParamFromResponse(response: unknown, tab: ChannelTabId): string | null {
@@ -453,14 +470,9 @@ async function computeChannelAbout(cleaned: string): Promise<ChannelTabDTO> {
 // memberships (Join) — the join button renderer + the honest tier degrade
 // ---------------------------------------------------------------------------
 
-export interface ChannelJoinDTO {
-  joinable: boolean;
-  /** tier rows when genuinely reachable through the operator session */
-  tiers: { title: string; priceText: string; perksText: string | null }[] | null;
-  /** public mode: YouTube's own logged-out Join modal state */
-  signinRequired: boolean;
-  note: string | null;
-}
+/** The join surface's honest unavailable-channel note — the degrade marker
+ * getChannelMembershipTab recognizes to shape the standard walled tab. */
+const JOIN_CHANNEL_UNAVAILABLE_NOTE = "channel unavailable";
 
 /**
  * The Join surface (WFX2-B-S): `joinable` from the channel page's Join
@@ -470,6 +482,11 @@ export interface ChannelJoinDTO {
  * getMembershipsPanelCommand when signed in); public mode honestly reports
  * YouTube's own logged-out Join modal state ("Sign in to become a member"),
  * never fabricated tiers.
+ *
+ * WFX2-P7-CH: this IS the single shared memberships-panel walk — both the
+ * /join route and the Membership tab (getChannelMembershipTab below)
+ * consume THIS function (and its one cache entry), so the tab and the sheet
+ * can never diverge: one walk, one honest-state contract.
  */
 export async function getChannelJoin(handle: string): Promise<ChannelJoinDTO> {
   const cleaned = decodeURIComponent(handle).trim();
@@ -478,7 +495,7 @@ export async function getChannelJoin(handle: string): Promise<ChannelJoinDTO> {
     try {
       const lookup = await resolveChannel(cleaned);
       if (!lookup || !lookup.header) {
-        return { joinable: false, tiers: null, signinRequired, note: "channel unavailable" };
+        return { joinable: false, tiers: null, signinRequired, note: JOIN_CHANNEL_UNAVAILABLE_NOTE };
       }
       const joinable = channelJoinable(lookup.homeResponse);
       if (!joinable) {
@@ -514,20 +531,42 @@ export async function getChannelJoin(handle: string): Promise<ChannelJoinDTO> {
         joinable: false,
         tiers: null,
         signinRequired,
-        note: "channel unavailable",
+        note: JOIN_CHANNEL_UNAVAILABLE_NOTE,
       };
     }
   });
 }
 
+/**
+ * WFX2-P7-CH — the Membership tab's payload: the SAME join surface /join
+ * serves, shaped as a ChannelTabDTO. This is a thin shaper over the shared
+ * walk (getChannelJoin) — it owns NO fetching logic of its own, so /join and
+ * the tab can never copy-paste-diverge (one walk, one cache entry, one
+ * honest-state contract). The tab route branches here for ?tab=membership
+ * (the same per-tab-switch shape the Community tab uses) instead of
+ * extending the /join response — that is where the code's shape makes the
+ * tab data natural (documented per the delivery brief).
+ *
+ * Honest states (verbatim the app's law):
+ *  - the join walk degrades to its unavailable-channel marker → the standard
+ *    `{tab, walled: true}` (the tab family's byte-identical wall copy);
+ *  - otherwise the membership field carries the join surface as-is — real
+ *    tiers, YouTube's logged-out copy, or the honest unreadable note.
+ */
+export async function getChannelMembershipTab(handle: string): Promise<ChannelTabDTO> {
+  const cleaned = decodeURIComponent(handle).trim();
+  const join = await getChannelJoin(cleaned);
+  if (join.joinable === false && join.note === JOIN_CHANNEL_UNAVAILABLE_NOTE) {
+    // the join surface's own wall marker → the tab family's honest degrade
+    return { tab: "membership", walled: true } as ChannelTabDTO;
+  }
+  return { tab: "membership", joinable: join.joinable, membership: join };
+}
+
 /** Best-effort tier mapping from a memberships-panel response (honest empty
  * when the response carries no recognizable tier rows). */
-export function mapMembershipTiers(panel: unknown): {
-  title: string;
-  priceText: string;
-  perksText: string | null;
-}[] {
-  const out: { title: string; priceText: string; perksText: string | null }[] = [];
+export function mapMembershipTiers(panel: unknown): ChannelMembershipTierDTO[] {
+  const out: ChannelMembershipTierDTO[] = [];
   for (const r of walkTree(panel, "membershipsRenderer")) {
     const title = runsText(r?.title) || "";
     const price = r?.subtitle?.simpleText ?? runsText(r?.priceText) ?? "";
