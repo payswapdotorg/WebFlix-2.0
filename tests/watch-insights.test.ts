@@ -234,7 +234,7 @@ describe("POST /api/watch/watched-map", () => {
     expect(body.map[sintel.id]).toBeUndefined();
   });
 
-  test("cap 50: 51 ids → 400; a malformed body → 400", async () => {
+  test("cap 50: 51 ids → 400; a malformed body → 400; garbage JSON → 400 (never a 500)", async () => {
     const user = await freshUser();
     const tooMany = await postWatchedMap(
       mapReq(Array.from({ length: 51 }, (_, i) => `v${i}`), user.id)
@@ -247,5 +247,13 @@ describe("POST /api/watch/watched-map", () => {
     }) as unknown as NextRequest;
     const res = await postWatchedMap(malformed);
     expect(res.status).toBe(400);
+    const garbage = new Request("http://localhost/api/watch/watched-map", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: '{"videoIds":["v0",', // truncated JSON — the curl-quoting trap, hardened
+    }) as unknown as NextRequest;
+    const garbageRes = await postWatchedMap(garbage);
+    expect(garbageRes.status).toBe(400);
+    expect(((await garbageRes.json()) as { error: string }).error).toContain("Invalid JSON");
   });
 });

@@ -20,7 +20,13 @@ export async function POST(req: NextRequest) {
       return json({ error: "Too many requests" }, 429);
     }
     const viewer = await resolveViewer(req.headers);
-    const body = (await req.json()) as { videoIds?: unknown };
+    let body: { videoIds?: unknown };
+    try {
+      body = (await req.json()) as { videoIds?: unknown };
+    } catch {
+      // malformed JSON is a client error — a garbage body is never a 500
+      throw badRequest("Invalid JSON body");
+    }
     if (!Array.isArray(body.videoIds) || body.videoIds.some((id) => typeof id !== "string")) {
       throw badRequest("videoIds must be an array of strings");
     }
