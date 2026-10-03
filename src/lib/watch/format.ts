@@ -67,3 +67,14 @@ export function fullDate(iso: string | Date | null): string {
 export function exactCount(n: number): string {
   return new Intl.NumberFormat("en-US").format(n);
 }
+
+/** WFX2-P7-AN — "1h 23m" / "42m" / "17s": humanized watch-time amounts. */
+export function humanizeWatchSec(totalSec: number): string {
+  const sec = Math.max(0, Math.floor(totalSec));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m`;
+  return `${s}s`;
+}

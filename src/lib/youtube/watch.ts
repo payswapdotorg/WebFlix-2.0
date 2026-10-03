@@ -156,6 +156,9 @@ export function mapWatchMetadata(videoId: string, response: unknown): WatchMetad
     subscribed,
     bell: null,
     resumeSec: null, // client-local progress memory (A-W lane)
+    // WFX2-P7-AN: the live-YouTube path carries no local ViewEvent read —
+    // the watch page's watched line stays hidden (the honest degrade)
+    watchedSec: null,
     playlistIds: [],
     savedWatchLater: false,
     isCreator: false,

@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { BadgeCheck } from "lucide-react";
 import { toast } from "sonner";
-import { api } from "@/lib/watch/client";
+import { api, post } from "@/lib/watch/client";
 import { compactCount, formatDuration, relativeTime } from "@/lib/watch/format";
 import type { PageDto, RelatedVideoDto } from "@/lib/watch/types";
 
@@ -23,6 +23,22 @@ export function RelatedRail({
   const [items, setItems] = useState<RelatedVideoDto[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  // WFX2-P7-AN — the viewer's watched map (one batch POST per page load;
+  // lights the WATCHED strips on the rail cards, never a per-card fetch)
+  const [watchedMap, setWatchedMap] = useState<Record<string, number>>({});
+
+  // fetch the watched map for a freshly loaded page's ids (capped batch)
+  const fetchWatchedMap = useCallback(async (ids: string[]) => {
+    if (ids.length === 0) return;
+    try {
+      const r = await post<{ map: Record<string, number> }>("/api/watch/watched-map", {
+        videoIds: ids.slice(0, 50),
+      });
+      setWatchedMap((prev) => ({ ...prev, ...r.map }));
+    } catch {
+      // the badge is an enrichment, never a load-blocker
+    }
+  }, []);
 
   // fresh mount per video (the parent keys the watch page) → single fetch
   useEffect(() => {
@@ -33,6 +49,7 @@ export function RelatedRail({
         setItems(page.items);
         setCursor(page.nextCursor);
         onFirstPage?.(page.items[0] ?? null);
+        void fetchWatchedMap(page.items.map((v) => v.id));
       })
       .catch((e) => {
         if (alive) toast.error(e instanceof Error ? e.message : "Failed to load related videos");
@@ -40,7 +57,7 @@ export function RelatedRail({
     return () => {
       alive = false;
     };
-  }, [videoId, onFirstPage]);
+  }, [videoId, onFirstPage, fetchWatchedMap]);
 
   const showMore = useCallback(async () => {
     if (!cursor || loadingMore) return;
@@ -51,6 +68,7 @@ export function RelatedRail({
       );
       setItems((prev) => [...(prev ?? []), ...page.items]);
       setCursor(page.nextCursor);
+      void fetchWatchedMap(page.items.map((v) => v.id));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to load more");
     } finally {
@@ -88,7 +106,7 @@ export function RelatedRail({
       <h2 className="mb-3 text-base font-bold">Up next</h2>
       <div className="flex flex-col gap-2">
         {items.map((v) => (
-          <RelatedCard key={v.id} video={v} />
+          <RelatedCard key={v.id} video={v} watchedSec={watchedMap[v.id]} />
         ))}
       </div>
       {cursor && (
@@ -112,7 +130,7 @@ export function RelatedRail({
   );
 }
 
-function RelatedCard({ video }: { video: RelatedVideoDto }) {
+function RelatedCard({ video, watchedSec }: { video: RelatedVideoDto; watchedSec?: number }) {
   return (
     <Link
       href={`/watch/${video.id}`}
@@ -129,6 +147,14 @@ function RelatedCard({ video }: { video: RelatedVideoDto }) {
         <span className="absolute bottom-1 right-1 rounded bg-black/80 px-1 py-0.5 text-[10px] font-medium tabular-nums text-white">
           {formatDuration(video.durationSec)}
         </span>
+        {watchedSec !== undefined && (
+          <span
+            data-testid="related-card-watched"
+            className="absolute bottom-0 left-0 right-0 bg-neutral-900/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white"
+          >
+            Watched
+          </span>
+        )}
       </div>
       <div className="min-w-0 flex-1 pt-0.5">
         <h3 className="line-clamp-2 text-sm font-medium leading-tight">{video.title}</h3>

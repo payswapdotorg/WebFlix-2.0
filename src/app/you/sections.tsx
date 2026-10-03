@@ -17,10 +17,12 @@ import {
   Play,
   SquarePlay,
   ThumbsUp,
+  TrendingUp,
   type LucideIcon,
 } from "lucide-react";
 import { VideoCard } from "@/components/video/video-card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { humanizeWatchSec } from "@/lib/watch/format";
 import type { ApiState } from "@/hooks/use-api";
 import type { ContinueVideoDTO, PlaylistDTO, StudioPageDTO } from "@/lib/types";
 
@@ -44,6 +46,28 @@ export type YouPlaylistsPayload = {
 
 /** /api/studio?enrich=0 — the channel + public uploads, no enrichment. */
 export type YouStudioPayload = StudioPageDTO & { loginRequired: boolean };
+
+/** /api/watch/insights — the watch analytics seam (WFX2-P7-AN, mirrored from
+ *  the insights service payload: totals + the zero-filled 28-day series +
+ *  the top videos by lifetime watchedSec). */
+export type YouInsightsPayload = {
+  totals: {
+    watchedSecAllTime: number;
+    videosWatched: number;
+    activeDays: number;
+    avgSecPerActiveDay: number;
+    streakDays: number;
+  };
+  series28d: { day: string; sec: number }[];
+  topVideos: {
+    videoId: string;
+    title: string;
+    channelName: string;
+    thumbnailUrl: string;
+    watchedSec: number;
+    lastWatchedAt: string;
+  }[];
+};
 
 // ---- shared bits ----
 
@@ -185,10 +209,57 @@ export function HistorySection({ state }: { state: ApiState<YouHistoryPayload> }
           )}
           <Rail>
             {recent.map((video) => (
-              <VideoCard key={video.id} video={video} variant="rail" />
+              <VideoCard key={video.id} video={video} variant="rail" watchedSec={video.watchedSec} />
             ))}
           </Rail>
         </>
+      )}
+    </section>
+  );
+}
+
+// ---- Watch insights (WFX2-P7-AN) ----
+
+export function WatchInsightsSection({ state }: { state: ApiState<YouInsightsPayload> }) {
+  // defensive optionals: a degraded/empty payload renders the honest neutral
+  // card, never a crash (the payload shape law holds on the real API)
+  const streak = state.data?.totals?.streakDays ?? 0;
+  const weekSec = (state.data?.series28d ?? []).slice(-7).reduce((acc, p) => acc + p.sec, 0);
+
+  return (
+    <section aria-label="Watch insights" data-testid="you-watch-insights">
+      <SectionHeader
+        icon={TrendingUp}
+        title="Watch insights"
+        seeAllHref="/you/insights"
+        seeAllLabel="See all"
+      />
+      {state.loading && (
+        <div className="px-4 py-4 sm:px-6">
+          <Skeleton className="h-[76px] w-full rounded-xl" />
+        </div>
+      )}
+      {state.error && (
+        <p className="px-4 py-6 text-sm text-muted-foreground sm:px-6" role="alert">
+          {state.error}
+        </p>
+      )}
+      {state.data && (
+        <div className="px-4 py-4 sm:px-6">
+          <SpecialCard
+            href="/you/insights"
+            testId="you-watch-insights-card"
+            icon={TrendingUp}
+            title="Watch insights"
+            meta={
+              weekSec > 0
+                ? `${humanizeWatchSec(weekSec)} watched this week${streak > 0 ? ` · ${streak}-day streak` : ""}`
+                : streak > 0
+                  ? `${streak}-day watching streak`
+                  : "Your watch time, honestly charted"
+            }
+          />
+        </div>
       )}
     </section>
   );

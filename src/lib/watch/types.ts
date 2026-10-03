@@ -55,11 +55,51 @@ export interface ViewerVideoState {
   savedWatchLater: boolean;
   /** viewer owns this video's channel (creator powers: heart/pin) */
   isCreator: boolean;
+  /** WFX2-P7-AN: the viewer's lifetime watchedSec on THIS video (null when no ViewEvent) */
+  watchedSec: number | null;
 }
 
 export interface VideoDetailDto {
   video: VideoDto;
   state: ViewerVideoState;
+}
+
+// ---- WFX2-P7-AN: watch insights DTOs (the /api/watch/insights payload) ----
+
+export interface InsightsTotalsDto {
+  /** lifetime sum of ViewEvent.watchedSec */
+  watchedSecAllTime: number;
+  /** ViewEvent rows = distinct videos watched */
+  videosWatched: number;
+  /** WatchDailyStat rows with sec > 0 */
+  activeDays: number;
+  /** watchedSecAllTime / activeDays (0 when no active days) */
+  avgSecPerActiveDay: number;
+  /** consecutive active days (sec>0) ending today or yesterday, UTC */
+  streakDays: number;
+}
+
+export interface SeriesPointDto {
+  /** "YYYY-MM-DD" UTC */
+  day: string;
+  sec: number;
+}
+
+export interface InsightsTopVideoDto {
+  videoId: string;
+  title: string;
+  channelName: string;
+  thumbnailUrl: string;
+  watchedSec: number;
+  lastWatchedAt: string;
+}
+
+export interface InsightsDto {
+  totals: InsightsTotalsDto;
+  /** 28 UTC days, oldest first, gap days zero-filled (real zeros) */
+  series28d: SeriesPointDto[];
+  /** top 10 by lifetime watchedSec (Video-less ViewEvents skipped) */
+  topVideos: InsightsTopVideoDto[];
 }
 
 export interface RelatedVideoDto {

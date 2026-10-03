@@ -11,7 +11,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { compactCount, exactCount, fullDate, formatDuration, relativeTime } from "@/lib/watch/format";
+import { compactCount, exactCount, fullDate, formatDuration, humanizeWatchSec, relativeTime } from "@/lib/watch/format";
 import { parseChapters, parseHashtags, tokenizeDescriptionLine } from "@/lib/watch/chapters";
 
 export function DescriptionBox({
@@ -24,6 +24,7 @@ export function DescriptionBox({
   durationSec,
   thumbnailUrl,
   onSeek,
+  viewerWatchedSec,
 }: {
   videoId: string;
   description: string;
@@ -34,6 +35,8 @@ export function DescriptionBox({
   durationSec: number | null;
   thumbnailUrl: string;
   onSeek: (sec: number) => void;
+  /** WFX2-P7-AN — the viewer's lifetime watchedSec on this video (the honest "You've watched…" line; null/0 → hidden) */
+  viewerWatchedSec?: number | null;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -90,6 +93,14 @@ export function DescriptionBox({
           <span className="text-xs text-muted-foreground">+{hashtags.length - 3}</span>
         )}
       </div>
+
+      {/* WFX2-P7-AN — the viewer's own watch time on this video (honest line
+          under the stats; hidden when the viewer has no watch history) */}
+      {viewerWatchedSec != null && viewerWatchedSec > 0 && (
+        <p className="mt-1 text-[13px] text-muted-foreground" data-testid="description-watched-line">
+          You&apos;ve watched {humanizeWatchSec(viewerWatchedSec)} of this video
+        </p>
+      )}
 
       {/* body: collapsed 2-line clamp / expanded animated full text */}
       {!expanded && <p className="mt-1.5 line-clamp-2 whitespace-pre-line text-foreground/90">{description}</p>}
