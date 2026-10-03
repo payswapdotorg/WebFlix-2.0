@@ -6,8 +6,12 @@ export const dynamic = "force-dynamic";
 
 /**
  * GET /api/videos?cursor=&category=&limit=&q= — live feed pagination.
- * Cursors are InnerTube continuation tokens (opaque strings); category pages
- * are search-backed (type=video), the default page continues the browse feed.
+ * Cursors are opaque strings the client passes back verbatim: rungs 1–2 hand
+ * out native InnerTube browse continuation tokens, rung 3 (search-compose —
+ * the production path while the Vercel egress is browse-walled) hands out the
+ * WFX2-P6-IS compose envelopes (pool offsets, then seed-query search
+ * continuations, then the honest null end). Category pages are search-backed
+ * (type=video) with their own native tokens.
  * WFX2-C-W: `q=` routes to the search-backed listing — search is NOT walled
  * for Vercel egress (browse is), which fixes the production
  * `/api/videos?q=music → {"videos":[]}` finding. First pages are cached

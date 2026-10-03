@@ -22,6 +22,10 @@ export interface SearchResults {
   resultCountText: string | null;
   /** WFX2-B-W: didYouMean / showingResultsFor spelling correction */
   correction: SearchCorrection | null;
+  /** WFX2-P6-IS: the response's own continuation token — the next results
+   *  page's cursor (null = the results honestly ended; mirrors feeds'
+   *  getSearchVideoPage mechanics: the token POSTs back as {continuation}). */
+  nextCursor: string | null;
 }
 
 function searchContinuationToken(response: unknown): string | null {
@@ -41,6 +45,9 @@ function searchContinuationToken(response: unknown): string | null {
 /**
  * Live search. `filters` carries sort / uploadDate / duration / type (see
  * filters.ts for the verified protobuf encoding) + the live/verbatim flags.
+ * `cursor` (WFX2-P6-IS) pages the results: it is the PREVIOUS page's own
+ * continuation token (searchContinuationToken above) — the token encodes the
+ * whole filtered query, so continuation pages need nothing else upstream.
  */
 export async function searchYouTube(
   query: string,
@@ -84,6 +91,7 @@ export async function searchYouTube(
     playlists: cursor ? [] : mapSearchPlaylists(response, 12),
     resultCountText: cursor ? null : searchResultCountText(response),
     correction: cursor ? null : mapSearchCorrection(response),
+    nextCursor: searchContinuationToken(response),
   };
 }
 

@@ -426,6 +426,10 @@ export type SearchPageDTO = {
   resultCountText?: string | null;
   /** "Showing results for X / Search instead for Y" when YouTube corrected the query */
   correction?: SearchCorrection | null;
+  /** WFX2-P6-IS — the opaque next-page cursor (base64url envelope; pass back
+   *  as ?cursor=). null = the results honestly ended. Additive: every earlier
+   *  field is identical for the no-cursor first page. */
+  nextCursor?: string | null;
 };
 
 export type HistoryGroupDTO = {
