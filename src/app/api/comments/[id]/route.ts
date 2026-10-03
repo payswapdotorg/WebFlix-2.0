@@ -8,15 +8,18 @@ import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/comments/[id] {text, videoId?, parentText?} — LIVE Tier-2 write:
- * reply to comment [id] (broker comment-reply). The canonical broker-API
- * route; the composer path (/api/videos/[id]/comments with parentId) maps
- * here internally. parentText enables the broker's DOM-locator UI path.
+ * POST /api/comments/[id] {text, videoId?, parentText?, replyParams?, video?}
+ * — LIVE Tier-2 write: reply to comment [id] through the three-rung chain
+ * (WFX2-P6-CR: direct replyParams → broker → the honest local rung). The
+ * canonical broker-API route; the composer path (/api/videos/[id]/comments
+ * with parentId) maps here internally. parentText enables the broker's
+ * DOM-locator UI path; replyParams + video feed the direct + local rungs.
  *
- * Response: the synthesized CommentDto (+ok/effect) with 201.
+ * Response: the CommentDto (+ok/effect, +local for local writes) with 201.
  */
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  if (!(await getSessionUser(req))) return authRequiredResponse();
+  const sessionUser = await getSessionUser(req);
+  if (!sessionUser) return authRequiredResponse();
   try {
     const { id } = await ctx.params;
     let body: Record<string, unknown> = {};
@@ -31,8 +34,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     if (!videoId) return json({ error: "videoId is required" }, 400);
     const parentText =
       typeof body.parentText === "string" && body.parentText ? body.parentText : undefined;
+    const replyParams =
+      typeof body.replyParams === "string" && body.replyParams ? body.replyParams : undefined;
     const viewer = await resolveViewer(req.headers);
-    const comment = await proxyCommentReply(videoId, id, text, viewer, parentText);
+    const comment = await proxyCommentReply(videoId, id, text, viewer, parentText, {
+      ...(replyParams ? { replyParams } : {}),
+      sessionUser,
+    });
     return json(comment, { status: 201 });
   } catch (e) {
     return errorResponse(e);

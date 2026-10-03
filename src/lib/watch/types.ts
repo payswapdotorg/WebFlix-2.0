@@ -116,6 +116,31 @@ export interface CommentDto {
   replyNextCursor?: string | null;
   /** live: continuation token for this thread's replies */
   repliesToken?: string | null;
+  /**
+   * WFX2-P6-CR: live replyParams — the toolbar surface mutation's
+   * replyCommand → createCommentEndpoint.createCommentParams (the direct
+   * reply rung's wire parameter). Null when YouTube serves the sign-in
+   * modal instead (session expired) or the payload carries none.
+   */
+  replyParams?: string | null;
+  /**
+   * WFX2-P6-CR: true when the row lives in the honest WebFlix store (the
+   * local rung) — NOT posted to YouTube. The UI discloses the origin.
+   */
+  local?: boolean;
+}
+
+/**
+ * WFX2-P6-CR — the watch payload's video snapshot the composer forwards so
+ * the local rung can mirror the real YouTube video/channel as shadow rows
+ * (honest mirror: the real id/title/channel, marked public).
+ */
+export interface CommentVideoSnapshotDto {
+  title?: string;
+  channelId?: string;
+  channelHandle?: string;
+  channelName?: string;
+  channelAvatarUrl?: string;
 }
 
 export interface CommentsPageDto extends PageDto<CommentDto> {

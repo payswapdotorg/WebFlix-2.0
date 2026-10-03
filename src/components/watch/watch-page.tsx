@@ -673,17 +673,25 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
               />
             )}
 
-            {/* comments */}
-            {viewer && (
-              <CommentsSection
-                videoId={videoId}
-                viewer={viewer}
-                viewerIsCreator={state.isCreator}
-                creatorName={video.channel.name}
-                operatorSession={operatorSession}
-                guest={guest}
-              />
-            )}
+            {/* comments — WFX2-P6-CR: rendered for EVERY viewer (anonymous
+                included — YouTube renders comments logged-out; the composer
+                keeps its own guest/public gates). The video snapshot feeds
+                the local rung's shadow rows via the composer. */}
+            <CommentsSection
+              videoId={videoId}
+              viewer={viewer}
+              viewerIsCreator={state.isCreator}
+              creatorName={video.channel.name}
+              operatorSession={operatorSession}
+              guest={guest}
+              video={{
+                title: video.title,
+                channelId: video.channel.id,
+                channelHandle: video.channel.handle,
+                channelName: video.channel.name,
+                channelAvatarUrl: video.channel.avatarUrl,
+              }}
+            />
           </div>
         </div>
 

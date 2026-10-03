@@ -15,6 +15,13 @@
  *
  * WFX2-P2-AU: WebFlix guests (no account session) get the sign-in prompt
  * (routed to /signin with the redirect back) instead of any write firing.
+ *
+ * WFX2-P6-CR: `viewer` is nullable (anonymous viewers still read); rows
+ * written through the local rung (local:true) carry the tiny WebFlix
+ * origin chip next to the author name — honest, unobtrusive disclosure
+ * that the row is stored on WebFlix, not posted to YouTube. The inline
+ * reply composer forwards the row's live replyParams (the direct reply
+ * rung's parameter) + the watch payload's video snapshot.
  */
 import { useState } from "react";
 import Link from "next/link";
@@ -54,20 +61,23 @@ import {
 import { compactCount, relativeTime } from "@/lib/watch/format";
 import { post, patch, del } from "@/lib/watch/client";
 import { signInHref } from "@/lib/auth/client";
-import type { CommentDto, LikeValue, ViewerDto } from "@/lib/watch/types";
+import type { CommentDto, CommentVideoSnapshotDto, LikeValue, ViewerDto } from "@/lib/watch/types";
 import { CommentComposer } from "./comment-composer";
 import { CommentReportDialog } from "./comment-report-dialog";
 
 export interface CommentRowProps {
   comment: CommentDto;
   videoId: string;
-  viewer: ViewerDto;
+  /** WFX2-P6-CR: nullable — anonymous viewers still read the thread */
+  viewer: ViewerDto | null;
   viewerIsCreator: boolean;
   creatorName: string;
   /** false in public mode → signed-out states for the write affordances */
   operatorSession?: boolean;
   /** WFX2-P2-AU: no WebFlix account → writes route to the sign-in prompt */
   guest?: boolean;
+  /** WFX2-P6-CR: the watch payload's snapshot (the local rung's shadow rows) */
+  video?: CommentVideoSnapshotDto;
   /** nesting depth (0 = top-level; 1 = rendered reply level; 2+ inline) */
   depth: number;
   /** open reply thread state (for depth 0) */
@@ -91,6 +101,7 @@ export function CommentRow({
   creatorName,
   operatorSession = true,
   guest = false,
+  video,
   depth,
   threadReplies,
   threadCursor,
@@ -296,6 +307,14 @@ export function CommentRow({
               Creator
             </span>
           )}
+          {comment.local && (
+            <span
+              className="rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+              title="Stored on WebFlix — not posted to YouTube"
+            >
+              WebFlix
+            </span>
+          )}
           {comment.author.isMember && !comment.author.isCreator && (
             <span
               className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400"
@@ -494,9 +513,11 @@ export function CommentRow({
               videoId={videoId}
               parentId={comment.id}
               parentText={comment.body}
+              replyParams={comment.replyParams}
               viewer={viewer}
               operatorSession={operatorSession}
               guest={guest}
+              video={video}
               placeholder="Add a reply..."
               submitLabel="Reply"
               autoFocus
@@ -544,6 +565,8 @@ export function CommentRow({
                     viewerIsCreator={viewerIsCreator}
                     creatorName={creatorName}
                     operatorSession={operatorSession}
+                    guest={guest}
+                    video={video}
                     depth={1}
                     onDeleted={onDeleted}
                     onReported={onReported}
@@ -609,6 +632,8 @@ export function CommentRow({
                       viewerIsCreator={viewerIsCreator}
                       creatorName={creatorName}
                       operatorSession={operatorSession}
+                      guest={guest}
+                      video={video}
                       depth={depth + 1}
                       onDeleted={onDeleted}
                       onReported={onReported}
