@@ -131,6 +131,14 @@ export type CommentDTO = {
 
 export type ChannelPageDTO = {
   channel: ChannelLite & {
+    /**
+     * WFX2-P6-CH — the bare-handle law: the page DTO's handle is BARE (any
+     * leading "@"/"/" the upstream form carried is stripped at the mapper);
+     * the page UI prefixes the single "@" itself. A "UC…" id (the
+     * no-@handle fallback) passes through as-is. Links resolve both forms
+     * through /api/channel/[handle].
+     */
+    handle: string;
     bannerUrl: string | null;
     description: string | null;
     /** live channel responses carry no join date (about tab — Wave B) */

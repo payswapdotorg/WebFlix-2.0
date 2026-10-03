@@ -640,6 +640,18 @@ export interface ChannelHeaderDTO {
   description: string | null;
 }
 
+/**
+ * WFX2-P6-CH — the bare-handle law for ChannelPageDTO.channel.handle: strip
+ * any leading "@"/"/" run the upstream form carries ("@name", "@/name",
+ * "/@name" → "name") so every consumer gets a BARE handle (the channel page
+ * renders "@name" by prefixing the "@" itself — the live bug showed
+ * "@/@mind_warehouse" when the upstream handle rode its own "@"). "UC…"
+ * channel ids pass through untouched (they never start with @ or /).
+ */
+export function bareChannelHandle(handle: string): string {
+  return handle.replace(/^[@\s/]+/, "").trim();
+}
+
 /** Map the current channel page header from a browse/SSR response. */
 export function mapChannelHeader(response: unknown): ChannelHeaderDTO | null {
   const phr = findFirst(response, "pageHeaderRenderer");

@@ -328,32 +328,54 @@ const unhealthy = (t: ChannelTabDTO) => t.walled === true;
 
 /** One channel tab's payload — the cutover resilience contract: the walled
  * marker is never cached; a last-good tab serves when the wall hits; cold +
- * walled → the honest `{tab, walled: true}` (HTTP 200 at the route). */
+ * walled → the honest `{tab, walled: true}` (HTTP 200 at the route).
+ *
+ * WFX2-P6-CH: `chip` (Videos tab only) swaps the fetch to the clicked chip's
+ * own continuation — browse {continuation} — whose response carries the
+ * sorted grid + the re-marked chip bar (the chosen sort selected). Each
+ * chip token is its own cache entry (Popular and Oldest must never alias
+ * Latest's cached grid). */
 export async function getChannelTab(
   handle: string,
-  tab: ChannelTabId
+  tab: ChannelTabId,
+  chip?: string
 ): Promise<ChannelTabDTO> {
   if (tab === "about") return getChannelAbout(handle);
   const cleaned = decodeURIComponent(handle).trim();
-  const key = `yt:channel:tab:${cleaned.toLowerCase()}:${tab}`;
-  return cachedResilient(key, TTL.FEED_MS, () => computeChannelTab(cleaned, tab), {
+  const chipToken = tab === "videos" && chip ? chip : null;
+  const key = chipToken
+    ? `yt:channel:tab:${cleaned.toLowerCase()}:videos:chip:${chipToken}`
+    : `yt:channel:tab:${cleaned.toLowerCase()}:${tab}`;
+  return cachedResilient(key, TTL.FEED_MS, () => computeChannelTab(cleaned, tab, chipToken), {
     isEmpty: (t: unknown) => unhealthy(t as ChannelTabDTO),
   });
 }
 
-async function computeChannelTab(cleaned: string, tab: ChannelTabId): Promise<ChannelTabDTO> {
+async function computeChannelTab(
+  cleaned: string,
+  tab: ChannelTabId,
+  chipToken: string | null
+): Promise<ChannelTabDTO> {
   try {
-    const lookup = await resolveChannel(cleaned);
-    if (!lookup || !lookup.header) return { tab, walled: true } as ChannelTabDTO;
-    const ownParam = tabParamFromResponse(lookup.homeResponse, tab);
-    const params =
-      ownParam ??
-      (tab === "home"
-        ? null
-        : CHANNEL_TAB_PARAMS[tab as keyof typeof CHANNEL_TAB_PARAMS] ?? null);
-    const response = await innertubeBrowse(
-      params ? { browseId: lookup.browseId, params } : { browseId: lookup.browseId }
-    );
+    let response: unknown;
+    if (chipToken) {
+      // WFX2-P6-CH — the clicked chip's own continuation (the live-verified
+      // chip fetch family: browse {continuation}); no channel resolve is
+      // needed — the token IS the addressed state
+      response = await innertubeBrowse({ continuation: chipToken });
+    } else {
+      const lookup = await resolveChannel(cleaned);
+      if (!lookup || !lookup.header) return { tab, walled: true } as ChannelTabDTO;
+      const ownParam = tabParamFromResponse(lookup.homeResponse, tab);
+      const params =
+        ownParam ??
+        (tab === "home"
+          ? null
+          : CHANNEL_TAB_PARAMS[tab as keyof typeof CHANNEL_TAB_PARAMS] ?? null);
+      response = await innertubeBrowse(
+        params ? { browseId: lookup.browseId, params } : { browseId: lookup.browseId }
+      );
+    }
     const joinable = channelJoinable(response);
     const dto: ChannelTabDTO = { tab, joinable };
     switch (tab) {
@@ -364,6 +386,14 @@ async function computeChannelTab(cleaned: string, tab: ChannelTabId): Promise<Ch
       case "videos":
       case "live":
         dto.videos = mapVideos(response, { dedupe: true, limit: 48 }).filter((v) => !v.isShort);
+        if (tab === "videos") {
+          // WFX2-P6-CH: the tab payload's own chip bar (the default fetch
+          // marks Latest; a chip-continuation fetch re-marks the chosen
+          // sort). Absent chip bar → the field stays absent (the UI hides
+          // the chip row — honest omission).
+          const chips = mapChannelSortChips(response);
+          if (chips.length > 0) dto.sortChips = chips;
+        }
         break;
       case "shorts":
         dto.shorts = mapShorts(response, 48);

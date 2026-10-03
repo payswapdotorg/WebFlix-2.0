@@ -253,7 +253,10 @@ describe("GET /api/channel/[handle] — resolve + browse", () => {
     expect(res.status).toBe(200);
     const page = (await res.json()) as any;
     expect(page.channel.id).toBe("UCuAXFkgsw1L7xaCfnd5JJOw");
-    expect(page.channel.handle).toBe("@RickAstleyYT");
+    // WFX2-P6-CH — the bare-handle law: the upstream "@RickAstleyYT" header
+    // text normalizes to the bare handle on the page DTO (the UI prefixes
+    // the single "@" itself — the doubled "@/@…" render is dead)
+    expect(page.channel.handle).toBe("RickAstleyYT");
     expect(page.channel.name).toBe("Rick Astley");
     expect(page.channel.subscriberCount).toBe(4_550_000);
     expect(page.channel.subscriberCountText).toBe("4.55M subscribers");

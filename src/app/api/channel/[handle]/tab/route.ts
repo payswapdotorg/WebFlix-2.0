@@ -23,6 +23,13 @@ const TAB_IDS: ChannelTabId[] = [
  * param}; Community = the Posts tab; About = the engagement-panel
  * continuation (aboutChannelViewModel).
  *
+ * WFX2-P6-CH: `?tab=videos&chip=<token>` — the Videos tab's sort chips.
+ * The clicked chip's own continuation token swaps the fetch to
+ * browse {continuation}; the response carries the sorted grid + the
+ * re-marked chip bar (the chosen sort selected). The chip list itself is
+ * never refetched per click — the page reuses its bar, only the grid data
+ * changes.
+ *
  * Every tab rides the cutover resilience contract: the walled shape is never
  * cached, last-good serves when the wall hits, and a cold walled read
  * answers HTTP 200 with `{tab, walled: true}` — the channel page renders its
@@ -50,10 +57,13 @@ export async function GET(
         { status: 400 }
       );
     }
+    // WFX2-P6-CH: the sort-chip continuation token (honored on the Videos
+    // tab only; absent/empty on every other tab — the default fetch)
+    const chip = url.searchParams.get("chip");
     const payload: ChannelTabDTO =
       tab === "community"
         ? await getCommunityTab(handle)
-        : await getChannelTab(handle, tab as ChannelTabId);
+        : await getChannelTab(handle, tab as ChannelTabId, chip ?? undefined);
     return NextResponse.json(payload);
   } catch (err) {
     console.error("GET /api/channel/[handle]/tab failed", err);

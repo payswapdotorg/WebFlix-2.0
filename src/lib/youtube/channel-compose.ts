@@ -55,7 +55,7 @@
 import { innertubeSearch } from "./innertube";
 import { cachedResilient, TTL } from "./cache";
 import { cacheJsonSet, cachePeek } from "./upstash-cache";
-import { mapVideos, walkTree, lastThumbnailUrl } from "./mappers";
+import { mapVideos, walkTree, lastThumbnailUrl, bareChannelHandle } from "./mappers";
 import { getVideoDetail } from "./watch";
 import type { ChannelPageDTO, VideoDTO } from "@/lib/types";
 
@@ -266,7 +266,9 @@ export function composeChannelPageFromResolution(
   return {
     channel: {
       id: resolution.channelId,
-      handle: resolution.channelHandle,
+      // WFX2-P6-CH — the bare-handle law: the resolution's "@handle" (or
+      // UC… id) normalizes to the bare form every page consumer expects
+      handle: bareChannelHandle(resolution.channelHandle),
       name: resolution.channelName,
       avatarUrl: resolution.avatarUrl,
       verified: resolution.verified,
@@ -318,7 +320,7 @@ export async function enrichComposedPageHeader(
     page.channel.subscriberCountText = owner.subscriberCountText;
     page.channel.subscriberCount = owner.subscriberCount;
   }
-  if (owner.handle) page.channel.handle = owner.handle;
+  if (owner.handle) page.channel.handle = bareChannelHandle(owner.handle); // WFX2-P6-CH: the bare-handle law
   if (owner.avatarUrl) page.channel.avatarUrl = owner.avatarUrl;
   page.channel.verified = owner.verified; // the watch owner badges' real state
 }
