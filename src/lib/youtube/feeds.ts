@@ -93,7 +93,25 @@ function fetchHomeBrowseResponse(): Promise<unknown> {
   return cachedResilient(
     HOME_BROWSE_CACHE_KEY,
     TTL.FEED_MS,
-    () => innertubeBrowse({ browseId: "FEwhat_to_watch" }),
+    async () => {
+      // WFX2-P7 session-home heal (verified live 2026-10-03): a VALID
+      // operator session walls the browse API harder from the datacenter
+      // egress — the fresh YT_COOKIES made the session browse answer the
+      // 200-but-empty shape, killing /api/home (502) while the expired jar
+      // had been server-side-ignored for weeks (the public browse served).
+      // When the session answer maps empty, ONE cookieless retry restores
+      // exactly the old behavior — real public data, never a fabrication.
+      const withSession = await innertubeBrowse({ browseId: "FEwhat_to_watch" });
+      if (!homeResponseIsEmpty(withSession)) return withSession;
+      if (hasSession()) {
+        const pub = await innertubeBrowse(
+          { browseId: "FEwhat_to_watch" },
+          { cookies: null },
+        );
+        if (!homeResponseIsEmpty(pub)) return pub;
+      }
+      return withSession; // both empty — the walled shape (last-good / compose own it)
+    },
     { isEmpty: homeResponseIsEmpty, hardTtlMs: TTL.HOME_HARD_MS },
   );
 }
@@ -517,9 +535,20 @@ async function composeHomeFeedFromSearch(): Promise<HomeFeedDTO> {
 
 export async function getContinueWatching(limit = 12): Promise<ContinueVideoDTO[]> {
   if (!hasSession()) return [];
-  const response = await cached("yt:history", TTL.FEED_MS, () =>
-    fetchYtInitialData("/feed/history")
-  );
+  let response: unknown;
+  try {
+    response = await cached("yt:history", TTL.FEED_MS, () =>
+      fetchYtInitialData("/feed/history")
+    );
+  } catch (err) {
+    // WFX2-P7 session-home heal (verified live 2026-10-03): the signed-in
+    // history SSR read (a walled/oversized history page from the datacenter
+    // egress) THREW and killed the whole home compose — a 502 home page. The
+    // honest degrade: NO continue-watching rail this round, the rest of the
+    // feed serves. A rail's failure is never the feed's failure.
+    console.error("getContinueWatching failed — serving the honest empty rail", err);
+    return [];
+  }
   const videos = mapVideos(response, { dedupe: true }).filter((v) => !v.isShort);
   const nowIso = new Date().toISOString();
   return videos.slice(0, limit).map((v) => ({
