@@ -22,6 +22,7 @@ import { NextRequest } from "next/server";
 import { setUpstream } from "@/lib/youtube/innertube";
 import { clearCache } from "@/lib/youtube/cache";
 import { setUpstashRest, type UpstashRest } from "@/lib/youtube/upstash-cache";
+import { decodeCursor } from "@/lib/youtube/cursors";
 import { GET as getHome } from "@/app/api/home/route";
 import { GET as listVideosRoute } from "@/app/api/videos/route";
 import { GET as getShorts } from "@/app/api/shorts/route";
@@ -329,7 +330,11 @@ describe("GET /api/videos — the default feed climbs the same ladder", () => {
     expect(res.status).toBe(200);
     const page = (await res.json()) as VideoPageDTO;
     expect(page.videos.length).toBeGreaterThan(0);
-    expect(page.nextCursor).toBeNull(); // no browse continuation for a composed page
+    // WFX2-P6-IS: a composed page carries the rung-3 pool cursor now — an
+    // opaque envelope resuming the merged pool (not a browse continuation)
+    const cursor = decodeCursor(page.nextCursor);
+    expect(cursor?.s).toBe("pool");
+    expect(cursor?.s === "pool" ? cursor.o : 0).toBe(12); // resumes after the first window
     // it shares the home feed's data: the same compose queries went upstream
     const queries = up.calls.search().map((r) => r.body.query);
     expect(queries).toContain("most viewed youtube videos");

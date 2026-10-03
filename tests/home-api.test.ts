@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 
 import { setUpstream } from "@/lib/youtube/innertube";
 import { clearCache } from "@/lib/youtube/cache";
+import { decodeCursor } from "@/lib/youtube/cursors";
 import { GET as getHome } from "@/app/api/home/route";
 import { GET as listVideosRoute } from "@/app/api/videos/route";
 import type { HomeFeedDTO, VideoPageDTO } from "@/lib/types";
@@ -136,7 +137,11 @@ describe("GET /api/videos — continuation-token pagination (live)", () => {
     const page1 = (await res1.json()) as VideoPageDTO;
     // the nudge browse maps to nothing — the compose fills the default feed
     expect(page1.videos.length).toBeGreaterThan(0);
-    expect(page1.nextCursor).toBeNull(); // a composed page carries no browse continuation
+    // WFX2-P6-IS: a composed page carries the rung-3 pool cursor now — an
+    // opaque envelope (not a browse continuation) resuming the merged pool
+    const cursor = decodeCursor(page1.nextCursor);
+    expect(cursor?.s).toBe("pool");
+    expect(cursor?.s === "pool" ? cursor.o : 0).toBe(12);
     const browse = recorded.find((r) => r.url.includes("/youtubei/v1/browse"));
     expect(browse?.body.browseId).toBe("FEwhat_to_watch");
     const search = recorded.find((r) => r.url.includes("/youtubei/v1/search"));

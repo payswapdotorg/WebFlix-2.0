@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Search, X } from "lucide-react";
@@ -19,7 +19,7 @@ import {
   type SearchFilterState,
 } from "@/lib/youtube/search-filters";
 import { formatCount } from "@/lib/format";
-import type { SearchPageDTO } from "@/lib/types";
+import type { SearchPageDTO, VideoDTO } from "@/lib/types";
 
 /**
  * Search — live youtube.com search with the real filter semantics
@@ -27,6 +27,10 @@ import type { SearchPageDTO } from "@/lib/types";
  * shareable), applied-filter chips, result-count text, spelling correction
  * ("Showing results for … / Search instead for …"), channel-result cards
  * with Subscribe, playlist-result cards, shorts lockups.
+ * WFX2-P6-IS: the results scroll infinitely — the first page rides useApi,
+ * every further page rides the opaque ?cursor= (the RecommendedGrid house
+ * pattern: IntersectionObserver sentinel, append + dedupe by id, skeletons,
+ * and the honest end state when the cursor chain runs out).
  */
 export default function SearchPage() {
   return (
@@ -52,6 +56,70 @@ function SearchContent() {
   const apiHref = q ? withFilterParams(`/api/search`, q, state) : null;
   const { data, loading, error } = useApi<SearchPageDTO>(apiHref);
 
+  // --- WFX2-P6-IS infinite scroll state (mirrors RecommendedGrid) ---------
+  const [extra, setExtra] = useState<VideoDTO[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  // Reset pagination when the query/filters change (guarded render-phase reset).
+  const [prevHref, setPrevHref] = useState(apiHref);
+  if (apiHref !== prevHref) {
+    setPrevHref(apiHref);
+    setExtra([]);
+    setCursor(null);
+  }
+
+  // Adopt the fresh first page's cursor (guarded render-phase reset — the
+  // cursor state must survive until the chain honestly ends, so it is never
+  // derived live from `data`).
+  const [adoptedHref, setAdoptedHref] = useState<string | null>(null);
+  if (apiHref && data && adoptedHref !== apiHref) {
+    setAdoptedHref(apiHref);
+    setCursor(data.nextCursor ?? null);
+  }
+
+  const loadMore = useCallback(async () => {
+    if (!apiHref || !cursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const res = await fetch(
+        `${apiHref}&cursor=${encodeURIComponent(cursor)}`,
+        { cache: "no-store" }
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const page = (await res.json()) as SearchPageDTO;
+      setExtra((prev) => [...prev, ...(page.videos ?? [])]);
+      setCursor(page.nextCursor ?? null);
+    } catch {
+      // Keep the results; the sentinel re-arms and retries on the next pass.
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [apiHref, cursor, loadingMore]);
+
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) void loadMore();
+      },
+      { rootMargin: "600px 0px" }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [loadMore]);
+
+  // First page + every appended page, deduped by id (server pages are raw —
+  // continuation pages can repeat a card; the client owns the dedupe).
+  const seenIds = new Set<string>();
+  const allVideos = [...(data?.videos ?? []), ...extra].filter((v) => {
+    if (seenIds.has(v.id)) return false;
+    seenIds.add(v.id);
+    return true;
+  });
+
   function pushState(query: string, next: SearchFilterState) {
     router.push(searchHref(query, next));
   }
@@ -66,8 +134,8 @@ function SearchContent() {
     pushState(q, next);
   }
 
-  const shorts = data?.videos.filter((v) => v.isShort) ?? [];
-  const videos = data?.videos.filter((v) => !v.isShort) ?? [];
+  const shorts = allVideos.filter((v) => v.isShort);
+  const videos = allVideos.filter((v) => !v.isShort);
   const hasAnyResults =
     (data?.videos.length ?? 0) > 0 ||
     (data?.channels.length ?? 0) > 0 ||
@@ -273,8 +341,39 @@ function SearchContent() {
                 {videos.map((video) => (
                   <VideoCard key={video.id} video={video} />
                 ))}
+                {loadingMore &&
+                  Array.from({ length: 4 }).map((_, i) => (
+                    <div key={`skeleton-${i}`} className="flex flex-col gap-3" aria-hidden="true">
+                      <Skeleton className="aspect-video w-full rounded-xl" />
+                      <div className="flex gap-3">
+                        <Skeleton className="size-9 rounded-full" />
+                        <div className="flex-1 space-y-2">
+                          <Skeleton className="h-4 w-full" />
+                          <Skeleton className="h-3 w-2/3" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
               </div>
+              {cursor && (
+                <div
+                  ref={sentinelRef}
+                  data-testid="search-scroll-sentinel"
+                  className="h-1"
+                  aria-hidden="true"
+                />
+              )}
             </section>
+          )}
+
+          {/* the honest end — the cursor chain ran out after real pages */}
+          {data && extra.length > 0 && !cursor && !loadingMore && (
+            <p
+              data-testid="search-end"
+              className="px-4 py-8 text-center text-sm text-muted-foreground sm:px-6"
+            >
+              No more results — you&apos;ve reached the end
+            </p>
           )}
         </>
       )}

@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 import { NextRequest } from "next/server";
 import { setUpstream } from "@/lib/youtube/innertube";
 import { clearCache } from "@/lib/youtube/cache";
+import { decodeCursor } from "@/lib/youtube/cursors";
 
 import { GET as searchRoute } from "@/app/api/search/route";
 import { GET as suggestRoute } from "@/app/api/search/suggest/route";
@@ -161,7 +162,11 @@ describe("GET /api/videos — continuation-cursor pagination", () => {
     const page = (await res.json()) as any;
     // the nudge browse maps to nothing — the compose fills the default feed
     expect(page.videos.length).toBeGreaterThan(0);
-    expect(page.nextCursor).toBeNull(); // a composed page carries no browse continuation
+    // WFX2-P6-IS: a composed page carries the rung-3 POOL cursor now (not a
+    // browse continuation) — an opaque envelope resuming the merged pool
+    const cursor = decodeCursor(page.nextCursor);
+    expect(cursor?.s).toBe("pool");
+    expect(cursor?.s === "pool" ? cursor.o : 0).toBe(12); // resumes after the first window
     const browse = upstream.recorded.find((r) => r.url.includes("/youtubei/v1/browse"));
     expect(browse?.body.browseId).toBe("FEwhat_to_watch");
     const search = upstream.recorded.find((r) => r.url.includes("/youtubei/v1/search"));
@@ -203,7 +208,12 @@ describe("GET /api/home — shelves → rails", () => {
     expect(feed.becauseYouWatched?.videos.length).toBeGreaterThan(0);
     expect(feed.shorts.length).toBeGreaterThan(0);
     expect(feed.recommended.length).toBeGreaterThan(0);
-    expect(feed.recommendedCursor).toBeNull(); // no browse continuation for a composed feed
+    // WFX2-P6-IS: the composed feed hands the grid the rung-3 pool cursor —
+    // the scroll resumes right after the prefix the feed itself showed
+    const cursor = decodeCursor(feed.recommendedCursor);
+    expect(cursor?.s).toBe("pool");
+    expect(cursor?.s === "pool" ? cursor.o : 0).toBeGreaterThan(0);
+    expect(cursor?.s === "pool" ? cursor.o : 0).toBeLessThanOrEqual(feed.recommended.length + 1 + 25);
   });
 
   test("category mode is search-backed with a continuation cursor", async () => {

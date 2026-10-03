@@ -27,6 +27,12 @@ import { innertubeBrowse, innertubeSearch } from "./innertube";
 import { upstreamFetch } from "./upstream";
 import { fetchYtInitialData } from "./ssr";
 import { cached, cachedResilient, cachePeek, TTL } from "./cache";
+import {
+  decodeComposeCursor,
+  encodeCursor,
+  type ComposeSearchCursor,
+  type PoolCursor,
+} from "./cursors";
 import { hasSession } from "./session";
 import { mapVideos, mapShorts, walkTree, runsText, viewsFromTexts, watchUrl, shortsThumbnailUrl } from "./mappers";
 import { getShortsSeed, type ShortDTO, type ShortsFeedDTO } from "./shorts";
@@ -213,34 +219,128 @@ const COMPOSE_BYW_LIMIT = 12;
 /** The compose's shorts rail size (browse-mode parity: 12). */
 const COMPOSE_SHORTS_LIMIT = 12;
 
+/** The cached compose pool entry (see composeSearchPool). */
+interface ComposePool {
+  /** the merged, query-order, id-deduped first-pass videos */
+  videos: VideoDTO[];
+  /** HOME_COMPOSE_QUERIES[i]'s first-page continuation token (null = failed/none) */
+  tokens: (string | null)[];
+}
+
 /**
  * The merged first-pass pool: every compose query's REAL search results,
- * merged in query order and de-duplicated by id. Per-query failures are
- * tolerated (best-effort merge); only when EVERY query fails — search itself
- * is down — does this throw, surfacing the honest upstream error.
+ * merged in query order and de-duplicated by id, PLUS each seed query's
+ * first-page continuation token captured at compose time. Per-query failures
+ * are tolerated (best-effort merge; a failed query's token is null); only
+ * when EVERY query fails — search itself is down — does this throw, surfacing
+ * the honest upstream error.
+ *
+ * WFX2-P6-IS: the WHOLE pool is one cached value — a pool cursor's offset
+ * must slice the identical list on every page (a fresh merge could reshuffle
+ * the underlying search answers mid-scroll), so pages read this same entry.
+ * The per-query pages inside still ride their own yt:searchpage:… keys — no
+ * new uncached upstream paths.
  */
-async function composeSearchVideos(): Promise<VideoDTO[]> {
-  const pages = await Promise.all(
-    HOME_COMPOSE_QUERIES.map((query) =>
-      getSearchVideoPage(query, { type: "video" }, undefined, COMPOSE_PAGE_LIMIT)
-        .then((page) => page.videos)
-        .catch(() => null),
-    ),
-  );
-  const okPages = pages.filter((videos): videos is VideoDTO[] => videos !== null);
-  if (okPages.length === 0) {
-    throw new Error("home compose: every search query failed (search is down)");
+async function composeSearchPool(): Promise<ComposePool> {
+  return cached("yt:compose:pool", TTL.SEARCH_MS, async () => {
+    const pages = await Promise.all(
+      HOME_COMPOSE_QUERIES.map((query) =>
+        getSearchVideoPage(query, { type: "video" }, undefined, COMPOSE_PAGE_LIMIT).catch(
+          () => null,
+        ),
+      ),
+    );
+    const okPages = pages.filter((page): page is VideoPage => page !== null);
+    if (okPages.length === 0) {
+      throw new Error("home compose: every search query failed (search is down)");
+    }
+    const tokens = pages.map((page) => page?.nextCursor ?? null);
+    const seen = new Set<string>();
+    const merged: VideoDTO[] = [];
+    for (const page of okPages) {
+      for (const video of page.videos) {
+        if (seen.has(video.id)) continue;
+        seen.add(video.id);
+        merged.push(video);
+      }
+    }
+    return { videos: merged, tokens };
+  });
+}
+
+/** The first seed-query index holding a captured continuation token (-1 = none). */
+function firstTokenQuery(tokens: (string | null)[]): number {
+  return tokens.findIndex((tok) => typeof tok === "string" && tok.length > 0);
+}
+
+/**
+ * The rung-3 chain's next cursor after consuming the pool through `offset`:
+ * pool windows remain → a pool cursor; the pool is exhausted → the search-phase
+ * cursor for the first seed query that captured a continuation token (its
+ * FIRST page's videos are already in the pool, so the token starts the next);
+ * every query tokenless → null (the honest end — nothing real left to page).
+ */
+function nextComposeCursor(
+  offset: number,
+  tokens: (string | null)[],
+  poolLength: number,
+): string | null {
+  if (offset < poolLength) return encodeCursor({ s: "pool", o: offset, t: tokens });
+  const qi = firstTokenQuery(tokens);
+  if (qi === -1) return null;
+  return encodeCursor({ s: "search", qi, t: tokens[qi] as string });
+}
+
+/**
+ * A pool cursor's page: slice [o, o+limit) from the SAME cached pool the
+ * first page composed (identical windows across pages — the pool is one
+ * cached value). A cursor whose offset is already past the pool (it shrank,
+ * or the direct-emission edge was skipped) transitions to the search phase
+ * immediately, so a page is never empty-with-a-cursor (an empty page would
+ * strand the grid's sentinel while it stays in view).
+ */
+async function composePoolPage(cursor: PoolCursor, limit: number): Promise<VideoPage> {
+  const pool = await composeSearchPool();
+  if (cursor.o < pool.videos.length) {
+    const videos = pool.videos.slice(cursor.o, cursor.o + limit);
+    return {
+      videos,
+      nextCursor: nextComposeCursor(cursor.o + limit, cursor.t, pool.videos.length),
+    };
   }
-  const seen = new Set<string>();
-  const merged: VideoDTO[] = [];
-  for (const videos of okPages) {
-    for (const video of videos) {
-      if (seen.has(video.id)) continue;
-      seen.add(video.id);
-      merged.push(video);
+  const qi = firstTokenQuery(cursor.t);
+  if (qi === -1) return { videos: [], nextCursor: null };
+  return composeSearchPage({ s: "search", qi, t: cursor.t[qi] as string }, limit);
+}
+
+/**
+ * A search-phase cursor's page: one live search continuation for seed query
+ * `qi` (the cursor's own token). The query's own continuation token keeps the
+ * chain; when it exhausts, the NEXT seed query's captured first token takes
+ * over; when every query has exhausted, the chain honestly ends (null) —
+ * with the pool plus each seed query's continuation depth this is dozens of
+ * real pages, and never a fabricated loop.
+ */
+async function composeSearchPage(cursor: ComposeSearchCursor, limit: number): Promise<VideoPage> {
+  const query = HOME_COMPOSE_QUERIES[cursor.qi];
+  const page = await getSearchVideoPage(query, { type: "video" }, cursor.t, limit);
+  if (page.nextCursor) {
+    return {
+      videos: page.videos,
+      nextCursor: encodeCursor({ s: "search", qi: cursor.qi, t: page.nextCursor }),
+    };
+  }
+  // this seed query exhausted — advance to the next query with a captured
+  // token. The pool entry holds the token table; it is read lazily (only on
+  // this boundary) because it is a cache hit in the common case.
+  const pool = await composeSearchPool();
+  for (let qi = cursor.qi + 1; qi < HOME_COMPOSE_QUERIES.length; qi++) {
+    const tok = pool.tokens[qi];
+    if (typeof tok === "string" && tok.length > 0) {
+      return { videos: page.videos, nextCursor: encodeCursor({ s: "search", qi, t: tok }) };
     }
   }
-  return merged;
+  return { videos: page.videos, nextCursor: null };
 }
 
 /**
@@ -351,14 +451,31 @@ async function composeBecauseYouWatched(
 }
 
 /**
+ * The pool prefix the composed feed already rendered (hero + the recommended
+ * rail) — the grid's continuation cursor resumes right after it, so the
+ * first scrolled page never repeats what the feed itself showed.
+ */
+function consumedPoolPrefix(merged: VideoDTO[], heroId: string, recommended: VideoDTO[]): number {
+  const shown = new Set<string>([heroId, ...recommended.map((v) => v.id)]);
+  let consumed = 0;
+  merged.forEach((video, i) => {
+    if (shown.has(video.id)) consumed = i + 1;
+  });
+  return consumed;
+}
+
+/**
  * Rung 3 — the full default home composed from REAL search data: hero = the
  * top pick of the merged set, shorts = the existing seed, becauseYouWatched =
  * the second-pass channel rail, recommended = the rest of the merge. No
- * browse continuation exists for a composed feed — the cursor stays null
- * (a search token would be misrouted by the All-mode cursor path).
+ * browse continuation exists for a composed feed, so WFX2-P6-IS hands the
+ * grid the rung-3 compose cursor instead: the pool resumes right after the
+ * prefix the feed showed, then the seed queries' live continuations carry
+ * the scroll on (the /api/videos All-mode path speaks the same envelopes).
  */
 async function composeHomeFeedFromSearch(): Promise<HomeFeedDTO> {
-  const merged = await composeSearchVideos(); // throws only when search itself fails
+  const pool = await composeSearchPool(); // throws only when search itself fails
+  const merged = pool.videos;
 
   const hero = merged.find((v) => !v.isShort && !v.isLive) ?? null;
   const heroId = hero?.id ?? "";
@@ -375,6 +492,11 @@ async function composeHomeFeedFromSearch(): Promise<HomeFeedDTO> {
     ...(becauseYouWatched?.videos.map((v) => v.id) ?? []),
   ]);
   const recommended = merged.filter((v) => !railIds.has(v.id) && !v.isShort).slice(0, 24);
+  const recommendedCursor = nextComposeCursor(
+    consumedPoolPrefix(merged, heroId, recommended),
+    pool.tokens,
+    merged.length,
+  );
 
   return {
     hero,
@@ -383,7 +505,7 @@ async function composeHomeFeedFromSearch(): Promise<HomeFeedDTO> {
     becauseYouWatched,
     shorts,
     recommended,
-    recommendedCursor: null,
+    recommendedCursor,
     chips: HOME_CHIPS,
     source: "search-compose",
   };
@@ -493,9 +615,14 @@ export async function getBrowseVideoPage(
 /** /api/videos implementation — `q=` and category routes search (search is
  * NOT walled for Vercel egress — this is the `/api/videos?q=music` production
  * fix); the default page climbs the SAME home ladder: browse-fresh →
- * browse-last-good → search-compose (it shares the home feed's compose pages
+ * browse-last-good → search-compose (it shares the home feed's compose pool
  * and cache keys, so the default feed is never empty while search lives).
- * Cursor pages stay browse continuations — a continuation must never compose. */
+ * WFX2-P6-IS — the cursor pages: rungs 1–2 keep their NATIVE browse
+ * continuation tokens exactly as before; rung 3's pages now speak the
+ * self-contained compose envelopes (cursors.ts): pool offsets through the
+ * cached merged pool, then the seed queries' live search continuations, then
+ * the honest null end. A native token never decodes as an envelope, and a
+ * continuation still never composes — the discrimination is by shape. */
 export async function listLiveVideos(opts: {
   cursor?: string | null;
   category?: string | null;
@@ -519,9 +646,15 @@ export async function listLiveVideos(opts: {
     } catch {
       // hard browse failure with no last-good — fall through to rung 3
     }
-    // rung 3: the search-backed compose (shared cache keys with the home feed)
-    const merged = await composeSearchVideos();
-    return { videos: merged.slice(0, limit), nextCursor: null };
+    // rung 3: the search-backed compose — first pool window + the chain cursor
+    const pool = await composeSearchPool();
+    return {
+      videos: pool.videos.slice(0, limit),
+      nextCursor: nextComposeCursor(limit, pool.tokens, pool.videos.length),
+    };
   }
+  const compose = decodeComposeCursor(opts.cursor, HOME_COMPOSE_QUERIES.length);
+  if (compose?.s === "pool") return composePoolPage(compose, limit);
+  if (compose?.s === "search") return composeSearchPage(compose, limit);
   return getBrowseVideoPage(opts.cursor, limit);
 }
