@@ -23,9 +23,11 @@ import {
   LikedCard,
   MoreFromRail,
   PlaylistsSection,
+  WatchInsightsSection,
   WatchLaterCard,
   YourVideosSection,
   type YouHistoryPayload,
+  type YouInsightsPayload,
   type YouPlaylistsPayload,
   type YouStudioPayload,
 } from "./sections";
@@ -45,6 +47,8 @@ function YouContent() {
   const history = useApi<YouHistoryPayload>("/api/history");
   const playlists = useApi<YouPlaylistsPayload>("/api/playlists");
   const studio = useApi<YouStudioPayload>("/api/studio?enrich=0");
+  // WFX2-P7-AN — the watch analytics seam (real rows only, zero-filled series)
+  const insights = useApi<YouInsightsPayload>("/api/watch/insights");
 
   return (
     <div className="pb-10">
@@ -68,6 +72,7 @@ function YouContent() {
 
       <div className="flex flex-col gap-10">
         <HistorySection state={history} />
+        <WatchInsightsSection state={insights} />
         <PlaylistsSection state={playlists} />
         <YourVideosSection state={studio} />
         <div className="grid gap-4 px-4 sm:grid-cols-2 sm:px-6">

@@ -657,6 +657,7 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
               durationSec={video.durationSec ?? 0}
               thumbnailUrl={video.thumbnailUrl}
               onSeek={seek}
+              viewerWatchedSec={detail?.state.watchedSec ?? null}
             />
 
             {/* transcript panel (keyed per video — fresh language state) */}

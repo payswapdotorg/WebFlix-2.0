@@ -39,10 +39,17 @@ type VideoCardProps = {
   progress?: number;
   variant?: "grid" | "rail";
   className?: string;
+  /**
+   * WFX2-P7-AN — the watched-map entry for this video (videoId → watchedSec
+   * from POST /api/watch/watched-map). When provided, the thumbnail carries
+   * the WATCHED strip (YouTube's already-watched idiom). Surfaces without a
+   * map simply don't pass it — never a per-card fetch.
+   */
+  watchedSec?: number;
 };
 
 /** WebFlix video card: thumbnail + duration badge, 2-line title, meta, kebab. */
-export function VideoCard({ video, progress, variant = "grid", className }: VideoCardProps) {
+export function VideoCard({ video, progress, variant = "grid", className, watchedSec: watchedMapSec }: VideoCardProps) {
   const [hidden, setHidden] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
   const hover = useHoverPreview(video);
@@ -138,6 +145,14 @@ export function VideoCard({ video, progress, variant = "grid", className }: Vide
           {video.isMembersOnly && (
             <span className="absolute left-1.5 top-1.5 rounded-sm bg-yt-red px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
               Members
+            </span>
+          )}
+          {watchedMapSec !== undefined && (
+            <span
+              data-testid="video-card-watched"
+              className="absolute bottom-0 left-0 right-0 bg-neutral-900/80 px-1.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white"
+            >
+              Watched
             </span>
           )}
           {shownProgress > 0 && (

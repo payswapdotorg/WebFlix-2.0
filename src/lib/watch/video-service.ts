@@ -86,7 +86,7 @@ export async function getVideoDetail(
     }),
     db.viewEvent.findUnique({
       where: { videoId_userId: { videoId, userId: viewerId } },
-      select: { lastPositionSec: true },
+      select: { lastPositionSec: true, watchedSec: true },
     }),
     db.playlistItem.findMany({
       where: { videoId, playlist: { userId: viewerId } },
@@ -103,6 +103,9 @@ export async function getVideoDetail(
       subscribed: subscription !== null,
       bell: (subscription?.bell as BellValue) ?? null,
       resumeSec: viewEvent?.lastPositionSec ?? null,
+      // WFX2-P7-AN: the viewer's lifetime watch time on this video (the
+      // watch page's honest "You've watched…" line; null when never watched)
+      watchedSec: viewEvent?.watchedSec ?? null,
       playlistIds: playlistItems.map((p) => p.playlistId),
       savedWatchLater,
       isCreator: video.channel.ownerId === viewerId,

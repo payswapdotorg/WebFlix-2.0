@@ -34,6 +34,7 @@ model User {
   notifications  Notification[]
   memberships    Membership[]
   viewEvents     ViewEvent[]
+  watchDailyStats WatchDailyStat[]
   comments       Comment[]
   videoReports   VideoReport[]
   videoSignals   VideoSignal[]
@@ -148,6 +149,24 @@ model ViewEvent {
   @@index([userId, at])
   @@index([videoId])
   @@index([videoId, userId, at])
+}
+
+// WFX2-P7-AN — the daily watch-time aggregation (one row per user+UTC-day).
+// The ONLY writer is the progress-service autosave path (saveProgress): the
+// increment is the autosave's cumulative delta. The /api/view dedupe ping
+// NEVER touches this table (view-dedupe semantics, not watch-time).
+model WatchDailyStat {
+  id            String   @id @default(cuid())
+  userId        String
+  // "YYYY-MM-DD" UTC date key
+  day           String
+  sec           Int      @default(0)
+  videosWatched Int      @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, day])
+  @@index([userId, day])
 }
 
 model Comment {
