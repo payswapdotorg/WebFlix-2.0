@@ -717,7 +717,10 @@ export function mapChannelHeader(response: unknown): ChannelHeaderDTO | null {
 // channel page tabs + membership (WFX2-B-S)
 // ---------------------------------------------------------------------------
 
-/** Map the response's tab titles to our tab ids (Community tab = "Posts"). */
+/** Map the response's tab titles to our tab ids (Community tab = "Posts").
+ * WFX2-P7-CH: YouTube's own "Membership" tab title maps to the membership
+ * tab id — the channel's own tab list (same source of truth as every other
+ * tab) decides the tab renders, gated on joinable in the page. */
 const TAB_TITLE_TO_ID: Record<string, ChannelTabId> = {
   Home: "home",
   Videos: "videos",
@@ -726,6 +729,7 @@ const TAB_TITLE_TO_ID: Record<string, ChannelTabId> = {
   Playlists: "playlists",
   Posts: "community",
   Community: "community",
+  Membership: "membership",
 };
 
 /** The channel's available tabs from its own tab list (YouTube's order + About). */

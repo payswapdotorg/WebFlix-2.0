@@ -182,7 +182,41 @@ export type ChannelTabId =
   | "live"
   | "playlists"
   | "community"
+  | "membership"
   | "about";
+
+/**
+ * WFX2-P7-CH — one membership tier row from the memberships panel
+ * (`membershipsRenderer`: title runs, priceText, perksText). Every field
+ * maps straight off the real panel payload — a tier never renders unless
+ * the panel really carried it (honest nulls, never fabricated prices).
+ */
+export type ChannelMembershipTierDTO = {
+  title: string;
+  priceText: string;
+  /** the panel's own perk text — null when the row carries none */
+  perksText: string | null;
+};
+
+/**
+ * WFX2-P7-CH (moved from channel-tabs.ts, re-exported there) — the Join
+ * (memberships) surface BOTH /api/channel/[handle]/join and the Membership
+ * tab consume (the single shared memberships-panel walk):
+ *  - `joinable` from the channel page's Join button renderer;
+ *  - `tiers` ONLY when genuinely reachable through the operator session
+ *    (the join button's own getMembershipsPanelCommand → the panel rows);
+ *  - public mode honestly reports YouTube's own logged-out Join modal
+ *    state (`signinRequired` + "Sign in to become a member."), never
+ *    fabricated tiers.
+ */
+export type ChannelJoinDTO = {
+  joinable: boolean;
+  /** tier rows when genuinely reachable through the operator session */
+  tiers: ChannelMembershipTierDTO[] | null;
+  /** public mode: YouTube's own logged-out Join modal state */
+  signinRequired: boolean;
+  note: string | null;
+};
 
 /** One channel playlist (the Playlists tab's lockup view models). */
 export type ChannelPlaylistDTO = {
@@ -281,6 +315,12 @@ export type ChannelTabDTO = {
   about?: ChannelAboutDTO;
   /** memberships (Join) info when the tab surface carries it */
   joinable?: boolean;
+  /**
+   * WFX2-P7-CH (additive): the Membership tab's payload — the SAME join
+   * surface /join serves (the shared memberships-panel walk), shaped as a
+   * tab DTO. Present only on `tab: "membership"` payloads.
+   */
+  membership?: ChannelJoinDTO;
   /**
    * WFX2-P6-CH (additive): the Videos tab's sort chips — the default fetch
    * carries the channel's own chip bar, a chip-continuation fetch carries

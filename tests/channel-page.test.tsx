@@ -525,3 +525,241 @@ describe("the channel header composition (WFX2-P6-CH)", () => {
     expect(meta!.textContent).toBe("UCuAXFkgsw1L7xaCfnd5JJOw · 1.23M subscribers · 437 videos");
   });
 });
+
+/* ------------------------------------------------------------------ */
+/* 4. WFX2-P7-CH — the Membership tab                                  */
+/* ------------------------------------------------------------------ */
+
+describe("the Membership tab (WFX2-P7-CH)", () => {
+  async function clickToMembershipTab() {
+    await act(async () => {
+      const membershipTab = qAll('[role="tab"]').find((b) => b.textContent === "Membership");
+      (membershipTab as HTMLElement).click();
+    });
+    await sleep(40);
+  }
+
+  test("joinable channel + tiers: the tab renders, the real tier cards serve (title, priceText, perk rows split on newlines/commas)", async () => {
+    let membershipReads = 0;
+    fetchHandler = (u) => {
+      if (u.includes("/tab?tab=membership")) {
+        membershipReads++;
+        return jsonResponse({
+          tab: "membership",
+          joinable: true,
+          membership: {
+            joinable: true,
+            tiers: [
+              {
+                title: "Fan",
+                priceText: "$4.99/month",
+                perksText: "Loyalty badges\nCustom emojis\nMembers-only videos",
+              },
+              {
+                title: "VIP",
+                priceText: "$9.99/month",
+                perksText: "Everything in Fan, Early access, VIP badge",
+              },
+              { title: "Studio Backer", priceText: "$0.99/month", perksText: null },
+            ],
+            signinRequired: false,
+            note: null,
+          },
+        });
+      }
+      return jsonResponse(pageDto({ tabs: ["home", "videos", "membership"], joinable: true }));
+    };
+    await renderPage();
+    // the Membership tab button renders (the own tab list carries it + joinable)
+    const membershipTab = qAll('[role="tab"]').find((b) => b.textContent === "Membership");
+    expect(membershipTab).toBeDefined();
+    await clickToMembershipTab();
+    // the lazy tab fetch happened exactly once (the tab route's membership branch)
+    expect(membershipReads).toBe(1);
+    expect(fetchLog.some((u) => u.includes("/tab?tab=membership"))).toBe(true);
+    // the "Join this channel" header line
+    expect(host!.textContent).toContain("Join this channel");
+    // the tier cards: title + priceText (the channel's own tier order)
+    expect(host!.textContent).toContain("Fan");
+    expect(host!.textContent).toContain("$4.99/month");
+    expect(host!.textContent).toContain("VIP");
+    expect(host!.textContent).toContain("$9.99/month");
+    // the perks split into rows — newlines AND commas
+    const perks = qAll("li").map((li) => li.textContent);
+    expect(perks).toContain("Loyalty badges");
+    expect(perks).toContain("Custom emojis");
+    expect(perks).toContain("Members-only videos");
+    expect(perks).toContain("Everything in Fan");
+    expect(perks).toContain("Early access");
+    expect(perks).toContain("VIP badge");
+    // null perksText → NO perk rows for that tier (honest empty) — the tier itself still renders
+    expect(host!.textContent).toContain("Studio Backer");
+    const studioPerks = qAll("li").filter((li) => li.closest("div")?.textContent?.includes("Studio Backer"));
+    expect(studioPerks).toHaveLength(0);
+  });
+
+  test("NOT rendered when the channel isn't joinable (own list carries it, no Join renderer) — honest absence", async () => {
+    fetchHandler = () =>
+      jsonResponse(pageDto({ tabs: ["home", "videos", "membership"], joinable: false }));
+    await renderPage();
+    expect(qAll('[role="tab"]').map((b) => b.textContent)).not.toContain("Membership");
+    expect(fetchLog.some((u) => u.includes("/tab?tab=membership"))).toBe(false);
+  });
+
+  test("NOT rendered when the own tab list doesn't carry it (even joinable) — honest absence", async () => {
+    fetchHandler = () => jsonResponse(pageDto({ joinable: true }));
+    await renderPage();
+    expect(qAll('[role="tab"]').map((b) => b.textContent)).not.toContain("Membership");
+    expect(fetchLog.some((u) => u.includes("/tab?tab=membership"))).toBe(false);
+  });
+
+  test("session absent → the tab renders YouTube's logged-out copy + the sign-in affordance (no fabricated tiers)", async () => {
+    fetchHandler = (u) => {
+      if (u.includes("/tab?tab=membership")) {
+        return jsonResponse({
+          tab: "membership",
+          joinable: true,
+          membership: {
+            joinable: true,
+            tiers: null,
+            signinRequired: true,
+            note: "Sign in to become a member.",
+          },
+        });
+      }
+      return jsonResponse(pageDto({ tabs: ["home", "videos", "membership"], joinable: true }));
+    };
+    await renderPage();
+    await clickToMembershipTab();
+    expect(host!.textContent).toContain("Sign in to become a member.");
+    // the sign-in affordance (the sheet's own /account pattern)
+    const signin = qAll("a").find((a) => a.getAttribute("href") === "/account");
+    expect(signin).toBeDefined();
+    expect(signin!.textContent).toBe("Sign in");
+    // NEVER a fabricated tier or price
+    expect(host!.textContent).not.toContain("$");
+  });
+
+  test("tiers unreadable from the session → the honest note line (never a fabricated tier)", async () => {
+    fetchHandler = (u) => {
+      if (u.includes("/tab?tab=membership")) {
+        return jsonResponse({
+          tab: "membership",
+          joinable: true,
+          membership: {
+            joinable: true,
+            tiers: null,
+            signinRequired: false,
+            note: "Membership tiers are not readable from this session right now.",
+          },
+        });
+      }
+      return jsonResponse(pageDto({ tabs: ["home", "videos", "membership"], joinable: true }));
+    };
+    await renderPage();
+    await clickToMembershipTab();
+    expect(host!.textContent).toContain(
+      "Membership tiers are not readable from this session right now."
+    );
+    expect(host!.textContent).not.toContain("$");
+  });
+
+  test("a walled membership read → the tab family's standard honest degrade (never a fake grid)", async () => {
+    fetchHandler = (u) => {
+      if (u.includes("/tab?tab=membership")) {
+        return jsonResponse({ tab: "membership", walled: true });
+      }
+      return jsonResponse(pageDto({ tabs: ["home", "videos", "membership"], joinable: true }));
+    };
+    await renderPage();
+    await clickToMembershipTab();
+    const note = q('[role="status"]');
+    expect(note).not.toBeNull();
+    expect(note!.textContent).toContain("unavailable from this egress");
+    expect(host!.textContent).not.toContain("Join this channel");
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* 5. WFX2-P7-CH — the Join sheet's per-tier CTA (the href law)        */
+/* ------------------------------------------------------------------ */
+
+describe("the Join sheet's per-tier CTA (WFX2-P7-CH)", () => {
+  test("each tier card carries a 'Join on YouTube' CTA — BARE-handle href, _blank, noopener noreferrer — + the honest checkout note; the fake in-app Join is gone", async () => {
+    fetchHandler = (u) => {
+      if (u.includes("/join")) {
+        return jsonResponse({
+          joinable: true,
+          tiers: [
+            { title: "Fan", priceText: "$4.99/month", perksText: "Loyalty badges, Custom emojis" },
+            { title: "VIP", priceText: "$9.99/month", perksText: null },
+          ],
+          signinRequired: false,
+          note: null,
+        });
+      }
+      return jsonResponse(pageDto({ tabs: ["home", "videos", "membership"], joinable: true }));
+    };
+    await renderPage();
+    // the header's Join button opens the sheet
+    const joinBtn = q('button[aria-label="Join Mind Warehouse"]');
+    expect(joinBtn).not.toBeNull();
+    await act(async () => {
+      joinBtn!.click();
+    });
+    await sleep(40);
+    // the join surface fetched exactly once
+    expect(fetchLog.filter((u) => u.includes("/join"))).toHaveLength(1);
+    // radix portals the sheet into document.body — assert against the document
+    // the per-tier CTAs: the BARE handle in the URL, external target, noopener
+    const ctas = Array.from(
+      win.document.querySelectorAll('a[href="https://www.youtube.com/mind_warehouse/join"]')
+    ) as unknown as HTMLAnchorElement[];
+    expect(ctas).toHaveLength(2); // one per tier card
+    for (const cta of ctas) {
+      expect(cta.getAttribute("target")).toBe("_blank");
+      expect(cta.getAttribute("rel")).toBe("noopener noreferrer");
+      expect(cta.textContent).toContain("Join on YouTube");
+    }
+    // never the doubled-@ form in the href
+    expect(win.document.body.innerHTML).not.toContain("@mind_warehouse/join");
+    // the one-line honest explainer
+    expect(win.document.body.textContent).toContain(
+      "Checkout and payment happen on YouTube"
+    );
+    // the fake in-app Join button (the old /account stand-in) is GONE
+    expect(Array.from(win.document.querySelectorAll('a[href="/account"]'))).toHaveLength(0);
+  });
+
+  test("tiers null (signinRequired) → the sheet's existing honest state stays byte-identical (copy + sign-in affordance, NO CTA)", async () => {
+    fetchHandler = (u) => {
+      if (u.includes("/join")) {
+        return jsonResponse({
+          joinable: true,
+          tiers: null,
+          signinRequired: true,
+          note: "Sign in to become a member.",
+        });
+      }
+      return jsonResponse(pageDto({ tabs: ["home", "videos", "membership"], joinable: true }));
+    };
+    await renderPage();
+    const joinBtn = q('button[aria-label="Join Mind Warehouse"]');
+    await act(async () => {
+      joinBtn!.click();
+    });
+    await sleep(40);
+    const body = win.document.body.textContent ?? "";
+    expect(body).toContain("Sign in to become a member.");
+    expect(body).toContain("single-tenant live mode");
+    const signin = Array.from(win.document.querySelectorAll("a")).find(
+      (a) => a.getAttribute("href") === "/account"
+    );
+    expect(signin).toBeDefined();
+    expect(signin!.textContent).toBe("Sign in");
+    // NO Join-on-YouTube CTA on a tierless honest state
+    expect(
+      Array.from(win.document.querySelectorAll('a[href^="https://www.youtube.com/"]'))
+    ).toHaveLength(0);
+  });
+});

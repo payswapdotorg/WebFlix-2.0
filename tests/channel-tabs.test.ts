@@ -44,6 +44,7 @@ import {
   aboutContinuationToken,
   tabParamFromResponse,
   mapChannelSortChips,
+  mapMembershipTiers,
 } from "@/lib/youtube/channel-tabs";
 import { channelJoinable, channelTabsFromResponse } from "@/lib/youtube/mappers";
 
@@ -186,6 +187,81 @@ describe("channel tab mappers", () => {
     const channel = load("channel_rickastley");
     const tabs = channelTabsFromResponse(channel);
     expect(tabs).toEqual(["home", "videos", "shorts", "live", "playlists", "community", "about"]);
+  });
+
+  // WFX2-P7-CH — a SYNTHETIC "Membership" tabRenderer injected on the real
+  // sanitized capture (YouTube's own tab title — the same source of truth
+  // the rest of the tab list uses; the param token is a shape-real
+  // placeholder, at runtime it comes from the live payload itself).
+  function withMembershipTab(base: any): any {
+    const clone = JSON.parse(JSON.stringify(base));
+    const tabs = clone.contents.twoColumnBrowseResultsRenderer.tabs;
+    const postsIdx = tabs.findIndex((t: any) => t?.tabRenderer?.title === "Posts");
+    tabs.splice(postsIdx + 1, 0, {
+      tabRenderer: {
+        title: "Membership",
+        endpoint: { browseEndpoint: { params: "MEMBERSHIP_TAB_PARAM" } },
+      },
+    });
+    return clone;
+  }
+
+  test("WFX2-P7-CH — TAB_TITLE_TO_ID: a 'Membership' tab title maps to the membership tab id (the own tab list's source of truth)", () => {
+    const channel = withMembershipTab(load("channel_rickastley"));
+    const tabs = channelTabsFromResponse(channel);
+    expect(tabs).toEqual([
+      "home",
+      "videos",
+      "shorts",
+      "live",
+      "playlists",
+      "community",
+      "membership",
+      "about",
+    ]);
+  });
+
+  test("WFX2-P7-CH — tabParamFromResponse: the Membership tab's own params resolve through the same title mapping (lockstep with the tab list)", () => {
+    const channel = withMembershipTab(load("channel_rickastley"));
+    expect(tabParamFromResponse(channel, "membership")).toBe("MEMBERSHIP_TAB_PARAM");
+    // the real capture carries no Membership tab → null (honest)
+    expect(tabParamFromResponse(load("channel_rickastley"), "membership")).toBeNull();
+  });
+
+  test("mapMembershipTiers: membershipsRenderer rows map (title, priceText, perksText) in panel order; no rows → []", () => {
+    // SYNTHETIC panel bytes in the live memberships-panel row shape
+    // (membershipsRenderer: title runs, subtitle.simpleText, perksText runs)
+    const panel = {
+      actions: [
+        {
+          membershipsRenderer: {
+            title: { runs: [{ text: "Fan" }] },
+            subtitle: { simpleText: "$4.99/month" },
+            perksText: { runs: [{ text: "Loyalty badges\nCustom emojis\nMembers-only videos" }] },
+          },
+        },
+        {
+          membershipsRenderer: {
+            title: { runs: [{ text: "VIP" }] },
+            subtitle: { simpleText: "$9.99/month" },
+            perksText: { runs: [{ text: "Everything in Fan, Early access, VIP badge" }] },
+          },
+        },
+      ],
+    };
+    expect(mapMembershipTiers(panel)).toEqual([
+      {
+        title: "Fan",
+        priceText: "$4.99/month",
+        perksText: "Loyalty badges\nCustom emojis\nMembers-only videos",
+      },
+      {
+        title: "VIP",
+        priceText: "$9.99/month",
+        perksText: "Everything in Fan, Early access, VIP badge",
+      },
+    ]);
+    expect(mapMembershipTiers({})).toEqual([]); // honest empty, never a guessed row
   });
 
   test("channelJoinable: false for a channel without the Join button renderer", () => {
@@ -706,5 +782,204 @@ describe("GET /api/channel/[handle]/join — memberships (Join)", () => {
     expect(data.signinRequired).toBe(true); // public mode — no YT_COOKIES
     expect(data.tiers).toBeNull(); // never fabricated
     expect(data.note).toBe("Sign in to become a member.");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WFX2-P7-CH — the shared memberships-panel walk + the Membership tab
+// ---------------------------------------------------------------------------
+
+/**
+ * A joinable-channel upstream: the real sanitized capture with the header
+ * actions row carrying a Join button whose onTap owns the real
+ * getMembershipsPanelCommand (the signed-in panel command — the wire form
+ * the shared walk follows), plus a SYNTHETIC memberships-panel payload in
+ * the live row shape (membershipsRenderer: title runs, subtitle.simpleText
+ * price, perksText runs).
+ */
+function membershipFixtureUpstream(withPanel: boolean) {
+  const recorded: Recorded[] = [];
+  const channel = JSON.parse(JSON.stringify(load("channel_rickastley")));
+  const joinButton: any = { buttonViewModel: { title: "Join" } };
+  if (withPanel) {
+    joinButton.buttonViewModel.onTap = {
+      innertubeCommand: { getMembershipsPanelCommand: { params: "MEMBERSHIP_PANEL_PARAMS" } },
+    };
+  }
+  channel.header.pageHeaderRenderer.content.pageHeaderViewModel.actions = {
+    flexibleActionsViewModel: {
+      actionsRows: [
+        { actions: [{ buttonViewModel: { title: "Subscribe" } }, joinButton] },
+      ],
+    },
+  };
+  const panel = {
+    actions: [
+      {
+        membershipsRenderer: {
+          title: { runs: [{ text: "Fan" }] },
+          subtitle: { simpleText: "$4.99/month" },
+          perksText: { runs: [{ text: "Loyalty badges\nCustom emojis\nMembers-only videos" }] },
+        },
+      },
+      {
+        membershipsRenderer: {
+          title: { runs: [{ text: "VIP" }] },
+          subtitle: { simpleText: "$9.99/month" },
+          perksText: { runs: [{ text: "Everything in Fan, Early access, VIP badge" }] },
+        },
+      },
+    ],
+  };
+  const htmlFor = (data: unknown) =>
+    `<!doctype html><html><head></head><body><script>var ytInitialData = ${JSON.stringify(
+      data
+    )};</script></body></html>`;
+  const impl = async (url: string, init?: RequestInit): Promise<Response> => {
+    const body = init?.body ? JSON.parse(String(init.body)) : null;
+    recorded.push({ url, body });
+    const json = (data: unknown) =>
+      new Response(JSON.stringify(data), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    if (url.includes("/youtubei/v1/browse")) {
+      // the Join button's own memberships-panel command (browse {params})
+      if (body?.params === "MEMBERSHIP_PANEL_PARAMS") return json(panel);
+      return json(channel); // channel home
+    }
+    if (url.includes("youtube.com/@")) {
+      return new Response(htmlFor(channel), {
+        status: 200,
+        headers: { "Content-Type": "text/html" },
+      });
+    }
+    return new Response("not found", { status: 404 });
+  };
+  return { impl, recorded };
+}
+
+describe("WFX2-P7-CH — the shared memberships-panel walk (one helper, both surfaces)", () => {
+  afterEach(() => {
+    delete process.env.YT_COOKIES; // session state never leaks past a test
+  });
+
+  test("signed-in + joinable + panel → the REAL tiers map through the panel continuation", async () => {
+    process.env.YT_COOKIES = "SAPISID=fixture; SID=fixture";
+    clearCache();
+    const upstream = membershipFixtureUpstream(true);
+    setUpstream(upstream.impl);
+    const res = await joinRoute(
+      new Request("http://localhost/api/channel/@RickAstleyYT/join"),
+      tabCtx("@RickAstleyYT")
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.joinable).toBe(true);
+    expect(data.signinRequired).toBe(false);
+    expect(data.tiers).toEqual([
+      {
+        title: "Fan",
+        priceText: "$4.99/month",
+        perksText: "Loyalty badges\nCustom emojis\nMembers-only videos",
+      },
+      {
+        title: "VIP",
+        priceText: "$9.99/month",
+        perksText: "Everything in Fan, Early access, VIP badge",
+      },
+    ]);
+    // the walk really rode the Join button's own panel command (browse {params})
+    const panelBrowse = upstream.recorded.find(
+      (r) => r.url.includes("/youtubei/v1/browse") && r.body?.params === "MEMBERSHIP_PANEL_PARAMS"
+    );
+    expect(panelBrowse).toBeDefined();
+    expect(panelBrowse!.body.browseId).toBeUndefined();
+  });
+
+  test("signed-in + joinable but NO panel command → the honest unreadable note, never fabricated tiers", async () => {
+    process.env.YT_COOKIES = "SAPISID=fixture; SID=fixture";
+    clearCache();
+    setUpstream(membershipFixtureUpstream(false).impl);
+    const res = await joinRoute(
+      new Request("http://localhost/api/channel/@RickAstleyYT/join"),
+      tabCtx("@RickAstleyYT")
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.joinable).toBe(true);
+    expect(data.signinRequired).toBe(false);
+    expect(data.tiers).toBeNull(); // honest null — no guessed tier, no guessed price
+    expect(data.note).toBe("Membership tiers are not readable from this session right now.");
+  });
+
+  test("public mode + joinable → signinRequired with YouTube's own logged-out copy (the tab rides the same contract)", async () => {
+    clearCache();
+    setUpstream(membershipFixtureUpstream(true).impl);
+    const res = await tabRoute(
+      new Request("http://localhost/api/channel/@RickAstleyYT/tab?tab=membership"),
+      tabCtx("@RickAstleyYT")
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.tab).toBe("membership");
+    expect(data.joinable).toBe(true);
+    expect(data.membership.signinRequired).toBe(true);
+    expect(data.membership.tiers).toBeNull();
+    expect(data.membership.note).toBe("Sign in to become a member.");
+  });
+
+  test("the Membership tab consumes the SAME walk — a /join read then ?tab=membership adds ZERO upstream calls (no divergence)", async () => {
+    process.env.YT_COOKIES = "SAPISID=fixture; SID=fixture";
+    clearCache();
+    const upstream = membershipFixtureUpstream(true);
+    setUpstream(upstream.impl);
+    const joinRes = await joinRoute(
+      new Request("http://localhost/api/channel/@RickAstleyYT/join"),
+      tabCtx("@RickAstleyYT")
+    );
+    const join = (await joinRes.json()) as any;
+    expect(join.tiers).toHaveLength(2);
+    const afterJoin = upstream.recorded.length;
+    const tabRes = await tabRoute(
+      new Request("http://localhost/api/channel/@RickAstleyYT/tab?tab=membership"),
+      tabCtx("@RickAstleyYT")
+    );
+    expect(tabRes.status).toBe(200);
+    const tabData = (await tabRes.json()) as any;
+    expect(tabData.tab).toBe("membership");
+    expect(tabData.joinable).toBe(true);
+    // the SAME tiers — byte-identical, from the one shared cache entry
+    expect(tabData.membership).toEqual(join);
+    expect(upstream.recorded.length).toBe(afterJoin); // nothing re-walked
+  });
+
+  test("not-joinable channel → the membership field carries joinable: false honestly (no tiers, no wall)", async () => {
+    // the default fixture upstream — Rick Astley carries no Join button
+    const res = await tabRoute(
+      new Request("http://localhost/api/channel/@RickAstleyYT/tab?tab=membership"),
+      tabCtx("@RickAstleyYT")
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.tab).toBe("membership");
+    expect(data.walled).toBeUndefined();
+    expect(data.joinable).toBe(false);
+    expect(data.membership.joinable).toBe(false);
+    expect(data.membership.tiers).toBeNull();
+  });
+
+  test("walled membership read → HTTP 200 {tab: 'membership', walled: true} — the tab family's honest degrade", async () => {
+    clearCache();
+    setUpstream(async () => new Response("not found", { status: 404 }));
+    const res = await tabRoute(
+      new Request("http://localhost/api/channel/@RickAstleyYT/tab?tab=membership"),
+      tabCtx("@RickAstleyYT")
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.tab).toBe("membership");
+    expect(data.walled).toBe(true);
+    expect(data.membership).toBeUndefined(); // never a fabricated surface on the wall
   });
 });

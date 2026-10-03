@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getChannelTab } from "@/lib/youtube/channel-tabs";
+import { getChannelTab, getChannelMembershipTab } from "@/lib/youtube/channel-tabs";
 import { getCommunityTab } from "@/lib/youtube/community";
 import { rateLimit } from "@/lib/youtube/cache";
 import type { ChannelTabDTO, ChannelTabId } from "@/lib/types";
@@ -13,11 +13,12 @@ const TAB_IDS: ChannelTabId[] = [
   "live",
   "playlists",
   "community",
+  "membership",
   "about",
 ];
 
 /**
- * GET /api/channel/[handle]/tab?tab=home|videos|shorts|live|playlists|community|about
+ * GET /api/channel/[handle]/tab?tab=home|videos|shorts|live|playlists|community|membership|about
  * — the per-tab channel data (WFX2-B-S deep parity), lazy-loaded per tab
  * switch. Real tab data via browse {browseId, params: the channel's own tab
  * param}; Community = the Posts tab; About = the engagement-panel
@@ -29,6 +30,13 @@ const TAB_IDS: ChannelTabId[] = [
  * re-marked chip bar (the chosen sort selected). The chip list itself is
  * never refetched per click — the page reuses its bar, only the grid data
  * changes.
+ *
+ * WFX2-P7-CH: `?tab=membership` — the tab route's per-tab switch branches to
+ * getChannelMembershipTab (the same branch shape the Community tab uses —
+ * the code's natural place, chosen over extending the /join response): the
+ * tab's tier data comes from the SAME join surface /join serves, through the
+ * single shared memberships-panel walk (getChannelJoin), so the tab and the
+ * sheet can never diverge.
  *
  * Every tab rides the cutover resilience contract: the walled shape is never
  * cached, last-good serves when the wall hits, and a cold walled read
@@ -60,10 +68,14 @@ export async function GET(
     // WFX2-P6-CH: the sort-chip continuation token (honored on the Videos
     // tab only; absent/empty on every other tab — the default fetch)
     const chip = url.searchParams.get("chip");
+    // WFX2-P7-CH: the membership tab branches to the shared join walk (the
+    // per-tab switch — the same shape the Community tab's branch takes)
     const payload: ChannelTabDTO =
       tab === "community"
         ? await getCommunityTab(handle)
-        : await getChannelTab(handle, tab as ChannelTabId, chip ?? undefined);
+        : tab === "membership"
+          ? await getChannelMembershipTab(handle)
+          : await getChannelTab(handle, tab as ChannelTabId, chip ?? undefined);
     return NextResponse.json(payload);
   } catch (err) {
     console.error("GET /api/channel/[handle]/tab failed", err);
