@@ -80,10 +80,13 @@ mock.module("@/lib/broker", () => ({
 import { GET as stageGET, OPTIONS as stageOPTIONS, POST as stagePOST } from "@/app/api/upload/stage/route";
 import { POST as executePOST } from "@/app/api/upload/execute/route";
 import {
+  UPLOAD_STEPS,
   canPublish,
+  detailsStepReady,
   initialUploadFlowState,
   uploadFlowNext,
   type UploadExecuteResponseDTO,
+  type UploadWizardStep,
 } from "@/lib/upload/flow";
 import {
   clearStagedUploads,
@@ -586,6 +589,148 @@ describe("the upload flow state machine", () => {
     expect(canPublish(executing, "T")).toBe(false); // busy
     const failed = uploadFlowNext(withFile, { type: "stage-failed", error: "x" });
     expect(canPublish(failed, "T")).toBe(true); // retry allowed
+  });
+});
+
+// ---------------------------------------------------------------------------
+// the WIZARD step ladder (WFX2-P6-UP) — the Details → Video elements → Checks
+// → Visibility walk, the step-gate law, and the header chips' backward-only
+// navigation law (the pure reducer; the rendered wizard rides
+// tests/upload-wizard.test.tsx)
+// ---------------------------------------------------------------------------
+describe("the wizard step ladder (P6-UP)", () => {
+  test("UPLOAD_STEPS is YouTube's dialog order: Details, Video elements, Checks, Visibility", () => {
+    expect(UPLOAD_STEPS.map((s) => s.id)).toEqual([1, 2, 3, 4]);
+    expect(UPLOAD_STEPS.map((s) => s.label)).toEqual([
+      "Details",
+      "Video elements",
+      "Checks",
+      "Visibility",
+    ]);
+  });
+
+  test("a fresh state rests at step 0 (no dialog) with the checks idle", () => {
+    const s = initialUploadFlowState();
+    expect(s.step).toBe(0);
+    expect(s.checks).toBe("idle");
+    expect(s.phase).toBe("idle");
+  });
+
+  test("the step-gate law: detailsStepReady demands a non-blank title", () => {
+    expect(detailsStepReady("")).toBe(false);
+    expect(detailsStepReady("   ")).toBe(false);
+    expect(detailsStepReady("a")).toBe(true);
+    expect(detailsStepReady("  My vlog  ")).toBe(true);
+  });
+
+  test("file-picked opens the dialog at Details carrying the REAL file facts", () => {
+    let s = initialUploadFlowState();
+    s = uploadFlowNext(s, { type: "file-picked", fileName: "clip.mp4", sizeBytes: 15102 });
+    expect(s.step).toBe(1);
+    expect(s.fileName).toBe("clip.mp4");
+    expect(s.sizeBytes).toBe(15102);
+    expect(s.checks).toBe("idle");
+    expect(s.phase).toBe("idle");
+  });
+
+  test("file-picked resets a prior terminal state (a new drive may start)", () => {
+    let s = initialUploadFlowState();
+    s = uploadFlowNext(s, { type: "file-picked", fileName: "a.mp4", sizeBytes: 1 });
+    s = uploadFlowNext(s, { type: "step-next" });
+    s = uploadFlowNext(s, { type: "step-next" });
+    s = uploadFlowNext(s, { type: "checks-completed" }); // → step 4, checks passed
+    s = uploadFlowNext(s, {
+      type: "execute-settled",
+      result: { outcome: "published", videoId: "x", watchUrl: "https://www.youtube.com/watch?v=x" },
+    });
+    s = uploadFlowNext(s, { type: "file-picked", fileName: "b.mp4", sizeBytes: 2 });
+    expect(s.step).toBe(1);
+    expect(s.checks).toBe("idle");
+    expect(s.result).toBeNull();
+    expect(s.phase).toBe("idle");
+  });
+
+  test("step-next walks 1→2→3→4, entering Checks starts its animation, capped at 4", () => {
+    let s = initialUploadFlowState();
+    s = uploadFlowNext(s, { type: "file-picked", fileName: "a.mp4", sizeBytes: 1 });
+    s = uploadFlowNext(s, { type: "step-next" });
+    expect(s.step).toBe(2);
+    expect(s.checks).toBe("idle"); // stepping into 2 does not touch checks
+    s = uploadFlowNext(s, { type: "step-next" });
+    expect(s.step).toBe(3);
+    expect(s.checks).toBe("running"); // stepping INTO Checks starts it
+    s = uploadFlowNext(s, { type: "checks-completed" });
+    s = uploadFlowNext(s, { type: "step-next" });
+    expect(s.step).toBe(4); // capped — no step 5
+    expect(uploadFlowNext(s, { type: "step-next" }).step).toBe(4);
+  });
+
+  test("checks-completed is the honest auto-advance: passed + Visibility", () => {
+    let s = initialUploadFlowState();
+    s = uploadFlowNext(s, { type: "file-picked", fileName: "a.mp4", sizeBytes: 1 });
+    s = uploadFlowNext(s, { type: "step-next" });
+    s = uploadFlowNext(s, { type: "step-next" });
+    expect(s.checks).toBe("running");
+    s = uploadFlowNext(s, { type: "checks-completed" });
+    expect(s.checks).toBe("passed");
+    expect(s.step).toBe(4);
+  });
+
+  test("step-back floors at Details and resets the Checks animation below it", () => {
+    let s = initialUploadFlowState();
+    s = uploadFlowNext(s, { type: "file-picked", fileName: "a.mp4", sizeBytes: 1 });
+    s = uploadFlowNext(s, { type: "step-next" });
+    s = uploadFlowNext(s, { type: "step-next" });
+    s = uploadFlowNext(s, { type: "checks-completed" }); // step 4, passed
+    s = uploadFlowNext(s, { type: "step-back" }); // 4 → 3 keeps the passed state
+    expect(s.step).toBe(3);
+    expect(s.checks).toBe("passed");
+    s = uploadFlowNext(s, { type: "step-back" }); // 3 → 2 resets the animation
+    expect(s.step).toBe(2);
+    expect(s.checks).toBe("idle");
+    s = uploadFlowNext(s, { type: "step-back" });
+    s = uploadFlowNext(s, { type: "step-back" });
+    expect(s.step).toBe(1); // floored at Details
+    // a re-entry re-runs the checks
+    s = uploadFlowNext(s, { type: "step-next" });
+    s = uploadFlowNext(s, { type: "step-next" });
+    expect(s.checks).toBe("running");
+  });
+
+  test("step-jump (the header chips) navigates BACKWARD only", () => {
+    let s = initialUploadFlowState();
+    s = uploadFlowNext(s, { type: "file-picked", fileName: "a.mp4", sizeBytes: 1 });
+    s = uploadFlowNext(s, { type: "step-next" });
+    s = uploadFlowNext(s, { type: "step-next" });
+    s = uploadFlowNext(s, { type: "checks-completed" }); // step 4
+    // forward/same-target jumps are honest no-ops (forward needs each step's Next)
+    expect(uploadFlowNext(s, { type: "step-jump", to: 4 as UploadWizardStep })).toBe(s);
+    expect(uploadFlowNext(s, { type: "step-jump", to: 5 as UploadWizardStep })).toBe(s);
+    // backward jumps land exactly on the target
+    const to2 = uploadFlowNext(s, { type: "step-jump", to: 2 as UploadWizardStep });
+    expect(to2.step).toBe(2);
+    expect(to2.checks).toBe("idle"); // jumping below Checks resets its animation
+    // jumping back to Checks keeps its completed state
+    const done = uploadFlowNext(to2, { type: "step-next" });
+    const running = uploadFlowNext(done, { type: "step-next" });
+    expect(running.checks).toBe("running");
+    const passed = uploadFlowNext(running, { type: "checks-completed" });
+    const to3 = uploadFlowNext(passed, { type: "step-jump", to: 3 as UploadWizardStep });
+    expect(to3.step).toBe(3);
+    expect(to3.checks).toBe("passed");
+    // step 0 is never a chip target
+    expect(uploadFlowNext(to3, { type: "step-jump", to: 0 as UploadWizardStep })).toBe(to3);
+  });
+
+  test("file-cleared / reset return the whole ladder to the drop target", () => {
+    let s = initialUploadFlowState();
+    s = uploadFlowNext(s, { type: "file-picked", fileName: "a.mp4", sizeBytes: 1 });
+    s = uploadFlowNext(s, { type: "step-next" });
+    s = uploadFlowNext(s, { type: "file-cleared" });
+    expect(s).toEqual(initialUploadFlowState());
+    s = uploadFlowNext(s, { type: "file-picked", fileName: "a.mp4", sizeBytes: 1 });
+    s = uploadFlowNext(s, { type: "reset" });
+    expect(s).toEqual(initialUploadFlowState());
   });
 });
 
