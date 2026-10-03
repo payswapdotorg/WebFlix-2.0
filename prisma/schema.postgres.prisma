@@ -160,7 +160,10 @@ model Comment {
   heartedByCreator Boolean  @default(false)
   pinned           Boolean  @default(false)
   // "approved" | "held" | "flagged" | "rejected" | "deleted"
-  // ("deleted" is the soft state that powers the delete-undo toast)
+  // ("deleted" is the soft state that powers the delete-undo toast;
+  //  "shadow" marks a live-YouTube-comment anchor row — an FK anchor that
+  //  NEVER renders: every read path filters moderation:"approved" only,
+  //  the live payload owns the parent's rendering — WFX2-P6-CR)
   moderation       String   @default("approved")
   reportedBy       Int      @default(0)
   edited           Boolean  @default(false)
