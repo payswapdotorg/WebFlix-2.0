@@ -69,6 +69,63 @@ const pressed=(b)=>!!b&&b.getAttribute('aria-pressed')==='true';
 const norm=(s)=>(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
 const CTX=()=>{try{if(window.ytcfg&&typeof window.ytcfg.get==='function'){const c=window.ytcfg.get('INNERTUBE_CONTEXT');if(c&&c.client)return c;}}catch(e){}return {client:{clientName:'WEB',clientVersion:'2.20250101.01.00'}}};
 const post=(path,body)=>fetch('/youtubei/v1/'+path+'?prettyPrint=false',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(async(r)=>({status:r.status,ok:r.ok,text:(await r.text().catch(()=>'')).slice(0,300)}));
+// P7 2026-10: authenticated InnerTube POST — some write endpoints
+// (subscription/*, account/*) demand BOTH the ?key= param (from ytcfg) and
+// the SAPISIDHASH Authorization header the app's interceptor adds:
+// "SAPISIDHASH <sha1(ts sid origin)>_<ts>".
+const postAuth=async(path,body)=>{
+  const m=document.cookie.match(/(?:^|;\\s*)SAPISID=([^;]+)/);
+  const key=(window.ytcfg&&ytcfg.get)?ytcfg.get('INNERTUBE_API_KEY'):null;
+  const headers={'Content-Type':'application/json'};
+  if(m){
+    const t=Math.floor(Date.now()/1000);
+    const digest=await crypto.subtle.digest('SHA-1',new TextEncoder().encode(t+' '+m[1]+' '+location.origin));
+    const hash=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
+    headers['Authorization']='SAPISIDHASH '+hash+'_'+t;
+    headers['X-Origin']=location.origin;
+  }
+  const qs=key?('?key='+encodeURIComponent(key)+'&prettyPrint=false'):'?prettyPrint=false';
+  const r=await fetch('/youtubei/v1/'+path+qs,{method:'POST',credentials:'include',headers,body:JSON.stringify(body)});
+  return {status:r.status,ok:r.ok,text:(await r.text().catch(()=>'')).slice(0,300)};
+};
+// P7 2026-10: comments migrated to ytd-comment-view-model (text in
+// .ytAttributedStringHost spans) — legacy ytd-comment-renderer kept as tier 2.
+const commentNodes=()=>qa("ytd-comment-view-model, ytd-comment-renderer");
+const commentTextOf=(node)=>textOf(node.querySelector(".ytAttributedStringHost")||node.querySelector("#content-text"));
+// P7 2026-10: 2026 view-model buttons (ytSpecButtonShapeNextHost) ignore
+// bare .click() — they need the full pointer event sequence.
+const realClick=(el)=>{
+  if(!el) return false;
+  // scroll FIRST (only when out of view), then read coords — a scroll between
+  // rect-read and dispatch sends the events to stale coordinates
+  const r0=el.getBoundingClientRect();
+  if(r0.y<0||r0.y>innerHeight-10||r0.x<0||r0.x>innerWidth-10) el.scrollIntoView({block:'center'});
+  const r=el.getBoundingClientRect();
+  const o={bubbles:true,cancelable:true,view:window,clientX:r.x+r.width/2,clientY:r.y+r.height/2,button:0,pointerId:1,pointerType:'mouse',isPrimary:true};
+  el.dispatchEvent(new PointerEvent('pointerover',o));
+  el.dispatchEvent(new PointerEvent('pointerdown',o));
+  el.dispatchEvent(new MouseEvent('mousedown',o));
+  el.dispatchEvent(new PointerEvent('pointerup',o));
+  el.dispatchEvent(new MouseEvent('mouseup',o));
+  el.dispatchEvent(new MouseEvent('click',o));
+  return true;
+};
+// P7 2026-10: confirm-dialog locator — YouTube dropped #confirm-button ids;
+// the 2026 dialog labels its buttons ("Unsubscribe"/"Cancel" etc. in
+// ytSpecButtonShapeNextHost hosts). Legacy tier first, text tier second.
+const findConfirmBtn=()=>{
+  // legacy tier: id'd confirm button — must be TRULY visible (a stale hidden
+  // #confirm-button template lives in the 2026 DOM and answers getClientRects)
+  const legacySel="yt-confirm-dialog-renderer #confirm-button, tp-yt-paper-dialog #confirm-button, dialog #confirm-button, #confirm-button";
+  const visible=(el)=>!!el&&(el.checkVisibility?el.checkVisibility({checkOpacity:true,checkVisibilityCSS:true}):(el.offsetParent!==null||el.getClientRects().length>0));
+  const legacy=[...document.querySelectorAll(legacySel)].find(visible);
+  if(legacy) return legacy;
+  const dlgs=[...document.querySelectorAll("yt-confirm-dialog-renderer, tp-yt-paper-dialog, [role=dialog], [role=alertdialog]")];
+  const dlg=dlgs.find(d=>d.getClientRects().length)||null;
+  if(!dlg) return null;
+  const btns=[...dlg.querySelectorAll("button")];
+  return btns.find(b=>/^(unsubscribe|confirm|ok|remove|delete|clear)$/i.test(textOf(b))&&!/cancel/i.test(textOf(b)))||null;
+};
 `;
 
 /** Wrap a body into an awaitPromise-able async IIFE expression. */
@@ -139,23 +196,53 @@ const SUB_SEL =
   "'ytd-subscribe-button-renderer button, subscribe-button-view-model button, ytg-subscribe-button-view-model button'";
 
 /** subscribe / unsubscribe — channel page. mode: on|off|toggle (default on). */
-function subscribeScript(mode: "on" | "off" | "toggle"): string {
+function subscribeScript(mode: "on" | "off" | "toggle", channelId: string): string {
   return script(`
-const subBtn=await until(()=>q(${SUB_SEL}),15000);
+let subBtn=await until(()=>q(${SUB_SEL}),15000);
 if(!subBtn) return {ok:false,error:'subscribe-button-not-found',path:'ui',dom:${domState()}};
 const isSubbed=(b)=>/subscribed/i.test(textOf(b)+' '+(b.getAttribute('aria-label')||''));
+// P7 2026-10: bring the button into view first (the proven flow — an
+// offscreen click opens a dialog whose overlay geometry can misbehave)
+subBtn.scrollIntoView({block:'center'});
+await S(600);
+subBtn=q(${SUB_SEL});
+if(!subBtn) return {ok:false,error:'subscribe-button-vanished',path:'ui'};
 const currently=isSubbed(subBtn);
 const mode=${j(mode)};
 const want=mode==='on'?true:mode==='off'?false:!currently;
 if(currently===want) return {ok:true,verified:true,already:true,subscribed:want,path:'ui'};
 subBtn.click();
 if(!want){
-  const confirmBtn=await until(()=>q("yt-confirm-dialog-renderer #confirm-button, tp-yt-paper-dialog #confirm-button, dialog #confirm-button, #confirm-button"),5000);
-  if(confirmBtn) confirmBtn.click();
+  // P7 2026-10: synthetic pointer events on the 2026 confirm dialog are
+  // unreliable (the overlay dismisses unconfirmed) and the wire fallback
+  // 401s without OAuth-grade credentials. THE PROVEN PATH: hand the confirm
+  // button's coordinates to the broker for a TRUSTED Input.dispatchMouseEvent
+  // (real input events — the same click a user makes). The broker then runs
+  // the verification continuation.
+  const confirmBtn=await until(()=>findConfirmBtn(),5000);
+  if(confirmBtn){
+    await S(2000);
+    const cb=findConfirmBtn();
+    if(cb){
+      const r=cb.getBoundingClientRect();
+      if(r.width>0&&r.x>=0&&r.y>=0&&r.x+r.width<=innerWidth&&r.y+r.height<=innerHeight){
+        return {__trustedClick:{x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)},want:false,channelId:${j(channelId)}};
+      }
+      realClick(cb);
+    }
+  }
 }
-const done=await until(()=>isSubbed(subBtn)===want,8000);
+const done=await until(()=>{const s=q(${SUB_SEL});return s&&isSubbed(s)===want;},8000);
 if(done) return {ok:true,verified:true,subscribed:want,path:'ui'};
-return {ok:false,verified:false,error:'subscribe-state-unchanged',path:'ui',dom:{label:textOf(subBtn),ariaLabel:subBtn.getAttribute('aria-label')||''}};
+// P7 2026-10 fetch fallback — the EXACT wire call the confirm dialog sends
+// (subscription/subscribe|unsubscribe). Verified by re-reading the button.
+const channelId=${j(channelId)};
+const res=await postAuth('subscription/'+(want?'subscribe':'unsubscribe'),{context:CTX(),channelIds:[channelId]});
+await S(1800);
+const done2=await until(()=>{const s=q(${SUB_SEL});return s&&isSubbed(s)===want;},8000);
+if(done2) return {ok:true,verified:true,subscribed:want,path:'fetch',status:res.status};
+const cbAfter=findConfirmBtn();
+return {ok:false,verified:false,error:'subscribe-state-unchanged',path:'ui',dom:{label:textOf(subBtn),ariaLabel:subBtn.getAttribute('aria-label')||'',dialogStillOpen:!!cbAfter,cbText:cbAfter?textOf(cbAfter):null,fetchStatus:res.status,fetchBody:res.text}};
 `);
 }
 
@@ -190,14 +277,23 @@ return {ok:matched,verified:matched,path:'ui',detail:{selectedPref:checkText},er
 `);
 }
 
-/** comment-create — watch page. payload.text required. */
+/** comment-create — watch page. payload.text required.
+ * P7 2026-10: TWO trusted-click rungs — the simplebox activation AND the
+ * submit button both ignore synthetic clicks. Phase A positions the
+ * simplebox; the executor ladder trusted-clicks it, runs phase B (type +
+ * position submit), trusted-clicks that, then verifies. */
 function commentCreateScript(text: string, videoId: string): string {
   const needle = text.slice(0, 40);
   return script(`
 const commentsAnchor=await until(()=>q("#comments, ytd-comments"),8000);
 if(commentsAnchor) commentsAnchor.scrollIntoView({block:'start'});
+await S(1500);
 const box=await until(()=>q("ytd-comment-simplebox-renderer #placeholder-area, #comment-dialog #placeholder-area, #placeholder-area"),15000);
 if(!box) return {ok:false,error:'comment-box-not-found',path:'ui',dom:${domState()}};
+const r=box.getBoundingClientRect();
+if(r.width>0&&r.x>=0&&r.y>=0&&r.x+r.width<=innerWidth&&r.y+r.height<=innerHeight){
+  return {__trustedClick:{x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)},__verify:'comment-activate',__text:${j(text)},__needle:${j(needle)},__videoId:${j(videoId)}};
+}
 box.click();
 const editor=await until(()=>q("#contenteditable-root"),6000);
 if(!editor) return {ok:false,error:'comment-editor-not-found',path:'ui',dom:${domState()}};
@@ -205,22 +301,25 @@ editor.focus();
 document.execCommand('selectAll',false,null);
 document.execCommand('insertText',false,${j(text)});
 const submit=await until(()=>{
-  const b=q("#submit-button button, #submit-button a, #submit-button yt-button-shape button, ytd-comment-dialog #submit-button");
+  const b=q("#submit-button button, #submit-button a, #submit-button yt-button-shape button, ytd-comment-dialog #submit-button, ytd-commentbox #submit-button button");
   if(!b) return null;
   if(b.hasAttribute('disabled')) return null;
-  const ad=b.getAttribute('aria-disabled');
-  return ad==='true'||ad==='false'?null:b;
+  if(b.getAttribute('aria-disabled')==='true') return null;
+  return b;
 },8000);
 if(!submit) return {ok:false,error:'submit-button-not-ready',path:'ui',dom:{editorText:textOf(editor).slice(0,80)}};
-submit.click();
+const sr=submit.getBoundingClientRect();
+if(sr.width>0&&sr.x>=0&&sr.y>=0&&sr.x+sr.width<=innerWidth&&sr.y+sr.height<=innerHeight){
+  return {__trustedClick:{x:Math.round(sr.x+sr.width/2),y:Math.round(sr.y+sr.height/2)},__verify:'comment-create',needle:${j(needle)}};
+}
+realClick(submit);
 const needle=${j(needle)};
-const found=await until(()=>qa("ytd-comment-renderer #content-text").some(el=>textOf(el).includes(needle)),15000);
+const found=await until(()=>commentNodes().some(node=>commentTextOf(node).includes(needle)),15000);
 if(found) return {ok:true,verified:true,path:'ui'};
 const dialogClosed=!q("#contenteditable-root");
 if(dialogClosed){
   return {ok:true,verified:false,path:'ui',detail:{note:'editor closed after submit; comment not yet visible in list (sort order)'}};
 }
-// fetch fallback: page-context create_comment
 const res=await post('comment/create_comment',{context:CTX(),videoId:${j(videoId)},commentText:${j(text)}});
 return {ok:res.ok,verified:false,path:'fetch',status:res.status,body:res.text};
 `);
@@ -232,8 +331,8 @@ function commentReplyScript(text: string, commentText: string | null): string {
   return script(`
 const textNeedle=${j(text.slice(0, 40))};
 const parentNeedle=${j(needle)};
-const findComment=()=>parentNeedle?qa("ytd-comment-renderer").find(el=>{
-  const t=textOf(el.querySelector("#content-text"));
+const findComment=()=>parentNeedle?commentNodes().find(el=>{
+  const t=commentTextOf(el);
   return t&&(t.startsWith(parentNeedle)||parentNeedle.startsWith(t.slice(0,parentNeedle.length)));
 }):null;
 const comment=await until(findComment,12000);
@@ -271,8 +370,8 @@ function commentLikeScript(commentText: string | null, commentId: string, mode: 
   const needle = commentText ? commentText.slice(0, 60) : null;
   return script(`
 const parentNeedle=${j(needle)};
-const comment=parentNeedle?await until(()=>qa("ytd-comment-renderer").find(el=>{
-  const t=textOf(el.querySelector("#content-text"));
+const comment=parentNeedle?await until(()=>commentNodes().find(el=>{
+  const t=commentTextOf(el);
   return t&&(t.startsWith(parentNeedle)||parentNeedle.startsWith(t.slice(0,parentNeedle.length)));
 }),12000):null;
 if(comment){
@@ -303,8 +402,8 @@ return {ok:res.ok,verified:false,path:'fetch',status:res.status,body:res.text,no
 const FIND_COMMENT_BY_TEXT = (commentText: string | null) => `
 const parentNeedle=${j(commentText ? commentText.slice(0, 60) : null)};
 if(!parentNeedle) return {ok:false,error:'commentText-required',path:'ui',note:'the menu actions locate the comment by text; pass payload.commentText'};
-const findComment=()=>qa("ytd-comment-renderer").find(el=>{
-  const t=textOf(el.querySelector("#content-text"));
+const findComment=()=>commentNodes().find(el=>{
+  const t=commentTextOf(el);
   return t&&(t.startsWith(parentNeedle)||parentNeedle.startsWith(t.slice(0,parentNeedle.length)));
 });
 const commentsAnchor=q("#comments, ytd-comments");
@@ -352,7 +451,7 @@ if(!submit){closeMenus();return {ok:false,error:'edit-save-not-ready',path:'ui',
 submit.click();
 const want=${j(newText.slice(0, 60))};
 const done=await until(()=>{
-  const el=thread.querySelector("ytd-comment-renderer #content-text, #content-text");
+  const el=thread.querySelector(".ytAttributedStringHost")||thread.querySelector("#content-text");
   const t=el?textOf(el):null;
   return t&&t.includes(want)?t:null;
 },15000);
@@ -372,9 +471,9 @@ if(menuErr) return menuErr;
 const deleteItem=await menuItem(/^delete$/i);
 if(!deleteItem){closeMenus();return {ok:false,error:'delete-menu-item-not-found',path:'ui',dom:{menu:menuItemsText()}};}
 deleteItem.click();
-const confirmBtn=await until(()=>q(${CONFIRM_SEL}),6000);
+const confirmBtn=await until(()=>findConfirmBtn(),6000);
 if(!confirmBtn){closeMenus();return {ok:false,error:'delete-confirm-not-found',path:'ui',dom:{dialogText:(q("yt-confirm-dialog-renderer, tp-yt-paper-dialog")?.textContent||'').slice(0,120)}};}
-confirmBtn.click();
+realClick(confirmBtn);
 const gone=await until(()=>!document.contains(comment),10000);
 if(gone) return {ok:true,verified:true,path:'ui'};
 const toast=!!q("yt-notification-action-renderer, #toast, tp-yt-paper-toast");
@@ -483,7 +582,12 @@ const findSave=()=>qa("#top-level-buttons-computed button, ytd-watch-metadata bu
 const saveBtn=await until(findSave,12000);
 if(!saveBtn) return {ok:false,error:'save-button-not-found',path:'ui',dom:${domState()}};
 saveBtn.click();
-const rows=()=>qa("ytd-playlist-add-to-option-renderer, [role='checkbox'], [role='menuitemcheckbox'], tp-yt-paper-item.yt-playlist-add-to-option-renderer");
+// P7 2026-10: YouTube migrated the save dialog to view-model rows
+// (yt-list-item-view-model button with aria-pressed + aria-label
+// "<name>, <visibility>, Selected|Not selected") — the legacy
+// ytd-playlist-add-to-option-renderer rows are kept as the first tier for
+// older DOM snapshots; the view-model tier is the live one.
+const rows=()=>qa("ytd-playlist-add-to-option-renderer, [role='checkbox'], [role='menuitemcheckbox'], tp-yt-paper-item.yt-playlist-add-to-option-renderer, yt-list-item-view-model button[role='menuitem'], toggleable-list-item-view-model button[role='menuitem']");
 const rowLabel=${j(watchLater ? "watch later" : (title ?? "").toLowerCase())};
 const row=await until(()=>rows().find(el=>{
   const t=textOf(el)||textOf(el.querySelector('#label, yt-formatted-string, #checkbox-label'));
@@ -491,10 +595,13 @@ const row=await until(()=>rows().find(el=>{
 }),8000);
 if(!row) return {ok:false,error:'playlist-row-not-found',path:'ui',dom:{rows:rows().map(el=>textOf(el)||textOf(el.querySelector('#label, yt-formatted-string, #checkbox-label'))).filter(Boolean).slice(0,20)}};
 const readChecked=(el)=>{
+  // view-model tier: the row button itself carries aria-pressed
+  if(el.getAttribute('aria-pressed')==='true') return true;
   if(el.getAttribute('aria-checked')==='true') return true;
   if(el.hasAttribute&&el.hasAttribute('checked')) return true;
-  const cb=el.querySelector('#checkbox [aria-checked], #checkbox, tp-yt-paper-checkbox');
-  return !!(cb&&(cb.getAttribute('aria-checked')==='true'||cb.hasAttribute&&cb.hasAttribute('checked')));
+  if(/, selected\s*$/i.test(el.getAttribute('aria-label')||'')) return true;
+  const cb=el.querySelector('#checkbox [aria-checked], #checkbox, tp-yt-paper-checkbox, button[aria-pressed]');
+  return !!(cb&&(cb.getAttribute('aria-pressed')==='true'||cb.getAttribute('aria-checked')==='true'||cb.hasAttribute&&cb.hasAttribute('checked')));
 };
 const was=readChecked(row);
 const mode=${j(mode)};
@@ -547,7 +654,7 @@ return {ok:false,verified:false,error:'card-still-present',path:'ui'};
 /* ------------------------------------------------------------------ */
 
 const CONFIRM_SEL =
-  "'yt-confirm-dialog-renderer #confirm-button, tp-yt-paper-dialog #confirm-button, dialog #confirm-button, #confirm-button'";
+  "'yt-confirm-dialog-renderer #confirm-button, tp-yt-paper-dialog #confirm-button, dialog #confirm-button, #confirm-button'"; // legacy tier — 2026 dialogs use findConfirmBtn() (RUNNER)
 
 /** Find a history/playlist card by videoId on the current feed page. */
 const FIND_CARD_BY_VIDEO = (videoId: string) => `
@@ -584,8 +691,8 @@ function historyClearAllScript(): string {
 const clearBtn=await until(()=>qa("button, a, yt-button-shape button").find(b=>/^clear all watch history$/i.test(textOf(b))),12000);
 if(!clearBtn) return {ok:false,error:'clear-all-button-not-found',path:'ui',dom:${domState()}};
 clearBtn.click();
-const confirmBtn=await until(()=>q(${CONFIRM_SEL}),6000);
-if(confirmBtn){confirmBtn.click();}
+const confirmBtn=await until(()=>findConfirmBtn(),6000);
+if(confirmBtn){realClick(confirmBtn);}
 const toast=await until(()=>q("yt-notification-action-renderer, #toast, tp-yt-paper-toast"),8000);
 const anyCard=qa("ytd-rich-item-renderer, ytd-video-renderer").length>0;
 if(toast||!anyCard) return {ok:true,verified:!anyCard,path:'ui'};
@@ -603,8 +710,8 @@ if(!btn) return {ok:false,error:'pause-button-not-found',path:'ui',dom:${domStat
 const labelBefore=textOf(btn);
 if(norm(labelBefore)===norm(${j(wantLabel)})) return {ok:true,verified:true,already:true,paused:${j(paused)},path:'ui'};
 btn.click();
-const confirmBtn=await until(()=>q(${CONFIRM_SEL}),5000);
-if(confirmBtn) confirmBtn.click();
+const confirmBtn=await until(()=>findConfirmBtn(),5000);
+if(confirmBtn) realClick(confirmBtn);
 const flipped=await until(()=>{
   const b=findControl();
   return b?norm(textOf(b)):null;
@@ -630,8 +737,8 @@ if(!item) return {ok:false,error:'search-history-menu-item-not-found',path:'ui',
 const labelBefore=textOf(item);
 if(norm(labelBefore)===norm(${j(wantLabel)})) return {ok:true,verified:true,already:true,paused:${j(paused)},path:'ui'};
 item.click();
-const confirmBtn=await until(()=>q(${CONFIRM_SEL}),5000);
-if(confirmBtn) confirmBtn.click();
+const confirmBtn=await until(()=>findConfirmBtn(),5000);
+if(confirmBtn) realClick(confirmBtn);
 const done=await until(()=>!/pause|resume/i.test(textOf(q("yt-notification-action-renderer"))||'')?true:null,3000).catch(()=>null);
 document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
 return {ok:true,verified:false,paused:${j(paused)},path:'ui',detail:{note:'clicked ' + labelBefore + '; verification of search-history state is not readable from this page (myactivity owns it)'}};
@@ -712,8 +819,8 @@ if(kebab){
   const item=await until(()=>qa("ytd-menu-service-item-renderer, yt-list-item-view-model, [role='menuitem'], tp-yt-paper-item").find(el=>/delete playlist/i.test(textOf(el))),6000);
   if(item){
     item.click();
-    const confirmBtn=await until(()=>q(${CONFIRM_SEL}),6000);
-    if(confirmBtn) confirmBtn.click();
+    const confirmBtn=await until(()=>findConfirmBtn(),6000);
+    if(confirmBtn) realClick(confirmBtn);
     const gone=await until(()=>/deleted/i.test(document.body.innerText)||!q("ytd-playlist-header-renderer, ytd-playlist-video-list-renderer"),8000);
     if(gone) return {ok:true,verified:true,path:'ui'};
     return {ok:true,verified:false,path:'ui',detail:{note:'delete submitted; page state unclear'}};
@@ -848,7 +955,7 @@ const submit=await until(()=>{
 if(!submit) return {ok:false,error:'post-comment-submit-not-ready',path:'ui',dom:{editorText:textOf(editor).slice(0,80)}};
 submit.click();
 const needle=${j(needle)};
-const found=await until(()=>qa("ytd-comment-renderer #content-text").some(el=>textOf(el).includes(needle)),15000);
+const found=await until(()=>commentNodes().some(node=>commentTextOf(node).includes(needle)),15000);
 if(found) return {ok:true,verified:true,path:'ui'};
 const dialogClosed=!q("#contenteditable-root");
 if(dialogClosed) return {ok:true,verified:false,path:'ui',detail:{note:'editor closed after submit; comment not yet visible in list (sort order)'}};
@@ -867,8 +974,8 @@ const parentNeedle=${j(needle)};
 if(!parentNeedle) return {ok:false,error:'commentText-required',path:'ui',note:'post-comment-like locates the comment by text; pass payload.commentText'};
 const commentsAnchor=q("#comments, ytd-comments");
 if(commentsAnchor) commentsAnchor.scrollIntoView({block:'start'});
-const comment=await until(()=>qa("ytd-comment-renderer").find(el=>{
-  const t=textOf(el.querySelector("#content-text"));
+const comment=await until(()=>commentNodes().find(el=>{
+  const t=commentTextOf(el);
   return t&&(t.startsWith(parentNeedle)||parentNeedle.startsWith(t.slice(0,parentNeedle.length)));
 }),15000);
 if(!comment) return {ok:false,error:'post-comment-not-in-dom',path:'ui',dom:{needle:parentNeedle}};
@@ -1069,7 +1176,9 @@ export function requiredUrl(req: BrokerActionRequest): string | null {
 }
 
 /** Build the page expression for the action (after the tab is in place). */
-export function buildScript(req: BrokerActionRequest): { script: string; timeoutMs: number } | null {
+export function buildScript(
+  req: BrokerActionRequest
+): { script: string; timeoutMs: number; userGesture?: boolean } | null {
   const { kind, target, payload } = req;
   const mode = payload?.mode;
   switch (kind) {
@@ -1078,12 +1187,26 @@ export function buildScript(req: BrokerActionRequest): { script: string; timeout
     case "remove-rating":
       return { script: likeScript(kind, target.videoId!), timeoutMs: 30000 };
     case "subscribe":
-      return { script: subscribeScript(mode === "toggle" || mode === "off" ? mode : "on"), timeoutMs: 30000 };
+      // P7 2026-10: userGesture OFF — with it on, the confirm dialog's overlay
+      // treats our synthetic pointerdown as an outside press and dismisses
+      // unconfirmed (empirically isolated; see realClick in RUNNER).
+      return {
+        script: subscribeScript(
+          mode === "toggle" || mode === "off" ? mode : "on",
+          target.channelId ?? ""
+        ),
+        timeoutMs: 30000,
+        userGesture: false,
+      };
     case "unsubscribe":
-      return { script: subscribeScript("off"), timeoutMs: 30000 };
+      return {
+        script: subscribeScript("off", target.channelId ?? ""),
+        timeoutMs: 30000,
+        userGesture: false,
+      };
     case "bell": {
       const pref = (payload?.pref ?? "").toLowerCase();
-      return { script: bellScript(pref), timeoutMs: 30000 };
+      return { script: bellScript(pref), timeoutMs: 30000, userGesture: false };
     }
     case "comment-create":
       return { script: commentCreateScript(payload?.text ?? "", target.videoId!), timeoutMs: 45000 };
@@ -1266,12 +1389,206 @@ export async function executeAction(
   const built = buildScript(req);
   if (!built) return { ok: false, error: `unsupported kind: ${kind as string}` };
 
-  const value = await conn.evaluate(built.script, built.timeoutMs);
+  const value = await conn.evaluate(built.script, built.timeoutMs, {
+    userGesture: built.userGesture ?? true,
+  });
   if (value && typeof value === "object" && "__exception" in (value as object)) {
     return { ok: false, error: `page-script-error: ${(value as { __exception: string }).__exception}` };
   }
   if (value === null || value === undefined) {
     return { ok: false, error: "page-script-returned-nothing" };
   }
+
+  // P7 2026-10: trusted-click continuation — a script that positioned a
+  // 2026 view-model dialog hands the coordinates here; the broker dispatches
+  // REAL Input events (the only reliably-accepted click on those buttons)
+  // and then runs the kind's verification continuation.
+  const marker = value as {
+    __trustedClick?: { x: number; y: number };
+    __verify?: "subscribe-off" | "comment-create" | "comment-activate";
+    needle?: string;
+    __text?: string;
+    __needle?: string;
+    __videoId?: string;
+  };
+  if (marker && typeof marker === "object" && marker.__trustedClick) {
+    const { x, y } = marker.__trustedClick;
+    try {
+      await conn.send("Input.dispatchMouseEvent", {
+        type: "mouseMoved",
+        x,
+        y,
+        button: "none",
+      });
+      await new Promise((r) => setTimeout(r, 150));
+      await conn.send("Input.dispatchMouseEvent", {
+        type: "mousePressed",
+        x,
+        y,
+        button: "left",
+        clickCount: 1,
+      });
+      await new Promise((r) => setTimeout(r, 140));
+      await conn.send("Input.dispatchMouseEvent", {
+        type: "mouseReleased",
+        x,
+        y,
+        button: "left",
+        clickCount: 1,
+      });
+    } catch (e) {
+      return { ok: false, error: `trusted-click-failed: ${e instanceof Error ? e.message : String(e)}` };
+    }
+    await new Promise((r) => setTimeout(r, 3000));
+
+    // P7 2026-10: comment-activate ladder — after the trusted simplebox
+    // activation, run phase B (type the text + position the submit) which
+    // returns the SECOND trusted-click marker for the executor loop.
+    if (marker.__verify === "comment-activate") {
+      const text = marker.__text ?? "";
+      const needle = marker.__needle ?? text.slice(0, 40);
+      const videoId = marker.__videoId ?? "";
+      const phaseB = await conn.evaluate(
+        `(async()=>{
+          const S=(ms)=>new Promise((r)=>setTimeout(r,ms));
+          const q=(s)=>document.querySelector(s);
+          const qa=(s)=>[...document.querySelectorAll(s)];
+          const textOf=(el)=>el?(el.textContent||'').replace(/\\s+/g,' ').trim():'';
+          const until=async(fn,ms=8000,step=250)=>{const t0=Date.now();for(;;){let v=null;try{v=fn()}catch(e){}if(v)return v;if(Date.now()-t0>ms)return null;await S(step)}};
+          const editor=await until(()=>{
+            // the ACTIVE editor: commentbox with visible Cancel/Comment buttons
+            const eds=qa('#contenteditable-root');
+            return eds.find(ed=>{
+              const box=ed.closest('ytd-commentbox, ytd-commentbox-renderer, ytd-comment-dialog-renderer');
+              if(!box) return false;
+              const btns=[...box.querySelectorAll('button')].filter(b=>b.getBoundingClientRect().width>0&&/^(cancel|comment)$/i.test((b.innerText||'').trim()));
+              return btns.length>=2;
+            })||null;
+          },8000);
+          if(!editor) return {ok:false,verified:false,error:'comment-editor-not-active',path:'ui-trusted'};
+          editor.focus();
+          document.execCommand('selectAll',false,null);
+          document.execCommand('insertText',false,${JSON.stringify(text)});
+          const submit=await until(()=>{
+            const box=editor.closest('ytd-commentbox, ytd-commentbox-renderer, ytd-comment-dialog-renderer');
+            if(!box) return null;
+            const btns=[...box.querySelectorAll('button')].filter(b=>b.getBoundingClientRect().width>0);
+            return btns.find(b=>/^comment$/i.test((b.innerText||'').trim())&&!b.hasAttribute('disabled')&&b.getAttribute('aria-disabled')!=='true')||null;
+          },8000);
+          if(!submit) return {ok:false,verified:false,error:'submit-button-not-ready',path:'ui-trusted',dom:{editorText:textOf(editor).slice(0,80)}};
+          const r=submit.getBoundingClientRect();
+          return {__trustedClick:{x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)},__verify:'comment-create',needle:${JSON.stringify(needle)}};
+        })()`,
+        25000,
+        { userGesture: false }
+      );
+      if (
+        phaseB &&
+        typeof phaseB === "object" &&
+        "__exception" in (phaseB as object)
+      ) {
+        return {
+          ok: false,
+          error: `phase-b-error: ${(phaseB as { __exception: string }).__exception}`,
+        };
+      }
+      // The phase-B result carries the second __trustedClick marker — handle
+      // it with the same ladder (dispatch + verify).
+      const phaseBMarker = phaseB as {
+        __trustedClick?: { x: number; y: number };
+        __verify?: string;
+        needle?: string;
+        ok?: boolean;
+        error?: string;
+      };
+      if (!phaseBMarker || typeof phaseBMarker !== "object" || !phaseBMarker.__trustedClick) {
+        return phaseB as BrokerActionResponse;
+      }
+      const { x: sx, y: sy } = phaseBMarker.__trustedClick;
+      try {
+        await conn.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: sx, y: sy, button: "none" });
+        await new Promise((r) => setTimeout(r, 150));
+        await conn.send("Input.dispatchMouseEvent", { type: "mousePressed", x: sx, y: sy, button: "left", clickCount: 1 });
+        await new Promise((r) => setTimeout(r, 140));
+        await conn.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: sx, y: sy, button: "left", clickCount: 1 });
+      } catch (e) {
+        return { ok: false, error: `trusted-click-failed: ${e instanceof Error ? e.message : String(e)}` };
+      }
+      await new Promise((r) => setTimeout(r, 4000));
+      const needle2 = phaseBMarker.needle ?? "";
+      const verify2 = await conn.evaluate(
+        `(async()=>{
+          const S=(ms)=>new Promise((r)=>setTimeout(r,ms));
+          const qa=(s)=>[...document.querySelectorAll(s)];
+          const q=(s)=>document.querySelector(s);
+          const textOf=(el)=>el?(el.textContent||'').replace(/\\s+/g,' ').trim():'';
+          const commentNodes=()=>qa("ytd-comment-view-model, ytd-comment-renderer");
+          const commentTextOf=(node)=>textOf(node.querySelector(".ytAttributedStringHost")||node.querySelector("#content-text"));
+          const until=async(fn,ms=15000,step=500)=>{const t0=Date.now();for(;;){let v=null;try{v=fn()}catch(e){}if(v)return v;if(Date.now()-t0>ms)return null;await S(step)}};
+          const needle=${JSON.stringify(needle2)};
+          const found=await until(()=>commentNodes().some(node=>commentTextOf(node).includes(needle)),18000);
+          if(found) return {ok:true,verified:true,path:'ui-trusted'};
+          const composerQuiet=!q('#contenteditable-root')||![...document.querySelectorAll('button')].some(b=>b.getBoundingClientRect().width>0&&/^(cancel)$/i.test((b.innerText||'').trim()));
+          if(composerQuiet) return {ok:true,verified:false,path:'ui-trusted',detail:{note:'composer closed after submit; comment not yet visible in list (sort order)'}};
+          return {ok:false,verified:false,error:'comment-not-posted',path:'ui-trusted'};
+        })()`,
+        30000,
+        { userGesture: false }
+      );
+      if (verify2 && typeof verify2 === "object" && "__exception" in (verify2 as object)) {
+        return { ok: false, error: `verify-script-error: ${(verify2 as { __exception: string }).__exception}` };
+      }
+      return verify2 as BrokerActionResponse;
+    }
+
+    // per-kind verification continuation
+    if (marker.__verify === "comment-create") {
+      const needle = marker.needle ?? "";
+      const verify = await conn.evaluate(
+        `(async()=>{
+          const S=(ms)=>new Promise((r)=>setTimeout(r,ms));
+          const qa=(s)=>[...document.querySelectorAll(s)];
+          const q=(s)=>document.querySelector(s);
+          const textOf=(el)=>el?(el.textContent||'').replace(/\\s+/g,' ').trim():'';
+          const until=async(fn,ms=12000,step=400)=>{const t0=Date.now();for(;;){let v=null;try{v=fn()}catch(e){}if(v)return v;if(Date.now()-t0>ms)return null;await S(step)}};
+          const needle=${JSON.stringify(needle)};
+          const found=await until(()=>commentNodes().some(node=>commentTextOf(node).includes(needle)),15000);
+          const editorGone=!q("#contenteditable-root");
+          if(found) return {ok:true,verified:true,path:'ui-trusted'};
+          if(editorGone) return {ok:true,verified:false,path:'ui-trusted',detail:{note:'editor closed after submit; comment not yet visible in list (sort order)'}};
+          return {ok:false,verified:false,error:'comment-not-posted',path:'ui-trusted'};
+        })()`,
+        25000,
+        { userGesture: false }
+      );
+      if (verify && typeof verify === "object" && "__exception" in (verify as object)) {
+        return { ok: false, error: `verify-script-error: ${(verify as { __exception: string }).__exception}` };
+      }
+      return verify as BrokerActionResponse;
+    }
+    // default: subscribe verification continuation
+    const verify = await conn.evaluate(
+      `(async()=>{
+        const S=(ms)=>new Promise((r)=>setTimeout(r,ms));
+        const q=(s)=>document.querySelector(s);
+        const textOf=(el)=>el?(el.textContent||'').replace(/\\s+/g,' ').trim():'';
+        const until=async(fn,ms=8000,step=250)=>{const t0=Date.now();for(;;){let v=null;try{v=fn()}catch(e){}if(v)return v;if(Date.now()-t0>ms)return null;await S(step)}};
+        const SUB=${SUB_SEL};
+        const isSubbed=(b)=>/subscribed/i.test(textOf(b)+' '+(b.getAttribute('aria-label')||''));
+        const done=await until(()=>{const s=q(SUB);return s&&isSubbed(s)===false;},10000);
+        const s=q(SUB);
+        return done
+          ? {ok:true,verified:true,subscribed:false,path:'ui-trusted'}
+          : {ok:false,verified:false,error:'subscribe-state-unchanged',path:'ui-trusted',dom:{label:s?textOf(s):'none'}};
+      })()`,
+      20000,
+      { userGesture: false }
+    );
+    if (verify && typeof verify === "object" && "__exception" in (verify as object)) {
+      return { ok: false, error: `verify-script-error: ${(verify as { __exception: string }).__exception}` };
+    }
+    return verify as BrokerActionResponse;
+  }
+
   return value as BrokerActionResponse;
 }

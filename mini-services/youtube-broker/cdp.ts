@@ -93,11 +93,25 @@ export class CdpConnection {
    * Evaluate an expression in the page. Returns the JSON value the expression
    * resolved to (returnByValue). Rejects on CDP-level errors; an expression
    * that itself throws resolves to { __exception: <message> }.
+   *
+   * P7 2026-10: userGesture is configurable (default true — the historical
+   * behavior). Scripts that drive 2026 view-model dialogs pass false: with
+   * userGesture on, the dialog overlay treats synthetic pointerdowns as
+   * outside presses and dismisses unconfirmed.
    */
-  async evaluate(expression: string, timeoutMs = 30000): Promise<any> {
+  async evaluate(
+    expression: string,
+    timeoutMs = 30000,
+    opts: { userGesture?: boolean } = {}
+  ): Promise<any> {
     const res = await this.send(
       "Runtime.evaluate",
-      { expression, awaitPromise: true, returnByValue: true, userGesture: true },
+      {
+        expression,
+        awaitPromise: true,
+        returnByValue: true,
+        userGesture: opts.userGesture ?? true,
+      },
       timeoutMs
     );
     if (res?.exceptionDetails) {
