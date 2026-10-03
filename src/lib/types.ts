@@ -154,6 +154,12 @@ export type ChannelPageDTO = {
   tabs?: ChannelTabId[];
   /** WFX2-B-S (additive): memberships are offered (the Join button renderer) */
   joinable?: boolean;
+  /**
+   * WFX2-P6-CH (additive): the Videos tab's own sort chips (Latest / Popular /
+   * Oldest) — the videos-tab browse response carries them; surfaced only when
+   * the payload really does (undefined → the UI hides the chip row).
+   */
+  sortChips?: ChannelSortChipDTO[];
   /** WFX2-B-S (additive): channel data walled upstream → last-good may still serve */
   walled?: boolean;
   /** WFX2-B-S (additive): the honest-degrade explanation (walled state) */
@@ -214,6 +220,25 @@ export type CommunityPostDTO = {
   poll?: CommunityPollDTO | null;
 };
 
+/**
+ * WFX2-P6-CH — one Videos-tab sort chip (Latest / Popular / Oldest).
+ * Live-verified 2026-10-03 (resident-browser capture, Rick Astley): the
+ * channel Videos tab carries its chip bar as
+ * `richGridRenderer.header.chipBarViewModel.chips[].chipViewModel` with
+ * `tapCommand.innertubeCommand.continuationCommand.token` (request
+ * CONTINUATION_REQUEST_TYPE_BROWSE — the fetch is browse {continuation});
+ * the legacy `chipCloudChipRenderer` shape (feedFilterChipBarRenderer)
+ * is honored as the fallback. Only chips the payload actually carries are
+ * surfaced — a tab with no chip data renders no chip row (honest omission).
+ */
+export type ChannelSortChipDTO = {
+  label: string;
+  /** the chip's own continuation token (browse {continuation} refetch) */
+  token: string;
+  /** the payload's own selected marker (Latest on the default tab fetch) */
+  selected: boolean;
+};
+
 /** The About panel (aboutChannelViewModel from the engagement-panel continuation). */
 export type ChannelAboutDTO = {
   description: string | null;
@@ -248,6 +273,12 @@ export type ChannelTabDTO = {
   about?: ChannelAboutDTO;
   /** memberships (Join) info when the tab surface carries it */
   joinable?: boolean;
+  /**
+   * WFX2-P6-CH (additive): the Videos tab's sort chips — the default fetch
+   * carries the channel's own chip bar, a chip-continuation fetch carries
+   * the re-marked chip bar (the chosen sort selected). Hidden when absent.
+   */
+  sortChips?: ChannelSortChipDTO[];
   /** honest degrade: upstream walled and no last-good */
   walled?: boolean;
   /** WFX2-P2-SO (additive): the community ladder rung that produced the posts */

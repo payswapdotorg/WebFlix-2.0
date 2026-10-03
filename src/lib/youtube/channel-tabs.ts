@@ -50,6 +50,7 @@ import type {
   CommunityPollDTO,
   CommunityPollChoiceDTO,
   ChannelAboutDTO,
+  ChannelSortChipDTO,
 } from "@/lib/types";
 
 /** Live-verified tab-param constants (full forms — the fallback family). */
@@ -255,6 +256,51 @@ export function extractRedirectTarget(url: string): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * WFX2-P6-CH — one chip's continuation token from either chip-bar shape:
+ *  - the 2026 view-model form: chipViewModel.tapCommand.innertubeCommand
+ *    .continuationCommand.token (live-verified on the channel Videos tab —
+ *    see ChannelSortChipDTO in types.ts);
+ *  - the legacy renderer form: chipCloudChipRenderer.navigationEndpoint
+ *    .continuationCommand.token (the trending chip family — the same
+ *    extractor law as trending-categories.ts, with the continuation token
+ *    where that page family carries browseEndpoint params).
+ */
+function chipContinuationToken(chip: any): string | null {
+  const token =
+    chip?.tapCommand?.innertubeCommand?.continuationCommand?.token ??
+    chip?.navigationEndpoint?.continuationCommand?.token ??
+    null;
+  return typeof token === "string" && token ? token : null;
+}
+
+/**
+ * The Videos tab's sort chips (Latest / Popular / Oldest) from a tab payload
+ * — both chip-bar shapes, document order, de-duplicated by label. A chip is
+ * surfaced ONLY when its label AND continuation token are really there
+ * (never a dead chip); a payload with no chip bar maps to [] (the UI hides
+ * the chip row — honest omission).
+ */
+export function mapChannelSortChips(response: unknown): ChannelSortChipDTO[] {
+  const out: ChannelSortChipDTO[] = [];
+  const seen = new Set<string>();
+  for (const chip of walkTree(response, "chipViewModel")) {
+    const label = typeof chip?.text === "string" ? chip.text : "";
+    const token = chipContinuationToken(chip);
+    if (!label || !token || seen.has(label)) continue;
+    seen.add(label);
+    out.push({ label, token, selected: chip?.selected === true });
+  }
+  for (const chip of walkTree(response, "chipCloudChipRenderer")) {
+    const label = runsText(chip?.text);
+    const token = chipContinuationToken(chip);
+    if (!label || !token || seen.has(label)) continue;
+    seen.add(label);
+    out.push({ label, token, selected: chip?.isSelected === true });
+  }
+  return out;
 }
 
 /**
