@@ -170,7 +170,11 @@ export async function ensureShadowParentComment(
       videoId,
       userId: anchorUserId,
       body: parentText ?? "",
-      moderation: "approved",
+      // THE ANCHOR LAW: moderation "shadow" — an FK anchor that NEVER renders
+      // (every read path filters moderation:"approved"; the live payload owns
+      // the parent's rendering). Parent validation accepts it: it is the
+      // shadow OF a live YouTube comment, not a deleted local one.
+      moderation: "shadow",
     },
   });
 }
@@ -435,8 +439,11 @@ export async function mergeLocalComments(args: LocalMergeArgs): Promise<{
 
   // index every live row on the page (top-level + nested replies) by id
   const byId = new Map<string, CommentDto>();
+  // FIRST-WINS: the top-level occurrence owns the thread root (a duplicate
+  // id deeper in the page — an upstream quirk — never steals the nesting:
+  // local replies must attach to the thread the UI renders as the root).
   const index = (c: CommentDto) => {
-    byId.set(c.id, c);
+    if (!byId.has(c.id)) byId.set(c.id, c);
     for (const r of c.replies ?? []) index(r);
   };
   for (const item of args.items) index(item);

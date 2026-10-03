@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { json } from "@/lib/watch/api";
-import { ANON_VIEWER, resolveViewer, VIEWER_COOKIE } from "@/lib/watch/session";
+import { ANON_VIEWER, parseCookies, resolveViewer, VIEWER_COOKIE } from "@/lib/watch/session";
 import { hasSession } from "@/lib/youtube/session";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +30,9 @@ export async function GET(req: NextRequest) {
 
 function sessionResponse(req: NextRequest, viewer: { id: string }) {
   const res = json({ viewer, operatorSession: hasSession() });
-  const existing = req.cookies.get(VIEWER_COOKIE)?.value;
+  // plain-header cookie read (no NextRequest sugar): the route stays
+  // callable with any Request shape — the bun-test runtime included.
+  const existing = parseCookies(req.headers.get("cookie"))[VIEWER_COOKIE] ?? null;
   if (viewer.id && existing !== viewer.id) {
     res.cookies.set(VIEWER_COOKIE, viewer.id, {
       httpOnly: false,

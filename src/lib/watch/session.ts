@@ -26,7 +26,8 @@ export const VIEWER_HEADER = "x-wfx2-user";
  */
 export const ANON_VIEWER: ViewerDto = { id: "", handle: "@guest", name: "", avatarUrl: "" };
 
-function parseCookies(cookieHeader: string | null): Record<string, string> {
+/** Parse a cookie header into a map (total — null/odd input → {}). */
+export function parseCookies(cookieHeader: string | null): Record<string, string> {
   const out: Record<string, string> = {};
   if (!cookieHeader) return out;
   for (const part of cookieHeader.split(";")) {

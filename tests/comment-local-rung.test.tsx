@@ -83,8 +83,11 @@ mock.module("sonner", () => ({
   }),
 }));
 
-/* next/link → a plain <a> (no Next router in the bun test runtime) */
-const realLink = { ...require("next/link") } as Record<string, unknown>;
+/* next/link → a plain <a> (no Next router in the bun test runtime).
+ * The real module is captured via a top-level namespace import (bound before
+ * mock.module swaps it) so afterAll can restore it. */
+import * as RealNextLink from "next/link";
+const realLink = RealNextLink as unknown as Record<string, unknown>;
 mock.module("next/link", () => ({
   default: ({ href, children, ...rest }: {
     href: string;
@@ -227,6 +230,8 @@ describe("WFX2-P6-CR — the local rung (both YouTube tiers offline, real module
   });
 
   test("second write is idempotent on the shadow rows (no duplicates, real comment rows)", async () => {
+    // fresh slate: earlier tests' rows on this video are not this test's subject
+    await db.comment.deleteMany({ where: { videoId: VIDEO_ID } });
     const snapshot = { video: { title: "Rick Astley - Never Gonna Give You Up", channelId: CHANNEL_ID } };
     await postComment(req({ videoId: VIDEO_ID, body: "first", ...snapshot }));
     await postComment(req({ videoId: VIDEO_ID, body: "second", ...snapshot }));
@@ -354,6 +359,8 @@ describe("WFX2-P6-CR — the direct reply rung (replyParams + configured session
 
 describe("WFX2-P6-CR — the GET merge (local rows join the live InnerTube read)", () => {
   test("local top-level PREPENDS (local:true), local replies nest under the live parent, counts adjust", async () => {
+    // fresh slate: this test asserts exact positions + the exact adjusted total
+    await db.comment.deleteMany({ where: { videoId: VIDEO_ID } });
     serveLiveComments();
     // one local top-level + one local reply under the fixture's pinned parent
     await postComment(
