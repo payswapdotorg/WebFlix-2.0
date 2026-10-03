@@ -47,7 +47,7 @@ export function CreateMenu() {
           data-testid="create-button"
         >
           <Plus className="size-5" aria-hidden="true" />
-          <span className="hidden sm:inline">Create</span>
+          <span className="hidden md:inline">Create</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52" data-testid="create-menu">

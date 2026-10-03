@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Progress } from "@/components/ui/progress";
 import { useApi, postJson } from "@/hooks/use-api";
 import type { UploadContextDTO, UploadHandoffDTO } from "@/lib/types";
 import {
@@ -55,6 +56,19 @@ function formatBytes(n: number): string {
   if (n >= 1024 * 1024 * 1024) return `${(n / (1024 * 1024 * 1024)).toFixed(1)} GB`;
   if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
   return `${Math.max(1, Math.round(n / 1024))} KB`;
+}
+
+/** YouTube's duration text (m:ss / h:mm:ss); null when the number is not a
+ * real finite duration — the display stays honestly absent, never 0:00. */
+function formatDuration(sec: number | null | undefined): string | null {
+  if (sec === null || sec === undefined || !Number.isFinite(sec) || sec <= 0) return null;
+  const total = Math.round(sec);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const mm = h > 0 ? String(m).padStart(2, "0") : String(m);
+  const ss = String(s).padStart(2, "0");
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
 interface StageFileOutcome {
@@ -535,6 +549,11 @@ function VisibilityStep(props: {
 // the right column — the honest local preview of the picked file
 // ---------------------------------------------------------------------------
 function VideoPreview(props: { url: string; fileName: string; sizeBytes: number }) {
+  // the duration is READ FROM THE FILE — the browser's <video> element
+  // reports it on loadedmetadata; until then (or forever, in environments
+  // that never decode) the display stays honestly absent
+  const [durationSec, setDurationSec] = useState<number | null>(null);
+  const durationText = formatDuration(durationSec);
   return (
     <aside
       aria-label="Video preview"
@@ -549,13 +568,17 @@ function VideoPreview(props: { url: string; fileName: string; sizeBytes: number 
         playsInline
         preload="metadata"
         controls
+        onLoadedMetadata={(e) => setDurationSec(e.currentTarget.duration)}
         className="aspect-video w-full rounded-lg bg-black"
         data-testid="upload-preview-video"
       />
       <p className="truncate text-sm font-medium" title={props.fileName}>
         {props.fileName}
       </p>
-      <p className="text-xs text-muted-foreground">{formatBytes(props.sizeBytes)}</p>
+      <p className="text-xs text-muted-foreground">
+        {formatBytes(props.sizeBytes)}
+        {durationText ? ` · ${durationText}` : ""}
+      </p>
       <p className="text-xs text-muted-foreground">
         The preview plays locally from the picked file — it reaches YouTube only through
         the publish drive or the hand-off bundle.
@@ -848,13 +871,12 @@ export default function UploadPage() {
             {(staging || flow.phase === "executing") && (
               <div data-testid="upload-progress-bar" aria-hidden="true">
                 {staging && stagePct !== null ? (
-                  <div className="h-1 w-full overflow-hidden rounded-full bg-secondary">
-                    <div
-                      className="h-full rounded-full bg-primary transition-all"
-                      style={{ width: `${stagePct}%` }}
-                    />
-                  </div>
+                  // the DETERMINATE bar — the shadcn Progress primitive, fed
+                  // only real browser progress events (never a guess)
+                  <Progress value={stagePct} className="h-1" />
                 ) : (
+                  // the honest INDETERMINATE pulse — no number exists yet
+                  // (fetch fallback, or the broker publish hold)
                   <div className="h-1 w-full overflow-hidden rounded-full bg-secondary">
                     <div className="h-full w-1/3 animate-pulse rounded-full bg-primary/70" />
                   </div>
