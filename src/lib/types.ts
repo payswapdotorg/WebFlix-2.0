@@ -155,6 +155,15 @@ export type ChannelPageDTO = {
      * nulls stand on its failure). Videos are the exact-id-filtered results.
      */
     composed?: boolean;
+    /**
+     * WFX2-4A (additive, mirrors composed?): the page was read through the
+     * broker's page-context fetch — the logged-in session's OWN channel
+     * page, mapped through the same mapper as the browse path (one mapper,
+     * two transports; see src/lib/youtube/channels.ts brokerChannelPage).
+     * The payload reflects the BROKER account's session: isSubscribed is
+     * always false (never the broker's subscription state).
+     */
+    brokered?: boolean;
   };
   videos: VideoDTO[];
   shorts: VideoDTO[];

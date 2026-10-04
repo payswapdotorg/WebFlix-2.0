@@ -44,6 +44,11 @@ export const ACTION_KINDS = [
   // kinds/playlistedit.ts (the lane-owned module, the P3 pattern)
   "playlist-update",
   "playlist-reorder",
+  // WFX2-4A (broker READ transport) — additive: a credentials-carrying
+  // same-origin page fetch executed in the logged-in tab's page context (the
+  // payload the datacenter-walled egress cannot get). READ-ONLY — no DOM is
+  // driven, the tab is never navigated.
+  "fetch",
 ] as const;
 
 export type BrokerActionKind = (typeof ACTION_KINDS)[number];
@@ -139,6 +144,11 @@ export interface BrokerPayload {
   fileName?: string;
   /** WFX2-P3-LC: live-chat-send message text */
   message?: string;
+  /** WFX2-4A: fetch — the youtube.com PATH to read (must start with "/";
+   * absolute URLs and other hosts are refused by validation). The wire
+   * contract carries it TOP-LEVEL ({kind:"fetch", path:"/…"}); the
+   * payload form is the tolerated alias. */
+  path?: string;
 }
 
 export interface BrokerActionRequest {
@@ -162,6 +172,14 @@ export interface BrokerActionResponse {
   error?: string;
   /** DOM state observed when verification failed (honest failure report) */
   dom?: Record<string, unknown>;
+  // WFX2-4A (fetch read transport) — the fetched page rides top-level (the
+  // transport succeeded; the HTTP status is the caller's to interpret)
+  /** the page-context fetch's HTTP status (2xx/3xx/4xx/5xx — carried, not judged) */
+  status?: number;
+  /** the fetched response text (page HTML; capped at 4 MiB — see truncated) */
+  body?: string;
+  /** the body hit the 4 MiB cap and was truncated (channel HTML runs 1–3 MiB) */
+  truncated?: boolean;
 }
 
 export interface HealthResponse {

@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Bell, Check } from "lucide-react";
 import { toast } from "sonner";
+import { toastActionError } from "@/lib/watch/connection-client";
 import { Button } from "@/components/ui/button";
 import { VerifiedBadge } from "@/components/app/verified-badge";
 import { postJson } from "@/hooks/use-api";
@@ -29,7 +30,9 @@ export function ChannelResultCard({ channel }: { channel: ChannelLite }) {
       setSubscribed(res.subscribed);
       toast.success(res.subscribed ? "Subscribed" : "Unsubscribed");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to update subscription");
+      // Task 4-b: the broker-offline shape gets the "check the connection in
+      // Settings" prompt; every other error keeps its existing message
+      toastActionError(err, "Failed to update subscription");
     } finally {
       setSubscribing(false);
     }

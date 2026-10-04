@@ -3,10 +3,26 @@
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
+import { AlertTriangle, CheckCircle2, PlugZap, RotateCw } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { SessionAvatar } from "@/components/app/account-menu";
 import { useApi } from "@/hooks/use-api";
 import { useWebFlixSession } from "@/hooks/use-webflix-session";
+import { useYouTubeConnection } from "@/hooks/use-youtube-connection";
+import { relativeTime } from "@/lib/watch/format";
+import {
+  parseConnectionTimestamp,
+  type YouTubeConnectionState,
+} from "@/lib/watch/connection-client";
 import { useAutoplayPreference } from "./use-autoplay-pref";
 
 /**
@@ -23,6 +39,7 @@ export const SCOPE_MANAGED_LABEL = "MANAGED ON YOUTUBE.COM (the operator account
 
 export const SECTIONS = [
   { id: "account", label: "Account" },
+  { id: "youtube-connection", label: "YouTube connection" },
   { id: "notifications", label: "Notifications" },
   { id: "playback", label: "Playback and performance" },
   { id: "appearance", label: "Appearance" },
@@ -207,6 +224,133 @@ export function AccountSection() {
         badge="Read-only"
       />
     </SettingsSection>
+  );
+}
+
+/** Coarse, channel-safe context for the connected tab (never a raw URL —
+ * only the KIND of YouTube page the shared session's tab is on). */
+function tabContextLabel(tabUrl: string | null): string {
+  if (!tabUrl) return "Session active";
+  if (tabUrl.includes("/watch")) return "Session active — the connected tab is on a watch page";
+  if (tabUrl.includes("/@") || tabUrl.includes("/channel/")) {
+    return "Session active — the connected tab is on a channel page";
+  }
+  if (tabUrl.includes("youtube.com")) return "Session active — the connected tab is on youtube.com";
+  return "Session active";
+}
+
+/** WFX2 Task 4-b — the live YouTube connection card: is the shared session
+ * that performs WebFlix's YouTube actions (like, subscribe, comment)
+ * reachable right now? Connected → the honest "actions run through the
+ * WebFlix connected session" state with the tab context + last action;
+ * disconnected → the warning + what stops working + Retry (a forced
+ * re-probe). The shared-session model is stated honestly up front. */
+export function YouTubeConnectionSection() {
+  const { state, loading, reload } = useYouTubeConnection();
+
+  return (
+    <SettingsSection
+      id="youtube-connection"
+      title="YouTube connection"
+      scope="managed"
+      description="WebFlix doesn't sign in to your own YouTube account — like, subscribe and comment actions are performed through one shared logged-in session (the WebFlix connected session). This card shows whether that session is reachable right now."
+    >
+      <div role="status" aria-live="polite" data-connection-loading={loading || undefined}>
+        {loading || !state ? (
+          <ConnectionCheckingCard />
+        ) : (
+          <ConnectionCard state={state} onRetry={reload} />
+        )}
+      </div>
+    </SettingsSection>
+  );
+}
+
+function ConnectionCheckingCard() {
+  return (
+    <Card className="gap-3 rounded-xl py-5">
+      <CardHeader className="px-5">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <PlugZap className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          Checking the YouTube connection…
+        </CardTitle>
+        <CardDescription>Asking the WebFlix connected session for its current state.</CardDescription>
+      </CardHeader>
+    </Card>
+  );
+}
+
+function ConnectionCard({
+  state,
+  onRetry,
+}: {
+  state: YouTubeConnectionState;
+  onRetry: () => void;
+}) {
+  const checkedAgo = relativeTime(state.checkedAt) || "just now";
+  const lastActionAgo = relativeTime(parseConnectionTimestamp(state.lastActionAt));
+
+  if (state.connected) {
+    return (
+      <Card className="gap-3 rounded-xl py-5" data-connection-state="connected">
+        <CardHeader className="px-5">
+          <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+            <CheckCircle2 className="size-5 shrink-0 text-emerald-500" aria-hidden="true" />
+            Connected — actions are available
+          </CardTitle>
+          <CardDescription>
+            Actions are performed through the WebFlix connected session.
+          </CardDescription>
+          <CardAction>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRetry}
+              aria-label="Recheck the YouTube connection"
+            >
+              <RotateCw className="size-4" aria-hidden="true" />
+              Recheck
+            </Button>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2 px-5 text-sm text-muted-foreground">
+          <p>
+            {tabContextLabel(state.tabUrl)}
+            {lastActionAgo ? ` — last action ${lastActionAgo}` : " — no action performed through this session yet"}
+            .
+          </p>
+          <p className="text-xs">Checked {checkedAgo}.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="gap-3 rounded-xl py-5" data-connection-state="disconnected">
+      <CardHeader className="px-5">
+        <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+          <AlertTriangle className="size-5 shrink-0 text-amber-500" aria-hidden="true" />
+          Disconnected — actions are unavailable
+        </CardTitle>
+        <CardDescription>
+          Like, subscribe and comment actions are unavailable right now.
+        </CardDescription>
+        <CardAction>
+          <Button size="sm" onClick={onRetry} aria-label="Retry the YouTube connection check">
+            <RotateCw className="size-4" aria-hidden="true" />
+            Retry
+          </Button>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2 px-5 text-sm text-muted-foreground">
+        <p>
+          The WebFlix connected session isn&apos;t reachable right now — either its browser
+          isn&apos;t running or the YouTube tab isn&apos;t open. It usually comes back on its own;
+          retry, or check back here later.
+        </p>
+        <p className="text-xs">Checked {checkedAgo}.</p>
+      </CardContent>
+    </Card>
   );
 }
 

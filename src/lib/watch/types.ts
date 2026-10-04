@@ -114,7 +114,8 @@ export interface StoryboardLevelDto {
  * GET /api/videos/[id]/playback — the server-side player-response chain
  * (innertube `player` over the client chain — INNER_TUBE_PLAYER_CLIENT
  * (default WEB) then IOS — then the watch page's embedded
- * ytInitialPlayerResponse). Empty arrays = the egress could not get a
+ * ytInitialPlayerResponse, then the broker's page-context watch read
+ * (WFX2-4A, source "broker-watch")). Empty arrays = no rung could get a
  * playable response (walled) — the honest degrade.
  */
 export interface PlaybackDto {
@@ -123,7 +124,7 @@ export interface PlaybackDto {
   /** videoDetails.lengthSeconds when the response carried it */
   durationSec: number | null;
   /** which chain rung produced the payload ("" = none served) */
-  source: "player" | "watch-page" | "";
+  source: "player" | "watch-page" | "broker-watch" | "";
 }
 
 // ---- WFX2-P7-AN: watch insights DTOs (the /api/watch/insights payload) ----

@@ -35,6 +35,37 @@ export function validateActionRequest(body: unknown): { error: string } | { req:
   if (typeof kind !== "string" || !(ACTION_KINDS as readonly string[]).includes(kind)) {
     return { error: `unknown kind (expected one of ${ACTION_KINDS.join(", ")})` };
   }
+  // WFX2-4A — the READ transport: no target, the PATH drives everything. The
+  // wire contract is {kind:"fetch", path:"/…"} (payload.path tolerated as the
+  // alias). Path-law: must start with "/" AND resolve inside www.youtube.com
+  // — absolute URLs, protocol-relative ("//host/…") and any form that escapes
+  // the origin are refused (the broker is a youtube.com reader, never a
+  // generic proxy).
+  if (kind === "fetch") {
+    const rawPath = b.path ?? (b.payload as { path?: unknown } | undefined)?.path;
+    if (typeof rawPath !== "string" || rawPath.length === 0) {
+      return { error: `fetch requires path (a www.youtube.com path starting with "/")` };
+    }
+    if (!rawPath.startsWith("/") || rawPath.startsWith("//")) {
+      return { error: `fetch path must start with "/" (a youtube.com path — absolute URLs are refused): ${rawPath.slice(0, 80)}` };
+    }
+    let resolved: URL;
+    try {
+      resolved = new URL(rawPath, "https://www.youtube.com");
+    } catch {
+      return { error: `fetch path is not a valid www.youtube.com path: ${rawPath.slice(0, 80)}` };
+    }
+    if (resolved.origin !== "https://www.youtube.com") {
+      return { error: `fetch path must stay on www.youtube.com (resolved to ${resolved.origin})` };
+    }
+    return {
+      req: {
+        kind: "fetch",
+        target: {},
+        payload: { path: rawPath },
+      },
+    };
+  }
   const targetRaw = b.target;
   if (typeof targetRaw !== "object" || targetRaw === null) {
     return { error: "target is required" };

@@ -14,16 +14,56 @@
  *  - getPlayback's chain via the setUpstream seam: rung 1 `player` over the
  *    CLIENT CHAIN (INNER_TUBE_PLAYER_CLIENT primary, default WEB, then IOS —
  *    first usable answer wins, no request multiplication) → rung 2 the watch
- *    page's embedded player response → honest-empty when all are walled;
+ *    page's embedded player response → rung 3 the BROKER's page-context
+ *    watch read (WFX2-4A — the logged-in session's own page, source
+ *    "broker-watch") → honest-empty when all are walled;
  *  - GET /api/videos/[id]/playback (DTO + validation);
  *  - GET /api/stream (the googlevideo proxy): allowlist, Range passthrough,
  *    status/header pass-through, upstream failure mapping.
  *
  * NEVER the network (lane law: tests run against tests/fixtures/yt only).
+ * The broker client is MOCKED with an injectable brokerFetchPage (the
+ * comment-writes/action-routes mock.module pattern — the real module is
+ * re-installed in afterAll; bun's mock.module is process-wide).
  */
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, test, mock } from "bun:test";
 import { readFileSync } from "node:fs";
 
+/* capture the REAL broker module before the mock replaces it (restore) —
+ * copied into a fresh object: bun mutates the captured namespace in place
+ * when mock.module swaps the registry */
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const realBroker = { ...require("@/lib/broker") } as Record<string, unknown>;
+
+class MockBrokerError extends Error {
+  kind: string;
+  status: number;
+  constructor(kind: string, message: string, status: number) {
+    super(message);
+    this.name = "BrokerError";
+    this.kind = kind;
+    this.status = status;
+  }
+}
+
+const brokerCalls: string[] = [];
+/** injectable broker fetch: a path→response fn, or a value for every path */
+let brokerResponse: unknown = new MockBrokerError(
+  "offline",
+  "action backend offline — the lead's broker must be running",
+  502
+);
+
+mock.module("@/lib/broker", () => ({
+  BROKER_OFFLINE_MESSAGE: "action backend offline — the lead's broker must be running",
+  BrokerError: MockBrokerError,
+  brokerFetchPage: async (path: string) => {
+    brokerCalls.push(path);
+    return typeof brokerResponse === "function" ? brokerResponse(path) : brokerResponse;
+  },
+}));
+
+/* the app modules (imported after the mock) */
 import {
   extractPlayerResponseFromHtml,
   getPlayback,
@@ -246,12 +286,24 @@ let envBefore: string | undefined;
 beforeEach(() => {
   clearCache();
   envBefore = process.env[PLAYER_CLIENT_ENV];
+  brokerCalls.length = 0;
+  brokerResponse = new MockBrokerError(
+    "offline",
+    "action backend offline — the lead's broker must be running",
+    502
+  );
 });
 
 afterEach(() => {
   setUpstream(null);
   if (envBefore === undefined) delete process.env[PLAYER_CLIENT_ENV];
   else process.env[PLAYER_CLIENT_ENV] = envBefore;
+});
+
+/* bun's mock.module is process-wide — restore the real broker module so
+ * later-loaded files exercise the real implementation again */
+afterAll(() => {
+  mock.module("@/lib/broker", () => realBroker);
 });
 
 describe("getPlayback — the chain (player endpoint → watch page → honest empty)", () => {
@@ -339,6 +391,30 @@ describe("getPlayback — the chain (player endpoint → watch page → honest e
     const dto = await getPlayback("WALLED99999");
     expect(dto).toEqual({ streamFormats: [], storyboards: [], durationSec: null, source: "" });
     expect(recorded.filter((r) => r.url.includes("/youtubei/v1/player"))).toHaveLength(1);
+  });
+
+  test("WFX2-4A rung 3 — rungs 1-2 walled, the broker's page-context watch read serves (source: broker-watch)", async () => {
+    const { impl } = chainUpstream(WALLED_PLAYER, null);
+    setUpstream(impl);
+    // the logged-in session's own watch page — the SAME embedded player
+    // response rung 2 parses, read through the broker fetch transport
+    brokerResponse = () => ({ ok: true, status: 200, body: watchHtmlFor(playerFixture) });
+    const dto = await getPlayback("dQw4w9WgXcQ");
+    expect(dto.source).toBe("broker-watch");
+    expect(dto.storyboards.map((l) => l.level)).toEqual([1, 2, 3]);
+    expect(dto.durationSec).toBe(213);
+    expect(dto.streamFormats).toEqual([]); // the watch page's formats are cipher-only
+    // exactly one broker read — the watch page with the hl/gl params
+    expect(brokerCalls).toEqual(["/watch?v=dQw4w9WgXcQ&hl=en&gl=US"]);
+  });
+
+  test("WFX2-4A — all three rungs walled (broker offline too) → the honest empty payload, re-checked", async () => {
+    const { impl } = chainUpstream(WALLED_PLAYER, null);
+    setUpstream(impl);
+    const dto = await getPlayback("WALLED12345");
+    expect(dto).toEqual({ streamFormats: [], storyboards: [], durationSec: null, source: "" });
+    // the broker rung WAS attempted before the honest degrade stood
+    expect(brokerCalls).toEqual(["/watch?v=WALLED12345&hl=en&gl=US"]);
   });
 });
 

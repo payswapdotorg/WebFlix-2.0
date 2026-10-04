@@ -28,6 +28,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { post } from "@/lib/watch/client";
+import { toastActionError } from "@/lib/watch/connection-client";
 import { signInHref } from "@/lib/auth/client";
 import { compactCount } from "@/lib/watch/format";
 import type { LikeValue } from "@/lib/watch/types";
@@ -131,7 +132,9 @@ export function ActionRow({
       onLikeResult(result);
     } catch (e) {
       setState({ likes, dislikes, yourLike });
-      toast.error(e instanceof Error ? e.message : "Failed to update rating");
+      // Task 4-b: the broker-offline shape gets the "check the connection in
+      // Settings" prompt; every other error keeps its existing message
+      toastActionError(e, "Failed to update rating");
     } finally {
       setBusy(false);
     }
@@ -146,7 +149,7 @@ export function ActionRow({
       await post(`/api/videos/${videoId}/not-interested`);
       toast.success("We won't recommend this video to you");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed");
+      toastActionError(e, "Failed");
     }
   };
 

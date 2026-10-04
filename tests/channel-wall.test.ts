@@ -15,12 +15,57 @@
  *    the channel last-good cache family serves the exact-handle match;
  *    honest empty otherwise.
  *
+ * WFX2-4A adds the BROKER READ RUNG between the last-good and the
+ * search-compose rungs: the wall stood, but the logged-in operator
+ * session's own page-context fetch still reads the REAL channel page
+ * (two brokerFetchPage reads — home + /videos — mapped through the same
+ * mapper, `brokered: true`, isSubscribed always false). Broker offline →
+ * the ladder is unchanged below it.
+ *
  * Fixture bytes via setUpstream() + the Upstash fake via setUpstashRest()
- * (the cutover-routes.test.ts patterns — never the network).
+ * (the cutover-routes.test.ts patterns — never the network). The broker
+ * client is MOCKED with an injectable brokerFetchPage (the comment-writes/
+ * action-routes mock.module pattern — real module re-installed in afterAll,
+ * bun's mock.module is process-wide).
  */
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, test, mock } from "bun:test";
 import { readFileSync } from "node:fs";
 
+/* capture the REAL broker module before the mock replaces it (restore) —
+ * copied into a fresh object: bun mutates the captured namespace in place
+ * when mock.module swaps the registry */
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const realBroker = { ...require("@/lib/broker") } as Record<string, unknown>;
+
+class MockBrokerError extends Error {
+  kind: string;
+  status: number;
+  constructor(kind: string, message: string, status: number) {
+    super(message);
+    this.name = "BrokerError";
+    this.kind = kind;
+    this.status = status;
+  }
+}
+
+const brokerCalls: string[] = [];
+/** injectable broker fetch: a path→response fn, or a value for every path */
+let brokerResponse: unknown = new MockBrokerError(
+  "offline",
+  "action backend offline — the lead's broker must be running",
+  502
+);
+
+mock.module("@/lib/broker", () => ({
+  BROKER_OFFLINE_MESSAGE: "action backend offline — the lead's broker must be running",
+  BrokerError: MockBrokerError,
+  brokerFetchPage: async (path: string) => {
+    brokerCalls.push(path);
+    return typeof brokerResponse === "function" ? brokerResponse(path) : brokerResponse;
+  },
+}));
+
+/* the app modules (imported after the mock) */
 import { setUpstream } from "@/lib/youtube/innertube";
 import { clearCache } from "@/lib/youtube/cache";
 import { setUpstashRest, type UpstashRest } from "@/lib/youtube/upstash-cache";
@@ -105,11 +150,23 @@ beforeEach(() => {
   clearCache();
   upstream = fixtureUpstream();
   setUpstream(upstream.impl);
+  brokerCalls.length = 0;
+  brokerResponse = new MockBrokerError(
+    "offline",
+    "action backend offline — the lead's broker must be running",
+    502
+  );
 });
 
 afterEach(() => {
   setUpstream(null);
   setUpstashRest(null);
+});
+
+/* bun's mock.module is process-wide — restore the real broker module so
+ * later-loaded files (playback-fallback etc.) exercise the real one */
+afterAll(() => {
+  mock.module("@/lib/broker", () => realBroker);
 });
 
 const ctx = (handle: string) => ({ params: Promise.resolve({ handle }) });
@@ -215,6 +272,68 @@ describe("GET /api/channel/[handle] — the channel-wall fix", () => {
     const page = (await res.json()) as any;
     expect(page.channel.id).toBe("UCuAXFkgsw1L7xaCfnd5JJOw");
     expect(page.walled).toBe(false);
+  });
+
+  test("WFX2-4A — the wall stands but the broker serves the channel page → the brokered REAL page (walled:false, brokered:true)", async () => {
+    upstream.wall(true);
+    // the broker's two reads answer the channel_rickastley fixture wrapped
+    // as page HTML — the logged-in session's own channel home + videos tab
+    const brokerHtml = `<!doctype html><script>var ytInitialData = ${JSON.stringify(channel)};</script>`;
+    brokerResponse = () => ({ ok: true, status: 200, body: brokerHtml });
+    const res = await channelRoute(
+      new Request("http://localhost/api/channel/@RickAstleyYT"),
+      ctx("@RickAstleyYT")
+    );
+    expect(res.status).toBe(200);
+    const page = (await res.json()) as any;
+    // a REAL page (not the walled degrade, not a compose)
+    expect(page.walled).toBe(false);
+    expect(page.channel.id).toBe("UCuAXFkgsw1L7xaCfnd5JJOw");
+    expect(page.channel.name).toBe("Rick Astley");
+    expect(page.channel.handle).toBe("RickAstleyYT");
+    expect(page.tabs).toEqual([
+      "home",
+      "videos",
+      "shorts",
+      "live",
+      "playlists",
+      "community",
+      "about",
+    ]);
+    expect(page.videos.length).toBeGreaterThan(0);
+    expect(page.shorts.length).toBeGreaterThan(0);
+    expect(page.channel.composed).toBeUndefined(); // the search-compose rung never fired
+    // the broker transport markers: brokered + the session-state law
+    expect(page.channel.brokered).toBe(true);
+    expect(page.channel.isSubscribed).toBe(false); // the broker account's state never leaks
+    // the two broker reads: the channel home page + the videos tab
+    expect(brokerCalls).toEqual(["/@RickAstleyYT", "/@RickAstleyYT/videos"]);
+    // a real broker page BEATS the compose rung — the search never fired
+    expect(upstream.recorded.some((r) => r.url.includes("/youtubei/v1/search"))).toBe(false);
+  });
+
+  test("WFX2-4A — the wall stands and the broker is offline → the honest walled degrade unchanged (the compose rung keeps its turn)", async () => {
+    upstream.wall(true);
+    brokerResponse = new MockBrokerError(
+      "offline",
+      "action backend offline — the lead's broker must be running",
+      502
+    );
+    const res = await channelRoute(
+      new Request("http://localhost/api/channel/@RickAstleyYT"),
+      ctx("@RickAstleyYT")
+    );
+    expect(res.status).toBe(200);
+    const page = (await res.json()) as any;
+    expect(page.channel).toBeNull();
+    expect(page.videos).toEqual([]);
+    expect(page.walled).toBe(true);
+    expect(typeof page.note).toBe("string");
+    // the broker read WAS attempted before the degrade stood
+    expect(brokerCalls).toEqual(["/@RickAstleyYT"]);
+    // the compose rung got its turn — and the search_lofi ownership (max
+    // share 21%, below every threshold) keeps the compose honestly null
+    expect(upstream.recorded.some((r) => r.url.includes("/youtubei/v1/search"))).toBe(true);
   });
 });
 

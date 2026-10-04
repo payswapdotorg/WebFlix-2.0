@@ -886,6 +886,34 @@ return {ok:true,verified:postsFound>0,path:'ui',detail:{data:window.ytInitialDat
 `);
 }
 
+/**
+ * fetch — WFX2-4A READ transport: a credentials-carrying SAME-ORIGIN fetch
+ * executed in the logged-in tab's own page context (validation already
+ * confined `path` to www.youtube.com; the URL is resolved broker-side and
+ * interpolated, never re-parsed in-page). The page's own request pipeline
+ * rides the browser's cookies/UA — the exact payload the datacenter-walled
+ * egress cannot get (channel pages, watch pages). READ-ONLY: no DOM is driven
+ * and the tab is NEVER navigated (requiredUrl is null — the fetch is
+ * same-origin from wherever the tab stands on www.youtube.com). The response
+ * text rides top-level {status, body, truncated}; the body is capped at
+ * 4 MiB (channel/watch HTML runs 1–3 MiB) with the truncated flag set when
+ * cut. A non-2xx page is still ok:true + its status — the transport
+ * succeeded; the caller judges the status.
+ */
+function fetchScript(path: string): string {
+  return script(`
+const url=${j(new URL(path, "https://www.youtube.com").href)};
+if(location.origin!=='https://www.youtube.com'){
+  return {ok:false,error:'fetch-needs-www-youtube-tab (the tab is on '+location.origin+')',path:'none',dom:${domState()}};
+}
+const res=await fetch(url,{credentials:'include',redirect:'follow'});
+const body=await res.text();
+const MAX=4*1024*1024;
+const truncated=body.length>MAX;
+return {ok:true,verified:body.length>0,path:'fetch',status:res.status,body:truncated?body.slice(0,MAX):body,truncated};
+`);
+}
+
 const POST_SCOPE_SEL =
   "'ytd-backstage-post-thread-renderer, ytd-backstage-post-renderer'";
 const POST_LIKE_SEL =
@@ -1170,6 +1198,12 @@ export function requiredUrl(req: BrokerActionRequest): string | null {
       }
       return handle ? `https://www.youtube.com/@${handle}/community` : null;
     }
+    // WFX2-4A — the READ transport NEVER navigates the tab: the fetch is
+    // same-origin from wherever the tab stands on www.youtube.com (the
+    // script itself refuses a non-www origin). A navigation would needlessly
+    // disturb the shared operator tab.
+    case "fetch":
+      return null;
     default:
       return null;
   }
@@ -1347,6 +1381,10 @@ export function buildScript(
       return playlistUpdateScript(payload);
     case "playlist-reorder":
       return playlistReorderScript(payload);
+    // WFX2-4A — the READ transport: 45s like community-read (page HTML is
+    // 1–3 MiB; the fetch itself is seconds, the margin covers slow loads)
+    case "fetch":
+      return { script: fetchScript(String(payload?.path ?? "")), timeoutMs: 45000 };
     default:
       return null;
   }

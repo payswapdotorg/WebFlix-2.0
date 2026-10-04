@@ -4,18 +4,27 @@
  * 401/400, 502 action-failure, the unconfigured-env fail path, and the
  * public-gateway wiring (BROKER_QUERY routing query + x-session-id affinity
  * header on every request).
+ *
+ * WFX2-4A adds the brokerFetchPage contract: the fetch READ transport's
+ * wire shape ({kind:"fetch", path} — path TOP-LEVEL), the secret/affinity
+ * headers, the sibling typed error mapping, and the TEST-UPSTREAM GUARD
+ * (the l2Active law — a fixture upstream serving means the broker fetch
+ * never fires).
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
+  BROKER_FETCH_TIMEOUT_MS,
   BROKER_OFFLINE_MESSAGE,
   BrokerError,
   brokerAction,
   brokerConfigured,
   brokerEndpoint,
+  brokerFetchPage,
   brokerQuery,
   brokerUrl,
   brokerTimeoutMs,
 } from "@/lib/broker";
+import { setUpstream } from "@/lib/youtube/innertube";
 
 const realFetch = globalThis.fetch;
 let calls: { url: string; init: RequestInit }[] = [];
@@ -30,6 +39,7 @@ beforeEach(() => {
 
 afterEach(() => {
   globalThis.fetch = realFetch;
+  setUpstream(null); // the test-upstream guard probe must never leak
   delete process.env.BROKER_URL;
   delete process.env.BROKER_SECRET;
   delete process.env.BROKER_QUERY;
@@ -207,5 +217,109 @@ describe("brokerAction contract (mocked fetch)", () => {
     expect(calls).toHaveLength(0);
     expect((r as BrokerError).kind).toBe("offline");
     expect((r as BrokerError).message).toBe(BROKER_OFFLINE_MESSAGE);
+  });
+});
+
+describe("brokerFetchPage contract (WFX2-4A — the fetch READ transport)", () => {
+  test("success: POSTs {kind:'fetch', path} with the secret + affinity headers; maps the page body", async () => {
+    mockFetch(() =>
+      jsonResponse(200, {
+        ok: true,
+        verified: true,
+        path: "fetch",
+        status: 200,
+        body: "<html><script>var ytInitialData = {};</script></html>",
+        truncated: false,
+      })
+    );
+    const r = await brokerFetchPage("/@RickAstleyYT");
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe("http://127.0.0.1:3055/broker/action");
+    const headers = calls[0].init.headers as Record<string, string>;
+    expect(headers["x-broker-secret"]).toBe("s3cret");
+    expect(headers["x-session-id"]).toBe("webflix-producer");
+    expect(headers["Content-Type"]).toBe("application/json");
+    // the wire contract: the path rides TOP-LEVEL — no target, no payload
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({
+      kind: "fetch",
+      path: "/@RickAstleyYT",
+    });
+    expect(r).not.toBeInstanceOf(BrokerError);
+    expect(r).toMatchObject({
+      ok: true,
+      status: 200,
+      body: "<html><script>var ytInitialData = {};</script></html>",
+      truncated: false,
+    });
+  });
+
+  test("the read carries its own ~30s budget (the broker's script ceiling is 45s)", () => {
+    expect(BROKER_FETCH_TIMEOUT_MS).toBe(30_000);
+  });
+
+  test("a gateway routing query (BROKER_QUERY) rides on the fetch request too", async () => {
+    process.env.BROKER_URL = "https://gw.example";
+    process.env.BROKER_QUERY = "XTransformPort=3055";
+    mockFetch(() => jsonResponse(200, { ok: true, status: 200, body: "x" }));
+    await brokerFetchPage("/watch?v=dQw4w9WgXcQ");
+    expect(calls[0].url).toBe("https://gw.example/broker/action?XTransformPort=3055");
+  });
+
+  test("broker 502 (the fetch action failed) → action-failed carrying the broker's message", async () => {
+    mockFetch(() => jsonResponse(502, { ok: false, error: "fetch-needs-www-youtube-tab" }));
+    const r = await brokerFetchPage("/@x");
+    expect(r).toBeInstanceOf(BrokerError);
+    const err = r as BrokerError;
+    expect(err.kind).toBe("action-failed");
+    expect(err.message).toBe("fetch-needs-www-youtube-tab");
+    expect(err.status).toBe(502);
+  });
+
+  test("401 → unauthorized; 400 → bad-request carrying the broker message", async () => {
+    mockFetch(() => jsonResponse(401, { error: "unauthorized" }));
+    expect(((await brokerFetchPage("/@x")) as BrokerError).kind).toBe("unauthorized");
+    mockFetch(() => jsonResponse(400, { error: 'fetch requires path (a www.youtube.com path starting with "/")' }));
+    const bad = (await brokerFetchPage("not-a-path")) as BrokerError;
+    expect(bad.kind).toBe("bad-request");
+    expect(bad.message).toContain("fetch requires path");
+  });
+
+  test("network unreachable / timeout / non-JSON error bodies → the offline/action-failed shapes", async () => {
+    globalThis.fetch = (async () => {
+      throw new TypeError("fetch failed");
+    }) as unknown as typeof fetch;
+    expect(((await brokerFetchPage("/@x")) as BrokerError).kind).toBe("offline");
+    globalThis.fetch = (async () => {
+      throw Object.assign(new Error("The operation was aborted"), { name: "AbortError" });
+    }) as unknown as typeof fetch;
+    const timedOut = (await brokerFetchPage("/@x")) as BrokerError;
+    expect(timedOut.kind).toBe("offline");
+    expect(timedOut.message).toBe(BROKER_OFFLINE_MESSAGE);
+    mockFetch(() => new Response("<html>bad gateway</html>", { status: 502 }));
+    expect(((await brokerFetchPage("/@x")) as BrokerError).kind).toBe("action-failed");
+  });
+
+  test("unconfigured env (no secret) → offline without any fetch", async () => {
+    process.env.BROKER_URL = "";
+    process.env.BROKER_SECRET = "";
+    const r = await brokerFetchPage("/@x");
+    expect(calls).toHaveLength(0);
+    expect((r as BrokerError).kind).toBe("offline");
+  });
+
+  test("TEST-UPSTREAM GUARD (the l2Active law): a fixture upstream serving → the offline-shaped error, ZERO broker fetches", async () => {
+    // .env carries BROKER_SECRET on this machine — the guard is the only
+    // thing standing between the walled-shape test suites and the LIVE
+    // local broker (mirrors l2Active() in upstash-cache.ts)
+    setUpstream(async () => new Response("{}", { status: 200 }));
+    mockFetch(() => {
+      throw new Error("the broker fetch must never fire under a test upstream");
+    });
+    const r = await brokerFetchPage("/@RickAstleyYT");
+    expect(calls).toHaveLength(0);
+    expect(r).toBeInstanceOf(BrokerError);
+    const err = r as BrokerError;
+    expect(err.kind).toBe("offline");
+    expect(err.message).toBe(BROKER_OFFLINE_MESSAGE);
   });
 });
