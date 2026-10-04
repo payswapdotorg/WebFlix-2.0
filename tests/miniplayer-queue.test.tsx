@@ -189,6 +189,13 @@ class MockYTPlayer {
   PlayerState: {},
 };
 
+// Task 2-c: the layer's embed-health probe ALSO creates offscreen players
+// (inside [data-wfx-embed-probe] wrappers) — the takeover assertions below
+// care about the MAIN player only, so filter the probe out.
+const isProbePlayer = (p: MockYTPlayer): boolean =>
+  !!(p.el as Element).closest?.("[data-wfx-embed-probe]");
+const mainPlayers = (): MockYTPlayer[] => MockYTPlayer.instances.filter((p) => !isProbePlayer(p));
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const item = (videoId: string): QueueItem => ({
@@ -527,8 +534,8 @@ describe("prev/next clicks drive the engine's exact advance", () => {
     expect(usePlayerHost.getState().videoId).toBe("V2");
     expect(useQueueStore.getState().items.map((i) => i.videoId)).toEqual(["V2", "V3"]);
     expect(usePlayerHost.getState().hostMode).toBe("mini");
-    expect(MockYTPlayer.instances).toHaveLength(1); // no remount — takeover
-    expect(MockYTPlayer.instances[0].loadedVideoId).toBe("V2");
+    expect(mainPlayers()).toHaveLength(1); // no remount — takeover
+    expect(mainPlayers()[0].loadedVideoId).toBe("V2");
   });
 
   test("next at the last item is disabled — nothing happens (no wraparound)", async () => {
@@ -550,8 +557,8 @@ describe("prev/next clicks drive the engine's exact advance", () => {
     expect(usePlayerHost.getState().videoId).toBe("V1");
     expect(useQueueStore.getState().items.map((i) => i.videoId)).toEqual(["V1", "V2", "V3"]); // unconsumed
     expect(usePlayerHost.getState().hostMode).toBe("mini");
-    expect(MockYTPlayer.instances).toHaveLength(1);
-    expect(MockYTPlayer.instances[0].loadedVideoId).toBe("V1");
+    expect(mainPlayers()).toHaveLength(1);
+    expect(mainPlayers()[0].loadedVideoId).toBe("V1");
   });
 
   test("prev at the head is disabled — nothing happens", async () => {

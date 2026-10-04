@@ -64,6 +64,68 @@ export interface VideoDetailDto {
   state: ViewerVideoState;
 }
 
+// ---- Task 2-c: playback fallback DTOs (the embed-wall chain) ----
+
+/**
+ * A server-usable progressive stream format (muxed audio+video, itag 18/22
+ * preferred). Only formats with a PLAIN `url` (no signatureCipher) are
+ * surfaced — deciphering is out of scope, honestly empty otherwise.
+ * The URL points at googlevideo.com and is played through /api/stream
+ * (same-origin proxy with Range passthrough).
+ */
+export interface StreamFormatDto {
+  itag: number;
+  /** the googlevideo.com videoplayback URL (server-fetched, IP-bound) */
+  url: string;
+  mimeType: string;
+  qualityLabel: string | null;
+  width: number | null;
+  height: number | null;
+  fps: number | null;
+  bitrate: number | null;
+  contentLength: string | null;
+  approxDurationMs: number | null;
+  /** muxed audio track present (progressive formats only) */
+  hasAudio: boolean;
+}
+
+/**
+ * One animatable storyboard level (parsed from the player response's
+ * `storyboards.playerStoryboardSpecRenderer.spec`, Invidious-style).
+ * `templateUrl` carries a literal `$N` placeholder — sheet k is
+ * `templateUrl.replace("$N", "M" + k)` (0 ≤ k < sheetCount); each sheet is a
+ * `cols × rows` grid of `frameWidth × frameHeight` frames, frame i covering
+ * `i * intervalMs` of the video. The "default" single-sheet level is skipped
+ * (no sequence to animate).
+ */
+export interface StoryboardLevelDto {
+  level: number;
+  templateUrl: string;
+  frameWidth: number;
+  frameHeight: number;
+  cols: number;
+  rows: number;
+  intervalMs: number;
+  frameCount: number;
+  sheetCount: number;
+}
+
+/**
+ * GET /api/videos/[id]/playback — the server-side player-response chain
+ * (innertube `player` over the client chain — INNER_TUBE_PLAYER_CLIENT
+ * (default WEB) then IOS — then the watch page's embedded
+ * ytInitialPlayerResponse). Empty arrays = the egress could not get a
+ * playable response (walled) — the honest degrade.
+ */
+export interface PlaybackDto {
+  streamFormats: StreamFormatDto[];
+  storyboards: StoryboardLevelDto[];
+  /** videoDetails.lengthSeconds when the response carried it */
+  durationSec: number | null;
+  /** which chain rung produced the payload ("" = none served) */
+  source: "player" | "watch-page" | "";
+}
+
 // ---- WFX2-P7-AN: watch insights DTOs (the /api/watch/insights payload) ----
 
 export interface InsightsTotalsDto {

@@ -60,6 +60,13 @@ export type PlayerHostState = {
   positionSec: number;
   durationSec: number;
   playing: boolean;
+  /**
+   * Task 2-c — the video whose embed is confirmed BLOCKED (the YouTube
+   * "prove you're not a bot" wall / embed-disabled). While this equals the
+   * current videoId the layer swaps the iframe for the fallback chain
+   * (native proxied stream → blocked card). Null = the embed lane is clean.
+   */
+  blockedVideoId: string | null;
 };
 
 type Listener<T> = (value: T) => void;
@@ -73,6 +80,7 @@ const initialHostState: PlayerHostState = {
   positionSec: 0,
   durationSec: 0,
   playing: false,
+  blockedVideoId: null,
 };
 
 /** The store factory (tests construct isolated stores). */
@@ -174,6 +182,7 @@ class PlayerHostManager {
         positionSec: 0,
         durationSec: video.durationSec ?? 0,
         playing: false,
+        blockedVideoId: null, // Task 2-c — a fresh video gets a fresh embed
         meta: {
           videoId: video.videoId,
           title: video.title ?? "",
@@ -305,6 +314,21 @@ class PlayerHostManager {
     if (el !== null && this.state.hostMode === "mini" && this.state.videoId !== null) {
       this.place();
     }
+  }
+
+  /* ---- Task 2-c: the embed-wall fallback chain ---- */
+
+  /** The embed for the CURRENT video cannot play — swap to the fallback. */
+  markBlocked(videoId: string, _reason?: string) {
+    if (this.state.videoId !== videoId) return; // stale verdict from a prior video
+    if (this.state.blockedVideoId === videoId) return;
+    this.set({ blockedVideoId: videoId });
+  }
+
+  /** "Retry embed" — clear the blocked verdict; the layer re-creates the iframe. */
+  retryEmbed() {
+    if (this.state.blockedVideoId === null) return;
+    this.set({ blockedVideoId: null });
   }
 
   /* ---- player events (wired once by the layer) ---- */

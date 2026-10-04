@@ -5,8 +5,14 @@
  * Verified against live youtube.com (see docs/research/2026-09-29-verifications.md):
  * search / browse / next / reel/reel_watch_sequence / reel/reel_item_watch /
  * live_chat/get_live_chat / notification/get_notification_menu.
- * The `player` endpoint is OFF-LIMITS server-side (datacenter IPs get
- * bot-flagged — verification §14); watch metadata comes from `next`.
+ *
+ * The `player` endpoint: called ONLY from src/lib/youtube/streams.ts (Task
+ * 2-c — the embed-wall playback fallback chain; watch METADATA still comes
+ * from `next`). Egress reality: the sandbox IP is walled for every client
+ * probed (LOGIN_REQUIRED/ERROR — verification §14, the historical
+ * "OFF-LIMITS" finding, now an honest degrade instead of a ban); Vercel
+ * egress is untested at build time. INNER_TUBE_PLAYER_CLIENT selects the
+ * primary client (default WEB; streams.ts chains IOS as the second try).
  *
  * Body: plain (gzip-safe) JSON — responses may arrive gzip/br compressed and
  * the runtime fetch decompresses transparently.
@@ -90,8 +96,9 @@ function sleep(ms: number): Promise<void> {
 
 /**
  * POST an InnerTube request. `endpoint` is the path after `/youtubei/v1/`
- * (e.g. "search", "browse", "next", "reel/reel_watch_sequence",
- * "live_chat/get_live_chat", "notification/get_notification_menu").
+ * (e.g. "search", "browse", "next", "player" — the last via streams.ts
+ * only — "reel/reel_watch_sequence", "live_chat/get_live_chat",
+ * "notification/get_notification_menu").
  * Responses are loosely typed at this layer (`Record<string, any>`); the
  * mapper layer owns the strong types.
  */

@@ -21,7 +21,7 @@
  * the queue-drawer toggle. The drawer itself is QueueDrawer (queue-drawer.tsx,
  * globally mounted in the AppShell next to this layer).
  */
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { ListVideo, Maximize2, SkipBack, SkipForward, X } from "lucide-react";
@@ -30,7 +30,8 @@ import { playerHost, usePlayerHost } from "@/lib/player/player-host";
 import { useQueueStore } from "@/lib/queue/queue-store";
 import { selectPrevBefore, selectNext, selectPrev } from "@/lib/queue/queue-neighbors";
 import { useQueueDrawer } from "@/components/player/queue-drawer";
-import { YoutubePlayer } from "@/components/watch/youtube-player";
+import { YoutubePlayer, probeEmbedHealth } from "@/components/watch/youtube-player";
+import { PlayerFallback } from "@/components/player/player-fallback";
 
 export function PlayerHostLayer() {
   const router = useRouter();
@@ -40,6 +41,11 @@ export function PlayerHostLayer() {
   const positionSec = usePlayerHost((s) => s.positionSec);
   const durationSec = usePlayerHost((s) => s.durationSec);
   const startSec = usePlayerHost((s) => s.startSec);
+  // Task 2-c — the embed-wall fallback chain: while the CURRENT video's
+  // embed is confirmed blocked, the wrapper hosts the fallback (native
+  // proxied stream, or the blocked card) instead of the iframe.
+  const blockedVideoId = usePlayerHost((s) => s.blockedVideoId);
+  const blocked = videoId !== null && blockedVideoId === videoId;
 
   // The persistent wrapper (created once via lazy state init — client only;
   // NEVER removed by React). A state initializer is the sanctioned pattern
@@ -118,21 +124,54 @@ export function PlayerHostLayer() {
     playerHost.setMini(true);
   }, []);
 
+  // Task 2-c — the embed health probe: per videoId (and per retry, when the
+  // blocked verdict clears), run the offscreen muted-autoplay probe. A
+  // healthy embed changes nothing; a walled one (never reaches PLAYING)
+  // flips the host to the fallback chain. The main player's own onError
+  // (101/150) and no-ready signals markBlocked directly, inside the player.
+  useEffect(() => {
+    if (videoId === null || blocked) return; // blocked already — no probe needed
+    let alive = true;
+    void probeEmbedHealth(videoId).then((healthy) => {
+      if (!alive || healthy) return;
+      playerHost.markBlocked(videoId, "wall");
+    });
+    return () => {
+      alive = false;
+    };
+  }, [videoId, blocked]);
+
   return (
     <>
       {/* The player itself — lives in the persistent wrapper node; React
           never removes this portal's container, so the iframe keeps
-          playing across every route change and mode switch. */}
+          playing across every route change and mode switch.
+          Task 2-c: while the embed is blocked, the wrapper hosts the
+          fallback chain instead (native proxied stream → blocked card). */}
       {videoId !== null && wrapper !== null
         ? createPortal(
-            <YoutubePlayer
-              handleRef={playerHost.handleRef}
-              videoId={videoId}
-              startSec={startSec}
-              onProgress={(sec, dur) => playerHost.progress(sec, dur)}
-              onEnded={() => playerHost.ended()}
-              onStateChange={(st) => playerHost.stateChange(st)}
-            />,
+            blocked ? (
+              <PlayerFallback
+                videoId={videoId}
+                startSec={startSec}
+                posterUrl={meta?.thumbnailUrl ?? null}
+                handleRef={playerHost.handleRef}
+                onProgress={(sec, dur) => playerHost.progress(sec, dur)}
+                onEnded={() => playerHost.ended()}
+                onStateChange={(st) => playerHost.stateChange(st)}
+                onRetryEmbed={() => playerHost.retryEmbed()}
+              />
+            ) : (
+              <YoutubePlayer
+                handleRef={playerHost.handleRef}
+                videoId={videoId}
+                startSec={startSec}
+                onProgress={(sec, dur) => playerHost.progress(sec, dur)}
+                onEnded={() => playerHost.ended()}
+                onStateChange={(st) => playerHost.stateChange(st)}
+                onBlocked={(reason) => playerHost.markBlocked(videoId, reason)}
+              />
+            ),
             wrapper,
           )
         : null}
