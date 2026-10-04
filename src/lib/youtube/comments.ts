@@ -6,12 +6,22 @@
  *    .contents[].itemSectionRenderer[sectionIdentifier="comment-item-section"]
  *    .contents[0].continuationItemRenderer.continuationEndpoint
  *    .continuationCommand.token
- *  - page: POST next {continuation} → onResponseReceivedEndpoints[]
+ *  - page 1: POST next {continuation} → onResponseReceivedEndpoints[]
  *    .reloadContinuationItemsCommand.continuationItems:
  *      [commentsHeaderRenderer] + [commentThreadRenderer ×20] +
  *      [continuationItemRenderer] (next page)
+ *  - REPLIES pages + top-level pages 2+: the same POST answers with
+ *    appendContinuationItemsAction (NOT reloadContinuationItemsCommand —
+ *    targetId "comment-replies-item-<commentId>" for replies, "comments-section"
+ *    for top-level). Replies rows are BARE commentViewModel objects (no
+ *    commentThreadRenderer envelope); top-level rows keep the envelope.
+ *    Replies pagination rides a trailing continuationItemRenderer whose token
+ *    hides in button.buttonRenderer.command.continuationCommand.token (the
+ *    "Show more replies" button) — top-level pages keep the classic
+ *    continuationEndpoint form; both are read.
  *  - entities: frameworkUpdates.entityBatchUpdate.mutations[].payload
- *    .commentEntityPayload (keyed lookup)
+ *    .commentEntityPayload (keyed lookup; live key = commentViewModel
+ *    .commentKey — the commentEntityPayloadKey spelling is accepted too)
  *  - WFX2-B-S: engagementToolbarStateEntityPayload (same mutations) carries
  *    heartState (TOOLBAR_HEART_STATE_HEARTED — creator hearts) and likeState
  *    (TOOLBAR_LIKE_STATE_LIKE/DISLIKE — the session viewer's own rating),
@@ -94,6 +104,43 @@ function replyParamsFrom(response: unknown): Map<string, string> {
   return out;
 }
 
+/**
+ * The commentEntityPayload lookup key on a commentViewModel. Verified live:
+ * replies pages key their entities with `commentKey` (the same field the
+ * top-level pages use) — the `commentEntityPayloadKey` spelling is accepted
+ * tolerantly in case a client variant emits it.
+ */
+function entityKeyOf(cvm: any): string {
+  const key = cvm?.commentKey ?? cvm?.commentEntityPayloadKey;
+  return typeof key === "string" ? key : "";
+}
+
+/**
+ * A trailing continuationItemRenderer's pagination token. Top-level pages
+ * use the classic continuationEndpoint form; replies pages hide the token in
+ * the "Show more replies" button (button.buttonRenderer.command) — both
+ * shapes are read (verified live, 2026-10).
+ */
+function continuationTokenOf(cir: any): string | null {
+  const token =
+    cir?.continuationEndpoint?.continuationCommand?.token ??
+    cir?.button?.buttonRenderer?.command?.continuationCommand?.token;
+  return typeof token === "string" && token ? token : null;
+}
+
+/**
+ * The continuation commands that carry comment rows: page 1 of the top-level
+ * section arrives as reloadContinuationItemsCommand; every later top-level
+ * page AND every replies page arrives as appendContinuationItemsAction
+ * (same continuationItems array, no header row). Both are walked — order
+ * within a response is preserved per command.
+ */
+function* continuationCommands(response: unknown): Generator<any> {
+  for (const key of ["appendContinuationItemsAction", "reloadContinuationItemsCommand"]) {
+    for (const cmd of walkTree(response, key)) yield cmd;
+  }
+}
+
 /** Pure mapper for one comments continuation page. */
 export function mapCommentsPage(response: unknown, parentId: string | null): CommentsPage {
   // entity payloads keyed for lookup
@@ -107,18 +154,29 @@ export function mapCommentsPage(response: unknown, parentId: string | null): Com
   const replyParams = replyParamsFrom(response);
 
   const threads: any[] = [];
+  const items: CommentDto[] = [];
+  const seen = new Set<string>();
   let nextCursor: string | null = null;
   let total: number | null = null;
   let sortTokens: CommentsPage["sortTokens"] = { top: null, newest: null };
 
-  for (const cmd of walkTree(response, "reloadContinuationItemsCommand")) {
+  for (const cmd of continuationCommands(response)) {
     for (const item of cmd?.continuationItems ?? []) {
       if (item?.commentThreadRenderer) {
         threads.push(item.commentThreadRenderer);
+      } else if (item?.commentViewModel) {
+        // replies pages: a BARE commentViewModel row (no thread envelope) —
+        // its entities ride this same response's frameworkUpdates
+        const cvm = item.commentViewModel;
+        const entity = entities.get(entityKeyOf(cvm)) ?? null;
+        const dto = mapCommentViewModel(entity, cvm, null, parentId, toolbar, replyParams);
+        if (dto && !seen.has(dto.id)) {
+          seen.add(dto.id);
+          items.push(dto);
+        }
       } else if (item?.continuationItemRenderer) {
-        const token =
-          item.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token;
-        if (typeof token === "string" && token) nextCursor = token;
+        const token = continuationTokenOf(item.continuationItemRenderer);
+        if (token) nextCursor = token;
       } else if (item?.commentsHeaderRenderer) {
         const header = item.commentsHeaderRenderer;
         const countText = runsText(header?.countText).replace(/[^\d]/g, "");
@@ -134,18 +192,25 @@ export function mapCommentsPage(response: unknown, parentId: string | null): Com
     }
   }
 
-  const items: CommentDto[] = [];
   for (const thread of threads) {
     const cvm = thread?.commentViewModel?.commentViewModel ?? thread?.commentViewModel ?? {};
-    const entity = entities.get(cvm?.commentKey ?? "") ?? null;
-    const dto = mapCommentEntity(entity, cvm, thread, parentId, toolbar, replyParams);
-    if (dto) items.push(dto);
+    const entity = entities.get(entityKeyOf(cvm)) ?? null;
+    const dto = mapCommentViewModel(entity, cvm, thread, parentId, toolbar, replyParams);
+    if (dto && !seen.has(dto.id)) {
+      seen.add(dto.id);
+      items.push(dto);
+    }
   }
 
   return { items, nextCursor, total, sortTokens };
 }
 
-function mapCommentEntity(
+/**
+ * One commentViewModel → CommentDto, shared by the thread-envelope rows
+ * (top-level pages, `thread` present) and the bare rows (replies pages,
+ * `thread` null — no nested replies token to harvest).
+ */
+function mapCommentViewModel(
   entity: any,
   cvm: any,
   thread: any,

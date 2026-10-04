@@ -291,6 +291,86 @@ describe("comments_dQw4 fixture → CommentDTOs", () => {
 });
 
 // ---------------------------------------------------------------------------
+// comments_replies_dQw4 — the 2026 REPLIES page (appendContinuationItemsAction
+// + BARE commentViewModel rows; entities in the same response's mutations)
+// ---------------------------------------------------------------------------
+
+describe("comments_replies_dQw4 fixture (replies page) → reply CommentDTOs", () => {
+  const response = load("comments_replies_dQw4");
+  const PARENT = "Ugzge340dBgB75hWBm54AaABAg"; // the pinned @YouTube thread
+  const page = mapCommentsPage(response, PARENT);
+
+  test("10 bare commentViewModel rows map through the shared entity lookup", () => {
+    expect(page.items.length).toBe(10);
+    for (const r of page.items) {
+      expect(r.parentId).toBe(PARENT);
+      expect(r.body).not.toBe("");
+      expect(r.author.name).not.toBe("");
+      expect(r.author.avatarUrl).toMatch(/^https:\/\//);
+      // no thread envelope on replies pages → no nested replies token
+      expect(r.repliesToken).toBeNull();
+    }
+  });
+
+  test("first reply fields from its commentEntityPayload (keyed by commentKey)", () => {
+    const r0 = page.items[0];
+    expect(r0.id).toBe("Ugzge340dBgB75hWBm54AaABAg.AHE8_QAWJx9AHE9eIiztxR");
+    expect(r0.body).toBe("YOUTUBE AND ONE LIKE WOOHAAAAH");
+    expect(r0.author.handle).toBe("@linganguliguliwatcha");
+    expect(r0.likesText).toBe("7.5K");
+    expect(r0.likes).toBe(7_500);
+    expect(r0.publishedText).toBe("1 year ago");
+    expect(r0.edited).toBe(false);
+  });
+
+  test("toolbar state + surface: unhearted, no viewer like, no replyCommand (logged-out)", () => {
+    for (const r of page.items) {
+      expect(r.heartedByCreator).toBe(false);
+      expect(r.yourLike).toBeNull();
+      // logged-out surfaces carry prepareAccountCommand (sign-in modal), not
+      // replyCommand — the honest null DTO
+      expect(r.replyParams).toBeNull();
+    }
+  });
+
+  test("pagination: next cursor read from the Show-more-replies button form", () => {
+    expect(typeof page.nextCursor).toBe("string");
+    expect(page.nextCursor!.length).toBeGreaterThan(50);
+    // replies pages carry no header row
+    expect(page.total).toBeNull();
+    expect(page.sortTokens.top).toBeNull();
+  });
+});
+
+describe("appendContinuationItemsAction — top-level page 2+ shape (thread envelopes)", () => {
+  test("commentThreadRenderer rows inside appendContinuationItemsAction map (live page-2 shape)", () => {
+    // hand-built from the live 2026 shape: later TOP-LEVEL pages also arrive
+    // as appendContinuationItemsAction (targetId "comments-section"), still
+    // with commentThreadRenderer envelopes — reusing the real fixture's rows
+    const real = load("comments_dQw4");
+    const threads = real.onResponseReceivedEndpoints[1].reloadContinuationItemsCommand.continuationItems.filter(
+      (it: any) => it.commentThreadRenderer,
+    );
+    const synthetic = {
+      frameworkUpdates: real.frameworkUpdates,
+      onResponseReceivedEndpoints: [
+        {
+          appendContinuationItemsAction: {
+            targetId: "comments-section",
+            continuationItems: threads,
+          },
+        },
+      ],
+    };
+    const page = mapCommentsPage(synthetic, null);
+    expect(page.items.length).toBe(20);
+    expect(page.items[0].id).toBe("Ugzge340dBgB75hWBm54AaABAg");
+    expect(page.items[0].pinned).toBe(true);
+    expect(page.items[0].repliesToken).toBeTruthy();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // home_feed — the real (empty) unauthenticated feed
 // ---------------------------------------------------------------------------
 
