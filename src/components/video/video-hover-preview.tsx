@@ -1,33 +1,35 @@
 "use client";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Volume2 } from "lucide-react";
-import { loadYouTubeIframeApi } from "@/components/watch/youtube-player";
+import { PlayCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  fetchPlayback,
+  pickStoryboardLevel,
+  storyboardSheetUrl,
+} from "@/lib/watch/playback-client";
+import type { StoryboardLevelDto } from "@/lib/watch/types";
 
 /**
- * YouTube-style hover preview (WFX2-P6-HP): ONE shared, muted, autoplaying
- * YouTube IFrame player follows the hovered card (fixed, over the thumbnail)
+ * YouTube-style hover preview (WFX2-P6-HP, rebuilt Task 2-c).
+ *
+ * ONE shared layer follows the hovered card (fixed, over the thumbnail)
  * after a 600ms dwell — exactly what youtube.com's home grid does on hover.
+ *
+ * Task 2-c: the preview NEVER touches YouTube iframe embeds (they show the
+ * "Sign in to confirm you're not a bot" wall for third-party contexts).
+ * Instead, after the dwell the layer fetches the video's storyboard
+ * (/api/videos/[id]/playback → server-side player-response chain) and
+ * ANIMATES it Invidious-style: sprite sheets are lazy-loaded as the frame
+ * cursor advances (one background-image per sheet — the browser fetches
+ * each sheet the first time it paints). No storyboard available (walled
+ * egress) → a subtle zoom/pan on the thumbnail (never a broken iframe).
  *
  * The store lives on globalThis so the layer (rendered from the app shell)
  * and the cards (page tree) always share ONE instance, even if the bundler
  * splits the module across chunk graphs.
- *
- * Playback is the REAL YouTube IFrame Player API — the same loader the
- * watch page uses (loadYouTubeIframeApi's module-level apiPromise singleton
- * → ONE iframe_api load per page, shared watch + preview). The preview
- * playerVars: autoplay + muted + chromeless (no controls, no branding, no
- * fullscreen, no keyboard). This replaces the old raw <video src=videoUrl>,
- * which could never play (videoUrl is the youtube.com/watch PAGE url).
- *
- * Lifecycle (performance-critical, mirrors youtube.com): the outer layer div
- * is ALWAYS mounted in the app shell; the YT.Player is created ONCE on the
- * first show ever and then reused — loadVideoById per hover (restarts from
- * 0, autoplays muted), pauseVideo on hide, NEVER destroyed on hide (instant
- * re-show, zero iframe churn). destroy() runs only on final unmount.
  */
-type PreviewVideo = { id: string; title: string };
+type PreviewVideo = { id: string; title: string; thumbnailUrl?: string | null };
 
 type PreviewSnapshot = {
   video: PreviewVideo | null;
@@ -62,6 +64,15 @@ const store: PreviewStore =
 
 const DWELL_MS = 600;
 
+/**
+ * Frame display cadence: storyboards typically carry a frame every ~1-2s of
+ * video (real-time pace feels static on a hover) — cycle at a lively but
+ * honest-feeling 1 frame/second, clamped for exotic intervals.
+ */
+function frameTickMs(level: StoryboardLevelDto): number {
+  return Math.max(400, Math.min(1000, level.intervalMs || 1000));
+}
+
 /** Hover handlers for VideoCard (dwell-delayed preview start). */
 export function useHoverPreview(video: PreviewVideo) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -84,7 +95,7 @@ export function useHoverPreview(video: PreviewVideo) {
       if (!anchor) return;
       const v = current.current;
       timer.current = setTimeout(() => {
-        // The preview player keys on the YouTube video id (it IS the id).
+        // The preview keys on the YouTube video id (it IS the id).
         if (!v.id) return;
         store.show(v, anchor);
       }, DWELL_MS);
@@ -110,35 +121,34 @@ function usePreviewSnapshot(): PreviewSnapshot {
 
 const EMPTY_SNAPSHOT: PreviewSnapshot = { video: null, rect: null };
 
-/** The YT player surface the preview needs (the watch player owns the full interface). */
-interface PreviewPlayer {
-  loadVideoById(options: { videoId: string }): void;
-  pauseVideo(): void;
-  destroy(): void;
-}
-
 /**
- * Hidden park: offscreen at a stable nonzero size so the reused iframe never
- * collapses while the layer is not showing.
+ * Hidden park: offscreen at a stable nonzero size so the layer never
+ * collapses while it is not showing.
  */
 const PARKED_STYLE = { left: -10000, top: -10000, width: 320, height: 180 };
+
+type Phase = "loading" | "storyboard" | "degraded";
 
 /** The single shared preview layer (rendered once in the app shell). */
 export function VideoHoverPreviewLayer() {
   const { video, rect } = usePreviewSnapshot();
-  // ONE player for the whole session — created on the first show, reused after.
-  const containerRef = useRef<HTMLDivElement>(null);
-  const playerRef = useRef<PreviewPlayer | null>(null);
-  const createdRef = useRef(false);
-  const unmountedRef = useRef(false);
-  const currentVideoIdRef = useRef<string | null>(null);
-  // Track which video failed (unembeddable) so a different hover starts fresh.
-  const [failedFor, setFailedFor] = useState<string | null>(null);
-  // iframe_api unavailable (offline/blocked): degrade silently to thumbnails.
-  const [apiDead, setApiDead] = useState(false);
+  // phase for the CURRENTLY shown video only (reset per show)
+  const [phase, setPhase] = useState<Phase>("loading");
+  const [level, setLevel] = useState<StoryboardLevelDto | null>(null);
+  const [frame, setFrame] = useState(0);
 
-  const failed = !!video && failedFor === video.id;
-  const visible = !!video && !!rect && !failed && !apiDead;
+  const shownId = video?.id ?? null;
+
+  // Reset the animation when the shown video changes — the sanctioned
+  // adjust-during-render pattern (setState synchronously in an effect body
+  // is the cascading-render anti-pattern the linter rightly rejects).
+  const [resetFor, setResetFor] = useState<string | null>(shownId);
+  if (resetFor !== shownId) {
+    setResetFor(shownId);
+    setPhase("loading");
+    setLevel(null);
+    setFrame(0);
+  }
 
   // Hide when the page scrolls (the anchor rect would go stale).
   useEffect(() => {
@@ -148,97 +158,53 @@ export function VideoHoverPreviewLayer() {
     return () => window.removeEventListener("scroll", onScroll, true);
   }, [video]);
 
-  // First show ever: create ONE muted autoplaying YT.Player in the container
-  // (shares the watch page's iframe_api load — the loader's singleton).
+  // Per shown video: fetch the storyboard (client-cached by fetchPlayback —
+  // one request per video per session).
   useEffect(() => {
-    if (!video || createdRef.current || apiDead) return;
-    const el = containerRef.current;
-    if (!el) return;
-    createdRef.current = true;
-    void loadYouTubeIframeApi()
-      .then((YT) => {
-        const target = containerRef.current;
-        if (unmountedRef.current || !target) return;
-        const initialId = currentVideoIdRef.current;
-        if (!initialId) return;
-        const player: PreviewPlayer = new YT.Player(target, {
-          videoId: initialId,
-          width: "100%",
-          height: "100%",
-          playerVars: {
-            autoplay: 1,
-            mute: 1,
-            controls: 0,
-            modestbranding: 1,
-            rel: 0,
-            playsinline: 1,
-            iv_load_policy: 3,
-            fs: 0,
-            disablekb: 1,
-          },
-          events: {
-            // Unembeddable/removed video → hide for THAT video (the thumbnail
-            // stays — never a broken box).
-            onError: () => {
-              const id = currentVideoIdRef.current;
-              if (id) setFailedFor(id);
-            },
-          },
-        });
-        playerRef.current = player;
-        // The hover may have moved on while the API loaded — catch up.
-        const latestId = currentVideoIdRef.current;
-        if (latestId && latestId !== initialId) {
-          player.loadVideoById({ videoId: latestId });
-        }
-      })
-      .catch(() => {
-        // iframe_api offline/blocked: no preview, no crash, no console spam
-        // (mirrors youtube-player.tsx — the thumbnail is the degrade state).
-        setApiDead(true);
-      });
-  }, [video, apiDead]);
-
-  // Every hovered video: (re)load into the reused player — restarts from 0
-  // and autoplays muted. A known-failed (unembeddable) video is scoped by
-  // id (failedFor === video.id): it simply stays on the thumbnail — no
-  // flash, no retry loop — while any DIFFERENT video previews fine.
-  useEffect(() => {
-    if (!video) return;
-    currentVideoIdRef.current = video.id;
-    if (failedFor === video.id) return; // known-failed: stays on the thumbnail
-    const p = playerRef.current;
-    if (!p) return; // first show — the creation effect carries the id
-    try {
-      p.loadVideoById({ videoId: video.id });
-    } catch {
-      /* player gone — the thumbnail stays */
-    }
-  }, [video]);
-
-  // Hide (mouseleave/scroll): pause — NEVER destroy (instant re-show).
-  useEffect(() => {
-    if (video) return;
-    try {
-      playerRef.current?.pauseVideo();
-    } catch {
-      /* player gone */
-    }
-  }, [video]);
-
-  // The layer lives for the app shell's lifetime; destroy only on unmount.
-  useEffect(() => {
-    unmountedRef.current = false;
-    return () => {
-      unmountedRef.current = true;
-      try {
-        playerRef.current?.destroy();
-      } catch {
-        /* already destroyed */
+    if (shownId === null) return;
+    let alive = true;
+    void fetchPlayback(shownId).then((playback) => {
+      if (!alive) return;
+      const chosen = playback ? pickStoryboardLevel(playback.storyboards) : null;
+      if (chosen) {
+        setLevel(chosen);
+        setPhase("storyboard");
+      } else {
+        setPhase("degraded"); // no storyboard — zoom/pan on the thumbnail
       }
-      playerRef.current = null;
+    });
+    return () => {
+      alive = false;
     };
-  }, []);
+  }, [shownId]);
+
+  // The animation clock: advance the frame cursor while shown + storyboard.
+  useEffect(() => {
+    if (phase !== "storyboard" || !level || shownId === null) return;
+    const tick = frameTickMs(level);
+    const timer = setInterval(() => {
+      setFrame((f) => (f + 1) % Math.max(1, level.frameCount));
+    }, tick);
+    return () => clearInterval(timer);
+  }, [phase, level, shownId]);
+
+  const visible = !!video && !!rect;
+
+  // storyboard geometry for the current frame (sheet/col/row)
+  const geom = (() => {
+    if (!level || phase !== "storyboard") return null;
+    const perSheet = level.cols * level.rows;
+    const clamped = Math.min(frame, Math.max(0, level.frameCount - 1));
+    const sheet = Math.floor(clamped / perSheet);
+    const inSheet = clamped % perSheet;
+    const col = inSheet % level.cols;
+    const row = Math.floor(inSheet / level.cols);
+    return {
+      sheetUrl: storyboardSheetUrl(level.templateUrl, sheet),
+      backgroundSize: `${level.cols * level.frameWidth}px ${level.rows * level.frameHeight}px`,
+      backgroundPosition: `${-col * level.frameWidth}px ${-row * level.frameHeight}px`,
+    };
+  })();
 
   return (
     <div
@@ -246,7 +212,7 @@ export function VideoHoverPreviewLayer() {
       data-hover-preview-layer=""
       data-testid={visible ? "hover-preview" : undefined}
       className={cn(
-        "pointer-events-none fixed z-30 overflow-hidden rounded-xl border border-border/40 bg-black/20 shadow-2xl",
+        "pointer-events-none fixed z-30 overflow-hidden rounded-xl border border-border/40 bg-black shadow-2xl",
         !visible && "invisible"
       )}
       style={
@@ -255,10 +221,43 @@ export function VideoHoverPreviewLayer() {
           : PARKED_STYLE
       }
     >
-      {/* YT.Player replaces this div with the (reused) muted autoplaying iframe */}
-      <div ref={containerRef} className="h-full w-full" />
+      {video ? (
+        <div className="relative h-full w-full bg-black" data-preview-phase={phase}>
+          {/* the thumbnail base: ken-burns while loading/degraded; static
+              backdrop under the storyboard frames (a failed sheet load
+              degrades to this — never a broken box) */}
+          {video.thumbnailUrl ? (
+            <img
+              src={video.thumbnailUrl}
+              alt=""
+              className={cn(
+                "absolute inset-0 h-full w-full object-cover",
+                phase !== "storyboard" && "wfx-kenburns"
+              )}
+            />
+          ) : null}
+          {phase === "loading" ? (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+              <span className="size-6 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+            </div>
+          ) : null}
+          {geom ? (
+            <div
+              data-testid="storyboard-frame"
+              className="absolute inset-0"
+              style={{
+                backgroundImage: `url("${geom.sheetUrl}")`,
+                backgroundSize: geom.backgroundSize,
+                backgroundPosition: geom.backgroundPosition,
+                backgroundRepeat: "no-repeat",
+                imageRendering: "auto",
+              }}
+            />
+          ) : null}
+        </div>
+      ) : null}
       <span className="absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded bg-black/80 px-1.5 py-0.5 text-[10px] font-medium text-white">
-        <Volume2 className="size-3" /> Muted preview
+        <PlayCircle className="size-3" aria-hidden="true" /> Preview
       </span>
     </div>
   );

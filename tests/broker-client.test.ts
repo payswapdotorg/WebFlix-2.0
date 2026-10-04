@@ -1,7 +1,9 @@
 /**
  * WFX2-A-W tests — the app-side broker client contract (mocked global
  * fetch; NO network, NO live CDP): success mapping, timeout, unreachable,
- * 401/400, 502 action-failure, and the unconfigured-env fail path.
+ * 401/400, 502 action-failure, the unconfigured-env fail path, and the
+ * public-gateway wiring (BROKER_QUERY routing query + x-session-id affinity
+ * header on every request).
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
@@ -9,6 +11,8 @@ import {
   BrokerError,
   brokerAction,
   brokerConfigured,
+  brokerEndpoint,
+  brokerQuery,
   brokerUrl,
   brokerTimeoutMs,
 } from "@/lib/broker";
@@ -19,6 +23,7 @@ let calls: { url: string; init: RequestInit }[] = [];
 beforeEach(() => {
   process.env.BROKER_URL = "http://127.0.0.1:3055";
   process.env.BROKER_SECRET = "s3cret";
+  delete process.env.BROKER_QUERY;
   delete process.env.BROKER_TIMEOUT_MS;
   calls = [];
 });
@@ -27,6 +32,7 @@ afterEach(() => {
   globalThis.fetch = realFetch;
   delete process.env.BROKER_URL;
   delete process.env.BROKER_SECRET;
+  delete process.env.BROKER_QUERY;
   delete process.env.BROKER_TIMEOUT_MS;
 });
 
@@ -45,8 +51,48 @@ describe("env configuration", () => {
     process.env.BROKER_URL = "http://127.0.0.1:3055///";
     expect(brokerUrl()).toBe("http://127.0.0.1:3055");
   });
-  test("brokerConfigured is false without url or secret", () => {
+  test("brokerUrl defaults to the local broker when unset", () => {
+    delete process.env.BROKER_URL;
+    expect(brokerUrl()).toBe("http://127.0.0.1:3055");
     process.env.BROKER_URL = "";
+    expect(brokerUrl()).toBe("http://127.0.0.1:3055");
+  });
+  test("brokerEndpoint preserves a gateway routing query on every path", () => {
+    process.env.BROKER_URL = "https://gw.example/?XTransformPort=3055";
+    expect(brokerEndpoint("/broker/action")).toBe(
+      "https://gw.example/broker/action?XTransformPort=3055"
+    );
+    process.env.BROKER_URL = "http://127.0.0.1:3055";
+    expect(brokerEndpoint("/broker/action")).toBe("http://127.0.0.1:3055/broker/action");
+  });
+  test("BROKER_QUERY rides onto every endpoint from a plain base", () => {
+    process.env.BROKER_QUERY = "XTransformPort=3055";
+    expect(brokerEndpoint("/broker/action")).toBe(
+      "http://127.0.0.1:3055/broker/action?XTransformPort=3055"
+    );
+    process.env.BROKER_URL = "https://gw.example";
+    expect(brokerEndpoint("/broker/action")).toBe(
+      "https://gw.example/broker/action?XTransformPort=3055"
+    );
+  });
+  test("BROKER_QUERY composition is safe — no doubled '?' or slashes, joins with a URL-embedded query", () => {
+    // leading "?" and a trailing-slash base must not produce "??" or "//"
+    process.env.BROKER_URL = "https://gw.example/";
+    process.env.BROKER_QUERY = "?XTransformPort=3055";
+    expect(brokerEndpoint("/broker/action")).toBe(
+      "https://gw.example/broker/action?XTransformPort=3055"
+    );
+    // both sources set → "&"-joined under a single "?"
+    process.env.BROKER_URL = "https://gw.example/?Affinity=on";
+    process.env.BROKER_QUERY = "XTransformPort=3055";
+    expect(brokerEndpoint("/broker/action")).toBe(
+      "https://gw.example/broker/action?Affinity=on&XTransformPort=3055"
+    );
+    expect(brokerQuery()).toBe("XTransformPort=3055");
+  });
+  test("brokerConfigured is false without a secret (the URL defaults)", () => {
+    delete process.env.BROKER_URL;
+    process.env.BROKER_SECRET = "";
     expect(brokerConfigured()).toBe(false);
     process.env.BROKER_URL = "http://x";
     process.env.BROKER_SECRET = "";
@@ -79,6 +125,30 @@ describe("brokerAction contract (mocked fetch)", () => {
     expect((r as { ok: boolean; verified: boolean; path: string }).ok).toBe(true);
     expect((r as { verified: boolean }).verified).toBe(true);
     expect((r as { path: string }).path).toBe("ui");
+  });
+
+  test("gateway-style BROKER_URL (?XTransformPort=…) rides the routing query onto the action URL", async () => {
+    process.env.BROKER_URL = "https://gw.example/?XTransformPort=3055";
+    mockFetch(() => jsonResponse(200, { ok: true }));
+    const r = await brokerAction("like", { videoId: "dQw4w9WgXcQ" });
+    expect(calls[0].url).toBe("https://gw.example/broker/action?XTransformPort=3055");
+    // the sandbox gateway's session-affinity header must ride on every call
+    const headers = calls[0].init.headers as Record<string, string>;
+    expect(headers["x-session-id"]).toBe("webflix-producer");
+    expect(r).not.toBeInstanceOf(BrokerError);
+  });
+
+  test("BROKER_QUERY composes onto the action URL and the affinity header rides on every call", async () => {
+    // the production wiring: plain gateway base + separate routing query
+    process.env.BROKER_URL = "https://gw.example";
+    process.env.BROKER_QUERY = "XTransformPort=3055";
+    mockFetch(() => jsonResponse(200, { ok: true }));
+    const r = await brokerAction("subscribe", { channelId: "UC123" });
+    expect(calls[0].url).toBe("https://gw.example/broker/action?XTransformPort=3055");
+    const headers = calls[0].init.headers as Record<string, string>;
+    expect(headers["x-session-id"]).toBe("webflix-producer");
+    expect(headers["x-broker-secret"]).toBe("s3cret");
+    expect(r).not.toBeInstanceOf(BrokerError);
   });
 
   test("broker 502 action-failure → typed error carrying the broker's message", async () => {
@@ -129,9 +199,12 @@ describe("brokerAction contract (mocked fetch)", () => {
     expect((r as BrokerError).kind).toBe("action-failed");
   });
 
-  test("unconfigured env → offline without any fetch", async () => {
+  test("unconfigured env (no secret) → offline without any fetch", async () => {
+    // the URL defaults to the local broker, so the secret is the gate
     process.env.BROKER_URL = "";
+    process.env.BROKER_SECRET = "";
     const r = await brokerAction("like", { videoId: "dQw4w9WgXcQ" });
+    expect(calls).toHaveLength(0);
     expect((r as BrokerError).kind).toBe("offline");
     expect((r as BrokerError).message).toBe(BROKER_OFFLINE_MESSAGE);
   });

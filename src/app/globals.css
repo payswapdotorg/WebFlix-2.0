@@ -174,3 +174,18 @@
     rgba(0, 0, 0, 0) 75%
   );
 }
+
+/* Task 2-c — hover-preview degrade state: a subtle zoom/pan on the
+   thumbnail when no storyboard is available (never a walled iframe). */
+@keyframes wfx-kenburns {
+  from {
+    transform: scale(1) translate(0, 0);
+  }
+  to {
+    transform: scale(1.12) translate(-2.5%, -1.5%);
+  }
+}
+.wfx-kenburns {
+  animation: wfx-kenburns 12s ease-out forwards;
+  will-change: transform;
+}

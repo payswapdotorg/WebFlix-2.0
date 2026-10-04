@@ -10,7 +10,11 @@ import { beforeAll, afterAll, describe, expect, test } from "bun:test";
 import { Window } from "happy-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { act } from "react";
-import { YoutubePlayer } from "@/components/watch/youtube-player";
+import {
+  YoutubePlayer,
+  probeEmbedHealth,
+  type EmbedBlockedReason,
+} from "@/components/watch/youtube-player";
 
 // ---- happy-dom as the global DOM (set before any component runs) ----
 const win = new Window();
@@ -65,6 +69,8 @@ class MockYTPlayer {
   }
   playVideo(): void {}
   pauseVideo(): void {}
+  mute(): void {}
+  unMute(): void {}
   seekTo(sec: number): void {
     this.time = sec;
   }
@@ -108,6 +114,7 @@ interface TestPlayerProps {
   videoId: string;
   onProgress?: (sec: number, durationSec: number) => void;
   onEnded?: () => void;
+  onBlocked?: (reason: EmbedBlockedReason) => void;
 }
 
 async function mountPlayer(props: TestPlayerProps) {
@@ -226,6 +233,7 @@ describe("YoutubePlayer lifecycle (YT iframe API stub)", () => {
 
   test("ENDED → onEnded fires (autoplay-next wiring point)", async () => {
     MockYTPlayer.instances = [];
+    MockYTPlayer.destroyed = [];
     win.sessionStorage.clear();
     let ended = 0;
     const { unmount } = await mountPlayer({
@@ -242,5 +250,129 @@ describe("YoutubePlayer lifecycle (YT iframe API stub)", () => {
     });
     expect(ended).toBe(1);
     await unmount();
+  });
+});
+
+describe("Task 2-c — onBlocked (the fallback chain's trigger)", () => {
+  test("onError 101/150 → onBlocked('embed-disabled') fires exactly once", async () => {
+    MockYTPlayer.instances = [];
+    const blocked: string[] = [];
+    const { unmount } = await mountPlayer({
+      videoId: "dQw4w9WgXcQ",
+      onBlocked: (reason) => blocked.push(reason),
+    });
+    const events = MockYTPlayer.instances[0].options["events"] as {
+      onError: (e: { data: number }) => void;
+    };
+    await act(async () => {
+      events.onError({ data: 101 });
+    });
+    await act(async () => {
+      events.onError({ data: 150 }); // deduped — the verdict already fired
+    });
+    expect(blocked).toEqual(["embed-disabled"]);
+    await unmount();
+  });
+
+  test("onError 100 (removed video) → onBlocked('player-error')", async () => {
+    MockYTPlayer.instances = [];
+    const blocked: string[] = [];
+    const { unmount } = await mountPlayer({
+      videoId: "removed00000",
+      onBlocked: (reason) => blocked.push(reason),
+    });
+    const events = MockYTPlayer.instances[0].options["events"] as {
+      onError: (e: { data: number }) => void;
+    };
+    await act(async () => {
+      events.onError({ data: 100 });
+    });
+    expect(blocked).toEqual(["player-error"]);
+    await unmount();
+  });
+
+  test("no onBlocked prop → onError is still harmless (optional contract)", async () => {
+    MockYTPlayer.instances = [];
+    const { unmount } = await mountPlayer({ videoId: "dQw4w9WgXcQ" });
+    const events = MockYTPlayer.instances[0].options["events"] as {
+      onError: (e: { data: number }) => void;
+    };
+    await act(async () => {
+      events.onError({ data: 101 });
+    });
+    await unmount();
+  });
+});
+
+describe("Task 2-c — probeEmbedHealth (the offscreen muted-autoplay detector)", () => {
+  const probeInstance = (): MockYTPlayer => {
+    const p = MockYTPlayer.instances.find(
+      (i) => (i.el as Element).closest?.("[data-wfx-embed-probe]")
+    );
+    if (!p) throw new Error("no probe player created");
+    return p;
+  };
+
+  test("muted probe reaches PLAYING → true; the probe player is destroyed + DOM removed", async () => {
+    MockYTPlayer.instances = [];
+    MockYTPlayer.destroyed = [];
+    const verdict = probeEmbedHealth("PROBEOK0001", { timeoutMs: 500 });
+    await sleep(30); // the api microtask creates the probe player
+    const probe = probeInstance();
+    const vars = probe.options["playerVars"] as Record<string, number>;
+    expect(vars).toMatchObject({ autoplay: 1, mute: 1, controls: 0, playsinline: 1 });
+    const events = probe.options["events"] as {
+      onReady: () => void;
+      onStateChange: (e: { data: number }) => void;
+    };
+    await act(async () => {
+      events.onReady();
+    });
+    await act(async () => {
+      events.onStateChange({ data: 3 }); // buffering — deadline extends, no verdict
+    });
+    await act(async () => {
+      events.onStateChange({ data: 1 }); // PLAYING — health proof
+    });
+    expect(await verdict).toBe(true);
+    expect(MockYTPlayer.destroyed).toContain(probe); // cleaned up
+    expect(win.document.querySelector("[data-wfx-embed-probe]")).toBeNull();
+  });
+
+  test("no playback within the deadline → false (the walled-embed verdict)", async () => {
+    MockYTPlayer.instances = [];
+    MockYTPlayer.destroyed = [];
+    const verdict = probeEmbedHealth("PROBEWALL01", { timeoutMs: 250 });
+    await sleep(30);
+    expect(probeInstance()).toBeTruthy();
+    expect(await verdict).toBe(false);
+    expect(MockYTPlayer.destroyed).toHaveLength(1); // cleaned up
+    expect(win.document.querySelector("[data-wfx-embed-probe]")).toBeNull();
+  });
+
+  test("probe onError → false immediately (embed-disabled etc.)", async () => {
+    MockYTPlayer.instances = [];
+    MockYTPlayer.destroyed = [];
+    const verdict = probeEmbedHealth("PROBEERR001", { timeoutMs: 5_000 });
+    await sleep(30);
+    const probe = probeInstance();
+    const events = probe.options["events"] as { onError: (e: { data: number }) => void };
+    await act(async () => {
+      events.onError({ data: 150 });
+    });
+    expect(await verdict).toBe(false);
+    expect(MockYTPlayer.destroyed).toContain(probe);
+  });
+
+  test("a new videoId supersedes an in-flight probe (abort + verdict for the new one)", async () => {
+    MockYTPlayer.instances = [];
+    MockYTPlayer.destroyed = [];
+    const first = probeEmbedHealth("PROBESUP001", { timeoutMs: 5_000 });
+    await sleep(30);
+    const firstProbe = probeInstance();
+    const second = probeEmbedHealth("PROBESUP002", { timeoutMs: 300 });
+    expect(await first).toBe(false); // aborted by the supersede
+    expect(MockYTPlayer.destroyed).toContain(firstProbe);
+    expect(await second).toBe(false); // its own deadline
   });
 });

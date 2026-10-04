@@ -118,6 +118,14 @@ class MockYTPlayer {
   PlayerState: {},
 };
 
+// Task 2-c: the layer's embed-health probe ALSO creates offscreen players
+// (inside [data-wfx-embed-probe] wrappers) — the lifecycle assertions below
+// care about the MAIN player only, so filter the probe out.
+const isProbePlayer = (p: MockYTPlayer): boolean =>
+  !!(p.el as Element).closest?.("[data-wfx-embed-probe]");
+const mainPlayers = (): MockYTPlayer[] => MockYTPlayer.instances.filter((p) => !isProbePlayer(p));
+const mainDestroyed = (): MockYTPlayer[] => MockYTPlayer.destroyed.filter((p) => !isProbePlayer(p));
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ---- harness: a fake watch page slot + the real layer ----------------------
@@ -223,7 +231,7 @@ describe("player host store lifecycle (mount / persist / close / expand)", () =>
     expect(store().meta?.title).toBe("Title V1");
     expect(playerHost.wrapper).not.toBeNull();
     expect(playerHost.wrapper!.parentElement).toBe(slotEl);
-    expect(MockYTPlayer.instances).toHaveLength(1);
+    expect(mainPlayers()).toHaveLength(1);
     // the mini chrome is mounted but hidden (opacity transition)
     const mini = q('[aria-label="Miniplayer"]');
     expect(mini).not.toBeNull();
@@ -233,7 +241,7 @@ describe("player host store lifecycle (mount / persist / close / expand)", () =>
   test("close() is the ONLY destroy path: player destroyed, wrapper detached, store reset", async () => {
     await renderApp(true);
     await attach("V1");
-    const player = MockYTPlayer.instances[0];
+    const player = mainPlayers()[0];
     await act(async () => {
       playerHost.close();
     });
@@ -281,12 +289,12 @@ describe("player host store lifecycle (mount / persist / close / expand)", () =>
         playerHost.setMini(false);
       });
     }
-    expect(MockYTPlayer.instances).toHaveLength(1);
-    expect(MockYTPlayer.destroyed).toHaveLength(0);
+    expect(mainPlayers()).toHaveLength(1);
+    expect(mainDestroyed()).toHaveLength(0);
     await act(async () => {
       playerHost.close();
     });
-    expect(MockYTPlayer.destroyed).toHaveLength(1);
+    expect(mainDestroyed()).toHaveLength(1);
   });
 });
 
@@ -330,8 +338,8 @@ describe("miniplayer persistence — the navigation survival matrix", () => {
     await attach("V1"); // same videoId → expand, no reload
     await settleFrames();
     expect(store().hostMode).toBe("inline"); // the mini never flashed
-    expect(MockYTPlayer.instances).toHaveLength(1);
-    expect(MockYTPlayer.instances[0].loadedVideoId).toBeNull(); // no loadVideoById
+    expect(mainPlayers()).toHaveLength(1);
+    expect(mainPlayers()[0].loadedVideoId).toBeNull(); // no loadVideoById
   });
 
   test("stale release (an old page unmounting late) is ignored by identity", async () => {
@@ -350,7 +358,7 @@ describe("miniplayer takeover — different video id (loadVideoById, no reload)"
   test("watch→watch takeover: the new slot takes the wrapper in the same commit; attach swaps the video without remount or mini flash", async () => {
     await renderApp(true, "A");
     await attach("V1");
-    const player = MockYTPlayer.instances[0];
+    const player = mainPlayers()[0];
 
     // simulate watch/V1 → watch/V2: the slot swap (unmount + mount) lands
     // in ONE commit — exactly what a route change does
@@ -358,11 +366,11 @@ describe("miniplayer takeover — different video id (loadVideoById, no reload)"
     expect(playerHost.wrapper!.parentElement).toBe(slotEl);
     await attach("V2");
     expect(store().videoId).toBe("V2");
-    expect(MockYTPlayer.instances).toHaveLength(1); // no remount
+    expect(mainPlayers()).toHaveLength(1); // no remount
     expect(player.loadedVideoId).toBe("V2"); // loadVideoById takeover
     await settleFrames();
     expect(store().hostMode).toBe("inline"); // the mini NEVER showed
-    expect(MockYTPlayer.destroyed).toHaveLength(0);
+    expect(mainDestroyed()).toHaveLength(0);
   });
 
   test("attach with startSec latches the takeover start position (localStorage progress wins when no explicit start)", async () => {
@@ -373,7 +381,7 @@ describe("miniplayer takeover — different video id (loadVideoById, no reload)"
     await attach("V2");
     expect(store().startSec).toBe(77);
     // the portal re-rendered with the new videoId + latched start
-    expect(MockYTPlayer.instances[0].loadedVideoId).toBe("V2");
+    expect(mainPlayers()[0].loadedVideoId).toBe("V2");
     win.localStorage.clear();
   });
 });

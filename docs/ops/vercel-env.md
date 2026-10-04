@@ -14,8 +14,49 @@ Secret VALUES never live in the repo — only names (checked into
 | `UPSTASH_REDIS_REST_TOKEN` | Production | yes (cutover) | The Upstash REST token (Bearer). Pair with the URL above. |
 | `YT_COOKIES` | Production | optional | The operator's `youtube.com` session cookie header (raw `k=v; …`). Powers personalized surfaces (trending grid, history/continue-watching, subscribe state, notifications). Without it the app runs in **public mode** — every surface still works, personal feeds answer YouTube's own logged-out responses (`loginRequired: true`, never fake rows). Rotate by signing into youtube.com in a browser and copying the Cookie header. NEVER commit it. |
 | `INNERTUBE_API_KEY` | all | optional | Overrides the InnerTube WEB public key (defaults are fine). |
-| `BROKER_URL` | Production | for writes | The Tier-2 youtube-broker base URL (`mini-services/youtube-broker`, CDP-driven logged-in tab). Powers authenticated writes: comments, likes, subscriptions, playlists. |
+| `INNER_TUBE_PLAYER_CLIENT` | Production | optional | Primary innertube player client for the playback fallback chain (`src/lib/youtube/streams.ts` — always tries IOS second unless it IS the primary). Values: `WEB` (default) / `MWEB` / `WEB_EMBEDDED_PLAYER` / `WEB_REMIX` / `IOS`. Vercel egress behavior verified post-deploy. |
+| `BROKER_URL` | Production | for writes | The Tier-2 youtube-broker base URL (`mini-services/youtube-broker`, CDP-driven logged-in tab). Powers authenticated writes: comments, likes, subscriptions, playlists. Defaults to `http://127.0.0.1:3055` (local dev); production uses the sandbox's public gateway (see the broker gateway wiring below). |
+| `BROKER_QUERY` | Production | for writes | Gateway routing query appended to every broker request (`XTransformPort=3055` → `?XTransformPort=3055`) — required because the broker listens on an internal port behind the public gateway. Composed safely by `brokerEndpoint` (`src/lib/broker.ts`); a query embedded in `BROKER_URL` also still works. |
 | `BROKER_SECRET` | Production | for writes | Shared secret for broker requests. NEVER commit it. |
+
+## Broker gateway wiring (production)
+
+The production broker egress runs through the sandbox's public gateway
+(`ws-dbda-ead-adb-lgwrjcdgey.cn-hongkong-vpc.fcapp.run`, Alibaba FC in front
+of Caddy → the broker on 127.0.0.1:3055). Verified end-to-end 2026-10-01
+(2-b step 2). Production values (set on the Vercel project):
+
+| var | production value |
+| --- | --- |
+| `BROKER_URL` | `https://ws-dbda-ead-adb-lgwrjcdgey.cn-hongkong-vpc.fcapp.run` |
+| `BROKER_QUERY` | `XTransformPort=3055` |
+| `BROKER_SECRET` | *(the shared secret — lives in the Vercel project env only, never committed; must match the broker's own `BROKER_SECRET`)* |
+
+Gateway hard requirements (both handled by `src/lib/broker.ts` — every
+request composes `?${BROKER_QUERY}` via `brokerEndpoint` and carries the
+session-affinity header; covered by `tests/broker-client.test.ts`):
+
+1. **`x-session-id` header on every request** — the FC gateway enforces
+   session affinity and rejects headerless requests with its own
+   `400 {"Code":"InvalidArgument",…}`. The client always sends
+   `x-session-id: webflix-producer` (any stable value passes; the direct
+   local broker ignores it).
+2. **`?XTransformPort=3055` on broker routes** — the gateway's internal-port
+   transform; without it the request never reaches the broker.
+
+Sanity probes (from anywhere):
+
+```bash
+curl -s -H 'x-session-id: webflix-producer' \
+  "https://ws-dbda-ead-adb-lgwrjcdgey.cn-hongkong-vpc.fcapp.run/healthz?XTransformPort=3055"
+# → 200 {"ok":true,…} — gateway → broker up
+curl -s -X POST -H 'x-session-id: webflix-producer' -H 'x-broker-secret: <secret>' \
+  -H 'Content-Type: application/json' -d '{}' \
+  "https://ws-dbda-ead-adb-lgwrjcdgey.cn-hongkong-vpc.fcapp.run/broker/action?XTransformPort=3055"
+# → the BROKER's own 4xx validation JSON (empty body/unknown-kind — proves
+#   gateway → broker → auth wiring); an FC `InvalidArgument` 400 instead means
+#   a missing x-session-id or query
+```
 
 ## Session cookie strategy
 

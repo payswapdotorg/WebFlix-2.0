@@ -1,0 +1,50 @@
+{
+  "_note": "Real capture (sandbox, 2026-10-04): the watch page HTML ytInitialPlayerResponse for dQw4w9WgXcQ, trimmed to playback-chain-relevant fields. Progressive formats arrive signatureCipher-only (no plain url) — the honest-filter case. Storyboard spec is live-verified against i.ytimg.com (L0/default, L1..L3/M0.. sheets all 200).",
+  "playabilityStatus": {
+    "status": "OK",
+    "playableInEmbed": true,
+    "miniplayer": {
+      "miniplayerRenderer": {
+        "playbackMode": "PLAYBACK_MODE_ALLOW"
+      }
+    },
+    "contextParams": "Q0FFU0FnZ0I="
+  },
+  "videoDetails": {
+    "videoId": "dQw4w9WgXcQ",
+    "title": "Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)",
+    "lengthSeconds": "213",
+    "isLiveContent": false
+  },
+  "storyboards": {
+    "playerStoryboardSpecRenderer": {
+      "spec": "https://i.ytimg.com/sb/dQw4w9WgXcQ/storyboard3_L$L/$N.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgjXxPfBBg==|48#27#100#10#10#0#default#rs$AOn4CLDgtWGAnaqZZSEHsiFathAqjUlfLQ|80#45#108#10#10#2000#M$M#rs$AOn4CLBf8GkpJjLT0oNOXNqGg2XsF5MCMg|160#90#108#5#5#2000#M$M#rs$AOn4CLClA1jTU48sHENDTij_c2ZcE493TQ|320#180#108#3#3#2000#M$M#rs$AOn4CLCHZGerbRu0IiBb-AIyubx5_-E4oQ",
+      "recommendedLevel": 3,
+      "fineScrubbingRecommendedLevel": 2,
+      "highResolutionRecommendedLevel": 3
+    }
+  },
+  "streamingData": {
+    "expiresInSeconds": "21540",
+    "formats": [
+      {
+        "itag": 18,
+        "mimeType": "video/mp4; codecs=\"avc1.42001E, mp4a.40.2\"",
+        "bitrate": 444226,
+        "width": 640,
+        "height": 360,
+        "lastModified": "1766960953317159",
+        "quality": "medium",
+        "fps": 25,
+        "qualityLabel": "360p",
+        "projectionType": "RECTANGULAR",
+        "audioQuality": "AUDIO_QUALITY_LOW",
+        "approxDurationMs": "213089",
+        "audioSampleRate": "44100",
+        "audioChannels": 2,
+        "signatureCipher": "s=y%3D%3DAZIVD6pKb6f6pi4dZ2aRowDqbTampch16BMHBgVvAWcDQICsf13MbqQ6TT%3DitPBKFrwJuIpjI0E9n3G554LGTFDYdEgIQRwYJ2s0EAq&sp=sig&url=https://rr2---sn-i3b7knsl.googlevideo.com/videoplayback%3Fexpire%3D1791096…(trimmed)",
+        "qualityOrdinal": "QUALITY_ORDINAL_360P"
+      }
+    ]
+  }
+}
