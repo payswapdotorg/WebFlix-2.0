@@ -7,10 +7,21 @@
  * honest 502s ("action backend offline — the lead's broker must be running").
  *
  * Env (secrets from env ONLY):
- *   BROKER_URL      e.g. http://127.0.0.1:3055 (the lead's gateway forwards)
+ *   BROKER_URL      default http://127.0.0.1:3055 (direct local broker); or
+ *                   a gateway base, optionally WITH query — e.g.
+ *                   https://host/?XTransformPort=3055 — whose routing query
+ *                   rides on every request (see brokerEndpoint)
+ *   BROKER_QUERY    optional routing query for gateway bases, e.g.
+ *                   XTransformPort=3055 — appended to EVERY broker request
+ *                   (`?<BROKER_QUERY>`); composes safely with a plain base
+ *                   and with a query already embedded in BROKER_URL
  *   BROKER_SECRET   shared secret (must match the broker's BROKER_SECRET)
  *   BROKER_TIMEOUT_MS  default 15000
  */
+
+/** Dev default — the broker's own port on the lead sandbox (local runs
+ *  work with just BROKER_SECRET set; production overrides via Vercel env). */
+const DEFAULT_BROKER_URL = "http://127.0.0.1:3055";
 
 export const BROKER_OFFLINE_MESSAGE =
   "action backend offline — the lead's broker must be running";
@@ -125,7 +136,37 @@ export interface BrokerActionSuccess {
 
 export function brokerUrl(): string {
   const url = process.env.BROKER_URL?.trim();
-  return url ? url.replace(/\/+$/, "") : "";
+  return url ? url.replace(/\/+$/, "") : DEFAULT_BROKER_URL;
+}
+
+/**
+ * The optional gateway routing query (BROKER_QUERY, e.g. "XTransformPort=3055")
+ * that must ride on EVERY request when the broker sits behind the sandbox's
+ * public gateway. A leading "?"/"&" is tolerated and stripped (the env holds
+ * a query STRING, not a delimiter).
+ */
+export function brokerQuery(): string {
+  return (process.env.BROKER_QUERY ?? "").trim().replace(/^[?&]+/, "");
+}
+
+/**
+ * Compose the full endpoint for a broker `path` (e.g. "/broker/action").
+ * Gateway routing queries ride on every request, from either source:
+ * embedded in BROKER_URL (`https://host/?XTransformPort=3055`) or the separate
+ * BROKER_QUERY env — composed safely (single "?", "&"-joined, no doubled
+ * slashes): `https://host` + `/broker/action` + `XTransformPort=3055` →
+ * `https://host/broker/action?XTransformPort=3055`. Plain bases compose
+ * unchanged (`http://127.0.0.1:3055/broker/action`).
+ */
+export function brokerEndpoint(path: string): string {
+  const url = brokerUrl();
+  const q = url.indexOf("?");
+  const base = (q === -1 ? url : url.slice(0, q)).replace(/\/+$/, "");
+  const safePath = path.startsWith("/") ? path : `/${path}`;
+  const query = [q === -1 ? "" : url.slice(q + 1), brokerQuery()]
+    .filter(Boolean)
+    .join("&");
+  return `${base}${safePath}${query ? `?${query}` : ""}`;
 }
 
 export function brokerSecret(): string {
@@ -158,11 +199,14 @@ export async function brokerAction(
   }
   let res: Response;
   try {
-    res = await fetch(`${url}/broker/action`, {
+    res = await fetch(brokerEndpoint("/broker/action"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-broker-secret": brokerSecret(),
+        // the sandbox's public gateway enforces session affinity on every
+        // request — any stable id passes; direct brokers ignore the header
+        "x-session-id": "webflix-producer",
       },
       body: JSON.stringify({ kind, target, ...(payload ? { payload } : {}) }),
       signal: AbortSignal.timeout(brokerTimeoutMs()),
@@ -303,11 +347,13 @@ export async function brokerUploadExecute(
   }
   let res: Response;
   try {
-    res = await fetch(`${url}/broker/action`, {
+    res = await fetch(brokerEndpoint("/broker/action"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-broker-secret": brokerSecret(),
+        // session affinity for the sandbox's public gateway (see brokerAction)
+        "x-session-id": "webflix-producer",
       },
       body: JSON.stringify({
         kind: "upload-execute",
