@@ -19,6 +19,12 @@
  *   BROKER_TIMEOUT_MS  default 15000
  */
 
+// the l2Active() law (upstash-cache.ts): a test upstream serving fixtures
+// means NO live-network reads, broker included — .env carries BROKER_SECRET
+// on this machine, so without this guard every walled-shape test
+// (channel-wall, playback-fallback, cutover…) would hit the LIVE local broker
+import { isTestUpstream } from "./youtube/upstream";
+
 /** Dev default — the broker's own port on the lead sandbox (local runs
  *  work with just BROKER_SECRET set; production overrides via Vercel env). */
 const DEFAULT_BROKER_URL = "http://127.0.0.1:3055";
@@ -63,7 +69,10 @@ export type BrokerKind =
   // WFX2-P3-UP (upload execution) — additive
   | "upload-execute"
   // WFX2-P3-LC (live chat send) — additive
-  | "live-chat-send";
+  | "live-chat-send"
+  // WFX2-4A (broker READ transport) — additive: a page-context fetch of a
+  // youtube.com path in the logged-in tab (see brokerFetchPage)
+  | "fetch";
 
 export interface BrokerTarget {
   videoId?: string;
@@ -106,6 +115,13 @@ export interface BrokerPayload {
   description?: string;
   /** WFX2-P3-LC: live-chat-send message text */
   message?: string;
+  /**
+   * WFX2-4A: fetch — the youtube.com PATH to read (must start with "/";
+   * absolute URLs and other hosts are refused by the broker's validation).
+   * The wire contract carries it TOP-LEVEL ({kind:"fetch", path:"/…"}) —
+   * see brokerFetchPage; the payload form is the tolerated alias.
+   */
+  path?: string;
 }
 
 /** Typed failure for the routes to map (502 offline / 502 action-failed). */
@@ -398,6 +414,95 @@ export async function brokerUploadExecute(
     return new BrokerError("action-failed", r?.error ?? "broker action failed", 502, parsed);
   }
   return (parsed ?? { ok: true }) as BrokerUploadExecuteSuccess;
+}
+
+// ---------------------------------------------------------------------------
+// WFX2-4A — broker READ: the page-context fetch transport (additive)
+// ---------------------------------------------------------------------------
+
+/**
+ * The fetch success shape (the broker's own wire contract): the TRANSPORT
+ * succeeded — `status` is the fetched page's own HTTP status (carried, not
+ * judged; a 4xx page is the caller's to interpret), `body` the page HTML
+ * capped at the broker's 4 MiB limit.
+ */
+export interface BrokerFetchSuccess {
+  ok: true;
+  /** the page-context fetch's HTTP status (2xx/3xx/4xx/5xx — carried) */
+  status: number;
+  /** the fetched page HTML (capped at 4 MiB — see truncated) */
+  body: string;
+  /** the body hit the 4 MiB cap and was truncated (channel HTML runs 1–3 MiB) */
+  truncated?: boolean;
+}
+
+/** How long the app waits on one broker page read — the broker's own script
+ * ceiling is 45s (the page-context fetch + a 1–3 MiB read); this budget
+ * covers dispatch + retries under it. */
+export const BROKER_FETCH_TIMEOUT_MS = 30_000;
+
+/**
+ * WFX2-4A — Tier-2 broker READ: one youtube.com page fetched in the
+ * LOGGED-IN tab's page context (credentials included) and returned as HTML.
+ * Wire shape {kind:"fetch", path:"/…"} — the path rides TOP-LEVEL, not in a
+ * payload (the broker-side contract; the shared tab is NEVER navigated, so
+ * reads never disturb the operator view).
+ *
+ * Self-contained POST (the brokerUploadExecute pattern) with its own ~30s
+ * timeout and the sibling typed error mapping (offline / unauthorized /
+ * bad-request / action-failed) — never a synthesized page.
+ *
+ * TEST-UPSTREAM GUARD (the l2Active() law): while a test upstream serves
+ * fixtures (setUpstream), this helper answers the honest offline error
+ * WITHOUT any fetch — see the isTestUpstream import above.
+ */
+export async function brokerFetchPage(path: string): Promise<BrokerFetchSuccess | BrokerError> {
+  if (isTestUpstream()) {
+    return new BrokerError("offline", BROKER_OFFLINE_MESSAGE, 502, "test-upstream");
+  }
+  const url = brokerUrl();
+  if (!url || !brokerSecret()) {
+    return new BrokerError("offline", BROKER_OFFLINE_MESSAGE, 502);
+  }
+  let res: Response;
+  try {
+    res = await fetch(brokerEndpoint("/broker/action"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-broker-secret": brokerSecret(),
+        // session affinity for the sandbox's public gateway (see brokerAction)
+        "x-session-id": "webflix-producer",
+      },
+      body: JSON.stringify({ kind: "fetch", path }),
+      signal: AbortSignal.timeout(BROKER_FETCH_TIMEOUT_MS),
+      cache: "no-store",
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return new BrokerError("offline", BROKER_OFFLINE_MESSAGE, 502, msg);
+  }
+
+  let parsed: unknown = null;
+  try {
+    parsed = await res.json();
+  } catch {
+    /* non-JSON body */
+  }
+
+  if (res.status === 401) {
+    return new BrokerError("unauthorized", "broker rejected the shared secret", 502, parsed);
+  }
+  if (res.status === 400) {
+    const message =
+      (parsed as { error?: string } | null)?.error ?? "broker rejected the action request";
+    return new BrokerError("bad-request", message, 400, parsed);
+  }
+  if (!res.ok) {
+    const r = parsed as { error?: string } | null;
+    return new BrokerError("action-failed", r?.error ?? "broker action failed", 502, parsed);
+  }
+  return (parsed ?? { ok: true, status: 0, body: "" }) as BrokerFetchSuccess;
 }
 
 /** The live-chat-send success shape (detail.messageId when the broker

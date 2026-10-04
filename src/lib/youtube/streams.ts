@@ -20,6 +20,12 @@
  *     the `player` endpoint is walled (live-verified from the sandbox:
  *     playabilityStatus OK, storyboards spec present; its progressive
  *     formats arrive signatureCipher'd only → honestly filtered out).
+ *  3. WFX2-4A — the broker's page-context watch read: the logged-in
+ *     operator tab fetches the watch page itself (credentials included, the
+ *     shared tab never navigated) and the app extracts the SAME embedded
+ *     player response — a logged-in session answers what the walled server
+ *     egress cannot. Honest failure (broker unconfigured/offline, no
+ *     player response in the HTML) → the empty degrade.
  *
  * Everything is parsed into the PlaybackDto contract and cached. Walled
  * responses resolve FAST (a LOGIN_REQUIRED answer is <1s), so the chain's
@@ -38,6 +44,7 @@
 import { innertube } from "./innertube";
 import { fetchPageHtml } from "./ssr";
 import { cached, TTL } from "./cache";
+import { brokerFetchPage } from "@/lib/broker";
 import type { PlaybackDto, StoryboardLevelDto, StreamFormatDto } from "@/lib/watch/types";
 
 /** The innertube client used for `player` (env-configurable, default WEB). */
@@ -266,10 +273,28 @@ async function fetchWatchPagePlayerResponse(videoId: string): Promise<unknown | 
 }
 
 /**
- * The chain: `player` endpoint (client chain) → watch page. Cached (formats
- * expire in hours; 10min mirrors WATCH_MS) — the WINNING rung's payload is
- * cached per video id. The result is NEVER thrown — a walled egress yields
- * the honest empty payload (source: "").
+ * Rung 3 — the broker's page-context watch read (WFX2-4A): the logged-in
+ * tab fetches the watch page itself (credentials included, never
+ * navigating) and the app extracts the SAME embedded player response rung
+ * 2 parses. Null when the broker is unconfigured/offline, the page carried
+ * no player response, or the read broke — never a throw.
+ */
+async function fetchBrokerWatchPlayerResponse(videoId: string): Promise<unknown | null> {
+  try {
+    const result = await brokerFetchPage(`/watch?v=${encodeURIComponent(videoId)}&hl=en&gl=US`);
+    if (result instanceof Error) return null;
+    return extractPlayerResponseFromHtml(result.body);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The chain: `player` endpoint (client chain) → watch page → the broker's
+ * page-context watch read. Cached (formats expire in hours; 10min mirrors
+ * WATCH_MS) — the WINNING rung's payload is cached per video id. The result
+ * is NEVER thrown — a walled egress yields the honest empty payload
+ * (source: "").
  */
 export async function getPlayback(videoId: string): Promise<PlaybackDto> {
   return cached(`yt:playback:${videoId}`, TTL.WATCH_MS, async () => {
@@ -277,6 +302,10 @@ export async function getPlayback(videoId: string): Promise<PlaybackDto> {
     if (fromPlayer) return fromPlayer;
     const fromPage = await fetchWatchPagePlayerResponse(videoId);
     if (fromPage) return parsePlayback("watch-page", fromPage);
+    // WFX2-4A rung 3 — the broker's page-context watch read (the logged-in
+    // session's own page); honest failure → the empty degrade below
+    const fromBroker = await fetchBrokerWatchPlayerResponse(videoId);
+    if (fromBroker) return parsePlayback("broker-watch", fromBroker);
     return { streamFormats: [], storyboards: [], durationSec: null, source: "" };
   });
 }

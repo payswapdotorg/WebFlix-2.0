@@ -11,12 +11,13 @@
  * constant "EgZ2aWRlb3MyBgQKAjoA" is the fallback).
  */
 import { innertubeBrowse, innertubeSearch } from "./innertube";
-import { fetchYtInitialData } from "./ssr";
+import { extractYtInitialData, fetchYtInitialData } from "./ssr";
 import { cached, cachedResilient, TTL } from "./cache";
 import { cachePeek } from "./upstash-cache";
 import { composeChannelPage, storeComposedPage } from "./channel-compose";
 import { mapChannelSortChips } from "./channel-tabs";
 import { hasSession } from "./session";
+import { brokerFetchPage } from "@/lib/broker";
 import {
   mapChannelHeader,
   mapVideos,
@@ -115,29 +116,49 @@ export async function getChannelPage(handle: string): Promise<ChannelPageDTO | n
   const videosResponse = await cached(`yt:channel:videos:${lookup.browseId}`, TTL.FEED_MS, () =>
     innertubeBrowse({ browseId: lookup.browseId, params: videosParam })
   );
+  return channelPageFromResponses(lookup.header, lookup.homeResponse, videosResponse, lookup.handle);
+}
+
+/**
+ * Map a channel page from its two upstream responses (the WFX2-4A
+ * extraction — the mapping body getChannelPage owned, verbatim): the
+ * resolved `header`, the channel home page's payload (`homeResponse` —
+ * tabs, joinable, subscribe state, the shorts-shelf fallback) and the
+ * Videos tab's payload (`videosResponse` — the videos rail + its sort
+ * chips); `fallbackHandle` is the resolve fallback identity for the header
+ * fields the upstream header lacked (the browse path's resolved handle;
+ * the broker path's requested handle). One mapper, two transports: the
+ * browse ladder and the broker's page-context reads (brokerChannelPage)
+ * produce byte-identical pages.
+ */
+export function channelPageFromResponses(
+  header: ChannelHeaderDTO,
+  homeResponse: unknown,
+  videosResponse: unknown,
+  fallbackHandle: string
+): ChannelPageDTO {
   const videos = mapVideos(videosResponse, { dedupe: true }).filter((v) => !v.isShort);
-  const shorts = mapShorts(lookup.homeResponse, 12).length
-    ? mapShorts(lookup.homeResponse, 12)
+  const shorts = mapShorts(homeResponse, 12).length
+    ? mapShorts(homeResponse, 12)
     : mapShorts(videosResponse, 12);
 
-  // subscribe state is only honest with a session; the browse response's
+  // subscribe state is only honest with a session; the response's
   // subscribeButton reflects the requesting session
   let isSubscribed = false;
   if (hasSession()) {
-    const sub = findFirst(lookup.homeResponse, "subscribeButtonRenderer");
+    const sub = findFirst(homeResponse, "subscribeButtonRenderer");
     isSubscribed = sub?.subscribed === true;
   }
 
-  const header = lookup.header;
   const page: ChannelPageDTO = {
     channel: {
-      id: header.id || lookup.browseId,
+      id: header.id || fallbackHandle,
       // WFX2-P6-CH — the bare-handle law: whatever @-prefixed form the
       // upstream header (or the resolve fallback) carries, the page DTO
       // hands every consumer a BARE handle ("@name"/"@/name"/"/ name" →
       // "name"); the page UI prefixes the "@" itself, so the header can
       // never show the doubled "@/@name" the live bug carried
-      handle: bareChannelHandle(header.handle || lookup.handle),
+      handle: bareChannelHandle(header.handle || fallbackHandle),
       name: header.name,
       avatarUrl: header.avatarUrl,
       verified: header.verified,
@@ -153,11 +174,11 @@ export async function getChannelPage(handle: string): Promise<ChannelPageDTO | n
     videos,
     shorts,
     // WFX2-B-S: the response's own tab list + the Join button renderer
-    tabs: channelTabsFromResponse(lookup.homeResponse),
-    joinable: channelJoinable(lookup.homeResponse),
+    tabs: channelTabsFromResponse(homeResponse),
+    joinable: channelJoinable(homeResponse),
   };
   // WFX2-P6-CH: the Videos tab's own sort chips (Latest / Popular / Oldest)
-  // — parsed off the SAME videos-tab browse payload the videos rail came
+  // — parsed off the SAME videos-tab payload the videos rail came
   // from. Surfaced ONLY when the payload really carries a chip bar: no
   // chips upstream → the field stays absent (the UI hides the chip row —
   // honest omission, never fabricated Latest/Popular/Oldest).
@@ -175,8 +196,10 @@ export async function getChannelPage(handle: string): Promise<ChannelPageDTO | n
  * `{page: null, walled: true}` marker for the route to degrade with
  * (HTTP 200 + structured empty — never a naked 502).
  *
- * WFX2-C-F extends the ladder with a THIRD rung — search-compose:
- *   browse-fresh → browse-last-good → search-compose → honest-degrade.
+ * WFX2-C-F extends the ladder with the search-compose rung, WFX2-4A with
+ * the broker read ahead of it:
+ *   browse-fresh → browse-last-good → broker-read → search-compose →
+ *   honest-degrade.
  * When the wall stands (fresh browse AND last-good both failed) the page is
  * composed from the real search results the dominant channel owns (see
  * channel-compose.ts — exact-id resolution under the WFX2-CF-2 dominance
@@ -213,7 +236,17 @@ export async function getChannelPageResilient(handle: string): Promise<ChannelPa
     { isEmpty: (v: unknown) => (v as ChannelPageResult | null)?.walled === true }
   );
   if (result.page) return result; // rungs 1–2: the fresh browse or the last-good
-  // WFX2-C-F rung 3 — search-compose: the wall stood, but the plain video
+  // WFX2-4A rung 3 — the broker read: a REAL full channel page through the
+  // logged-in session's page-context fetch beats the synthetic compose
+  // below (broker unconfigured/offline → this rung is a null and the
+  // compose rung is unchanged)
+  try {
+    const brokered = await brokerChannelPage(handle);
+    if (brokered) return { page: brokered, walled: false };
+  } catch {
+    // the broker read is best-effort — the compose rung gets its turn
+  }
+  // WFX2-C-F rung 4 (was 3) — search-compose: the wall stood, but the plain video
   // search is unwalled — compose the page from the real results the
   // dominant channel owns.
   try {
@@ -226,6 +259,65 @@ export async function getChannelPageResilient(handle: string): Promise<ChannelPa
     // the compose is best-effort — rung 4 (the honest degrade) stands
   }
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// WFX2-4A — the broker read rung (the channel family's ladder)
+// ---------------------------------------------------------------------------
+
+/**
+ * The channel page read through the broker's page-context fetch transport
+ * (WFX2-4A): the logged-in operator session's OWN /@handle (or
+ * /channel/UC…) home page + Videos tab, extracted with the SAME
+ * ytInitialData extractor and mapped through the SAME mapper as the browse
+ * path (one mapper, two transports). Honest-degrade rules:
+ *  - either read fails (broker unconfigured/offline, no ytInitialData in
+ *    the HTML, a null/nameless header) → null — never a synthesized page;
+ *  - isSubscribed is ALWAYS false: the payload reflects the BROKER
+ *    account's session, and its own subscription state must never leak as
+ *    the viewer's;
+ *  - `brokered: true` marks the transport (the additive channel marker,
+ *    mirroring composed?).
+ *
+ * Cached under `yt:channel:broker:<normalized>` (the resolveChannelFromSearch
+ * convention): a NULL result is the unhealthy shape — never cached, never
+ * overwrites; a last-good broker page serves within the family's hard
+ * window while a flaky broker honestly re-reads.
+ */
+export async function brokerChannelPage(handle: string): Promise<ChannelPageDTO | null> {
+  const cleaned = decodeURIComponent(handle).trim();
+  if (!cleaned) return null;
+  const isUcId = /^UC[\w-]{20,}$/.test(cleaned);
+  const base = isUcId
+    ? `/channel/${cleaned}`
+    : `/${cleaned.startsWith("@") ? cleaned : `@${cleaned}`}`;
+  return cachedResilient(
+    `yt:channel:broker:${normalizeChannelHandle(cleaned)}`,
+    TTL.FEED_MS,
+    async (): Promise<ChannelPageDTO | null> => {
+      try {
+        const home = await brokerFetchPage(base);
+        if (home instanceof Error) return null;
+        const videos = await brokerFetchPage(`${base}/videos`);
+        if (videos instanceof Error) return null;
+        const homeData = extractYtInitialData(home.body);
+        const videosData = extractYtInitialData(videos.body);
+        const header = mapChannelHeader(homeData);
+        // a real channel always has a name — null/nameless is the walled or
+        // error-page shape, never a page worth serving
+        if (!header || !header.name) return null;
+        const page = channelPageFromResponses(header, homeData, videosData, cleaned);
+        // the payload reflects the BROKER account's session — its own
+        // subscription state must never leak as the viewer's
+        page.channel.isSubscribed = false;
+        page.channel.brokered = true;
+        return page;
+      } catch {
+        return null; // a broken read honestly degrades (never a synthesized page)
+      }
+    },
+    { isEmpty: (v) => v === null }
+  );
 }
 
 /**

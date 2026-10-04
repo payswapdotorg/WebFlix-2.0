@@ -76,6 +76,69 @@ describe("request validation", () => {
   });
 });
 
+describe("fetch validation (WFX2-4A read transport)", () => {
+  const validate = (body: unknown) => validateActionRequest(body);
+
+  test("valid top-level path normalizes into payload.path — no target required", () => {
+    const r = validate({ kind: "fetch", path: "/@RickAstleyYT" });
+    expect("req" in r).toBe(true);
+    const req = (r as { req: { kind: string; target: Record<string, never>; payload: { path: string } } })
+      .req;
+    expect(req.kind).toBe("fetch");
+    expect(req.target).toEqual({});
+    expect(req.payload.path).toBe("/@RickAstleyYT");
+  });
+  test("payload.path is the tolerated alias (same shape as the top-level form)", () => {
+    const r = validate({ kind: "fetch", payload: { path: "/watch?v=dQw4w9WgXcQ" } });
+    expect("req" in r).toBe(true);
+    expect((r as { req: { payload: { path: string } } }).req.payload.path).toBe(
+      "/watch?v=dQw4w9WgXcQ"
+    );
+  });
+  test("missing / empty / non-string path → error", () => {
+    for (const body of [{ kind: "fetch" }, { kind: "fetch", path: "" }, { kind: "fetch", path: 42 }, { kind: "fetch", path: null }]) {
+      const r = validate(body);
+      expect("error" in r).toBe(true);
+      expect((r as { error: string }).error).toContain("fetch requires path");
+    }
+  });
+  test("absolute URLs are refused (path must start with \"/\")", () => {
+    for (const path of ["https://evil.com/x", "http://www.youtube.com/", "watch?v=x", "www.youtube.com/watch?v=x"]) {
+      const r = validate({ kind: "fetch", path });
+      expect("error" in r).toBe(true);
+      expect((r as { error: string }).error).toContain('must start with "/"');
+    }
+  });
+  test("protocol-relative paths are refused (\"//host/…\" is an absolute URL)", () => {
+    const r = validate({ kind: "fetch", path: "//evil.com/x" });
+    expect("error" in r).toBe(true);
+    expect((r as { error: string }).error).toContain('must start with "/"');
+  });
+  test("query-bearing watch paths pass (the playback rung's shape)", () => {
+    const r = validate({ kind: "fetch", path: "/watch?v=dQw4w9WgXcQ&hl=en&gl=US" });
+    expect("req" in r).toBe(true);
+  });
+});
+
+describe("fetch routing (executor)", () => {
+  test("requiredUrl is null — the READ transport never navigates the tab", () => {
+    expect(requiredUrl({ kind: "fetch", target: {}, payload: { path: "/@RickAstleyYT" } })).toBeNull();
+  });
+  test("buildScript: broker-side URL resolution + credentials + the 4 MiB cap", () => {
+    const built = buildScript({ kind: "fetch", target: {}, payload: { path: "/watch?v=dQw4w9WgXcQ" } });
+    expect(built).not.toBeNull();
+    expect(built!.timeoutMs).toBeGreaterThan(0);
+    // the path is resolved broker-side against the youtube.com base (never
+    // re-parsed in-page) and interpolated as a JSON string literal
+    expect(built!.script).toContain('"https://www.youtube.com/watch?v=dQw4w9WgXcQ"');
+    expect(built!.script).toContain("credentials:'include'");
+    expect(built!.script).toContain("4*1024*1024");
+    expect(built!.script).toContain("truncated");
+    // the same-origin guard refuses a non-www tab (music/studio subdomains)
+    expect(built!.script).toContain("https://www.youtube.com'");
+  });
+});
+
 describe("journal", () => {
   test("append + last + tail round-trip", () => {
     const j = new Journal(join(dir, "j2.jsonl"));
