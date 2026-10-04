@@ -14,6 +14,7 @@ import { Bell, BellOff, BellRing, Check } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { post } from "@/lib/watch/client";
+import { toastActionError } from "@/lib/watch/connection-client";
 import { signInHref } from "@/lib/auth/client";
 import { compactCount } from "@/lib/watch/format";
 import type { SubscriptionResultDto } from "@/lib/watch/types";
@@ -68,7 +69,9 @@ export function SubscribeButton({
         toast.success(`Subscribed to ${channelName}`);
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to update subscription");
+      // Task 4-b: the broker-offline shape gets the "check the connection in
+      // Settings" prompt; every other error keeps its existing message
+      toastActionError(e, "Failed to update subscription");
     } finally {
       setBusy(false);
       setMenuOpen(false);

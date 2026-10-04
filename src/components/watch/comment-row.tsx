@@ -60,6 +60,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { compactCount, relativeTime } from "@/lib/watch/format";
 import { post, patch, del } from "@/lib/watch/client";
+import { toastActionError } from "@/lib/watch/connection-client";
 import { signInHref } from "@/lib/auth/client";
 import type { CommentDto, CommentVideoSnapshotDto, LikeValue, ViewerDto } from "@/lib/watch/types";
 import { CommentComposer } from "./comment-composer";
@@ -170,7 +171,9 @@ export function CommentRow({
       setLike(result); // server truth
     } catch (e) {
       setLike(prev);
-      toast.error(e instanceof Error ? e.message : "Failed to rate comment");
+      // Task 4-b: the broker-offline shape gets the "check the connection
+      // in Settings" prompt; every other error keeps its existing message
+      toastActionError(e, "Failed to rate comment");
     }
   };
 
@@ -197,7 +200,7 @@ export function CommentRow({
       setEditing(false);
       toast.success("Comment updated");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to edit comment");
+      toastActionError(e, "Failed to edit comment");
     }
   };
 
@@ -213,7 +216,7 @@ export function CommentRow({
       setConfirmDelete(false);
       toast("Comment deleted");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to delete comment");
+      toastActionError(e, "Failed to delete comment");
     } finally {
       setDeleting(false);
     }
@@ -231,7 +234,7 @@ export function CommentRow({
       });
       onChanged({ ...comment, heartedByCreator: r.heartedByCreator, likes: like.likes });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to heart");
+      toastActionError(e, "Failed to heart");
     }
   };
 
@@ -248,7 +251,7 @@ export function CommentRow({
       onChanged({ ...comment, pinned: r.pinned });
       toast.success(r.pinned ? "Comment pinned" : "Comment unpinned");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to pin");
+      toastActionError(e, "Failed to pin");
     }
   };
 

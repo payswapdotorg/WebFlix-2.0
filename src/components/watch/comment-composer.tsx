@@ -25,6 +25,7 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { toastActionError } from "@/lib/watch/connection-client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Dialog,
@@ -134,7 +135,9 @@ export function CommentComposer({
         toast.success(parentId ? "Reply posted on WebFlix" : "Comment posted on WebFlix");
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to post comment");
+      // Task 4-b: the broker-offline shape gets the "check the connection in
+      // Settings" prompt; every other error keeps its existing message
+      toastActionError(e, "Failed to post comment");
     } finally {
       setBusy(false);
     }

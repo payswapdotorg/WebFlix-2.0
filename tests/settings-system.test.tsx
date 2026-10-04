@@ -133,6 +133,14 @@ const { readAutoplayPreference, writeAutoplayPreference } = await import(
 );
 const { SCOPE_LOCAL_LABEL, SCOPE_MANAGED_LABEL } = await import("@/app/settings/sections");
 const SettingsView = (await import("@/app/settings/view")).default;
+const {
+  isBrokerOfflineError,
+  resetYouTubeConnectionCache,
+  ACTIONS_DISCONNECTED_MESSAGE,
+} = await import("@/lib/watch/connection-client");
+const connectionRouteModule = await import("@/app/api/connection/youtube/route");
+const connectionGet = connectionRouteModule.GET;
+const { mintSessionCookie } = await import("./helpers");
 const { FEEDBACK_DISCLOSURE, FEEDBACK_CATEGORIES } = await import("@/app/feedback/shared");
 const FeedbackView = (await import("@/app/feedback/view")).default;
 const feedbackRouteModule = await import("@/app/api/feedback/route");
@@ -150,7 +158,15 @@ const OPERATOR_USER = {
   avatarSeed: 12,
 };
 
-const SECTION_IDS = ["account", "notifications", "playback", "appearance", "privacy", "advanced"];
+const SECTION_IDS = [
+  "account",
+  "youtube-connection",
+  "notifications",
+  "playback",
+  "appearance",
+  "privacy",
+  "advanced",
+];
 
 let root: Root | null = null;
 let host: ReturnType<typeof win.document.createElement> | null = null;
@@ -208,6 +224,7 @@ beforeEach(() => {
   sessionState = { status: "unauthenticated", user: null };
   themeCalls.length = 0;
   mockResolvedTheme = "dark";
+  resetYouTubeConnectionCache(); // the connection client's SWR cache is per-module
   fetchHandler = (url) => {
     if (url.includes("/api/watch/session")) {
       return Response.json({ operatorSession: true });
@@ -281,13 +298,13 @@ describe("P5-SS settings: the guest gate (settings is a personal surface)", () =
 });
 
 describe("P5-SS settings: every section renders with its visible scope label", () => {
-  test("all six youtube.com sections render, LOCAL × 4 and MANAGED × 2", async () => {
+  test("all seven youtube.com sections render, LOCAL × 4 and MANAGED × 3", async () => {
     await renderSignedInSettings();
     for (const id of SECTION_IDS) {
       expect(q(`[data-settings-section="${id}"]`)).not.toBeNull();
     }
     expect(all('[data-scope="local"]')).toHaveLength(4); // playback, appearance, privacy, advanced
-    expect(all('[data-scope="managed"]')).toHaveLength(2); // account, notifications
+    expect(all('[data-scope="managed"]')).toHaveLength(3); // account, youtube-connection, notifications
     expect(host!.textContent).toContain(SCOPE_LOCAL_LABEL);
     expect(host!.textContent).toContain(SCOPE_MANAGED_LABEL);
   });
@@ -402,6 +419,212 @@ describe("P5-SS settings: Appearance + Advanced (local, honest about effect scop
     expect(win.localStorage.getItem("wfx2-language")).toBe("es");
     const location = q('[aria-label="Location"]') as unknown as HTMLSelectElement;
     expect(location).not.toBeNull(); // renders; honest about having no effect today
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Part 1c — Task 4-b: the YouTube connection (settings card + client + API)
+// ---------------------------------------------------------------------------
+
+describe("P4B settings: the YouTube connection card (the shared session, honestly)", () => {
+  test("connected → the shared-session explainer + green card + coarse tab context, never the raw URL", async () => {
+    fetchHandler = (url) => {
+      if (url.includes("/api/connection/youtube")) {
+        return Response.json({
+          connected: true,
+          tabFound: true,
+          tabUrl: "https://www.youtube.com/watch?v=okH-kaRjuAQ",
+          lastActionAt: new Date(Date.now() - 90_000).toISOString(),
+          checkedAt: new Date().toISOString(),
+        });
+      }
+      return new Response("{}", { status: 200 });
+    };
+    await renderSignedInSettings();
+    const section = q('[data-settings-section="youtube-connection"]');
+    expect(section).not.toBeNull();
+    // the shared-session model, stated honestly (one or two sentences)
+    expect(section!.textContent).toContain("one shared logged-in session");
+    // the connected card
+    expect(section!.querySelector('[data-connection-state="connected"]')).not.toBeNull();
+    expect(section!.textContent).toContain("Connected — actions are available");
+    expect(section!.textContent).toContain(
+      "Actions are performed through the WebFlix connected session"
+    );
+    // channel-safe tab context + the last action's relative time
+    expect(section!.textContent).toContain("Session active — the connected tab is on a watch page");
+    expect(section!.textContent).toContain("last action");
+    expect(section!.textContent).toContain("Checked");
+    // coarse context only — the raw video id from the tab URL never renders
+    expect(section!.textContent).not.toContain("okH-kaRjuAQ");
+  });
+
+  test("disconnected → the warning + what stops working + Retry forces a fresh probe past the cache", async () => {
+    fetchHandler = (url) => {
+      if (url.includes("/api/connection/youtube")) {
+        return Response.json({
+          connected: false,
+          tabFound: false,
+          tabUrl: null,
+          lastActionAt: null,
+          checkedAt: new Date().toISOString(),
+        });
+      }
+      return new Response("{}", { status: 200 });
+    };
+    await renderSignedInSettings();
+    const section = q('[data-settings-section="youtube-connection"]');
+    expect(section!.querySelector('[data-connection-state="disconnected"]')).not.toBeNull();
+    expect(section!.textContent).toContain(
+      "Like, subscribe and comment actions are unavailable right now"
+    );
+    expect(section!.textContent).toContain("Checked");
+    const probes = () =>
+      fetchLog.filter((f) => f.url.includes("/api/connection/youtube")).length;
+    expect(probes()).toBe(1); // one probe on mount
+
+    // Retry → a FORCED second probe (a cache hit would issue no second fetch)
+    const retry = section!.querySelector(
+      'button[aria-label="Retry the YouTube connection check"]'
+    ) as unknown as HTMLButtonElement | null;
+    expect(retry).not.toBeNull();
+    fetchHandler = (url) => {
+      if (url.includes("/api/connection/youtube")) {
+        return Response.json({
+          connected: true,
+          tabFound: true,
+          tabUrl: "https://www.youtube.com/",
+          lastActionAt: null,
+          checkedAt: new Date().toISOString(),
+        });
+      }
+      return new Response("{}", { status: 200 });
+    };
+    await act(async () => {
+      retry!.click();
+    });
+    expect(probes()).toBe(2);
+    expect(section!.querySelector('[data-connection-state="connected"]')).not.toBeNull();
+  });
+});
+
+describe("P4B connection client: the broker-offline error shape (the action prompts)", () => {
+  test("isBrokerOfflineError matches both offline variants and rejects everything else", () => {
+    expect(
+      isBrokerOfflineError(
+        new Error("action backend offline — the lead's broker must be running")
+      )
+    ).toBe(true);
+    expect(
+      isBrokerOfflineError(
+        new Error("action backend offline and the WebFlix store is unreachable — comment not posted")
+      )
+    ).toBe(true);
+    expect(isBrokerOfflineError(new Error("broker rejected the shared secret"))).toBe(false);
+    expect(isBrokerOfflineError(new Error("Failed to update rating"))).toBe(false);
+    expect(isBrokerOfflineError(undefined)).toBe(false);
+    expect(isBrokerOfflineError("not an error")).toBe(false);
+  });
+
+  test("the disconnected prompt copy points at Settings", () => {
+    expect(ACTIONS_DISCONNECTED_MESSAGE).toContain("check the connection in Settings");
+  });
+});
+
+describe("P4B /api/connection/youtube: the gated, honest-degrade status route", () => {
+  let AUTH_COOKIE = "";
+  beforeAll(async () => {
+    AUTH_COOKIE = await mintSessionCookie();
+  });
+
+  let savedSecret = "";
+  let savedUrl = "";
+  beforeEach(() => {
+    savedSecret = process.env.BROKER_SECRET ?? "";
+    savedUrl = process.env.BROKER_URL ?? "";
+    process.env.BROKER_SECRET = "wfx2-test-secret";
+    process.env.BROKER_URL = "http://127.0.0.1:3055"; // the direct default; the stub answers
+  });
+  afterEach(() => {
+    if (savedSecret) process.env.BROKER_SECRET = savedSecret;
+    else delete process.env.BROKER_SECRET;
+    if (savedUrl) process.env.BROKER_URL = savedUrl;
+    else delete process.env.BROKER_URL;
+  });
+
+  test("guests → the uniform 401 (the gate fires before any broker call)", async () => {
+    const res = await connectionGet(new Request("http://localhost/api/connection/youtube") as never);
+    expect(res.status).toBe(401);
+    expect(((await res.json()) as { error?: string }).error).toBe("unauthenticated");
+    expect(fetchLog.filter((f) => f.url.includes("/healthz"))).toHaveLength(0);
+  });
+
+  test("signed-in + broker healthy with the tab → the connected envelope", async () => {
+    fetchHandler = (url) => {
+      if (url.includes("/healthz")) {
+        return Response.json({
+          ok: true,
+          tabFound: true,
+          tabUrl: "https://www.youtube.com/watch?v=okH-kaRjuAQ",
+          lastActionAt: null,
+        });
+      }
+      return new Response("{}", { status: 200 });
+    };
+    const res = await connectionGet(
+      new Request("http://localhost/api/connection/youtube", {
+        headers: { cookie: AUTH_COOKIE },
+      }) as never
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as {
+      connected: boolean;
+      tabFound: boolean;
+      tabUrl: string | null;
+      lastActionAt: unknown;
+      checkedAt: string;
+    };
+    expect(data.connected).toBe(true);
+    expect(data.tabFound).toBe(true);
+    expect(data.tabUrl).toContain("youtube.com/watch");
+    expect(data.lastActionAt).toBeNull();
+    expect(data.checkedAt).toBeTruthy();
+    // the probe hit the broker's healthz with the gateway header set
+    const probe = fetchLog.find((f) => f.url.includes("/healthz"));
+    expect(probe).toBeDefined();
+  });
+
+  test("broker ok but no YouTube tab → connected:false, tabFound:false (honest 200)", async () => {
+    fetchHandler = (url) => {
+      if (url.includes("/healthz")) {
+        return Response.json({ ok: true, tabFound: false, tabUrl: null, lastActionAt: null });
+      }
+      return new Response("{}", { status: 200 });
+    };
+    const res = await connectionGet(
+      new Request("http://localhost/api/connection/youtube", {
+        headers: { cookie: AUTH_COOKIE },
+      }) as never
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { connected: boolean; tabFound: boolean };
+    expect(data.connected).toBe(false);
+    expect(data.tabFound).toBe(false);
+  });
+
+  test("broker unreachable → the honest disconnected 200, never a 5xx", async () => {
+    fetchHandler = () => {
+      throw new Error("connect ECONNREFUSED");
+    };
+    const res = await connectionGet(
+      new Request("http://localhost/api/connection/youtube", {
+        headers: { cookie: AUTH_COOKIE },
+      }) as never
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { connected: boolean; tabUrl: string | null };
+    expect(data.connected).toBe(false);
+    expect(data.tabUrl).toBeNull();
   });
 });
 
