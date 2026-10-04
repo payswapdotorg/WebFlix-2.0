@@ -73,7 +73,7 @@ import {
   PLAYER_CLIENT_ENV,
 } from "@/lib/youtube/streams";
 import { setUpstream } from "@/lib/youtube/innertube";
-import { clearCache } from "@/lib/youtube/cache";
+import { cachePeek, clearCache } from "@/lib/youtube/cache";
 import { GET as playbackRoute } from "@/app/api/videos/[id]/playback/route";
 import { GET as streamRoute } from "@/app/api/stream/route";
 
@@ -415,6 +415,31 @@ describe("getPlayback — the chain (player endpoint → watch page → honest e
     expect(dto).toEqual({ streamFormats: [], storyboards: [], durationSec: null, source: "" });
     // the broker rung WAS attempted before the honest degrade stood
     expect(brokerCalls).toEqual(["/watch?v=WALLED12345&hl=en&gl=US"]);
+  });
+
+  test("WFX2-5 — the all-walled empty degrade is NEVER cached (isEmpty guard); a healthy broker-watch read still is", async () => {
+    const { impl } = chainUpstream(WALLED_PLAYER, null);
+    setUpstream(impl);
+    // every rung walled (broker offline too) → the honest empty payload …
+    const empty = await getPlayback("WALLED12345");
+    expect(empty).toEqual({ streamFormats: [], storyboards: [], durationSec: null, source: "" });
+    // … which must NOT be persisted: the 4-c tab-wedge incident cached
+    // source:"" for the full 10min soft TTL and poisoned later reads —
+    // the cache layer holds nothing for the key
+    expect(await cachePeek("yt:playback:WALLED12345")).toBeNull();
+    // the broker revives: the SAME id recomputes immediately (a cached
+    // empty would have served for 10 minutes with zero upstream requests)
+    brokerResponse = () => ({ ok: true, status: 200, body: watchHtmlFor(playerFixture) });
+    const recovered = await getPlayback("WALLED12345");
+    expect(recovered.source).toBe("broker-watch");
+    expect(recovered.storyboards).toHaveLength(3);
+    expect(recovered.streamFormats).toEqual([]); // cipher-only formats are NOT "empty"
+    // the healthy payload (storyboards present) IS cached normally — the
+    // guard matches only the source:"" degrade
+    const stored = await cachePeek("yt:playback:WALLED12345");
+    expect(stored).not.toBeNull();
+    expect(stored?.fresh).toBe(true);
+    expect((stored?.value as { source: string }).source).toBe("broker-watch");
   });
 });
 

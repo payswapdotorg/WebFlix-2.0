@@ -1390,6 +1390,62 @@ export function buildScript(
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* WFX2-5 tab-liveness watchdog (the 4-c wedge incidents)             */
+/* ------------------------------------------------------------------ */
+
+/** Cheap renderer probe budget — a healthy tab evaluates `1+1` in <100ms. */
+const LIVENESS_PROBE_MS = 3000;
+/** Post-revival settle: the renderer needs a moment after Page.reload. */
+const REVIVE_SETTLE_MS = 2500;
+
+/**
+ * Test seam: the post-revival settle budget (the unit tests shrink it to
+ * keep the suite fast — revive behavior is deliberately fixed in prod).
+ */
+export const livenessSeam = { settleMs: REVIVE_SETTLE_MS };
+
+export type TabLiveness = "alive" | "revived" | "revive-failed";
+
+/**
+ * WFX2-5 tab-liveness pre-check. The 4-c incidents (2× on 2026-10-04): the
+ * YouTube tab's renderer main-thread silently wedges — Runtime.evaluate
+ * times out on even `1+1`, healthz stays green (it only checks the tab
+ * URL) and every action fails with CDP timeouts until a Page.reload
+ * revives the tab. This probe runs at the action-execution entry (ALL
+ * kinds, not just fetch): a cheap `1+1` with a SHORT budget; on timeout /
+ * error, the revival that worked twice in production — Page.reload
+ * (falling back to a fresh https://www.youtube.com/ navigation), a
+ * settle wait, then a re-probe. "revive-failed" is honest: the caller
+ * lets the action proceed and fail with its normal error (never a
+ * synthesized success).
+ */
+export async function ensureTabLiveness(conn: CdpConnection): Promise<TabLiveness> {
+  // any non-nullish answer is proof of life — `1+1` normally yields 2; an
+  // exception object still means the renderer evaluated the expression
+  const probe = await conn.evaluate("1+1", LIVENESS_PROBE_MS).catch(() => null);
+  if (probe !== null && probe !== undefined) return "alive";
+  let reloadSent = false;
+  try {
+    await conn.send("Page.reload", {}, 15000);
+    reloadSent = true;
+  } catch {
+    // the reload command itself refused (e.g. the WS connection died) —
+    // try a fresh navigation before giving up
+    try {
+      await conn.send("Page.navigate", { url: "https://www.youtube.com/" }, 15000);
+      reloadSent = true;
+    } catch {
+      reloadSent = false;
+    }
+  }
+  if (!reloadSent) return "revive-failed";
+  await new Promise((r) => setTimeout(r, livenessSeam.settleMs));
+  const recheck = await conn.evaluate("1+1", LIVENESS_PROBE_MS).catch(() => null);
+  if (recheck !== null && recheck !== undefined) return "revived";
+  return "revive-failed";
+}
+
 /** Execute the action in the given connected tab. */
 export async function executeAction(
   conn: CdpConnection,
@@ -1400,6 +1456,20 @@ export async function executeAction(
   // bell "off" unsubscribes (the UI state-machine semantics)
   if (kind === "bell" && (payload?.pref ?? "").toLowerCase() === "off") {
     return executeAction(conn, { kind: "unsubscribe", target, payload: undefined });
+  }
+
+  // WFX2-5 tab-liveness pre-check (the 4-c wedge incidents): a cheap probe
+  // with a SHORT budget before ANY action script runs — a wedged renderer
+  // is auto-revived (Page.reload; the youtube.com navigation fallback)
+  // instead of burning the action's own timeout on a dead tab. A failed
+  // revive is honest: the action proceeds and fails with its normal error.
+  const liveness = await ensureTabLiveness(conn);
+  if (liveness !== "alive") {
+    console.warn(
+      `[executor] tab liveness: ${liveness} — renderer probe failed; ${
+        liveness === "revived" ? "auto-revived (Page.reload)" : "revive attempt failed — proceeding honestly"
+      }`
+    );
   }
 
   const url = requiredUrl(req);

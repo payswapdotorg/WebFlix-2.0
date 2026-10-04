@@ -4,7 +4,7 @@
  * honest PASS. Covers: auth (constant-time module), request validation,
  * action journal, healthz shape, like-params templating.
  */
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,7 +15,15 @@ import { playlistUpdateScript, playlistReorderScript } from "./kinds/playlistedi
 import { createBrokerOptions } from "./options";
 import { secretMatches } from "./auth";
 import { Journal } from "./journal";
-import { buildLikeParams, buildScript, requiredUrl } from "./executor";
+import type { CdpConnection } from "./cdp";
+import {
+  buildLikeParams,
+  buildScript,
+  ensureTabLiveness,
+  executeAction,
+  livenessSeam,
+  requiredUrl,
+} from "./executor";
 
 const dir = mkdtempSync(join(tmpdir(), "broker-test-"));
 const journalPath = join(dir, "actions.jsonl");
@@ -308,4 +316,157 @@ test("P4 kinds: playlist-update + playlist-reorder route their real lane drives"
   expect(requiredUrl({ kind: "playlist-reorder", target: { playlistId: "PLx" }, payload: {} })).toBe(
     "https://www.youtube.com/playlist?list=PLx"
   );
+});
+
+// -------------------------------------------------------------------------
+// WFX2-5 tab-liveness pre-check + auto-revive (the 4-c wedge incidents)
+// -------------------------------------------------------------------------
+
+/**
+ * Minimal CdpConnection stub — a SCRIPTED sequence of evaluate results
+ * (per-call: an Error means the call REJECTS, the wedge's "CDP timeout"
+ * shape) and a per-method send() outcome table. No live CDP (the file law:
+ * units only — the real CdpConnection never opens a socket here).
+ */
+function fakeCdp(
+  evalResults: (unknown | Error)[],
+  sendResults: Record<string, unknown | Error> = {}
+) {
+  const calls = {
+    evals: [] as string[],
+    sends: [] as { method: string; params: Record<string, unknown> }[],
+  };
+  let evalIdx = 0;
+  const conn = {
+    evaluate: (expression: string) => {
+      calls.evals.push(expression);
+      const r = evalResults[evalIdx++];
+      if (r === undefined) {
+        return Promise.reject(
+          new Error(`fake-cdp: unexpected evaluate #${evalIdx}: ${expression.slice(0, 60)}`)
+        );
+      }
+      return r instanceof Error ? Promise.reject(r) : Promise.resolve(r);
+    },
+    send: (method: string, params: Record<string, unknown> = {}) => {
+      calls.sends.push({ method, params });
+      if (!(method in sendResults)) {
+        return Promise.reject(new Error(`fake-cdp: unexpected send ${method}`));
+      }
+      const r = sendResults[method];
+      return r instanceof Error ? Promise.reject(r) : Promise.resolve(r);
+    },
+  };
+  return { conn: conn as unknown as CdpConnection, calls };
+}
+
+const CDP_TIMEOUT = () => new Error("CDP timeout: Runtime.evaluate");
+
+describe("WFX2-5 ensureTabLiveness — probe + auto-revive", () => {
+  const settleBefore = livenessSeam.settleMs;
+
+  beforeEach(() => {
+    livenessSeam.settleMs = 1; // keep the suite fast (prod default 2500)
+  });
+  afterEach(() => {
+    livenessSeam.settleMs = settleBefore;
+  });
+
+  test("healthy tab: the probe answers → alive; no reload, zero CDP sends", async () => {
+    const { conn, calls } = fakeCdp([2]);
+    expect(await ensureTabLiveness(conn)).toBe("alive");
+    expect(calls.evals).toEqual(["1+1"]);
+    expect(calls.sends).toEqual([]);
+  });
+
+  test("wedged renderer: the probe times out → Page.reload → settle → re-probe answers → revived", async () => {
+    const { conn, calls } = fakeCdp([CDP_TIMEOUT(), 2], { "Page.reload": {} });
+    expect(await ensureTabLiveness(conn)).toBe("revived");
+    expect(calls.evals).toEqual(["1+1", "1+1"]); // probe + post-revival re-probe
+    expect(calls.sends.map((s) => s.method)).toEqual(["Page.reload"]);
+  });
+
+  test("an exception-object answer is still proof of life (the renderer evaluated)", async () => {
+    const { conn, calls } = fakeCdp([{ __exception: "SyntaxError" }]);
+    expect(await ensureTabLiveness(conn)).toBe("alive");
+    expect(calls.sends).toEqual([]);
+  });
+
+  test("Page.reload refused → the https://www.youtube.com/ navigation fallback revives", async () => {
+    const { conn, calls } = fakeCdp([CDP_TIMEOUT(), 2], {
+      "Page.reload": new Error("CDP error:reload-refused"),
+      "Page.navigate": { frameId: "f1", loaderId: "l1" },
+    });
+    expect(await ensureTabLiveness(conn)).toBe("revived");
+    expect(calls.sends.map((s) => s.method)).toEqual(["Page.reload", "Page.navigate"]);
+    expect(calls.sends[1].params).toEqual({ url: "https://www.youtube.com/" });
+  });
+
+  test("reload sent but the renderer stays wedged → honest revive-failed (never a throw)", async () => {
+    const { conn, calls } = fakeCdp([CDP_TIMEOUT(), CDP_TIMEOUT()], { "Page.reload": {} });
+    expect(await ensureTabLiveness(conn)).toBe("revive-failed");
+    expect(calls.sends.map((s) => s.method)).toEqual(["Page.reload"]);
+  });
+
+  test("dead connection (reload AND navigate both refused) → revive-failed without a throw", async () => {
+    const { conn, calls } = fakeCdp([CDP_TIMEOUT()], {
+      "Page.reload": new Error("CDP connection closed"),
+      "Page.navigate": new Error("CDP connection closed"),
+    });
+    expect(await ensureTabLiveness(conn)).toBe("revive-failed");
+    expect(calls.evals).toEqual(["1+1"]); // no re-probe — nothing was revived
+  });
+});
+
+describe("WFX2-5 executeAction — the liveness pre-check runs at the entry (ALL kinds)", () => {
+  const settleBefore = livenessSeam.settleMs;
+  const fetchPayload = { ok: true, verified: true, path: "fetch", status: 200, body: "<html>yt</html>" };
+
+  beforeEach(() => {
+    livenessSeam.settleMs = 1;
+  });
+  afterEach(() => {
+    livenessSeam.settleMs = settleBefore;
+  });
+
+  test("healthy tab: probe → action script (exactly the two evaluates, fetch kind)", async () => {
+    const { conn, calls } = fakeCdp([2, fetchPayload]);
+    const res = await executeAction(conn, {
+      kind: "fetch",
+      target: {},
+      payload: { path: "/@RickAstleyYT" },
+    });
+    expect(res.ok).toBe(true);
+    expect((res as { body: string }).body).toBe("<html>yt</html>");
+    // call 0 = the liveness probe, call 1 = the fetch action script
+    expect(calls.evals).toHaveLength(2);
+    expect(calls.evals[1]).toContain("https://www.youtube.com/@RickAstleyYT");
+    expect(calls.sends).toEqual([]);
+  });
+
+  test("wedged tab: auto-revived BEFORE the action script runs (probe → reload → re-probe → script)", async () => {
+    const { conn, calls } = fakeCdp([CDP_TIMEOUT(), 2, fetchPayload], { "Page.reload": {} });
+    const res = await executeAction(conn, {
+      kind: "fetch",
+      target: {},
+      payload: { path: "/watch?v=dQw4w9WgXcQ&hl=en&gl=US" },
+    });
+    expect(res.ok).toBe(true);
+    expect(calls.sends.map((s) => s.method)).toEqual(["Page.reload"]);
+    expect(calls.evals).toHaveLength(3); // probe → post-revive re-probe → script
+    expect(calls.evals[2]).toContain("/watch?v=dQw4w9WgXcQ");
+  });
+
+  test("failed revive is honest: the action proceeds and fails with its NORMAL error", async () => {
+    // probe times out, reload refused, navigate refused → revive-failed →
+    // the action script's own evaluate rejects (the normal cdp failure)
+    const { conn, calls } = fakeCdp([CDP_TIMEOUT(), CDP_TIMEOUT()], {
+      "Page.reload": new Error("CDP connection closed"),
+      "Page.navigate": new Error("CDP connection closed"),
+    });
+    await expect(
+      executeAction(conn, { kind: "fetch", target: {}, payload: { path: "/@MrBeast" } })
+    ).rejects.toThrow("CDP timeout: Runtime.evaluate");
+    expect(calls.evals).toHaveLength(2); // probe + the action's own (failing) evaluate
+  });
 });

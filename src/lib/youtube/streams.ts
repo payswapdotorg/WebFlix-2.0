@@ -43,7 +43,7 @@
  */
 import { innertube } from "./innertube";
 import { fetchPageHtml } from "./ssr";
-import { cached, TTL } from "./cache";
+import { cachedResilient, TTL } from "./cache";
 import { brokerFetchPage } from "@/lib/broker";
 import type { PlaybackDto, StoryboardLevelDto, StreamFormatDto } from "@/lib/watch/types";
 
@@ -297,15 +297,27 @@ async function fetchBrokerWatchPlayerResponse(videoId: string): Promise<unknown 
  * (source: "").
  */
 export async function getPlayback(videoId: string): Promise<PlaybackDto> {
-  return cached(`yt:playback:${videoId}`, TTL.WATCH_MS, async () => {
-    const fromPlayer = await fetchInnertubePlayer(videoId);
-    if (fromPlayer) return fromPlayer;
-    const fromPage = await fetchWatchPagePlayerResponse(videoId);
-    if (fromPage) return parsePlayback("watch-page", fromPage);
-    // WFX2-4A rung 3 — the broker's page-context watch read (the logged-in
-    // session's own page); honest failure → the empty degrade below
-    const fromBroker = await fetchBrokerWatchPlayerResponse(videoId);
-    if (fromBroker) return parsePlayback("broker-watch", fromBroker);
-    return { streamFormats: [], storyboards: [], durationSec: null, source: "" };
-  });
+  return cachedResilient(
+    `yt:playback:${videoId}`,
+    TTL.WATCH_MS,
+    async () => {
+      const fromPlayer = await fetchInnertubePlayer(videoId);
+      if (fromPlayer) return fromPlayer;
+      const fromPage = await fetchWatchPagePlayerResponse(videoId);
+      if (fromPage) return parsePlayback("watch-page", fromPage);
+      // WFX2-4A rung 3 — the broker's page-context watch read (the logged-in
+      // session's own page); honest failure → the empty degrade below
+      const fromBroker = await fetchBrokerWatchPlayerResponse(videoId);
+      if (fromBroker) return parsePlayback("broker-watch", fromBroker);
+      return { streamFormats: [], storyboards: [], durationSec: null, source: "" };
+    },
+    // WFX2-5 poisoning guard (the 4-c incident): the honest empty degrade is
+    // NEVER cached — a wedge/wall window must not poison the key for the
+    // 10min soft TTL (+2h last-good window). With a last-good payload that
+    // keeps serving instead; a cold cache passes the empty through untouched
+    // (the channel broker rung's convention). A healthy broker-watch read —
+    // storyboards present, formats maybe empty because they are ciphered —
+    // has source "broker-watch" and caches normally.
+    { isEmpty: (v) => (v as PlaybackDto).source === "" }
+  );
 }
