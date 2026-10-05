@@ -132,3 +132,30 @@ channel page's membership surface.
 - QUEUED/LIMITED: Vercel deploy API quota exhausted until ~2026-10-06 11:50 UTC (hook jobs still build).
 - NEEDS OPERATOR: (1) CF API token with Tunnel:Edit + DNS:Edit to restore the named tunnel; (2) Vercel↔GitHub reconnect (repo has no webhooks — push deploys dead).
 - SANDBOX-LOCAL ONLY (never commit): `youtube_login.py`, `harvest_cookies.py` (account material).
+
+## P11-DOCS — post-roadmap hardening retro-documentation (2026-10-05)
+
+**Lane goal:** close the documentation gap for the post-roadmap hardening lanes
+P6–P10-OPS — executed as commit-history lanes after the 2026-10-02 roadmap
+close, never documented in docs/plans/ (only fragments in WORKLOG.md and
+docs/ops/).
+
+**What was done:** read docs/plans/wave-claims.md, WORKLOG.md,
+docs/ops/vercel-env.md (the 2026-10-05 section), scripts/rearm/README.md,
+README.md; mined `git log --oneline -100` for the P6/P7/P8/P9/P10 lane commits
+(subjects, bodies, per-commit stats); wrote
+docs/plans/2026-10-05-post-roadmap-hardening.md — one section per lane (scope,
+key commits, acceptance evidence recorded in history, production impact) ending
+with a sources list; appended the settle section to docs/plans/wave-claims.md;
+this entry. Zero code changes.
+
+**Baseline (recorded before any edit, at base `225eba0`):** lint 0 errors /
+typecheck 0 errors / test 1237 pass / 0 fail (boot 413, watch 447, liveshorts
+110, cutover 108, auth 107, community 34, notifications 18) — matches the
+1237/1237 recorded at the P10-OPS commit.
+
+**Gates after the edits (verification):** identical — lint 0 / typecheck 0 /
+test 1237 pass / 0 fail.
+
+**Files touched:** docs/plans/2026-10-05-post-roadmap-hardening.md (new),
+docs/plans/wave-claims.md (the settle section), WORKLOG.md (this entry).

@@ -239,3 +239,10 @@ Gates (clean env, no Upstash vars): lint 0 / typecheck 0 / **642 green** (619 + 
 - Status ledger truth: P3 lanes (UP/LC/SG) and P4 lanes (PE/NC/QT) all landed in earlier mains (their merges are in git history; this entry records the phase-5 close).
 - **ROADMAP COMPLETE**: the goal states G1–G6 (live watch / discovery / actions / streams+chat / personal surfaces / cutover) are all achieved and production-verified. The 2026-09-29 live roadmap's phases are delivered through Phase 5.
 - OPERATOR NOTE: the work-order clone-line token saw plaintext exposure across dispatch retries (flagged by the YA worker) — rotate it.
+
+## 2026-10-05 — POST-ROADMAP HARDENING settled (P6–P10-OPS, retro-documented)
+
+P6–P10 retro-documented 2026-10-05 — see docs/plans/2026-10-05-post-roadmap-hardening.md.
+
+- The post-roadmap lanes ran as commit-history lanes (no claims staked here): P6 production-data + parity (1034 → 1134 root tests, both totals recorded), P7 broker 2026 DOM refresh + membership + watch analytics (→ 1174), P8 yt-parity production fixes, P9 broker read path + connection UI, P10-OPS broker route restoration + re-arm automation (1237/1237 at `225eba0`, recorded in WORKLOG.md).
+- The retro doc records per-lane scope, key commits, acceptance evidence, and production impact — documentation only (P11-DOCS), zero code changes.
