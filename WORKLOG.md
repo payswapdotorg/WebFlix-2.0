@@ -120,3 +120,15 @@ channel page's membership surface.
 - The CTA href follows the bare-handle law verbatim (`youtube.com/<bare-handle>/join`);
   for the rare UC…-id fallback handle the URL carries the id as-is (the letter of the
   spec — no invented @handle).
+
+## P10-OPS — broker route restoration + re-arm automation (2026-10-05)
+
+**Lane goal:** restore production Tier-2 writes (tunnel down, 0 connectors, no DNS record) and make the broker chain self-healing; reconcile ops docs with the real route.
+
+**What happened:** production `BROKER_URL` pointed at the named tunnel `webflix-broker.flauz.app`, which had no DNS record and no connector — all broker-backed actions were dead. The provisioned CF API token is read-only for tunnels (cannot fetch the connector token), so the named tunnel could not be armed from the sandbox. Bridge: a cloudflared **quick tunnel** now fronts the broker (public healthz ok; DOM-verified write through the public route). A 120s watchdog re-arms the whole chain (Xvfb → Chrome CDP → login → broker → tunnel) and auto-republishes the URL on rotation (env PATCH + 3-way deploy-trigger chain: v13 API gitSource POST → deploy hook → empty-commit push). Gates at this commit: lint/typecheck green, **1237/1237 tests pass**.
+
+**Honest-state matrix:**
+- LIVE: production deployment with quick-tunnel `BROKER_URL` (Tier-2 writes restored); fresh `YT_COOKIES` land on the next deployment.
+- QUEUED/LIMITED: Vercel deploy API quota exhausted until ~2026-10-06 11:50 UTC (hook jobs still build).
+- NEEDS OPERATOR: (1) CF API token with Tunnel:Edit + DNS:Edit to restore the named tunnel; (2) Vercel↔GitHub reconnect (repo has no webhooks — push deploys dead).
+- SANDBOX-LOCAL ONLY (never commit): `youtube_login.py`, `harvest_cookies.py` (account material).

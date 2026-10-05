@@ -1,6 +1,6 @@
 # WebFlix 2.0 — Vercel production environment (WFX2-C-W ops runbook)
 
-The deployment is `webflix-2-0-3l2mqi5ti.vercel.app` (Vercel project
+The deployment is `webflix-2-0-one.vercel.app` (Vercel project
 `webflix-2-0`). This document is the **env wiring + ops contract** for it.
 Secret VALUES never live in the repo — only names (checked into
 `.env.example` for local reference).
@@ -111,7 +111,7 @@ WARM_URL=http://localhost:3000 bun scripts/warm-cache.mjs
 ## Acceptance (the merge gate)
 
 ```bash
-ACCEPT_URL=https://webflix-2-0-3l2mqi5ti.vercel.app bun scripts/acceptance.mjs
+ACCEPT_URL=https://webflix-2-0-one.vercel.app bun scripts/acceptance.mjs
 bun scripts/acceptance.mjs --selftest   # hermetic dry-run (mock server)
 ```
 
@@ -137,3 +137,13 @@ Exits non-zero on any failure with a failure table.
 Page shells (sidebar nav, category chips, topbar skeleton) revalidate hourly
 (`export const revalidate = 3600` on the twelve shell pages). All feed data
 stays client-fetched from `/api/*`, which keep `force-dynamic` by law.
+
+## 2026-10-05 — broker route status
+
+- Production `BROKER_URL` currently routes through a **cloudflared quick tunnel** (ephemeral `*.trycloudflare.com` URL) to the sandbox broker on `:3055`. Tier-2 writes are live end-to-end (public healthz ok; DOM-verified action verified through the public route).
+- The **named tunnel `webflix-broker.flauz.app` has no DNS record and no connector** and is NOT serving. Restoration path: a Cloudflare API token with **Account → Cloudflare Tunnel → Edit** + **Zone (flauz.app) → DNS → Edit** scopes (the currently provisioned token is read-only for tunnels — `/tunnels/{id}/token` and `/configurations` return 404), then create the CNAME `webflix-broker → <tunnel-id>.cfargotunnel.com` (proxied), run the connector, and swap `BROKER_URL` back.
+- The `x-session-id: webflix-producer` gateway law remains in effect client-side and is harmless through the tunnel.
+- Env ids (names only, values never in docs): `BROKER_URL=BWVN2w1WGC744u2n`, `BROKER_SECRET=XbkH63tk0GUY32jf`.
+- Deploy triggers: push-based deploys are currently dead (GitHub↔Vercel integration disconnected; repo has no webhooks — reconnect via the Vercel dashboard). Working chain: v13 API `gitSource` POST → deploy hook → empty-commit push. **Vercel free-plan quota: 100 API deployments/day; rejected POSTs extend the cooldown — never hammer.** Deploy-hook jobs still build during API quota exhaustion.
+- `YT_COOKIES` re-harvested 2026-10-05 from the live session (fresh; lands on the next deployment).
+- Re-arm automation: `scripts/rearm/` (idempotent chain re-arm + 120s self-healing watchdog + prod-sync auto-deploy). See `scripts/rearm/README.md`.

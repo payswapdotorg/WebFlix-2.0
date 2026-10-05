@@ -2,7 +2,7 @@
 
 A complete YouTube clone. **Interface baseline: WebFlix** (the deployed reference at https://d1ezj447xe91-deploy.space-z.ai/). **Functionality: cloned feature-for-feature from youtube.com** — every feature visible on the interface gets its complete real-YouTube behavior plus a complete backend.
 
-## Live architecture (production: webflix-2-0-3l2mqi5ti.vercel.app)
+## Live architecture (production: webflix-2-0-one.vercel.app)
 
 Every read surface is **live youtube.com data** — InnerTube (search / browse / next / updated_metadata) and SSR page parses, never seeded rows:
 
