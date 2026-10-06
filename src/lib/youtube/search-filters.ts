@@ -1,14 +1,19 @@
 /**
  * WFX2-B-W search filters — the UI-facing vocabulary mirroring the REAL
  * youtube.com search filter menu, plus the URL round-trip (?q=&sort=&date=
- * &type=&duration= — shareable filtered searches).
+ * &type=&duration=&live= — shareable filtered searches).
  *
- * Ground truth: the recorded filter menu in `tests/fixtures/yt/search_lofi.json`
- * (`searchHeaderRenderer.searchFilterButton…searchFilterOptionsDialogRenderer.groups`)
- * + live probing from this lane's sandbox (evidence/wfx2bw/DISCOVERY.md). Every
- * label below is the real YouTube label; the params come from A-B's
- * `filters.ts` builder (verified byte-for-byte against the menu's param
- * strings).
+ * Ground truth: the LIVE 2026 youtube.com filter dialog (measured on the
+ * operator session, 2026-10-06 — the dialog's exact groups, order and labels):
+ *   Type: Videos, Shorts, Channels, Playlists, Movies
+ *   Duration: Under 3 minutes, 3 - 20 minutes, Over 20 minutes
+ *   Upload date: Today, This week, This month, This year
+ *   Features: Live, 4K, HD, Subtitles/CC, Creative Commons, 360°, VR180,
+ *             3D, HDR, Location, Purchased   (only Live is backend-wired —
+ *             the rest are omitted, never dead controls)
+ *   Prioritize: Relevance, Popularity
+ * (the recorded `tests/fixtures/yt/search_lofi.json` menu + live probing from
+ * the A-B lane remain the params ground truth — `filters.ts`.)
  *
  * Real YouTube semantics: single-select per group (picking an option in a
  * group replaces that group's previous selection; the full selection set
@@ -16,7 +21,7 @@
  */
 import type { SearchFilters } from "./filters";
 
-export type FilterGroupId = "uploadDate" | "type" | "duration" | "sort";
+export type FilterGroupId = "uploadDate" | "type" | "duration" | "sort" | "features";
 
 export interface FilterOption {
   /** canonical URL value (also the SearchFilters field value) */
@@ -31,19 +36,8 @@ export interface FilterGroup {
   options: FilterOption[];
 }
 
-/** Ordered to match the recorded menu (Type, Duration, Upload date) + the classic sort group. */
+/** Ordered + labeled to match the LIVE 2026 dialog exactly. */
 export const FILTER_GROUPS: FilterGroup[] = [
-  {
-    id: "uploadDate",
-    title: "Upload date",
-    options: [
-      { value: "hour", label: "Last hour" },
-      { value: "today", label: "Today" },
-      { value: "week", label: "This week" },
-      { value: "month", label: "This month" },
-      { value: "year", label: "This year" },
-    ],
-  },
   {
     id: "type",
     title: "Type",
@@ -65,23 +59,39 @@ export const FILTER_GROUPS: FilterGroup[] = [
     ],
   },
   {
+    id: "uploadDate",
+    title: "Upload date",
+    options: [
+      { value: "today", label: "Today" },
+      { value: "week", label: "This week" },
+      { value: "month", label: "This month" },
+      { value: "year", label: "This year" },
+    ],
+  },
+  {
+    // Features — only the backend-wired option (live) ships; the dialog's
+    // other feature toggles have no param and are omitted (never dead).
+    id: "features",
+    title: "Features",
+    options: [{ value: "live", label: "Live" }],
+  },
+  {
     id: "sort",
-    title: "Sort by",
+    title: "Prioritize",
     options: [
       { value: "relevance", label: "Relevance" },
-      { value: "date", label: "Upload date" },
-      { value: "views", label: "View count" },
-      { value: "rating", label: "Rating" },
+      { value: "views", label: "Popularity" },
     ],
   },
 ];
 
-/** The URL key for each group (`sort`, `date`, `type`, `duration`). */
+/** The URL key for each group (`sort`, `date`, `type`, `duration`, `live`). */
 export const FILTER_URL_KEYS: Record<FilterGroupId, string> = {
   uploadDate: "date",
   type: "type",
   duration: "duration",
   sort: "sort",
+  features: "live",
 };
 
 /** The filter state the search page URL carries (q lives alongside). */
@@ -90,16 +100,31 @@ export interface SearchFilterState {
   type?: SearchFilters["type"];
   duration?: SearchFilters["duration"];
   sort?: SearchFilters["sort"];
+  /** Features → Live (the one backend-wired feature toggle) */
+  live?: boolean;
   /** passthrough flag for the "Search instead for" correction link */
   verbatim?: boolean;
 }
 
 const VALID: Record<FilterGroupId, Set<string>> = {
-  uploadDate: new Set(FILTER_GROUPS[0].options.map((o) => o.value)),
-  type: new Set(FILTER_GROUPS[1].options.map((o) => o.value)),
-  duration: new Set(FILTER_GROUPS[2].options.map((o) => o.value)),
-  sort: new Set(FILTER_GROUPS[3].options.map((o) => o.value)),
+  uploadDate: new Set(["hour", "today", "week", "month", "year"]),
+  type: new Set(["video", "shorts", "channel", "playlist", "movie"]),
+  duration: new Set(["short", "medium", "long"]),
+  // "date" + "rating" stay URL-valid (backend-wired sorts, legacy share links)
+  // even though the live dialog only surfaces Relevance + Popularity.
+  sort: new Set(["relevance", "date", "views", "rating"]),
+  features: new Set(["live"]),
 };
+
+/** Is one option the active selection for its group? (features → live flag) */
+export function isOptionActive(
+  state: SearchFilterState,
+  group: FilterGroupId,
+  value: string
+): boolean {
+  if (group === "features") return value === "live" && state.live === true;
+  return state[group] === value;
+}
 
 function isTruthyFlag(v: string | null | undefined): boolean {
   return v === "1" || v === "true";
@@ -118,6 +143,7 @@ export function filtersFromParams(input: {
   uploadDate?: string | null;
   type?: string | null;
   duration?: string | null;
+  live?: string | null;
   verbatim?: string | null;
 }): { q: string; state: SearchFilterState } {
   const q = (input.q ?? "").trim();
@@ -132,11 +158,12 @@ export function filtersFromParams(input: {
   if (input.sort && VALID.sort.has(input.sort) && input.sort !== "relevance") {
     state.sort = input.sort as SearchFilterState["sort"];
   }
+  if (isTruthyFlag(input.live)) state.live = true;
   if (isTruthyFlag(input.verbatim)) state.verbatim = true;
   return { q, state };
 }
 
-/** The URL search params entries for a state (q + set groups + verbatim). */
+/** The URL search params entries for a state (q + set groups + live + verbatim). */
 export function filtersToEntries(q: string, state: SearchFilterState): [string, string][] {
   const entries: [string, string][] = [];
   if (q) entries.push(["q", q]);
@@ -144,6 +171,7 @@ export function filtersToEntries(q: string, state: SearchFilterState): [string, 
   if (state.type) entries.push([FILTER_URL_KEYS.type, state.type]);
   if (state.duration) entries.push([FILTER_URL_KEYS.duration, state.duration]);
   if (state.sort && state.sort !== "relevance") entries.push([FILTER_URL_KEYS.sort, state.sort]);
+  if (state.live) entries.push([FILTER_URL_KEYS.features, "1"]);
   if (state.verbatim) entries.push(["verbatim", "1"]);
   return entries;
 }
@@ -171,8 +199,17 @@ export function withGroupValue(
     next.type = value === null ? undefined : (value as SearchFilterState["type"]);
   } else if (group === "duration") {
     next.duration = value === null ? undefined : (value as SearchFilterState["duration"]);
+  } else if (group === "features") {
+    next.live = value === null ? undefined : true;
   }
-  if (!next.uploadDate && !next.type && !next.duration && !next.sort && !next.verbatim) {
+  if (
+    !next.uploadDate &&
+    !next.type &&
+    !next.duration &&
+    !next.sort &&
+    !next.live &&
+    !next.verbatim
+  ) {
     return clearFilters(next);
   }
   return next;
@@ -184,7 +221,13 @@ export function clearFilters(state: SearchFilterState): SearchFilterState {
 }
 
 export function hasActiveFilters(state: SearchFilterState): boolean {
-  return Boolean(state.uploadDate || state.type || state.duration || (state.sort && state.sort !== "relevance"));
+  return Boolean(
+    state.uploadDate ||
+      state.type ||
+      state.duration ||
+      state.live ||
+      (state.sort && state.sort !== "relevance")
+  );
 }
 
 /** The applied-filter chips row (one chip per selected group). */
@@ -197,6 +240,10 @@ export interface AppliedFilterChip {
 export function appliedFilterChips(state: SearchFilterState): AppliedFilterChip[] {
   const chips: AppliedFilterChip[] = [];
   for (const group of FILTER_GROUPS) {
+    if (group.id === "features") {
+      if (state.live) chips.push({ group: "features", value: "live", label: "Live" });
+      continue;
+    }
     const value = state[group.id];
     if (!value) continue;
     if (group.id === "sort" && value === "relevance") continue;

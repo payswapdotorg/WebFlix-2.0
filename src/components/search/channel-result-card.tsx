@@ -12,9 +12,10 @@ import { formatSubscribers } from "@/lib/format";
 import type { ChannelLite } from "@/lib/types";
 
 /**
- * Channel result card (search parity): avatar, name + verified, handle,
- * subs + video count, description snippet, Subscribe wired to the existing
- * /api/subscribe route (same contract as the channel page).
+ * Channel result card (search parity — P13): youtube.com's horizontal
+ * channel card: 136px avatar left, name + verified, @handle · subscriber
+ * count · video count, 1-2 line description, Subscribe wired to the existing
+ * /api/subscribe route (same contract as the channel page), right-aligned.
  */
 export function ChannelResultCard({ channel }: { channel: ChannelLite }) {
   const [subscribed, setSubscribed] = useState(false);
@@ -39,7 +40,10 @@ export function ChannelResultCard({ channel }: { channel: ChannelLite }) {
   }
 
   return (
-    <article className="flex flex-col gap-3 border-b border-border/40 py-4 last:border-b-0 sm:flex-row sm:items-start sm:gap-6">
+    <article
+      data-testid="search-channel-card"
+      className="flex flex-col gap-3 py-1 sm:flex-row sm:items-start sm:gap-6"
+    >
       <Link
         href={`/channel/${channel.handle}`}
         className="mx-auto shrink-0 sm:mx-0"
@@ -49,10 +53,10 @@ export function ChannelResultCard({ channel }: { channel: ChannelLite }) {
           src={channel.avatarUrl}
           alt={`${channel.name} avatar`}
           loading="lazy"
-          className="size-24 rounded-full object-cover sm:size-28"
+          className="size-24 rounded-full object-cover sm:size-[136px]"
         />
       </Link>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 self-center">
         <Link href={`/channel/${channel.handle}`} className="group">
           <h3 className="flex items-center gap-1 text-lg font-medium text-foreground group-hover:text-primary">
             <span className="truncate">{channel.name}</span>
@@ -61,14 +65,16 @@ export function ChannelResultCard({ channel }: { channel: ChannelLite }) {
         </Link>
         <p className="mt-0.5 text-xs text-muted-foreground">
           {channel.handle.startsWith("@") ? channel.handle : `@${channel.handle}`}
-          {channel.subscriberCountText ? ` · ${channel.subscriberCountText}` : ` · ${formatSubscribers(channel.subscriberCount)}`}
+          {channel.subscriberCountText
+            ? ` · ${channel.subscriberCountText}`
+            : ` · ${formatSubscribers(channel.subscriberCount)}`}
           {channel.videoCountText ? ` · ${channel.videoCountText}` : ""}
         </p>
         {channel.description && (
-          <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{channel.description}</p>
+          <p className="mt-1 line-clamp-2 text-[13px] text-muted-foreground">{channel.description}</p>
         )}
       </div>
-      <div className="shrink-0">
+      <div className="shrink-0 self-center">
         <Button
           onClick={toggleSubscribe}
           disabled={subscribing}
