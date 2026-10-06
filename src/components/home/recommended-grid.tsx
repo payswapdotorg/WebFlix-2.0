@@ -6,19 +6,26 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { VideoDTO, VideoPageDTO } from "@/lib/types";
 
 /**
- * Recommended grid with infinite scroll — fetches /api/videos?cursor=…
- * (keyset pagination) when the sentinel scrolls into view.
+ * P12-UX — the recommended grid, split into the infinite-scroll hook + the
+ * presentational grid.
+ *
+ * The hook keeps the keyset-pagination contract exactly (fetch
+ * /api/videos?cursor=… when the sentinel scrolls into view) — but the
+ * SENTINEL itself now renders at the very END of the home feed (below the
+ * rails/shorts shelf), so the grid-first youtube.com layout never starves
+ * the rails: appended pages can no longer push them away mid-scroll.
+ *
+ * Card sizing = youtube.com measured 2026-10-06 (live DOM vars + skeleton
+ * CSS): item min-width ~327-332px, item margin 16px (gap-x-4), row margin
+ * 36px (gap-y-9), responsive 1/2/3/4-up (4-up at ≳1300px content, exactly
+ * youtube.com's adaptive rich-grid behavior).
  */
-export function RecommendedGrid({
-  initialVideos,
-  initialCursor,
-  category,
-}: {
-  initialVideos: VideoDTO[];
-  initialCursor: string | null;
-  category: string;
-}) {
-  const [videos, setVideos] = useState<VideoDTO[]>(initialVideos);
+export function useRecommendedInfiniteScroll(
+  initialVideos: VideoDTO[] | undefined,
+  initialCursor: string | null,
+  category: string
+) {
+  const [videos, setVideos] = useState<VideoDTO[]>(initialVideos ?? []);
   const [cursor, setCursor] = useState<string | null>(initialCursor);
   const [loading, setLoading] = useState(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -27,7 +34,7 @@ export function RecommendedGrid({
   const [prevInitial, setPrevInitial] = useState(initialVideos);
   if (prevInitial !== initialVideos) {
     setPrevInitial(initialVideos);
-    setVideos(initialVideos);
+    setVideos(initialVideos ?? []);
     setCursor(initialCursor);
   }
 
@@ -65,10 +72,24 @@ export function RecommendedGrid({
     return () => observer.disconnect();
   }, [loadMore]);
 
+  return { videos, cursor, loading, sentinelRef };
+}
+
+/**
+ * The grid itself — regular full-size youtube.com-parity thumbnails from
+ * the first row (P12-UX Task 1/2: no giant hero above it, no heading —
+ * exactly youtube.com's home).
+ */
+export function RecommendedGrid({
+  videos,
+  loading,
+}: {
+  videos: VideoDTO[];
+  loading: boolean;
+}) {
   return (
-    <section aria-label="Recommended videos" className="mt-8 px-4 pb-8 sm:px-6">
-      <h2 className="text-lg font-semibold text-foreground sm:text-xl">Recommended</h2>
-      <div className="mt-4 grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+    <section aria-label="Recommended videos" className="px-4 pb-4 pt-2 sm:px-6">
+      <div className="grid grid-cols-1 gap-x-4 gap-y-9 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
         {videos.map((video) => (
           <VideoCard key={video.id} video={video} />
         ))}
@@ -86,9 +107,6 @@ export function RecommendedGrid({
             </div>
           ))}
       </div>
-      {cursor && (
-        <div ref={sentinelRef} data-testid="infinite-scroll-sentinel" className="h-1" aria-hidden="true" />
-      )}
     </section>
   );
 }

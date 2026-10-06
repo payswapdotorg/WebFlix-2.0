@@ -28,7 +28,7 @@ import {
   useState,
   type Ref,
 } from "react";
-import { ExternalLink, Loader2, RotateCcw, ShieldAlert } from "lucide-react";
+import { ExternalLink, Loader2, RotateCcw, ShieldAlert, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fetchPlayback } from "@/lib/watch/playback-client";
 import {
@@ -49,6 +49,9 @@ export function pickStreamFormat(formats: StreamFormatDto[]): StreamFormatDto | 
 /* ------------------------------------------------------------------ */
 /* The native <video> swap                                             */
 /* ------------------------------------------------------------------ */
+
+/** P12-UX — same policy window as the embed player's autoplay check. */
+const AUTOPLAY_FALLBACK_MS = 1500;
 
 interface NativeFallbackPlayerProps {
   videoId: string;
@@ -78,11 +81,47 @@ export function NativeFallbackPlayer({
   const resumeAppliedRef = useRef(false);
   const lastPersistRef = useRef(0);
   const viewPingedRef = useRef(false);
+  // P12-UX — autoplay-policy parity with the embed player: the <video
+  // autoPlay> attribute attempts playback WITH sound; if the browser
+  // blocked it (still paused ~1.5s in), mute + retry + surface the
+  // tap-to-unmute affordance (the native controls can also unmute).
+  const [mutedAutostart, setMutedAutostart] = useState(false);
 
   const src = useMemo(
     () => `/api/stream?url=${encodeURIComponent(format.url)}`,
     [format.url]
   );
+
+  // P12-UX — reset per stream via the sanctioned adjust-during-render
+  // pattern (setState in an effect body is the cascading anti-pattern).
+  const [resetFor, setResetFor] = useState(src);
+  if (resetFor !== src) {
+    setResetFor(src);
+    setMutedAutostart(false);
+  }
+
+  // P12-UX — the muted-autostart fallback (see state comment above).
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const t = setTimeout(() => {
+      if (!v.paused) return; // autoplay took — with sound
+      v.muted = true;
+      try {
+        const p = v.play();
+        if (p && typeof p.then === "function") {
+          p.then(() => setMutedAutostart(true)).catch(() => {
+            /* even muted failed — the controls remain */
+          });
+        } else {
+          setMutedAutostart(true);
+        }
+      } catch {
+        /* runtime without media playback — the controls remain */
+      }
+    }, AUTOPLAY_FALLBACK_MS);
+    return () => clearTimeout(t);
+  }, [src]);
 
   // stable callbacks
   const onProgressRef = useRef(onProgress);
@@ -166,31 +205,56 @@ export function NativeFallbackPlayer({
   );
 
   return (
-    <video
-      ref={videoRef}
-      key={src}
-      src={src}
-      poster={posterUrl ?? undefined}
-      controls
-      autoPlay
-      playsInline
-      preload="metadata"
-      aria-label={`Play ${videoId}`}
-      className="absolute inset-0 h-full w-full bg-black object-contain"
-      onLoadedMetadata={handleLoadedMetadata}
-      onTimeUpdate={handleTimeUpdate}
-      onPlay={() => onStateChangeRef.current?.("playing")}
-      onPause={() => {
-        onStateChangeRef.current?.("paused");
-        const v = videoRef.current;
-        if (v) persist(v.currentTime);
-      }}
-      onEnded={handleEnded}
-      onError={() => {
-        onStateChangeRef.current?.("error");
-        onFatalRef.current?.();
-      }}
-    />
+    <div className="absolute inset-0 h-full w-full">
+      <video
+        ref={videoRef}
+        key={src}
+        src={src}
+        poster={posterUrl ?? undefined}
+        controls
+        autoPlay
+        playsInline
+        preload="metadata"
+        aria-label={`Play ${videoId}`}
+        className="absolute inset-0 h-full w-full bg-black object-contain"
+        onLoadedMetadata={handleLoadedMetadata}
+        onTimeUpdate={handleTimeUpdate}
+        onPlay={() => onStateChangeRef.current?.("playing")}
+        onPause={() => {
+          onStateChangeRef.current?.("paused");
+          const v = videoRef.current;
+          if (v) persist(v.currentTime);
+        }}
+        onEnded={handleEnded}
+        onError={() => {
+          onStateChangeRef.current?.("error");
+          onFatalRef.current?.();
+        }}
+      />
+      {mutedAutostart && (
+        <button
+          type="button"
+          onClick={() => {
+            const v = videoRef.current;
+            if (v) {
+              v.muted = false;
+              try {
+                const p = v.play();
+                if (p && typeof p.catch === "function") p.catch(() => {});
+              } catch {
+                /* keep — the controls remain */
+              }
+            }
+            setMutedAutostart(false);
+          }}
+          aria-label="Tap to unmute"
+          className="absolute bottom-3 left-3 z-10 flex min-h-11 items-center gap-1.5 rounded-full bg-black/80 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-black"
+        >
+          <VolumeX className="size-4" aria-hidden="true" />
+          Tap to unmute
+        </button>
+      )}
+    </div>
   );
 }
 

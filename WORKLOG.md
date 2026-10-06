@@ -159,3 +159,81 @@ test 1237 pass / 0 fail.
 
 **Files touched:** docs/plans/2026-10-05-post-roadmap-hardening.md (new),
 docs/plans/wave-claims.md (the settle section), WORKLOG.md (this entry).
+
+# WFX2 P12-UX worklog — youtube-parity home feed, hover mini-player previews, watch autoplay
+
+Branch: `work/P12-UX` (base `7dc1af3`)
+
+## Baseline (recorded before any edit; foreground per group with
+`env -u UPSTASH_REDIS_REST_URL -u UPSTASH_REDIS_REST_TOKEN -u UPSTASH_REDIS_REST_TOKEN_2`)
+
+- test:boot 413 pass / 0 fail
+- test:watch 447 pass / 0 fail
+- test:liveshorts 110 pass / 0 fail
+- test:cutover 108 pass / 0 fail
+- test:auth 107 pass / 0 fail
+- test:community 34 pass / 0 fail
+- test:notifications 18 pass / 0 fail
+- **TOTAL: 1237 pass / 0 fail** (+ lint 0, typecheck 0)
+
+## YouTube.com measurements (2026-10-06, live DOM via headless browser + served CSS)
+
+- rich-grid item min-width **326.8-331.6px** (live grid inline style; html default
+  `--ytd-rich-grid-items-per-row: 4`), item margin **16px**, row margin **36px**,
+  shelf margin 48px; grid computed 3-up at 1440px viewport (guide open).
+- skeleton CSS cross-check: cards flex 310-500px, avatar 36px, content padding
+  16px, guide 240px/72px collapsed — WebFlix already matched the last three.
+- shorts lockup (channel Shorts grid, live): **208x389px, 4px gaps, 9:16**.
+- logged-out home/search feeds are bot-walled (empty shell) — the channel page
+  and stylesheet extraction carried the measurements.
+
+## Design decisions
+
+1. **Home layout**: hero + TrendingSideList deleted; feed = chips -> grid (no
+   heading, youtube.com has none) -> continue-watching -> because-you-watched
+   -> shorts shelf -> demoted full "Trending now" rail -> infinite-scroll
+   sentinel. The sentinel moved to the TRUE END of the feed (lifted into
+   `useRecommendedInfiniteScroll` + presentational `RecommendedGrid`): with the
+   grid first, a mid-feed sentinel would Zeno-push the rails away on every
+   append. `data.hero` stays in the DTO (API untouched); the empty-state check
+   dropped its hero term.
+2. **Card sizing**: grid `gap-x-4 gap-y-9` (16/36px measured), cols 1/2/3/4
+   (sm/lg/2xl — 2xl = 1296px content ~= youtube's 4-up zone); rail cards
+   `w-[320px] sm:w-[360px]` (full-size, replacing w-[240px]); kebab button
+   44px on touch (h-11) / 32px on desktop pointers.
+3. **Shorts**: `w-[208px]` (measured), gap-4, 9:16 + hover scale kept, /shorts
+   links kept, `data-no-preview` opt-out (youtube.com shows NO hover video
+   preview on shorts tiles — verified; ours now matches).
+4. **Hover preview (the operator's core ask)**: embed-first mini player. The
+   shared store snapshot gains `mode`; the hook computes it per dwell —
+   coarse pointer -> NO preview; reduced-motion -> storyboard-only; else
+   embed. The embed is created inside the ONE shared layer (probe-style
+   imperative host; the React-owned mount stays stable) with
+   autoplay+mute+controls:0; EMBED_HEALTH_MS=1500 deadline (PLAYING/BUFFERING
+   proof, onError -> give up) then destroy + the WFX2-P6-HP storyboard lane
+   takes over (kept intact as the fallback). Single-instance law: hide and
+   retarget destroy first. Muted pill (bottom-left) in the embed phase. Zero
+   layout shift: the layer is the card's own thumbnail rect (unchanged
+   geometry law).
+5. **Watch autoplay**: `autoplay: 1` in playerVars (sound attempt); 1.5s
+   UNSTARTED check (armed at creation/ready/loadVideoById, cleared on
+   PLAYING) -> `mute()+playVideo()` + "Tap to unmute" overlay (44px); the
+   native fallback keeps its `autoplay` attribute + gains the same
+   paused-at-1.5s muted-retry + affordance. Player-host wrapper law,
+   miniplayer, and the probe -> PlayerFallback chain untouched.
+6. **Reduced motion**: storyboard-only previews; `.wfx-kenburns` disabled via
+   `@media (prefers-reduced-motion: reduce)`. `.hero-scrim` removed with its
+   only consumer.
+
+## Test contract updates (legitimate behavior changes, none deleted)
+
+- `tests/hover-preview.test.tsx`: storyboard-lane tests kept verbatim (they
+  pin geometry, dwell, frames, degrade, scroll-hide); "no iframes ever"
+  re-scoped to the storyboard lane; NEW embed-lane describe (creation vars,
+  PLAYING -> embed phase + muted pill, walled -> destroyed + fallback at the
+  deadline, hide/retarget single-instance, coarse-pointer skip,
+  reduced-motion storyboard-only). Stub stores options + tracks destroyed.
+- `tests/youtube-player.test.tsx`: mount test asserts `autoplay: 1`; NEW
+  autoplay-policy describe (blocked -> mute+play+affordance+tap-unmute;
+  success -> no fallback). Mock gains a state override + call counters + an
+  afterEach state reset.

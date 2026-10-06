@@ -5,7 +5,14 @@ import { SquarePlay } from "lucide-react";
 import { displayViews } from "@/lib/format";
 import type { VideoDTO } from "@/lib/types";
 
-/** Shorts shelf — vertical cards in a horizontal rail (WebFlix pattern). */
+/**
+ * Shorts shelf — vertical cards in a horizontal rail (WebFlix pattern).
+ *
+ * P12-UX Task 3: 208px tiles (youtube.com's current shorts lockup, measured
+ * 2026-10-06 from a live channel Shorts grid: 208×389, 4px grid gaps, 9:16).
+ * No hover video preview on shorts — youtube.com's shorts tiles only scale
+ * on hover (the [data-no-preview] opt-out keeps it that way here too).
+ */
 export function ShortsShelf({ shorts }: { shorts: VideoDTO[] }) {
   if (shorts.length === 0) return null;
   return (
@@ -13,13 +20,14 @@ export function ShortsShelf({ shorts }: { shorts: VideoDTO[] }) {
       <h2 className="flex items-center gap-2 px-4 text-lg font-semibold text-foreground sm:px-6 sm:text-xl">
         <SquarePlay className="size-6 text-yt-red" strokeWidth={2.2} /> Shorts
       </h2>
-      <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto px-4 pb-2 sm:px-6">
+      <div className="no-scrollbar mt-3 flex gap-4 overflow-x-auto px-4 pb-2 sm:px-6">
         {shorts.map((short) => (
           <Link
             key={short.id}
             href="/shorts"
             aria-label={`Open Shorts: ${short.title}`}
-            className="group flex w-[157px] shrink-0 flex-col gap-2"
+            data-no-preview=""
+            className="group flex w-[208px] shrink-0 flex-col gap-2"
           >
             <div className="relative aspect-[9/16] w-full overflow-hidden rounded-xl bg-secondary">
               <img

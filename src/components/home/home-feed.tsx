@@ -4,22 +4,39 @@ import { useSearchParams } from "next/navigation";
 import { Flame, Sparkles } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
 import { CategoryChips } from "./category-chips";
-import { HeroCard } from "./hero-card";
-import { TrendingSideList } from "./trending-side-list";
 import { ContinueWatchingRail, VideoRail } from "./video-rail";
 import { ShortsShelf } from "./shorts-shelf";
-import { RecommendedGrid } from "./recommended-grid";
+import { RecommendedGrid, useRecommendedInfiniteScroll } from "./recommended-grid";
 import { Skeleton } from "@/components/ui/skeleton";
 import { normalizeCategory } from "@/lib/categories";
 import type { HomeFeedDTO } from "@/lib/types";
 
-/** The WebFlix home feed — every rail comes from GET /api/home (real DB). */
+/**
+ * The WebFlix home feed (P12-UX: youtube.com parity).
+ *
+ * Layout — exactly youtube.com's home shape: category chips → the regular
+ * thumbnail grid from the FIRST row (the giant "Trending #1" hero and its
+ * side list are gone), then the feature rails (continue-watching,
+ * because-you-watched) with FULL-SIZE cards, the shorts shelf inline, and
+ * the demoted trending rail (the old hero's trending surface folded into
+ * it — nothing data-driven was deleted). The infinite-scroll sentinel
+ * renders at the very END of the feed so appended grid pages never push
+ * the rails away mid-scroll.
+ */
 export function HomeFeed() {
   const params = useSearchParams();
   const category = normalizeCategory(params.get("category"));
   const { data, loading, error, reload } = useApi<HomeFeedDTO>(
     `/api/home?category=${encodeURIComponent(category)}`
   );
+  // Destructure once: plain bindings for the render values, the ref itself
+  // only ever handed to the sentinel's `ref` (react-hooks/refs law).
+  const {
+    videos: recommendedVideos,
+    cursor: recommendedCursor,
+    loading: loadingMore,
+    sentinelRef,
+  } = useRecommendedInfiniteScroll(data?.recommended, data?.recommendedCursor ?? null, category);
 
   return (
     <div className="pb-4">
@@ -40,18 +57,13 @@ export function HomeFeed() {
       )}
       {data && (
         <>
-          {data.hero && (
-            <div className="grid gap-4 px-4 sm:px-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-              <HeroCard video={data.hero} />
-              <TrendingSideList videos={data.trending.slice(0, 4)} />
-            </div>
-          )}
-          {!data.hero &&
-            data.trending.length === 0 &&
+          {data.trending.length === 0 &&
             data.continueWatching.length === 0 &&
             (data.becauseYouWatched?.videos.length ?? 0) === 0 &&
             data.shorts.length === 0 &&
             data.recommended.length === 0 && <CategoryEmptyState category={category} />}
+
+          <RecommendedGrid videos={recommendedVideos} loading={loadingMore} />
 
           <ContinueWatchingRail videos={data.continueWatching} />
 
@@ -66,21 +78,24 @@ export function HomeFeed() {
 
           <ShortsShelf shorts={data.shorts} />
 
-          {data.trending.length > 4 && (
+          {data.trending.length > 0 && (
             <VideoRail
               title="Trending now"
-              videos={data.trending.slice(4)}
+              videos={data.trending}
               icon={<Flame className="size-5 text-muted-foreground" />}
               moreHref="/trending"
               railLabel="Trending now rail"
             />
           )}
 
-          <RecommendedGrid
-            initialVideos={data.recommended}
-            initialCursor={data.recommendedCursor}
-            category={category}
-          />
+          {recommendedCursor && (
+            <div
+              ref={sentinelRef}
+              data-testid="infinite-scroll-sentinel"
+              className="h-1"
+              aria-hidden="true"
+            />
+          )}
         </>
       )}
     </div>
@@ -110,22 +125,21 @@ function CategoryEmptyState({ category }: { category: string }) {
 
 function HomeSkeleton() {
   return (
-    <div className="space-y-6" aria-busy="true" aria-label="Loading home feed">
-      <Skeleton className="mx-4 aspect-video max-h-[420px] w-[calc(100%-2rem)] rounded-2xl sm:mx-6 sm:w-[calc(100%-3rem)]" />
-      {Array.from({ length: 2 }).map((_, r) => (
-        <div key={r} className="px-4 sm:px-6">
-          <Skeleton className="h-6 w-48" />
-          <div className="mt-3 flex gap-4 overflow-hidden">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="w-[240px] shrink-0 space-y-3">
-                <Skeleton className="aspect-video w-full rounded-xl" />
+    <div className="px-4 pb-8 pt-2 sm:px-6" aria-busy="true" aria-label="Loading home feed">
+      <div className="grid grid-cols-1 gap-x-4 gap-y-9 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="flex flex-col gap-3">
+            <Skeleton className="aspect-video w-full rounded-xl" />
+            <div className="flex gap-3">
+              <Skeleton className="size-9 rounded-full" />
+              <div className="flex-1 space-y-2">
                 <Skeleton className="h-4 w-11/12" />
                 <Skeleton className="h-3 w-2/3" />
               </div>
-            ))}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
