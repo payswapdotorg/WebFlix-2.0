@@ -371,6 +371,38 @@ describe("YouView — the profile header (the WebFlix identity, real session dat
     expect(host!.textContent?.trim()).toBe("Z");
     expect(q("span")?.getAttribute("style")).toContain("hsl(200 65% 45%)");
   });
+
+  test("P14-YOU: the operator session live → the REAL YouTube identity header (avatar image, name, @handle, View channel, Google Account pill)", async () => {
+    studioPayload = makeStudio([], STUDIO_CHANNEL);
+    serveYouSeams();
+    await render(<YouView />);
+    await act(async () => {});
+    // the REAL identity wins over the WebFlix-local one
+    expect(q("[data-testid='you-display-name']")?.textContent).toBe("Operator Channel");
+    expect(q("[data-testid='you-operator-handle']")?.textContent).toBe("@operator");
+    const avatarImg = q("[data-testid='you-operator-avatar']") as unknown as HTMLImageElement;
+    expect(avatarImg?.getAttribute("src")).toBe("https://x/a.jpg");
+    // the View channel chevron link → the operator's channel page
+    const viewChannel = q("[data-testid='you-view-channel']");
+    expect(viewChannel?.textContent).toContain("View channel");
+    expect(viewChannel?.getAttribute("href")).toBe("/channel/@operator");
+    // the Google Account pill → the app's account page
+    const pills = Array.from(host!.querySelectorAll("a")).find(
+      (a) => (a.textContent ?? "").trim() === "Google Account"
+    );
+    expect(pills?.getAttribute("href")).toBe("/account");
+  });
+
+  test("P14-YOU: public mode → the honest WebFlix-local fallback (no fabricated YouTube identity)", async () => {
+    studioPayload = makeStudio([], null); // the studio seam degrades honestly
+    serveYouSeams();
+    await render(<YouView />);
+    await act(async () => {});
+    expect(q("[data-testid='you-display-name']")?.textContent).toBe("The Operator");
+    expect(q("[data-testid='you-operator-avatar']")).toBeNull();
+    expect(q("[data-testid='you-view-channel']")).toBeNull();
+    expect(q("[data-testid='you-profile-header']")?.textContent).toContain("operator@webflix.test");
+  });
 });
 
 describe("YouView — History section (the real /api/history seam)", () => {
@@ -583,12 +615,13 @@ describe("AccountMenu — the depth (youtube.com's items, honest)", () => {
     expect(link!.getAttribute("href")).toBe("/signin");
   });
 
-  test("the deepened item list renders with the preserved items", async () => {
+  test("the deepened item list renders the LIVE 2026 menu (P14-YOU order + labels)", async () => {
     await openAccountMenu();
     const body = win.document.body.textContent ?? "";
     for (const label of [
-      "Your account",
-      "WebFlix Studio",
+      "Google Account",
+      "Sign out",
+      "YouTube Studio",
       "Purchases & memberships",
       "Your data in YouTube",
       "Appearance",
@@ -597,23 +630,33 @@ describe("AccountMenu — the depth (youtube.com's items, honest)", () => {
       "Location",
       "Keyboard shortcuts",
       "Settings",
-      "Sign out",
+      "Help",
+      "Send feedback",
     ]) {
       expect(body).toContain(label);
     }
-    // the identity label keeps the real session data
+    // the retired pre-parity labels are gone
+    expect(body).not.toContain("Your account");
+    expect(body).not.toContain("WebFlix Studio");
+    // the identity label keeps the real session data (public mode fallback)
     expect(body).toContain("The Operator");
     expect(body).toContain("operator@webflix.test");
   });
 
-  test("Your channel: the operator session's REAL handle (lazy /api/studio read)", async () => {
+  test("View your channel: the operator session's REAL handle + identity header (lazy /api/studio read)", async () => {
     studioPayload = makeStudio([], STUDIO_CHANNEL);
     serveYouSeams();
     await openAccountMenu();
     await act(async () => {});
     const channelLink = docAll("a").find((a) => a.getAttribute("href") === "/channel/@operator");
     expect(channelLink).toBeDefined();
-    expect(channelLink?.textContent).toContain("Your channel");
+    expect(channelLink?.textContent).toContain("View your channel");
+    // P14-YOU: the header carries the operator's REAL YouTube identity
+    // (avatar image + channel name + @handle — the honest local fallback
+    // only when the session is not live)
+    const body = win.document.body.textContent ?? "";
+    expect(body).toContain(STUDIO_CHANNEL.name);
+    expect(body).toContain("@operator");
     // the lazy read happened exactly once, only because the menu opened
     const studioCalls = fetchLog.filter((f) => f.url.includes("/api/studio"));
     expect(studioCalls).toHaveLength(1);
@@ -625,7 +668,7 @@ describe("AccountMenu — the depth (youtube.com's items, honest)", () => {
     await openAccountMenu();
     await act(async () => {});
     const body = win.document.body.textContent ?? "";
-    expect(body).not.toContain("Your channel");
+    expect(body).not.toContain("View your channel");
     expect(docAll("a").filter((a) => (a.getAttribute("href") ?? "").startsWith("/channel/"))).toHaveLength(0);
   });
 

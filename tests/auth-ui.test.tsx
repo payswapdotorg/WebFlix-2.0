@@ -256,9 +256,19 @@ describe("AccountMenu — the header states", () => {
     const body = win.document.body.textContent ?? "";
     expect(body).toContain("The Operator");
     expect(body).toContain("operator@webflix.test");
-    expect(body).toContain("Your account");
-    expect(body).toContain("WebFlix Studio");
+    // P14-YOU: the LIVE 2026 menu labels ("Google Account" for the app's
+    // account page, "YouTube Studio", Sign out beside the header group)
+    expect(body).toContain("Google Account");
+    expect(body).toContain("YouTube Studio");
     expect(body).toContain("Sign out");
+    expect(body).toContain("Purchases & memberships");
+    expect(body).toContain("Your data in YouTube");
+    expect(body).toContain("Keyboard shortcuts");
+    expect(body).toContain("Help");
+    expect(body).toContain("Send feedback");
+    // the retired pre-parity labels are gone
+    expect(body).not.toContain("Your account");
+    expect(body).not.toContain("WebFlix Studio");
     // the menu links point at the real surfaces
     const accountLink = docAll("a").find((a) => a.getAttribute("href") === "/account");
     const studioLink = docAll("a").find((a) => a.getAttribute("href") === "/studio");

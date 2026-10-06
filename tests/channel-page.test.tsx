@@ -103,9 +103,19 @@ type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Resp
 const realFetch = globalThis.fetch;
 let fetchHandler: FetchHandler = () => new Response("{}", { status: 200 });
 const fetchLog: string[] = [];
+// P14-YOU: the own-channel seam's read (/api/studio?enrich=0) defaults to
+// public mode (no operator session). A test that exercises the own-channel
+// affordances sets `studioResponse` to the operator channel.
+let studioResponse: unknown = { session: false, channel: null };
 globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
   const u = String(url instanceof Request ? url.url : url);
   fetchLog.push(u);
+  if (u.includes("/api/studio")) {
+    return new Response(JSON.stringify(studioResponse), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }
   return fetchHandler(u, init);
 }) as unknown as typeof fetch;
 
@@ -262,6 +272,7 @@ beforeEach(() => {
   routeHandle = "@mind_warehouse";
   win.localStorage.clear();
   fetchLog.length = 0;
+  studioResponse = { session: false, channel: null };
   fetchHandler = () => new Response("{}", { status: 200 });
 });
 
@@ -761,5 +772,41 @@ describe("the Join sheet's per-tier CTA (WFX2-P7-CH)", () => {
     expect(
       Array.from(win.document.querySelectorAll('a[href^="https://www.youtube.com/"]'))
     ).toHaveLength(0);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* P14-YOU — the own-channel affordances (Customize channel / Manage)  */
+/* ------------------------------------------------------------------ */
+
+describe("the own-channel affordances (P14-YOU)", () => {
+  test("the operator's OWN channel: Customize channel + Manage videos replace Subscribe/Join (live 2026 order)", async () => {
+    // the studio seam resolves the operator's channel = the viewed channel
+    studioResponse = {
+      session: true,
+      channel: { id: "UC-mind-warehouse", handle: "@mind_warehouse", name: "Mind Warehouse" },
+    };
+    fetchHandler = () => jsonResponse(pageDto({}));
+    await renderPage();
+    const buttons = win.document.querySelectorAll("button, a");
+    const labels = Array.from(buttons).map((b) => (b.textContent ?? "").trim());
+    expect(labels).toContain("Customize channel");
+    expect(labels).toContain("Manage videos");
+    expect(labels.some((l) => /^Subscribe/.test(l))).toBe(false);
+    expect(labels.some((l) => l === "Join")).toBe(false);
+  });
+
+  test("every OTHER channel keeps Subscribe (the seam resolves a different channel)", async () => {
+    studioResponse = {
+      session: true,
+      channel: { id: "UC-someone-else", handle: "@someone_else", name: "Someone Else" },
+    };
+    fetchHandler = () => jsonResponse(pageDto({}));
+    await renderPage();
+    const buttons = win.document.querySelectorAll("button, a");
+    const labels = Array.from(buttons).map((b) => (b.textContent ?? "").trim());
+    expect(labels).toContain("Subscribe");
+    expect(labels).not.toContain("Customize channel");
+    expect(labels).not.toContain("Manage videos");
   });
 });

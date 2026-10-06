@@ -138,6 +138,18 @@ export default function ChannelPage() {
   const { data, loading, error, reload } = useApi<ChannelPageDTO>(
     handle ? `/api/channel/${encodeURIComponent(handle)}` : null
   );
+  // P14-YOU: the operator's own-channel affordances — resolve the operator's
+  // REAL channel through the studio seam (session-only; cached server-side)
+  // and compare with the viewed channel. Honest null in public mode → the
+  // Subscribe button stays for every channel.
+  const { data: studioInfo } = useApi<{ session: boolean; channel: { id: string; handle: string } | null }>(
+    handle ? "/api/studio?enrich=0" : null
+  );
+  const ownChannel =
+    data?.channel && studioInfo?.channel
+      ? studioInfo.channel.id === data.channel.id ||
+        studioInfo.channel.handle.replace(/^@/, "") === data.channel.handle.replace(/^@/, "")
+      : false;
   const { data: results, loading: searching, error: searchError } = useApi<ChannelSearchDTO>(
     searchOpen && query.trim()
       ? `/api/channel/${encodeURIComponent(handle)}/search?q=${encodeURIComponent(query.trim())}&t=${searchTick}`
@@ -315,6 +327,7 @@ export default function ChannelPage() {
           <ChannelHeaderBlock
             channel={data.channel}
             joinable={data.joinable}
+            ownChannel={ownChannel}
             subscribing={subscribing}
             onToggleSubscribe={toggleSubscribe}
             onJoin={() => setJoinOpen(true)}
@@ -664,6 +677,7 @@ export function isChannelIdHandle(handle: string): boolean {
 export function ChannelHeaderBlock({
   channel,
   joinable,
+  ownChannel = false,
   subscribing,
   onToggleSubscribe,
   onJoin,
@@ -671,6 +685,10 @@ export function ChannelHeaderBlock({
 }: {
   channel: ChannelPageDTO["channel"];
   joinable?: boolean;
+  /** P14-YOU: the viewed channel IS the operator's own (the studio seam's
+   *  resolution) — youtube.com swaps Subscribe for "Customize channel" +
+   *  "Manage videos" (measured live: Customize first, then Manage). */
+  ownChannel?: boolean;
   subscribing: boolean;
   onToggleSubscribe: () => void;
   onJoin: () => void;
@@ -722,7 +740,18 @@ export function ChannelHeaderBlock({
         )}
       </div>
       <div className="flex items-center gap-2">
-        {channel.isOwner ? (
+        {ownChannel ? (
+          // youtube.com's own-channel controls (live 2026: Customize channel
+          // first, then Manage videos — NO Subscribe on your own channel)
+          <>
+            <Button asChild variant="secondary" className="rounded-full">
+              <Link href="/studio">Customize channel</Link>
+            </Button>
+            <Button asChild variant="secondary" className="rounded-full">
+              <Link href="/studio">Manage videos</Link>
+            </Button>
+          </>
+        ) : channel.isOwner ? (
           <Button asChild variant="secondary" className="rounded-full">
             <Link href="/studio">Your channel — open Studio</Link>
           </Button>
