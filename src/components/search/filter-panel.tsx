@@ -8,6 +8,7 @@ import {
   appliedFilterChips,
   clearFilters,
   hasActiveFilters,
+  isOptionActive,
   withGroupValue,
   type FilterGroupId,
   type SearchFilterState,
@@ -21,17 +22,22 @@ type FilterPanelProps = {
 };
 
 /**
- * The search filter panel — real YouTube filter semantics: a Filters button
- * opening the grouped options (single-select per group; selecting the active
- * option clears the group), "Clear all" at the bottom. Labels are the real
- * menu labels (recorded in search_lofi.json + probed live).
+ * The search filter panel — the LIVE 2026 youtube.com filter dialog: a
+ * Filters button (tune icon) opening the grouped options (single-select per
+ * group; selecting the active option clears the group), groups ordered
+ * Type / Duration / Upload date / Features / Prioritize, "Clear all" at the
+ * bottom.
  */
 export function FilterPanel({ state, onChange }: FilterPanelProps) {
   const chips = appliedFilterChips(state);
 
   function select(group: FilterGroupId, value: string) {
     // single-select: clicking the active option deselects it
-    const next = withGroupValue(state, group, state[group] === value ? null : value);
+    const next = withGroupValue(
+      state,
+      group,
+      isOptionActive(state, group, value) ? null : value
+    );
     onChange(next);
   }
 
@@ -72,7 +78,7 @@ export function FilterPanel({ state, onChange }: FilterPanelProps) {
               </h3>
               <ul className="space-y-0.5">
                 {group.options.map((option) => {
-                  const active = state[group.id] === option.value;
+                  const active = isOptionActive(state, group.id, option.value);
                   return (
                     <li key={option.value}>
                       <button

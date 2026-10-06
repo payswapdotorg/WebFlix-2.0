@@ -1,42 +1,72 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, X } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
-import { VideoCard } from "@/components/video/video-card";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FilterPanel, AppliedFilterChips } from "@/components/search/filter-panel";
+import { SearchVideoCard } from "@/components/search/search-video-card";
 import { ChannelResultCard } from "@/components/search/channel-result-card";
 import { PlaylistResultCard } from "@/components/search/playlist-result-card";
 import {
   filtersFromParams,
   hasActiveFilters,
   searchHref,
+  withGroupValue,
   type SearchFilterState,
 } from "@/lib/youtube/search-filters";
-import { formatCount } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import type { SearchPageDTO, VideoDTO } from "@/lib/types";
 
 /**
- * Search — live youtube.com search with the real filter semantics
- * (WFX2-B-W): URL-synced filters (?q=&sort=&date=&type=&duration= —
- * shareable), applied-filter chips, result-count text, spelling correction
- * ("Showing results for … / Search instead for …"), channel-result cards
- * with Subscribe, playlist-result cards, shorts lockups.
+ * P13-SEARCH — youtube.com's search results page, feature-for-feature.
+ *
+ * Live-measured on youtube.com (2026-10-06): a VERTICAL LIST of large
+ * horizontal cards (thumbnail 16:9 left — 500px at wide columns, 360px
+ * narrower, full-width mobile; metadata right), 16px row gaps, ~1096px
+ * centered content column. Channel + playlist cards interleave inline where
+ * the API returns them; shorts ride a mid-list shelf. The search box is the
+ * TOPBAR's (youtube.com has no second form on the results page — the query
+ * lives in the topbar input, prefilled from ?q=).
+ *
+ * Quick-chip bar (the live 2026 row): All / Videos / Shorts / Recently
+ * uploaded / Live — each wired to the existing filter params.
  * WFX2-P6-IS: the results scroll infinitely — the first page rides useApi,
- * every further page rides the opaque ?cursor= (the RecommendedGrid house
- * pattern: IntersectionObserver sentinel, append + dedupe by id, skeletons,
- * and the honest end state when the cursor chain runs out).
+ * every further page rides the opaque ?cursor= with list-shaped skeletons.
  */
 export default function SearchPage() {
   return (
     <Suspense fallback={null}>
       <SearchContent />
     </Suspense>
+  );
+}
+
+/** One quick chip in the 2026 row (All / Videos / Shorts / …). */
+function QuickChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "h-9 shrink-0 whitespace-nowrap rounded-lg px-3 text-sm font-medium transition-colors",
+        active
+          ? "bg-foreground text-background"
+          : "bg-secondary text-foreground hover:bg-accent"
+      )}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -49,9 +79,9 @@ function SearchContent() {
     date: params.get("date") ?? params.get("uploadDate"),
     type: params.get("type"),
     duration: params.get("duration"),
+    live: params.get("live"),
     verbatim: params.get("verbatim"),
   });
-  const [input, setInput] = useState(q);
 
   const apiHref = q ? withFilterParams(`/api/search`, q, state) : null;
   const { data, loading, error } = useApi<SearchPageDTO>(apiHref);
@@ -62,24 +92,32 @@ function SearchContent() {
   const [loadingMore, setLoadingMore] = useState(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  // Reset pagination when the query/filters change (guarded render-phase reset).
-  const [prevHref, setPrevHref] = useState(apiHref);
-  if (apiHref !== prevHref) {
-    setPrevHref(apiHref);
-    setExtra([]);
-    setCursor(null);
-  }
+  // Reset pagination when the query/filters change (ref-guarded — survives
+  // StrictMode double-effects and the compiler's memo analysis).
+  const prevHrefRef = useRef<string | null>(apiHref);
+  const adoptedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (apiHref !== prevHrefRef.current) {
+      prevHrefRef.current = apiHref;
+      adoptedRef.current = null;
+      setExtra([]);
+      setCursor(null);
+    }
+  }, [apiHref]);
 
-  // Adopt the fresh first page's cursor (guarded render-phase reset — the
-  // cursor state must survive until the chain honestly ends, so it is never
-  // derived live from `data`).
-  const [adoptedHref, setAdoptedHref] = useState<string | null>(null);
-  if (apiHref && data && adoptedHref !== apiHref) {
-    setAdoptedHref(apiHref);
-    setCursor(data.nextCursor ?? null);
-  }
+  // Adopt the fresh first page's cursor (the cursor state must survive until
+  // the chain honestly ends, so it is never derived live from `data`).
+  useEffect(() => {
+    if (apiHref && data && adoptedRef.current !== apiHref) {
+      adoptedRef.current = apiHref;
+      setCursor(data.nextCursor ?? null);
+    }
+  }, [apiHref, data]);
 
-  const loadMore = useCallback(async () => {
+  // The compiler owns memoization here (no manual useCallback): plain
+  // function + always-resubscribed observer — idempotent observe, the
+  // loadingMore flag dedupes concurrent chain loads.
+  async function loadMore() {
     if (!apiHref || !cursor || loadingMore) return;
     setLoadingMore(true);
     try {
@@ -96,7 +134,7 @@ function SearchContent() {
     } finally {
       setLoadingMore(false);
     }
-  }, [apiHref, cursor, loadingMore]);
+  }
 
   useEffect(() => {
     const node = sentinelRef.current;
@@ -109,7 +147,7 @@ function SearchContent() {
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [loadMore]);
+  });
 
   // First page + every appended page, deduped by id (server pages are raw —
   // continuation pages can repeat a card; the client owns the dedupe).
@@ -124,67 +162,89 @@ function SearchContent() {
     router.push(searchHref(query, next));
   }
 
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
-    const query = input.trim();
-    if (query) pushState(query, { ...state, verbatim: undefined });
-  }
-
   function onFiltersChange(next: SearchFilterState) {
     pushState(q, next);
   }
 
+  // --- the quick-chip row (live 2026): each chip = one filter edit ----------
+  const chips: { label: string; active: boolean; next: SearchFilterState }[] = [
+    {
+      label: "All",
+      active: !state.type && !state.uploadDate && !state.live,
+      next: { ...state, type: undefined, uploadDate: undefined, live: undefined },
+    },
+    {
+      label: "Videos",
+      active: state.type === "video",
+      next: { ...state, type: "video", uploadDate: undefined, live: undefined },
+    },
+    {
+      label: "Shorts",
+      active: state.type === "shorts",
+      next: { ...state, type: "shorts", uploadDate: undefined, live: undefined },
+    },
+    {
+      label: "Recently uploaded",
+      active: state.uploadDate === "week",
+      next: { ...state, type: undefined, uploadDate: "week", live: undefined },
+    },
+    {
+      label: "Live",
+      active: state.live === true,
+      next: { ...state, type: undefined, uploadDate: undefined, live: true },
+    },
+  ];
+
   const shorts = allVideos.filter((v) => v.isShort);
   const videos = allVideos.filter((v) => !v.isShort);
+  const channels = data?.channels ?? [];
+  const playlists = data?.playlists ?? [];
   const hasAnyResults =
-    (data?.videos.length ?? 0) > 0 ||
-    (data?.channels.length ?? 0) > 0 ||
-    (data?.playlists?.length ?? 0) > 0;
+    videos.length > 0 || shorts.length > 0 || channels.length > 0 || playlists.length > 0;
+
+  // --- the interleave (youtube.com's result order: videos with the channel
+  // card + shorts shelf + playlist cards inline, never grouped sections) ----
+  const headCount = channels.length > 0 ? 2 : videos.length; // channels after ~2 videos
+  const head = videos.slice(0, headCount);
+  const afterChannels = videos.slice(headCount, headCount + 4);
+  const tail = videos.slice(headCount + 4);
 
   return (
-    <div className="pb-6">
-      <form role="search" onSubmit={submit} className="flex gap-2 px-4 py-4 sm:px-6">
-        <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Search WebFlix"
-            aria-label="Search WebFlix"
-            className="rounded-full pl-10"
-            autoFocus
-          />
-          {input && (
-            <button
-              type="button"
-              aria-label="Clear search"
-              onClick={() => setInput("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X className="size-4" />
-            </button>
-          )}
-        </div>
-        <Button type="submit" variant="secondary" className="rounded-full">
-          Search
-        </Button>
-      </form>
-
+    <div className="mx-auto w-full max-w-[1096px] pb-6">
       {!q && (
         <div className="px-4 py-16 text-center sm:px-6">
           <p className="text-lg font-medium">Search WebFlix</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Find videos and channels — try “blender”, “elden ring” or “travel”.
+            Find videos and channels — use the search box above.
           </p>
         </div>
       )}
 
       {q && (
         <>
+          {/* the quick-chip row (live 2026 youtube.com) */}
+          <div
+            role="group"
+            aria-label="Quick filters"
+            className="flex gap-3 overflow-x-auto px-4 py-3 sm:px-6 slim-scrollbar"
+            data-testid="search-quick-chips"
+          >
+            {chips.map((chip) => (
+              <QuickChip
+                key={chip.label}
+                label={chip.label}
+                active={chip.active}
+                onClick={() =>
+                  pushState(q, chip.active ? { ...state, type: undefined, uploadDate: undefined, live: undefined } : chip.next)
+                }
+              />
+            ))}
+          </div>
+
           {/* results header: count + correction + the Filters button */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 pb-3 sm:px-6">
             <div className="min-w-0 flex-1">
-              <h1 className="truncate text-sm font-medium text-foreground sm:text-base">
+              <h1 className="truncate text-base font-normal text-foreground">
                 {data?.resultCountText
                   ? data.resultCountText
                   : loading
@@ -225,13 +285,19 @@ function SearchContent() {
           </div>
 
           {loading && (
-            <div className="space-y-6 px-4 sm:px-6" aria-busy="true">
+            <div className="space-y-4 px-4 py-2 sm:px-6" aria-busy="true" data-testid="search-skeleton">
               {Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="flex gap-4">
-                  <Skeleton className="aspect-video w-[240px] shrink-0 rounded-xl" />
-                  <div className="flex-1 space-y-2">
-                    <Skeleton className="h-5 w-2/3" />
-                    <Skeleton className="h-3.5 w-1/3" />
+                  <Skeleton className="aspect-video w-[360px] shrink-0 rounded-xl max-md:w-full" />
+                  <div className="hidden flex-1 space-y-3 sm:block">
+                    <Skeleton className="h-5 w-5/6" />
+                    <Skeleton className="h-5 w-1/2" />
+                    <div className="flex items-center gap-2 pt-1">
+                      <Skeleton className="size-6 rounded-full" />
+                      <Skeleton className="h-3.5 w-32" />
+                    </div>
+                    <Skeleton className="h-3.5 w-2/3" />
+                    <Skeleton className="h-3.5 w-1/2" />
                   </div>
                 </div>
               ))}
@@ -258,112 +324,95 @@ function SearchContent() {
                 <li>Remove search filters to widen the results</li>
               </ul>
               {hasActiveFilters(state) && (
-                <Button
+                <button
                   type="button"
-                  variant="outline"
-                  size="sm"
-                  className="mt-6 rounded-full"
                   onClick={() => pushState(q, {})}
+                  className="mt-6 rounded-full border border-border px-4 py-2 text-sm font-medium hover:bg-accent"
                 >
                   Remove all filters
-                </Button>
+                </button>
               )}
             </div>
           )}
 
-          {/* channel result cards */}
-          {data && data.channels.length > 0 && (
-            <section aria-label="Channel results" className="px-4 pb-4 pt-2 sm:px-6">
-              {state.type !== "channel" && (
-                <h2 className="pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Channels
-                </h2>
-              )}
-              {data.channels.map((ch) => (
+          {/* THE LIST — youtube.com's vertical result list */}
+          {data && hasAnyResults && (
+            <div className="flex flex-col gap-4 px-4 py-2 sm:px-6" data-testid="search-results-list">
+              {head.map((video) => (
+                <SearchVideoCard key={video.id} video={video} />
+              ))}
+
+              {/* channel cards — inline where the API returns them */}
+              {channels.map((ch) => (
                 <ChannelResultCard key={ch.id} channel={ch} />
               ))}
-            </section>
-          )}
 
-          {/* playlist result cards */}
-          {data && (data.playlists?.length ?? 0) > 0 && (
-            <section aria-label="Playlist results" className="px-4 pb-4 sm:px-6">
-              {state.type !== "playlist" && (
-                <h2 className="pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Playlists
-                </h2>
-              )}
-              {data.playlists?.map((pl) => <PlaylistResultCard key={pl.id} playlist={pl} />)}
-            </section>
-          )}
+              {afterChannels.map((video) => (
+                <SearchVideoCard key={video.id} video={video} />
+              ))}
 
-          {/* shorts lockups */}
-          {data && shorts.length > 0 && (
-            <section aria-label="Shorts results" className="px-4 pb-6 pt-2 sm:px-6">
-              <h2 className="pb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Shorts
-              </h2>
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
-                {shorts.map((short) => (
-                  <Link
-                    key={short.id}
-                    href="/shorts"
-                    className="group flex flex-col gap-2"
-                    aria-label={short.title}
-                  >
-                    <div className="relative aspect-[9/16] w-full overflow-hidden rounded-xl bg-secondary">
-                      <img
-                        src={short.thumbnailUrl}
-                        alt={short.title}
-                        loading="lazy"
-                        className="absolute inset-0 h-full w-full object-cover"
-                      />
-                    </div>
-                    <p className="line-clamp-2 text-sm font-medium leading-snug">{short.title}</p>
-                    <p className="-mt-1 text-xs text-muted-foreground">
-                      {formatCount(short.views)} views
-                    </p>
-                  </Link>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* video results */}
-          {data && videos.length > 0 && (
-            <section aria-label="Video results" className="px-4 sm:px-6">
-              {state.type !== "video" && videos.length > 0 && (
-                <h2 className="pb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Videos
-                </h2>
-              )}
-              <div className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-                {videos.map((video) => (
-                  <VideoCard key={video.id} video={video} />
-                ))}
-                {loadingMore &&
-                  Array.from({ length: 4 }).map((_, i) => (
-                    <div key={`skeleton-${i}`} className="flex flex-col gap-3" aria-hidden="true">
-                      <Skeleton className="aspect-video w-full rounded-xl" />
-                      <div className="flex gap-3">
-                        <Skeleton className="size-9 rounded-full" />
-                        <div className="flex-1 space-y-2">
-                          <Skeleton className="h-4 w-full" />
-                          <Skeleton className="h-3 w-2/3" />
+              {/* the shorts shelf — inline mid-list (youtube.com's own shape) */}
+              {shorts.length > 0 && (
+                <section aria-label="Shorts results" className="py-2">
+                  <h2 className="pb-3 text-base font-medium text-foreground">Shorts</h2>
+                  <div className="-mx-2 flex gap-3 overflow-x-auto px-2 pb-2 slim-scrollbar">
+                    {shorts.map((short) => (
+                      <Link
+                        key={short.id}
+                        href="/shorts"
+                        className="group flex w-[160px] shrink-0 flex-col gap-2"
+                        aria-label={short.title}
+                      >
+                        <div className="relative aspect-[9/16] w-full overflow-hidden rounded-xl bg-secondary">
+                          <img
+                            src={short.thumbnailUrl}
+                            alt={short.title}
+                            loading="lazy"
+                            className="absolute inset-0 h-full w-full object-cover transition-transform group-hover:scale-105"
+                          />
                         </div>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-              {cursor && (
-                <div
-                  ref={sentinelRef}
-                  data-testid="search-scroll-sentinel"
-                  className="h-1"
-                  aria-hidden="true"
-                />
+                        <p className="line-clamp-2 text-sm font-medium leading-snug">{short.title}</p>
+                        <p className="-mt-1 text-xs text-muted-foreground">
+                          {short.viewsText ?? `${short.views.toLocaleString()} views`}
+                        </p>
+                      </Link>
+                    ))}
+                  </div>
+                </section>
               )}
-            </section>
+
+              {/* playlist cards — inline where the API returns them */}
+              {playlists.map((pl) => (
+                <PlaylistResultCard key={pl.id} playlist={pl} />
+              ))}
+
+              {tail.map((video) => (
+                <SearchVideoCard key={video.id} video={video} />
+              ))}
+
+              {/* list-shaped skeletons while the cursor chain loads */}
+              {loadingMore &&
+                Array.from({ length: 3 }).map((_, i) => (
+                  <div key={`skeleton-${i}`} className="flex gap-4" aria-hidden="true">
+                    <Skeleton className="aspect-video w-[360px] shrink-0 rounded-xl max-md:w-full" />
+                    <div className="hidden flex-1 space-y-3 sm:block">
+                      <Skeleton className="h-5 w-5/6" />
+                      <Skeleton className="h-5 w-1/2" />
+                      <Skeleton className="size-6 rounded-full" />
+                      <Skeleton className="h-3.5 w-2/3" />
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
+
+          {data && hasAnyResults && cursor && (
+            <div
+              ref={sentinelRef}
+              data-testid="search-scroll-sentinel"
+              className="h-1"
+              aria-hidden="true"
+            />
           )}
 
           {/* the honest end — the cursor chain ran out after real pages */}
@@ -388,6 +437,7 @@ function withFilterParams(base: string, q: string, state: SearchFilterState): st
   if (state.type) params.set("type", state.type);
   if (state.duration) params.set("duration", state.duration);
   if (state.sort && state.sort !== "relevance") params.set("sort", state.sort);
+  if (state.live) params.set("live", "1");
   if (state.verbatim) params.set("verbatim", "1");
   return `${base}?${params.toString()}`;
 }

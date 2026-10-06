@@ -328,21 +328,31 @@ describe("search-filters — URL ↔ state round-trips", () => {
     expect(hasActiveFilters({})).toBe(false);
     expect(hasActiveFilters({ sort: "relevance" })).toBe(false);
     expect(hasActiveFilters({ duration: "medium" })).toBe(true);
+    // chip order follows the LIVE dialog's group order: Type, Duration,
+    // Upload date, Features, Prioritize (duration before uploadDate)
     const chips = appliedFilterChips({ uploadDate: "today", duration: "medium" });
     expect(chips).toEqual([
-      { group: "uploadDate", value: "today", label: "Today" },
       { group: "duration", value: "medium", label: "3 - 20 minutes" },
+      { group: "uploadDate", value: "today", label: "Today" },
     ]);
   });
 
-  test("the panel vocabulary mirrors the real menu labels", () => {
-    const uploadDate = FILTER_GROUPS.find((g) => g.id === "uploadDate")!;
-    expect(uploadDate.options.map((o) => o.label)).toEqual([
-      "Last hour",
-      "Today",
-      "This week",
-      "This month",
-      "This year",
+  test("the panel vocabulary mirrors the LIVE 2026 menu labels (measured 2026-10-06)", () => {
+    // group order matches the live dialog: Type, Duration, Upload date, Features, Prioritize
+    expect(FILTER_GROUPS.map((g) => g.title)).toEqual([
+      "Type",
+      "Duration",
+      "Upload date",
+      "Features",
+      "Prioritize",
+    ]);
+    const type = FILTER_GROUPS.find((g) => g.id === "type")!;
+    expect(type.options.map((o) => o.label)).toEqual([
+      "Videos",
+      "Shorts",
+      "Channels",
+      "Playlists",
+      "Movies",
     ]);
     const duration = FILTER_GROUPS.find((g) => g.id === "duration")!;
     expect(duration.options.map((o) => o.label)).toEqual([
@@ -350,12 +360,35 @@ describe("search-filters — URL ↔ state round-trips", () => {
       "3 - 20 minutes",
       "Over 20 minutes",
     ]);
+    const uploadDate = FILTER_GROUPS.find((g) => g.id === "uploadDate")!;
+    expect(uploadDate.options.map((o) => o.label)).toEqual([
+      "Today",
+      "This week",
+      "This month",
+      "This year",
+    ]);
+    // Features — only the backend-wired Live option ships (never dead controls)
+    const features = FILTER_GROUPS.find((g) => g.id === "features")!;
+    expect(features.options.map((o) => o.label)).toEqual(["Live"]);
     const sort = FILTER_GROUPS.find((g) => g.id === "sort")!;
-    expect(sort.options.map((o) => o.label)).toEqual([
-      "Relevance",
-      "Upload date",
-      "View count",
-      "Rating",
+    expect(sort.options.map((o) => o.label)).toEqual(["Relevance", "Popularity"]);
+  });
+
+  test("live feature flag — URL round-trip + group semantics", () => {
+    // parse: live=1 → state.live
+    const parsed = filtersFromParams({ q: "x", live: "1" });
+    expect(parsed.state.live).toBe(true);
+    // entries: state.live → live=1
+    const entries = filtersToEntries("x", { live: true });
+    expect(entries).toContainEqual(["live", "1"]);
+    // withGroupValue toggles the features group
+    const on = withGroupValue({}, "features", "live");
+    expect(on.live).toBe(true);
+    expect(withGroupValue(on, "features", null).live).toBeUndefined();
+    // chips + hasActiveFilters see it
+    expect(hasActiveFilters({ live: true })).toBe(true);
+    expect(appliedFilterChips({ live: true })).toEqual([
+      { group: "features", value: "live", label: "Live" },
     ]);
   });
 });
