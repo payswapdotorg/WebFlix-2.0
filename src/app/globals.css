@@ -165,16 +165,6 @@
   color: #ffffff;
 }
 
-/* Hero gradient overlay (trending #1 card) */
-.hero-scrim {
-  background: linear-gradient(
-    to top,
-    rgba(0, 0, 0, 0.9) 0%,
-    rgba(0, 0, 0, 0.45) 45%,
-    rgba(0, 0, 0, 0) 75%
-  );
-}
-
 /* Task 2-c — hover-preview degrade state: a subtle zoom/pan on the
    thumbnail when no storyboard is available (never a walled iframe). */
 @keyframes wfx-kenburns {
@@ -188,4 +178,11 @@
 .wfx-kenburns {
   animation: wfx-kenburns 12s ease-out forwards;
   will-change: transform;
+}
+
+/* P12-UX — reduced motion: no ken-burns pan (storyboard-only previews). */
+@media (prefers-reduced-motion: reduce) {
+  .wfx-kenburns {
+    animation: none;
+  }
 }

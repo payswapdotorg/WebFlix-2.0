@@ -117,7 +117,13 @@ export function VideoCard({ video, progress, variant = "grid", className, watche
 
   return (
     <article
-      className={cn("group/card flex flex-col", variant === "rail" && "w-[240px] shrink-0", className)}
+      className={cn(
+        "group/card flex flex-col",
+        // P12-UX Task 2: rails use the SAME full-size card as the grid
+        // (youtube.com's shelf items ≈ 320-400px, measured min-width ~330px).
+        variant === "rail" && "w-[320px] shrink-0 sm:w-[360px]",
+        className
+      )}
       onMouseEnter={hover.onMouseEnter}
       onMouseLeave={hover.onMouseLeave}
     >
@@ -209,7 +215,8 @@ export function VideoCard({ video, progress, variant = "grid", className, watche
               variant="ghost"
               size="icon"
               aria-label={`More options for ${video.title}`}
-              className="h-8 w-8 shrink-0 rounded-full opacity-0 transition-opacity focus-visible:opacity-100 group-hover/card:opacity-100 data-[state=open]:opacity-100"
+              // P12-UX: ≥44px touch target on touch devices, compact 32px on desktop pointers
+              className="h-11 w-11 shrink-0 rounded-full opacity-0 transition-opacity focus-visible:opacity-100 group-hover/card:opacity-100 data-[state=open]:opacity-100 sm:h-8 sm:w-8"
             >
               <MoreVertical className="size-4" />
             </Button>
