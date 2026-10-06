@@ -1,33 +1,35 @@
 "use client";
 
 /**
- * WFX2-P5-YA — the header account surface, youtube.com parity:
+ * WFX2-P5-YA + P14-YOU — the header account surface, youtube.com parity
+ * (item order + labels measured on the LIVE 2026 menu, 2026-10-06):
  *  - guest → the outlined "Sign in" pill (avatar-and-in icon), linking
  *    /signin with the current surface as the redirect (unchanged);
- *  - signed-in → the initial-based avatar (avatarSeed hue) with the deepened
- *    account dropdown (youtube.com's items, honest):
- *      Your account · Your channel (the operator session's REAL channel
- *      handle, read lazily from /api/studio only while the menu is open —
- *      honest hidden state when the channel is unresolved) · WebFlix Studio ·
- *      Purchases & memberships (the honest page) · Your data in YouTube (the
- *      honest page) · Appearance / Language / Restricted Mode / Location
- *      (deep links into /settings — SS owns the pages, href only) ·
- *      Keyboard shortcuts (the shift+/ overlay) · Settings · Sign out.
+ *  - signed-in → the avatar dropdown whose header carries the operator's
+ *    REAL YouTube identity (avatar image, channel name, @handle — read
+ *    lazily from /api/studio only while the menu is open; honest
+ *    WebFlix-local fallback when the operator session is not live).
+ *    Live order: View your channel · Google Account · Sign out — YouTube
+ *    Studio · Purchases and memberships · Your data in YouTube —
+ *    Appearance · Language · Restricted Mode · Location — Keyboard
+ *    shortcuts · Settings — Help · Send feedback.
  *
  * Nothing is fabricated: an item whose data does not exist stays hidden or
- * degrades honestly.
+ * degrades honestly (no "Switch account" — this app is single-tenant).
  */
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   AtSign,
+  CircleHelp,
   Clapperboard,
   Database,
   Keyboard,
   Languages,
   LogOut,
   MapPin,
+  MessageSquareWarning,
   Monitor,
   Settings as SettingsIcon,
   Shield,
@@ -97,13 +99,18 @@ export function AccountMenu() {
   const [signingOut, setSigningOut] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // The operator channel's REAL handle — read only while the menu is open
-  // (the lazy useApi(null) idiom). Honest null in public mode → the
-  // "Your channel" item stays hidden until a real handle exists.
+  // The operator channel's REAL identity — read only while the menu is open
+  // (the lazy useApi(null) idiom). Honest null in public mode → the header
+  // falls back to the WebFlix-local identity, "View your channel" stays
+  // hidden until a real handle exists.
   const { data: studio } = useApi<StudioPageDTO & { loginRequired: boolean }>(
     menuOpen && session.user ? "/api/studio?enrich=0" : null
   );
   const channelHandle = studio?.channel?.handle || null;
+  // the REAL YouTube identity for the menu header (avatar image + name +
+  // @handle) when the operator session is live — the honest local fallback
+  // otherwise
+  const operatorIdentity = studio?.channel ?? null;
 
   if (session.status === "unauthenticated") {
     // the youtube-style outlined pill: circle avatar-and-in icon + "Sign in"
@@ -163,23 +170,51 @@ export function AccountMenu() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuLabel className="flex items-center gap-3 py-3">
-          <SessionAvatar displayName={displayName} avatarSeed={avatarSeed} size="size-10" />
+          {operatorIdentity ? (
+            <img
+              src={operatorIdentity.avatarUrl}
+              alt=""
+              className="size-10 rounded-full object-cover"
+            />
+          ) : (
+            <SessionAvatar displayName={displayName} avatarSeed={avatarSeed} size="size-10" />
+          )}
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">{displayName}</p>
-            <p className="truncate text-xs text-muted-foreground">{email}</p>
+            <p className="truncate text-sm font-semibold">
+              {operatorIdentity ? operatorIdentity.name : displayName}
+            </p>
+            <p className="truncate text-xs text-muted-foreground">
+              {operatorIdentity
+                ? operatorIdentity.handle.startsWith("@")
+                  ? operatorIdentity.handle
+                  : `@${operatorIdentity.handle}`
+                : email}
+            </p>
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <MenuLink href="/account" icon={UserRound}>
-          Your account
-        </MenuLink>
+        {/* the live 2026 order: View your channel · Google Account · Sign out */}
         {channelHandle && (
           <MenuLink href={`/channel/${channelHandle}`} icon={AtSign}>
-            Your channel
+            View your channel
           </MenuLink>
         )}
+        <MenuLink href="/account" icon={UserRound}>
+          Google Account
+        </MenuLink>
+        <DropdownMenuItem
+          onSelect={(e) => {
+            e.preventDefault();
+            void doSignOut();
+          }}
+          className="cursor-pointer"
+        >
+          <LogOut className="size-4" aria-hidden="true" />{" "}
+          {signingOut ? "Signing out…" : "Sign out"}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <MenuLink href="/studio" icon={Clapperboard}>
-          WebFlix Studio
+          YouTube Studio
         </MenuLink>
         <DropdownMenuSeparator />
         <MenuLink href="/account/purchases" icon={ShoppingBag}>
@@ -213,17 +248,12 @@ export function AccountMenu() {
         <MenuLink href="/settings" icon={SettingsIcon}>
           Settings
         </MenuLink>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onSelect={(e) => {
-            e.preventDefault();
-            void doSignOut();
-          }}
-          className="cursor-pointer"
-        >
-          <LogOut className="size-4" aria-hidden="true" />{" "}
-          {signingOut ? "Signing out…" : "Sign out"}
-        </DropdownMenuItem>
+        <MenuLink href="/help" icon={CircleHelp}>
+          Help
+        </MenuLink>
+        <MenuLink href="/feedback" icon={MessageSquareWarning}>
+          Send feedback
+        </MenuLink>
       </DropdownMenuContent>
     </DropdownMenu>
   );
