@@ -20,7 +20,8 @@
  * view ping per session to /api/view {videoId, watchedSec} (the existing
  * route contract). LIVE streams (duration 0) skip seek + persistence.
  */
-import { useCallback, useEffect, useImperativeHandle, useRef, type Ref } from "react";
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
+import { VolumeX } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type YoutubePlayerState =
@@ -93,6 +94,10 @@ const PROGRESS_KEY = (videoId: string) => `webflix-progress:${videoId}`;
 const VIEW_KEY = (videoId: string) => `webflix-view:${videoId}`;
 const PROGRESS_INTERVAL_MS = 1000;
 const PERSIST_EVERY_TICKS = 5; // ~5s
+/** P12-UX — how long the unmuted autoplay attempt gets before the
+ * mute-then-retry fallback arms (youtube.com's own policy: try sound,
+ * fall back to muted + a tap-to-unmute affordance). */
+const AUTOPLAY_CHECK_MS = 1500;
 
 /* ---------- iframe_api loader (once per page) ---------- */
 
@@ -344,6 +349,9 @@ export function YoutubePlayer({
   const liveRef = useRef(false);
   const readyRef = useRef(false);
   const blockedFiredRef = useRef(false);
+  // P12-UX — the muted-autostart fallback state + its one-shot timer.
+  const [mutedAutostart, setMutedAutostart] = useState(false);
+  const autoplayCheckRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // stable callbacks (the player events live across renders)
   const onProgressRef = useRef(onProgress);
@@ -366,6 +374,44 @@ export function YoutubePlayer({
     },
     []
   );
+
+  /** P12-UX — cancel a pending autoplay check. */
+  const clearAutoplayCheck = useCallback(() => {
+    if (autoplayCheckRef.current) {
+      clearTimeout(autoplayCheckRef.current);
+      autoplayCheckRef.current = null;
+    }
+  }, []);
+
+  /**
+   * P12-UX — youtube.com's autoplay policy: the player attempted autoplay
+   * WITH sound (autoplay: 1). If it is still UNSTARTED ~1.5s after ready
+   * (the browser blocked unmuted autoplay), mute + playVideo and surface
+   * the tap-to-unmute affordance. Armed on creation/ready and on every
+   * loadVideoById; cleared the moment playback starts.
+   */
+  const armAutoplayCheck = useCallback(() => {
+    clearAutoplayCheck();
+    autoplayCheckRef.current = setTimeout(() => {
+      autoplayCheckRef.current = null;
+      const p = playerRef.current;
+      if (!p) return;
+      let state = -1;
+      try {
+        state = p.getPlayerState();
+      } catch {
+        return; // player gone — the fallback chain owns dead embeds
+      }
+      if (state !== -1) return; // it started (or cued) — the sound attempt won
+      try {
+        p.mute();
+        p.playVideo();
+        setMutedAutostart(true);
+      } catch {
+        /* dead embed — the fallback chain owns it */
+      }
+    }, AUTOPLAY_CHECK_MS);
+  }, [clearAutoplayCheck]);
 
   const stopProgressLoop = useCallback(() => {
     if (intervalRef.current !== null) {
@@ -390,6 +436,7 @@ export function YoutubePlayer({
       const named = STATE_NAMES[state] ?? "unstarted";
       onStateChangeRef.current?.(named);
       if (named === "playing") {
+        clearAutoplayCheck(); // autoplay succeeded (or the mute-retry took) — stop checking
         const p = playerRef.current;
         if (p) {
           const dur = safeNum(p.getDuration());
@@ -416,7 +463,7 @@ export function YoutubePlayer({
         onEndedRef.current?.();
       }
     },
-    [savePosition, stopProgressLoop, videoId]
+    [clearAutoplayCheck, savePosition, stopProgressLoop, videoId]
   );
 
   // mount: load the API, create the player
@@ -435,6 +482,10 @@ export function YoutubePlayer({
           width: "100%",
           height: "100%",
           playerVars: {
+            // P12-UX: autoplay WITH sound on load (youtube.com watch parity).
+            // If the browser blocks it, the ready+1.5s check below mutes and
+            // retries, surfacing a tap-to-unmute affordance.
+            autoplay: 1,
             playsinline: 1,
             rel: 0,
             modestbranding: 1,
@@ -459,6 +510,10 @@ export function YoutubePlayer({
                   /* not seekable yet — user can seek */
                 }
               }
+              // P12-UX — the unmuted autoplay attempt gets ~1.5s before the
+              // mute+retry fallback arms (clear-then-arm: idempotent with the
+              // creation-time arm below).
+              armAutoplayCheck();
             },
             onStateChange: (e: { data: number }) => handleState(e.data),
             // Task 2-c — 101/150 = embedding disallowed; 100/2/5 = the video
@@ -470,6 +525,9 @@ export function YoutubePlayer({
           },
         });
         playerRef.current = created;
+        // P12-UX — the iframe's autoplay attempt is underway from creation;
+        // ready re-arms (no double-fire — clear-then-arm).
+        armAutoplayCheck();
         // Task 2-c — a loaded iframe API whose onReady never arrives (~5s)
         // is a dead/walled embed (the wall never initializes the player).
         noReadyTimer = setTimeout(() => {
@@ -484,6 +542,7 @@ export function YoutubePlayer({
     return () => {
       cancelled = true;
       if (noReadyTimer) clearTimeout(noReadyTimer);
+      clearAutoplayCheck();
       stopProgressLoop();
       savePosition();
       try {
@@ -503,11 +562,14 @@ export function YoutubePlayer({
       tickCountRef.current = 0;
       blockedFiredRef.current = false; // a new video gets a fresh blocked verdict
       readyRef.current = false;
+      setMutedAutostart(false); // P12-UX — a new video gets a fresh sound attempt
       playerRef.current.loadVideoById({
         videoId,
         ...(startSec && startSec > 0 ? { startSeconds: startSec } : {}),
       });
       if (startSec && startSec > 0) startAppliedRef.current = true;
+      // P12-UX — each takeover load re-attempts unmuted autoplay.
+      armAutoplayCheck();
     }
   }, [videoId, startSec]);
 
@@ -553,6 +615,24 @@ export function YoutubePlayer({
     >
       {/* YT.Player replaces this node with the iframe */}
       <div ref={containerRef} className="absolute inset-0 h-full w-full" />
+      {mutedAutostart && (
+        <button
+          type="button"
+          onClick={() => {
+            try {
+              playerRef.current?.unMute();
+            } catch {
+              /* player gone */
+            }
+            setMutedAutostart(false);
+          }}
+          aria-label="Tap to unmute"
+          className="absolute bottom-3 left-3 z-10 flex min-h-11 items-center gap-1.5 rounded-full bg-black/80 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-black"
+        >
+          <VolumeX className="size-4" aria-hidden="true" />
+          Tap to unmute
+        </button>
+      )}
       <noscript>
         <p className="absolute inset-0 flex items-center justify-center p-4 text-center text-sm text-white">
           The YouTube player needs JavaScript enabled.
