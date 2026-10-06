@@ -6,7 +6,7 @@
  * change (no remount), destroy() on unmount, onProgress ticking, progress
  * persistence + the once-per-session view ping.
  */
-import { beforeAll, afterAll, describe, expect, test } from "bun:test";
+import { beforeAll, afterAll, afterEach, describe, expect, test } from "bun:test";
 import { Window } from "happy-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { act } from "react";
@@ -58,19 +58,30 @@ Object.defineProperty(globalThis, "sessionStorage", {
 class MockYTPlayer {
   static instances: MockYTPlayer[] = [];
   static destroyed: MockYTPlayer[] = [];
+  /** P12-UX — the getPlayerState override (default 1 = PLAYING). */
+  static state = 1;
   el: Element;
   options: Record<string, unknown>;
   loadedVideoId: string | null = null;
+  muteCalls = 0;
+  unmuteCalls = 0;
+  playCalls = 0;
 
   constructor(el: Element, options: Record<string, unknown>) {
     this.el = el;
     this.options = options;
     MockYTPlayer.instances.push(this);
   }
-  playVideo(): void {}
+  playVideo(): void {
+    this.playCalls += 1;
+  }
   pauseVideo(): void {}
-  mute(): void {}
-  unMute(): void {}
+  mute(): void {
+    this.muteCalls += 1;
+  }
+  unMute(): void {
+    this.unmuteCalls += 1;
+  }
   seekTo(sec: number): void {
     this.time = sec;
   }
@@ -82,7 +93,7 @@ class MockYTPlayer {
     return 100;
   }
   getPlayerState(): number {
-    return 1;
+    return MockYTPlayer.state;
   }
   loadVideoById(opts: { videoId: string }): void {
     this.loadedVideoId = opts.videoId;
@@ -106,6 +117,9 @@ globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
 }) as typeof fetch;
 afterAll(() => {
   globalThis.fetch = realFetch;
+});
+afterEach(() => {
+  MockYTPlayer.state = 1; // never leak a blocked-state override between tests
 });
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -131,6 +145,7 @@ async function mountPlayer(props: TestPlayerProps) {
 beforeAll(() => {
   MockYTPlayer.instances = [];
   MockYTPlayer.destroyed = [];
+  MockYTPlayer.state = 1;
 });
 
 describe("YoutubePlayer lifecycle (YT iframe API stub)", () => {
@@ -148,6 +163,7 @@ describe("YoutubePlayer lifecycle (YT iframe API stub)", () => {
     expect(vars["playsinline"]).toBe(1);
     expect(vars["rel"]).toBe(0);
     expect(vars["modestbranding"]).toBe(1);
+    expect(vars["autoplay"]).toBe(1); // P12-UX: autoplay WITH sound on load
     await unmount();
     expect(MockYTPlayer.destroyed).toContain(player);
   });
@@ -374,5 +390,58 @@ describe("Task 2-c — probeEmbedHealth (the offscreen muted-autoplay detector)"
     expect(await first).toBe(false); // aborted by the supersede
     expect(MockYTPlayer.destroyed).toContain(firstProbe);
     expect(await second).toBe(false); // its own deadline
+  });
+});
+
+describe("P12-UX — autoplay policy (sound attempt → mute+retry fallback)", () => {
+  test("blocked unmuted autoplay (UNSTARTED at the 1.5s check) → mute()+playVideo() + the tap-to-unmute affordance; the tap unmutes and dismisses", async () => {
+    MockYTPlayer.instances = [];
+    MockYTPlayer.destroyed = [];
+    MockYTPlayer.state = -1; // UNSTARTED — the browser blocked autoplay
+    win.sessionStorage.clear();
+    const { unmount } = await mountPlayer({ videoId: "AUTOPLAY001" });
+    const player = MockYTPlayer.instances[0];
+    const events = player.options["events"] as { onReady: () => void };
+    await act(async () => {
+      events.onReady();
+    });
+    await act(async () => {
+      await sleep(1700); // past AUTOPLAY_CHECK_MS (1500)
+    });
+    expect(player.muteCalls).toBe(1);
+    expect(player.playCalls).toBeGreaterThanOrEqual(1);
+    const btn = win.document.querySelector('button[aria-label="Tap to unmute"]');
+    expect(btn).not.toBeNull();
+    await act(async () => {
+      (btn as unknown as HTMLElement).click();
+    });
+    expect(player.unmuteCalls).toBe(1);
+    expect(win.document.querySelector('button[aria-label="Tap to unmute"]')).toBeNull();
+    await unmount();
+  });
+
+  test("autoplay WITH sound succeeds (PLAYING) → no mute fallback, no affordance", async () => {
+    MockYTPlayer.instances = [];
+    MockYTPlayer.destroyed = [];
+    MockYTPlayer.state = 1; // PLAYING — autoplay took, with sound
+    win.sessionStorage.clear();
+    const { unmount } = await mountPlayer({ videoId: "AUTOPLAY002" });
+    const player = MockYTPlayer.instances[0];
+    const events = player.options["events"] as {
+      onReady: () => void;
+      onStateChange: (e: { data: number }) => void;
+    };
+    await act(async () => {
+      events.onReady();
+    });
+    await act(async () => {
+      events.onStateChange({ data: 1 }); // PLAYING clears the check
+    });
+    await act(async () => {
+      await sleep(1700);
+    });
+    expect(player.muteCalls).toBe(0);
+    expect(win.document.querySelector('button[aria-label="Tap to unmute"]')).toBeNull();
+    await unmount();
   });
 });

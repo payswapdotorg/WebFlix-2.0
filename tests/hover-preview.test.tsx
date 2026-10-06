@@ -1,15 +1,21 @@
 /// <reference types="bun-types" />
 /**
- * Task 2-c tests — the hover preview layer (STORYBOARD-based, no iframes).
+ * Hover preview tests — WFX2-P6-HP (storyboard lane) + P12-UX Task 4 (the
+ * embed lane: each hovered card is a MINI VIDEO PLAYER).
  *
- * What must hold after the embed-wall rebuild:
+ * What must hold:
  *  - the 600ms dwell gate (arm → wait → show; leave before the delay cancels);
- *  - NO YouTube iframe player is EVER created (the wall can never appear) —
- *    asserted with a stubbed window.YT that stays at zero instances;
- *  - show → positioned over the anchor rect (fixed geometry);
- *  - storyboard available → the sprite frames animate (background-image =
- *    the level's sheet URL with $N → M<k>, background-position stepping
- *    through the grid as the frame cursor advances);
+ *  - storyboard mode / reduced motion: NO YT player is created on this lane
+ *    (asserted with a stubbed window.YT at zero instances) and the sprite
+ *    frames animate (sheet URL with $N → M<k>, background-position stepping);
+ *  - P12-UX embed mode: ONE muted autoplaying player created per show with
+ *    autoplay+mute+controls:0 vars; PLAYING → "embed" phase + the muted
+ *    pill, no storyboard frame; a walled embed (never plays) is DESTROYED
+ *    at the EMBED_HEALTH_MS deadline and the storyboard takes over; hide
+ *    and retarget destroy the previous player (never two);
+ *  - coarse pointer (touch): the dwell never shows a preview at all;
+ *  - show → positioned over the anchor rect (fixed geometry, the card's
+ *    own bounds — zero layout shift);
  *  - no storyboard (walled egress / fetch error) → the subtle zoom/pan
  *    degrade on the thumbnail (never a broken box);
  *  - scroll-to-hide.
@@ -26,6 +32,7 @@ import { act } from "react";
 import {
   useHoverPreview,
   VideoHoverPreviewLayer,
+  EMBED_HEALTH_MS,
 } from "@/components/video/video-hover-preview";
 
 // ---- happy-dom as the global DOM (set before any component runs) ----
@@ -69,10 +76,21 @@ Object.defineProperty(globalThis, "sessionStorage", {
 // ---- YT iframe API stub — MUST stay unused (the anti-wall property) ----
 class MockYTPlayer {
   static instances: MockYTPlayer[] = [];
-  constructor(_el: Element, _options: Record<string, unknown>) {
+  static destroyed: MockYTPlayer[] = [];
+  el: Element;
+  options: Record<string, unknown>;
+  constructor(el: Element, options: Record<string, unknown>) {
+    this.el = el;
+    this.options = options;
     MockYTPlayer.instances.push(this);
   }
-  destroy(): void {}
+  destroy(): void {
+    MockYTPlayer.destroyed.push(this);
+  }
+  /** Passive stub: never reports playback (drives the fallback path). */
+  getPlayerState(): number {
+    return -1;
+  }
 }
 (win as unknown as Record<string, unknown>).YT = { Player: MockYTPlayer, PlayerState: {} };
 
@@ -145,9 +163,14 @@ interface TestStore {
   snapshot: {
     video: { id: string; title: string; thumbnailUrl?: string | null } | null;
     rect: DOMRect | null;
+    mode: "embed" | "storyboard";
   };
   listeners: Set<() => void>;
-  show: (video: { id: string; title: string; thumbnailUrl?: string | null }, anchor: HTMLElement) => void;
+  show: (
+    video: { id: string; title: string; thumbnailUrl?: string | null },
+    anchor: HTMLElement,
+    mode?: "embed" | "storyboard"
+  ) => void;
   hide: () => void;
 }
 const previewStore = (): TestStore => {
@@ -250,10 +273,11 @@ const leave = (el: HTMLElement) =>
 
 beforeEach(() => {
   MockYTPlayer.instances = [];
+  MockYTPlayer.destroyed = [];
   fetchedUrls.length = 0;
   installFetchStub();
   const s = previewStore();
-  s.snapshot = { video: null, rect: null };
+  s.snapshot = { video: null, rect: null, mode: "storyboard" };
   for (const l of s.listeners) l();
 });
 
@@ -304,7 +328,7 @@ describe("hover preview — dwell gate (600ms before store.show)", () => {
   });
 });
 
-describe("hover preview — storyboard animation (no iframes, ever)", () => {
+describe("hover preview — the storyboard lane (primary in storyboard mode, fallback for the embed lane)", () => {
   test("show → positioned over the anchor + the storyboard frame renders sheet M0 at frame 0", async () => {
     const { anchor } = await renderApp(videoA);
     stubRect(anchor, { left: 10, top: 20, width: 300, height: 169 });
@@ -330,7 +354,7 @@ describe("hover preview — storyboard animation (no iframes, ever)", () => {
     );
     expect(frame.style.backgroundSize).toBe("800px 450px"); // 5×160 × 5×90
     expect(frame.style.backgroundPosition).toBe("0px 0px");
-    // the ANTI-WALL property: no YT player was ever created
+    // storyboard-mode property: this lane creates no YT player at all
     expect(MockYTPlayer.instances).toHaveLength(0);
   });
 
@@ -412,5 +436,133 @@ describe("hover preview — storyboard animation (no iframes, ever)", () => {
     // the client cache means the playback endpoint was hit exactly ONCE for A
     // across the whole file session (test 1's fetch) — the re-show never refetches
     expect(totalPlaybackFetches.filter((u) => u.includes("AAAAAAAAAAA"))).toHaveLength(1);
+  });
+});
+
+// ---- P12-UX Task 4: the embed lane (mini video player on hover) ----------
+
+/** Override happy-dom's matchMedia for a device-policy test (restored by the caller). */
+const setMatchMedia = (matches: (query: string) => boolean) => {
+  (win as unknown as Record<string, unknown>).matchMedia = (query: string) => ({
+    matches: matches(query),
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  });
+};
+
+describe("P12-UX — the embed lane (muted autoplay mini player)", () => {
+  test("embed mode: ONE muted autoplaying player created; PLAYING → embed phase + muted pill, no storyboard frame", async () => {
+    const { anchor } = await renderApp(videoA);
+    stubRect(anchor, { left: 10, top: 20, width: 300, height: 169 });
+    await act(async () => {
+      previewStore().show(videoA, anchor, "embed");
+    });
+    await act(async () => {
+      await sleep(30); // the api microtask creates the player
+    });
+    expect(MockYTPlayer.instances).toHaveLength(1);
+    const player = MockYTPlayer.instances[0];
+    expect(player.options["videoId"]).toBe("AAAAAAAAAAA");
+    const vars = player.options["playerVars"] as Record<string, number>;
+    expect(vars).toMatchObject({ autoplay: 1, mute: 1, controls: 0, playsinline: 1 });
+    // the embed reports PLAYING → the embed phase with the muted indicator
+    const events = player.options["events"] as { onStateChange: (e: { data: number }) => void };
+    await act(async () => {
+      events.onStateChange({ data: 1 });
+    });
+    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("embed");
+    expect(q('[data-testid="hover-preview-muted"]')).not.toBeNull();
+    expect(q('[data-testid="storyboard-frame"]')).toBeNull(); // storyboard waits its turn
+  });
+
+  test("walled embed (never reports playback) → destroyed at the health deadline → the storyboard fallback takes over", async () => {
+    const { anchor } = await renderApp(videoA);
+    await act(async () => {
+      previewStore().show(videoA, anchor, "embed");
+    });
+    await act(async () => {
+      await sleep(30);
+    });
+    expect(MockYTPlayer.instances).toHaveLength(1);
+    await act(async () => {
+      await sleep(EMBED_HEALTH_MS + 400); // past the health deadline
+    });
+    expect(MockYTPlayer.destroyed).toHaveLength(1); // the embed was destroyed
+    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
+    expect(q('[data-testid="storyboard-frame"]')).not.toBeNull();
+    expect(q('[data-testid="hover-preview-muted"]')).toBeNull();
+  });
+
+  test("hide destroys the embed (the single-instance law, exit side)", async () => {
+    const { anchor } = await renderApp(videoA);
+    await act(async () => {
+      previewStore().show(videoA, anchor, "embed");
+    });
+    await act(async () => {
+      await sleep(30);
+    });
+    expect(MockYTPlayer.instances).toHaveLength(1);
+    await hide();
+    expect(MockYTPlayer.destroyed).toHaveLength(1);
+    expect(q('[data-testid="hover-preview"]')).toBeNull();
+  });
+
+  test("retarget A → B: the previous embed is destroyed (never two players)", async () => {
+    const { anchor } = await renderApp(videoA);
+    await act(async () => {
+      previewStore().show(videoA, anchor, "embed");
+    });
+    await act(async () => {
+      await sleep(30);
+    });
+    const first = MockYTPlayer.instances[0];
+    await act(async () => {
+      previewStore().show(videoB, anchor, "embed");
+    });
+    await act(async () => {
+      await sleep(30);
+    });
+    expect(MockYTPlayer.instances).toHaveLength(2); // created twice in total
+    expect(MockYTPlayer.destroyed).toContain(first); // …but the first was retired
+    const alive = MockYTPlayer.instances.filter((p) => !MockYTPlayer.destroyed.includes(p));
+    expect(alive).toHaveLength(1); // exactly ONE live preview player
+  });
+
+  test("coarse pointer (touch): the dwell never shows a preview at all (youtube.com shows none)", async () => {
+    const real = (win as unknown as Record<string, unknown>).matchMedia;
+    setMatchMedia((query) => query.includes("coarse"));
+    const { card } = await renderApp(videoA);
+    await enter(card);
+    await act(async () => {
+      await sleep(850); // past the dwell
+    });
+    expect(previewStore().snapshot.video).toBeNull();
+    expect(q('[data-testid="hover-preview"]')).toBeNull();
+    expect(fetchedUrls).toHaveLength(0); // nothing fetched, nothing armed
+    expect(MockYTPlayer.instances).toHaveLength(0);
+    (win as unknown as Record<string, unknown>).matchMedia = real;
+  });
+
+  test("reduced motion: the dwell shows the STORYBOARD lane only (no embed player)", async () => {
+    const real = (win as unknown as Record<string, unknown>).matchMedia;
+    setMatchMedia((query) => query.includes("prefers-reduced-motion"));
+    const { card, anchor } = await renderApp(videoA);
+    stubRect(anchor, { left: 10, top: 20, width: 300, height: 169 });
+    await enter(card);
+    await act(async () => {
+      await sleep(850); // past the dwell
+    });
+    expect(previewStore().snapshot.video?.id).toBe("AAAAAAAAAAA");
+    await act(async () => {
+      await sleep(30); // the storyboard fetch settles
+    });
+    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
+    expect(MockYTPlayer.instances).toHaveLength(0); // storyboard-only, no embed
+    (win as unknown as Record<string, unknown>).matchMedia = real;
   });
 });
