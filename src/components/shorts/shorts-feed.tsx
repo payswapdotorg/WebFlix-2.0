@@ -7,6 +7,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useApi } from "@/hooks/use-api";
+import { useWebFlixSession } from "@/hooks/use-webflix-session";
+import { ReportDialog } from "@/components/watch/report-dialog";
 import { ShortsPlayerSlot } from "./shorts-player-slot";
 import { ShortsEngagementRail } from "./shorts-engagement-rail";
 import { ShortsCommentsSheet } from "./shorts-comments-sheet";
@@ -36,6 +38,10 @@ import type {
  * - Keyboard ArrowUp/ArrowDown, wheel + touch = natural snap scroll,
  *   desktop chevrons. Share copies the internal /watch/{id} link.
  *
+ * P15-SHORTS: the feed owns the WebFlix session probe (one fetch — the rail
+ * instances receive `guest` as a prop) and the report dialog state for the
+ * rail's More (⋯) menu (the watch report dialog, read-only reuse).
+ *
  * HEIGHT CONTRACT: the AppShell wraps page children in a plain `div.flex-1`
  * whose used height comes from flexing — percentage heights (h-full) do NOT
  * resolve against it (classic flex-item gotcha, verified in-browser). The
@@ -49,6 +55,10 @@ const MAX_ITEMS = 60;
 const EMPTY_ITEMS: ShortDTO[] = [];
 
 export function ShortsFeed() {
+  // ---- WebFlix session (ONE probe for the whole feed; guests never write) --
+  const wfSession = useWebFlixSession();
+  const guest = wfSession.status === "unauthenticated";
+
   // ---- seed page (shared fetch hook: loading is derived, no setState in effect)
   const {
     data: seedPage,
@@ -89,6 +99,7 @@ export function ShortsFeed() {
   const [metas, setMetas] = useState<Record<string, ShortMetaDTO>>({});
   const [failedIds, setFailedIds] = useState<Record<string, boolean>>({});
   const [commentsFor, setCommentsFor] = useState<string | null>(null);
+  const [reportFor, setReportFor] = useState<string | null>(null);
 
   const feedRef = useRef<HTMLDivElement | null>(null);
   const slideRefs = useRef<(HTMLElement | null)[]>([]);
@@ -202,7 +213,8 @@ export function ShortsFeed() {
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (commentsFor !== null) return; // comments sheet owns the keyboard
+      if (commentsFor !== null || reportFor !== null) return; // sheet/dialog owns the keyboard
+      if (event.defaultPrevented) return; // an open menu (the ⋯ dropdown) owns the keys
       if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
       const target = event.target as HTMLElement | null;
       if (
@@ -219,7 +231,7 @@ export function ShortsFeed() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeIndex, commentsFor, goNext, scrollToIndex]);
+  }, [activeIndex, commentsFor, reportFor, goNext, scrollToIndex]);
 
   // ---- share (internal /watch link) -----------------------------------------
   async function shareShort(id: string) {
@@ -377,9 +389,13 @@ export function ShortsFeed() {
                   </div>
 
                   <ShortsEngagementRail
+                    videoId={item.id}
                     meta={display}
+                    metaLoading={!hydrated && !failedMeta}
+                    guest={guest}
                     onOpenComments={() => setCommentsFor(item.id)}
                     onShare={() => void shareShort(item.id)}
+                    onReport={() => setReportFor(item.id)}
                   />
 
                   {/* desktop prev/next chevrons (above the rail) */}
@@ -434,6 +450,17 @@ export function ShortsFeed() {
         open={commentsFor !== null}
         onClose={() => setCommentsFor(null)}
       />
+      {/* the ⋯ menu's Report action — the watch report dialog (read-only
+          reuse; conditional mount → fresh state per open, the watch-page law) */}
+      {reportFor !== null && (
+        <ReportDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setReportFor(null);
+          }}
+          videoId={reportFor}
+        />
+      )}
     </div>
   );
 }

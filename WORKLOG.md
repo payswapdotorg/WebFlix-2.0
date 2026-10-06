@@ -237,3 +237,73 @@ Branch: `work/P12-UX` (base `7dc1af3`)
   autoplay-policy describe (blocked -> mute+play+affordance+tap-unmute;
   success -> no fallback). Mock gains a state override + call counters + an
   afterEach state reset.
+
+---
+
+## P15-SHORTS — youtube-parity shorts rail (dislike, more menu, sound disc, remix)
+
+**Agent:** P15-SHORTS frontend-parity lane
+**Base:** 3ae85a14f12b131eb5c4b96282b0fc6436cb1470
+
+### What shipped (src/components/shorts/ only)
+
+1. **Dislike + live Like** (`shorts-engagement-rail.tsx`): wired to the watch
+   page's seam — `POST /api/videos/{id}/like {value, baseline}` via `post()`
+   from `@/lib/watch/client`, the ActionRow idiom verbatim (optimistic
+   set/swap/unset, `aria-pressed` + `fill-current text-[#f03]` filled icon,
+   honest revert on failure, guest gate → `signInHref("/shorts")`,
+   broker-offline → `toastActionError`). Session-local pressed state keyed per
+   short id (one rail instance per slide), starting unpressed — there is no
+   per-user rating READ for shorts. Like label keeps the real `likesText`
+   (optimistic ±1 only when parseable; the response's DOM-observed count
+   wins; unparseable labels never fabricate a number). Dislike shows NO count
+   (youtube.com never shows one).
+2. **More (⋯) menu**: the app's DropdownMenu with REAL actions only — Report
+   (the watch `report-dialog`, read-only reuse, gated), Save to Watch later
+   (`POST /api/playlists/watch-later` toggle, BookmarkPlus↔BookmarkCheck
+   pressed state), Copy link (the existing share handler), Not interested
+   (`POST /api/videos/{id}/not-interested`). Omitted honestly: Captions,
+   Playback speed, Don't recommend channel, Quality (no seams; embed is
+   controls=0).
+3. **Honest absence**: Remix (no seam — only `WEB_REMIX` InnerTube client name
+   in streams.ts; /upload is not a remix flow) and the sound disc (shorts
+   DTOs carry no sound metadata; no sound page route) — omitted, never faked.
+4. **Measured geometry** (youtube.com 2026-10-06, desktop 1280×900 + mobile
+   412×915, signed-out): 48×48 buttons (was 44), 24px icons (was 20),
+   rgba(0,0,0,0.3) tonal bg (was /50), 8px unit gap + 70px units = 78px pitch
+   (was gap-4), 12px right inset (was 8px, `right-3`), labels 12px/400/18px
+   with reserved slots (skeleton while meta hydrates — no layout shift),
+   `bottom-16` kept (64px = measured last-rail-element bottom with the disc
+   honestly absent). Channel chip REMOVED from the rail (youtube.com has no
+   rail chip — channel info lives bottom-left, which the feed already has).
+5. **Feed wiring** (`shorts-feed.tsx`): one `useWebFlixSession` probe for the
+   whole feed (per-instance fetches avoided), `reportFor` state + one
+   conditionally-mounted `ReportDialog`, keyboard guard extended
+   (`reportFor` + `event.defaultPrevented` so an open ⋯ menu owns arrows).
+
+### Files touched (all in scope)
+
+- `src/components/shorts/shorts-engagement-rail.tsx` (rewritten)
+- `src/components/shorts/shorts-feed.tsx` (wiring only; player/sheet/chevrons
+  untouched)
+
+Shared files: READ-ONLY imports only (`action-row` idiom, `report-dialog`,
+`post`, `toastActionError`, `signInHref`, `useWebFlixSession`,
+`LikeValue`/`LikeResultDto` types). No API/DTO/watch/video/search/home edits.
+
+### Verified in-browser (agent-browser, dev :3001)
+
+Rail 48×48/78px pitch on desktop+mobile; labels 997/33/Share with sr-only;
+⋯ menu opens upward, 4 items @44px; Copy link → "Link copied"; guest Like →
+`/signin?redirect=%2Fshorts`; authenticated Like/WL/NI with broker offline →
+the honest disconnected toast + state reverts; Report → dialog → the route's
+own honest 404 for live videoIds (identical to the watch page's behavior for
+live videos — read-only reuse, no API edits); comments sheet (20 comments),
+chevrons, ArrowDown feed scroll, menu-open arrow ownership all intact.
+No hydration/runtime errors from the shorts surface.
+
+### Gates
+
+lint 0 errors (1 pre-existing warning in tests/search-layout.test.tsx,
+outside scope) · typecheck clean · test 1255/0 (baseline 1255/0, no test
+changes needed — shorts tests cover API/mappers only, untouched).
