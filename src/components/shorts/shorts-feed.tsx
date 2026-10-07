@@ -449,6 +449,7 @@ export function ShortsFeed() {
         meta={commentsFor !== null ? (metas[commentsFor] ?? null) : null}
         open={commentsFor !== null}
         onClose={() => setCommentsFor(null)}
+        guest={guest}
       />
       {/* the ⋯ menu's Report action — the watch report dialog (read-only
           reuse; conditional mount → fresh state per open, the watch-page law) */}
