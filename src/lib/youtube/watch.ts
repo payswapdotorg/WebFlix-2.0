@@ -54,6 +54,19 @@ function absoluteDateToIso(text: string): string | null {
   return new Date(Date.UTC(year, month, day)).toISOString();
 }
 
+/**
+ * P21-LIVE-PREMIERES — the `next` dateText for an upcoming premiere /
+ * scheduled stream is "Scheduled for Oct 9, 2026" (verified live on real
+ * premieres — tests/fixtures/yt/next_premiere.json; `next` carries no
+ * exact timestamp, so the watch-page premieredAt is DATE-granular — the
+ * exact-to-the-second start stays YouTube's). Null for every other wording
+ * (the honest absence — a regular video's date falls through to createdAt).
+ */
+function premiereDateFromText(dateText: string): string | null {
+  const m = /^\s*(?:Scheduled for|Premieres)\s+([A-Za-z]{3}\s+\d{1,2},\s*\d{4})\s*$/.exec(dateText);
+  return m ? absoluteDateToIso(m[1]) : null;
+}
+
 /** Like count from the segmented like/dislike view model (exact via a11y). */
 function likeCountFrom(primaryInfo: any): { count: number; text: string | null } {
   const buttons =
@@ -98,6 +111,8 @@ export function mapWatchMetadata(videoId: string, response: unknown): WatchMetad
   const { count: likes, text: likeCountText } = likeCountFrom(primaryInfo);
   const publishedText = runsText(primaryInfo?.relativeDateText) || runsText(primaryInfo?.dateText) || null;
   const absoluteDate = runsText(primaryInfo?.dateText); // "Oct 25, 2009"
+  // P21-LIVE-PREMIERES: "Scheduled for Oct 9, 2026" → the premiere start
+  const premieredAt = premiereDateFromText(absoluteDate);
 
   const channelId: string = owner?.navigationEndpoint?.browseEndpoint?.browseId ?? "";
   const canonical: string = owner?.navigationEndpoint?.browseEndpoint?.canonicalBaseUrl ?? "";
@@ -131,7 +146,7 @@ export function mapWatchMetadata(videoId: string, response: unknown): WatchMetad
     isMembersOnly: false,
     membersTier: null,
     isShort: false,
-    premieredAt: null,
+    premieredAt,
     createdAt: absoluteDate ? absoluteDateToIso(absoluteDate) : null,
     channel: {
       id: channelId,

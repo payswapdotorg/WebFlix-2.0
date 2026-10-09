@@ -100,3 +100,31 @@ export function watchProgress(watchedSec: number, durationSec: number): number {
   if (durationSec <= 0) return 0;
   return Math.min(1, Math.max(0, watchedSec / durationSec));
 }
+
+/**
+ * P21-LIVE-PREMIERES — true when the video is a scheduled premiere / upcoming
+ * live stream that hasn't started yet (premieredAt in the future). Pure: the
+ * clock is injectable for deterministic tests.
+ */
+export function isUpcomingPremiere(
+  video: { premieredAt: string | null },
+  now: Date = new Date()
+): boolean {
+  if (!video.premieredAt) return false;
+  const startsAt = Date.parse(video.premieredAt);
+  return Number.isFinite(startsAt) && startsAt > now.getTime();
+}
+
+/**
+ * P21-LIVE-PREMIERES — the card meta date for an upcoming premiere, per
+ * YouTube's wording: "Premieres 10/12" (month/day); the year is appended
+ * when the premiere falls in a different year ("Premieres 1/5/2027").
+ */
+export function formatPremiereDate(date: Date | string, now: Date = new Date()): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) return "";
+  const md = `${d.getMonth() + 1}/${d.getDate()}`;
+  return d.getFullYear() === now.getFullYear()
+    ? `Premieres ${md}`
+    : `Premieres ${md}/${d.getFullYear()}`;
+}

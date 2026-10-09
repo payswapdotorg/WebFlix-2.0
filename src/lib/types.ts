@@ -551,9 +551,17 @@ export type PlaylistPageDTO = {
   nextCursor: string | null;
 };
 
-/** The Live surface (/explore/live) — real live streams with watching counts. */
+/**
+ * The Live surface (/explore/live) — real live streams with watching counts.
+ * P21-LIVE-PREMIERES: premieringSoon carries the upcoming premieres /
+ * scheduled live streams (premieredAt future) surfaced by the same
+ * live-scoped seed queries — additive; consumers that only read `videos`
+ * (the watching-now grid) are unaffected. Honestly empty when upstream
+ * can't reach any (public mode).
+ */
 export type LivePageDTO = {
   videos: VideoDTO[];
+  premieringSoon: VideoDTO[];
 };
 
 /**

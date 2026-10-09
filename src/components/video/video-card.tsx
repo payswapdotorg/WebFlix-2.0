@@ -27,7 +27,7 @@ import { addToQueue } from "@/lib/queue/queue-actions";
 import { useWebFlixSession } from "@/hooks/use-webflix-session";
 import { signInHref } from "@/lib/auth/client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { formatDuration, displayViews, displayPublished, watchProgress } from "@/lib/format";
+import { formatDuration, displayViews, displayPublished, watchProgress, isUpcomingPremiere, formatPremiereDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { postJson } from "@/hooks/use-api";
 import { VerifiedBadge } from "@/components/app/verified-badge";
@@ -62,6 +62,10 @@ export function VideoCard({ video, progress, variant = "grid", className, watche
   const watched =
     "watchedSec" in video ? watchProgress(video.watchedSec, video.durationSec ?? 0) : 0;
   const shownProgress = progress ?? watched;
+  // P21-LIVE-PREMIERES: the card's premiere state — scheduled (premieredAt
+  // future) carries YouTube's PREMIERE badge + the scheduled date text in
+  // the meta line (no views/age — none exist before the premiere starts).
+  const upcomingPremiere = isUpcomingPremiere(video);
 
   async function copyLink() {
     const link = `${window.location.origin}/watch/${video.id}`;
@@ -143,6 +147,10 @@ export function VideoCard({ video, progress, variant = "grid", className, watche
             <span className="absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-sm bg-yt-red px-1.5 py-0.5 text-[11px] font-bold uppercase text-white">
               <span className="size-1.5 rounded-full bg-white" /> Live
             </span>
+          ) : upcomingPremiere ? (
+            <span className="duration-badge absolute bottom-1.5 right-1.5 rounded-sm px-1.5 py-0.5 text-[11px] font-bold uppercase">
+              Premiere
+            </span>
           ) : video.durationSec !== null ? (
             <span className="duration-badge absolute bottom-1.5 right-1.5 rounded-sm px-1.5 py-0.5 text-[11px] font-medium tabular-nums">
               {formatDuration(video.durationSec)}
@@ -202,11 +210,17 @@ export function VideoCard({ video, progress, variant = "grid", className, watche
             {video.channel.verified && <VerifiedBadge />}
           </Link>
           <p className="text-[13px] text-muted-foreground">
-            {displayViews(video)}
-            {(() => {
-              const age = displayPublished(video);
-              return age ? ` · ${age}` : "";
-            })()}
+            {upcomingPremiere && video.premieredAt ? (
+              formatPremiereDate(video.premieredAt)
+            ) : (
+              <>
+                {displayViews(video)}
+                {(() => {
+                  const age = displayPublished(video);
+                  return age ? ` · ${age}` : "";
+                })()}
+              </>
+            )}
           </p>
         </div>
         <DropdownMenu>

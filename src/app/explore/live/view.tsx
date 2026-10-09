@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { Radio } from "lucide-react";
+import { CalendarClock, Radio } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
 import { displayViews } from "@/lib/format";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VerifiedBadge } from "@/components/app/verified-badge";
+import { VideoRail } from "@/components/home/video-rail";
 import type { LivePageDTO } from "@/lib/types";
 
 /**
@@ -13,6 +14,13 @@ import type { LivePageDTO } from "@/lib/types";
  * Live search filter over a live-scoped query set, merged). Every card
  * carries the real LIVE badge + watching count; clicking → the watch page
  * (the embed plays the live stream + the live-chat panel — already built).
+ *
+ * P21-LIVE-PREMIERES — "Premiering soon": the upcoming premieres / scheduled
+ * live streams the same seed queries surface (premieredAt future), as a rail
+ * of VideoCards AHEAD of the watching-now grid. Each card carries the
+ * PREMIERE badge + the scheduled date ("Premieres 10/12") and links to the
+ * watch page's premiere state. Honestly absent when upstream can't reach
+ * any (public mode) — never faked.
  */
 export default function LivePage() {
   const { data, loading, error } = useApi<LivePageDTO>("/api/live?limit=24");
@@ -51,54 +59,67 @@ export default function LivePage() {
           {error}
         </p>
       )}
-      {data && data.videos.length === 0 && (
+      {data && data.videos.length === 0 && !data.premieringSoon?.length && (
         <p className="px-4 py-10 text-center text-sm text-muted-foreground">
           No live streams matching right now — try again in a moment.
         </p>
       )}
+      {data && data.premieringSoon?.length > 0 && (
+        <VideoRail
+          title="Premiering soon"
+          railLabel="Premiering soon"
+          videos={data.premieringSoon}
+          icon={<CalendarClock className="size-5 text-muted-foreground" aria-hidden="true" />}
+        />
+      )}
       {data && data.videos.length > 0 && (
-        <div className="grid grid-cols-1 gap-x-4 gap-y-8 px-4 sm:grid-cols-2 sm:px-6 lg:grid-cols-3 2xl:grid-cols-4">
-          {data.videos.map((video) => (
-            <article key={video.id} className="group flex flex-col">
-              <Link
-                href={`/watch/${video.id}`}
-                aria-label={`Watch ${video.title} (live)`}
-                className="relative block overflow-hidden rounded-xl bg-secondary"
-              >
-                <div className="relative aspect-video w-full">
-                  <img
-                    src={video.thumbnailUrl}
-                    alt={video.title}
-                    loading="lazy"
-                    className="absolute inset-0 h-full w-full object-cover"
-                  />
-                  <span className="absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-sm bg-yt-red px-1.5 py-0.5 text-[11px] font-bold uppercase text-white">
-                    <span className="size-1.5 rounded-full bg-white" aria-hidden /> Live
-                  </span>
+        <section
+          aria-label="Watching now"
+          className={data.premieringSoon?.length ? "mt-8" : undefined}
+        >
+          <div className="grid grid-cols-1 gap-x-4 gap-y-8 px-4 sm:grid-cols-2 sm:px-6 lg:grid-cols-3 2xl:grid-cols-4">
+            {data.videos.map((video) => (
+              <article key={video.id} className="group flex flex-col">
+                <Link
+                  href={`/watch/${video.id}`}
+                  aria-label={`Watch ${video.title} (live)`}
+                  className="relative block overflow-hidden rounded-xl bg-secondary"
+                >
+                  <div className="relative aspect-video w-full">
+                    <img
+                      src={video.thumbnailUrl}
+                      alt={video.title}
+                      loading="lazy"
+                      className="absolute inset-0 h-full w-full object-cover"
+                    />
+                    <span className="absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-sm bg-yt-red px-1.5 py-0.5 text-[11px] font-bold uppercase text-white">
+                      <span className="size-1.5 rounded-full bg-white" aria-hidden /> Live
+                    </span>
+                  </div>
+                </Link>
+                <div className="mt-3 flex min-w-0 flex-1 gap-3">
+                  <div className="min-w-0 flex-1">
+                    <Link href={`/watch/${video.id}`} className="block">
+                      <h2 className="line-clamp-2 text-sm font-medium leading-snug text-foreground">
+                        {video.title}
+                      </h2>
+                    </Link>
+                    <Link
+                      href={`/channel/${video.channel.handle}`}
+                      className="mt-1 flex w-fit items-center gap-1 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      <span className="truncate">{video.channel.name}</span>
+                      {video.channel.verified && <VerifiedBadge />}
+                    </Link>
+                    <p className="text-[13px] font-medium text-muted-foreground">
+                      {video.viewsText ?? displayViews(video)}
+                    </p>
+                  </div>
                 </div>
-              </Link>
-              <div className="mt-3 flex min-w-0 flex-1 gap-3">
-                <div className="min-w-0 flex-1">
-                  <Link href={`/watch/${video.id}`} className="block">
-                    <h2 className="line-clamp-2 text-sm font-medium leading-snug text-foreground">
-                      {video.title}
-                    </h2>
-                  </Link>
-                  <Link
-                    href={`/channel/${video.channel.handle}`}
-                    className="mt-1 flex w-fit items-center gap-1 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
-                  >
-                    <span className="truncate">{video.channel.name}</span>
-                    {video.channel.verified && <VerifiedBadge />}
-                  </Link>
-                  <p className="text-[13px] font-medium text-muted-foreground">
-                    {video.viewsText ?? displayViews(video)}
-                  </p>
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
+              </article>
+            ))}
+          </div>
+        </section>
       )}
     </div>
   );

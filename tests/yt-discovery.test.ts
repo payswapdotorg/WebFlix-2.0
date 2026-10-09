@@ -16,6 +16,7 @@ import { readFileSync } from "node:fs";
 import { NextRequest } from "next/server";
 import { setUpstream } from "@/lib/youtube/innertube";
 import { clearCache } from "@/lib/youtube/cache";
+import { walkTree } from "@/lib/youtube/mappers";
 import { buildSearchParam, type SearchFilters } from "@/lib/youtube/filters";
 import {
   FILTER_GROUPS,
@@ -679,6 +680,116 @@ describe("GET /api/live — the Live surface", () => {
       (r) => r.url.includes("/youtubei/v1/search") && r.body?.params === "EgJAAQ=="
     );
     expect(liveSearches.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7b. P21-LIVE-PREMIERES — the premiering-soon set on the Live surface
+// ---------------------------------------------------------------------------
+
+/**
+ * A live-search response (the recorded search_live fixture) with UPCOMING
+ * videoRenderers spliced in from the real search_premiere capture, their
+ * scheduled starts pinned RELATIVE TO NOW (the fixture's real Oct-2026
+ * dates must never make this suite date-dependent). `extraRenderers` ride
+ * along verbatim (crafted stale-copy probes).
+ */
+function liveSearchWithUpcoming(startsInSec: number[], extraRenderers: any[] = []): any {
+  const base = structuredClone(load("search_live"));
+  const section = base.contents.twoColumnSearchResultsRenderer.primaryContents.sectionListRenderer.contents.find(
+    (s: any) => s.itemSectionRenderer?.contents?.some?.((i: any) => i?.videoRenderer)
+  );
+  if (!section) throw new Error("search_live carries no videoRenderer itemSection");
+  const upcoming = walkTree(load("search_premiere"), "videoRenderer")
+    .filter((r: any) => r.upcomingEventData)
+    .slice(0, startsInSec.length)
+    .map((r: any, i: number) => {
+      const copy = structuredClone(r);
+      copy.upcomingEventData.startTime = String(Math.floor(Date.now() / 1000) + startsInSec[i]);
+      return copy;
+    });
+  section.itemSectionRenderer.contents.push(
+    ...[...upcoming, ...extraRenderers].map((r) => ({ videoRenderer: r }))
+  );
+  return base;
+}
+
+/** Upstream serving one fixed payload to every live-scoped search. */
+function fixedSearchUpstream(payload: any) {
+  return async (url: string, init?: RequestInit): Promise<Response> => {
+    const body = init?.body ? JSON.parse(String(init.body)) : null;
+    if (url.includes("/youtubei/v1/search") && body?.params === "EgJAAQ==") {
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    return new Response("not found", { status: 404 });
+  };
+}
+
+describe("GET /api/live — the premiering-soon set (P21)", () => {
+  test("upcoming premieres surface in premieringSoon (soonest first), never in the watching-now grid", async () => {
+    // document order +3d, +1d, +2d — the set must come back soonest-first
+    const augmented = liveSearchWithUpcoming([3 * 86_400, 1 * 86_400, 2 * 86_400]);
+    setUpstream(fixedSearchUpstream(augmented));
+    const res = await liveRoute(new Request("http://localhost/api/live"));
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.premieringSoon).toHaveLength(3);
+    const starts = data.premieringSoon.map((v: any) => Date.parse(v.premieredAt));
+    expect(starts[0]).toBeLessThan(starts[1]);
+    expect(starts[1]).toBeLessThan(starts[2]);
+    for (const v of data.premieringSoon) {
+      expect(v.isLive).toBe(false); // the premiere state, never a fake LIVE badge
+      expect(Date.parse(v.premieredAt)).toBeGreaterThan(Date.now() - 60_000);
+    }
+    // the watching-now grid is unchanged: all live, no overlap with the rail
+    expect(data.videos.length).toBeGreaterThan(0);
+    expect(data.videos.every((v: any) => v.isLive)).toBe(true);
+    const railIds = new Set(data.premieringSoon.map((v: any) => v.id));
+    expect(data.videos.some((v: any) => railIds.has(v.id))).toBe(false);
+  });
+
+  test("a stale UPCOMING copy of a live video stays out of the rail (live-now is the fresher truth)", async () => {
+    const live = load("search_live");
+    const firstLiveId = live.contents.twoColumnSearchResultsRenderer.primaryContents.sectionListRenderer.contents
+      .find((s: any) => s.itemSectionRenderer?.contents?.some?.((i: any) => i?.videoRenderer))
+      .itemSectionRenderer.contents.find((i: any) => i?.videoRenderer).videoRenderer.videoId;
+    const stale = {
+      videoId: firstLiveId,
+      title: { runs: [{ text: "A stale UPCOMING copy of a live stream" }] },
+      upcomingEventData: { startTime: String(Math.floor(Date.now() / 1000) + 86_400) },
+      thumbnailOverlays: [
+        { thumbnailOverlayTimeStatusRenderer: { style: "UPCOMING", text: { simpleText: "Upcoming" } } },
+      ],
+    };
+    setUpstream(fixedSearchUpstream(liveSearchWithUpcoming([2 * 86_400], [stale])));
+    const res = await liveRoute(new Request("http://localhost/api/live"));
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.videos.some((v: any) => v.id === firstLiveId)).toBe(true); // live copy wins
+    expect(data.premieringSoon.some((v: any) => v.id === firstLiveId)).toBe(false); // stale copy dropped
+  });
+
+  test("no upcoming in the searches → premieringSoon honestly [] (public mode), videos intact", async () => {
+    // the default fixtureUpstream: search_live only (zero UPCOMING renderers)
+    const res = await liveRoute(new Request("http://localhost/api/live"));
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(Array.isArray(data.premieringSoon)).toBe(true);
+    expect(data.premieringSoon).toHaveLength(0); // honest empty — never faked
+    expect(data.videos.length).toBeGreaterThan(0);
+  });
+
+  test("an upcoming start already in the past is NOT premiering soon (it started)", async () => {
+    const augmented = liveSearchWithUpcoming([-3600]); // started an hour ago
+    setUpstream(fixedSearchUpstream(augmented));
+    const res = await liveRoute(new Request("http://localhost/api/live"));
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.premieringSoon).toHaveLength(0);
+    expect(data.videos.every((v: any) => v.isLive)).toBe(true); // and it never leaks into live either
   });
 });
 

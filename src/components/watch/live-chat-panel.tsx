@@ -79,6 +79,57 @@ const iconButton =
 export function LiveChatPanel({
   videoId,
   currentTimeSec,
+  premiereStartsAt,
+}: {
+  videoId: string;
+  currentTimeSec?: number;
+  /**
+   * P21-LIVE-PREMIERES — the scheduled start (ISO) of an upcoming premiere.
+   * While it is in the future the panel renders YouTube's pre-premiere
+   * chat state ("Chat is disabled until the premiere starts") instead of
+   * the live/replay machinery: the real pre-premiere chat stream is
+   * YouTube's (no session, no continuation — honest disclosure on the
+   * panel itself). Once the start passes, the caller drops the prop and
+   * the normal live-chat bootstrap takes over.
+   */
+  premiereStartsAt?: string | null;
+}) {
+  // P21: the pre-premiere state — decided BEFORE any chat machinery runs
+  // (this outer arm carries no hooks, so the branch is legal).
+  if (premiereStartsAt && Date.parse(premiereStartsAt) > Date.now()) {
+    return <PrePremiereChat />;
+  }
+  return <LiveChatPanelInner videoId={videoId} currentTimeSec={currentTimeSec} />;
+}
+
+/** P21-LIVE-PREMIERES — YouTube's pre-premiere chat state, honestly. */
+function PrePremiereChat() {
+  return (
+    <section
+      aria-label="Live chat"
+      data-premiere-chat
+      className="mb-6 flex h-in(560px,70vh)] w-full max-w-in(420px,100%)] flex-col overflow-hidden rounded-xl border border-border bg-card/40"
+    >
+      <header className="flex items-center gap-2 border-b border-border px-3 py-2.5">
+        <h2 className="text-sm font-semibold">Live chat</h2>
+      </header>
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 py-8 text-center">
+        <MessagesSquare className="size-6 text-muted-foreground" aria-hidden="true" />
+        <p className="text-sm font-medium text-foreground">
+          Chat is disabled until the premiere starts
+        </p>
+        <p className="max-w-xs text-xs leading-relaxed text-muted-foreground">
+          The pre-premiere chat stream is YouTube’s — it plays on youtube.com
+          only. WebFlix joins the live chat once the premiere begins.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function LiveChatPanelInner({
+  videoId,
+  currentTimeSec,
 }: {
   videoId: string;
   currentTimeSec?: number;
