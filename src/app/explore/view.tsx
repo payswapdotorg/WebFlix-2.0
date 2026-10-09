@@ -22,9 +22,9 @@ const CATEGORY_ICON_NAMES: Record<string, string> = {
 };
 
 /**
- * The Explore hub (WFX2-B-W) — youtube.com's explore pattern: a category
- * grid where every card lands on a real-data destination (trending category
- * pages, the Live surface, or scoped search with the category pre-applied).
+ * The Explore hub (WFX2-B-W; WFX2-P19-EXPL) — youtube.com's explore pattern:
+ * a category grid where every card lands on a real-data destination (the
+ * category's own browse page, or the Live surface).
  */
 export default function ExplorePage() {
   return (
@@ -33,8 +33,8 @@ export default function ExplorePage() {
         <Compass className="size-7 text-yt-red" aria-hidden /> Explore
       </h1>
       <p className="px-4 pb-6 text-sm text-muted-foreground sm:px-6">
-        Browse YouTube by category — trending categories, live streams, and scoped search,
-        all real data.
+        Browse YouTube by category — every card opens a real category browse page with a
+        ranked grid of real videos, plus the Live surface.
       </p>
 
       <div className="grid grid-cols-2 gap-4 px-4 sm:grid-cols-3 lg:grid-cols-4 sm:px-6">
@@ -52,7 +52,6 @@ export default function ExplorePage() {
         </Link>
 
         {CATEGORIES.filter((c) => c !== "Live").map((category) => {
-          const isTrendingCategory = category === "Music" || category === "Gaming";
           return (
             <Link
               key={category}
@@ -64,7 +63,7 @@ export default function ExplorePage() {
             >
               <p className="text-lg font-semibold">{category}</p>
               <p className="text-xs text-muted-foreground">
-                {isTrendingCategory ? "Trending this week" : "Search with filters applied"}
+                Real {category.toLowerCase()} videos from YouTube search
               </p>
             </Link>
           );

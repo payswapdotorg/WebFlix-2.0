@@ -39,20 +39,17 @@ export function normalizeCategory(value: string | null | undefined): string {
 
 /**
  * The real destination for a sidebar EXPLORE / explore-hub category link
- * (WFX2-B-W): every link lands on a real-data page with the category
- * pre-applied —
- *  - Music / Gaming → the real youtube.com trending category pages
- *    (/trending?category=…, SSR category pages + search-backed fallback);
+ * (WFX2-B-W; WFX2-P19-EXPL): every link lands on a real-data page with the
+ * category pre-applied —
+ *  - the 13 browse categories → the category's own browse page
+ *    (/explore/category/<key> — the ranked grid composed from per-category
+ *    seed searches, infinite scroll through live search continuations);
  *  - Live → the Live surface (/explore/live — the Features→Live filter
- *    search, real live streams);
- *  - the rest → scoped search (/search?q=<Category>&type=video).
+ *    search, real live streams).
  */
 export function categoryDestination(category: string): string {
-  if (category === "Music" || category === "Gaming") {
-    return `/trending?category=${encodeURIComponent(category)}`;
-  }
   if (category === "Live") return "/explore/live";
-  return `/search?q=${encodeURIComponent(category)}&type=video`;
+  return `/explore/category/${encodeURIComponent(category)}`;
 }
 
 /** Pure chip-filter used by the home feed and the tests. */

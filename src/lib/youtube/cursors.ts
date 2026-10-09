@@ -13,7 +13,14 @@
  *                       for seed query `qi` (t = that query's current token);
  *  {s:"page",   t}      /api/search results — one InnerTube search
  *                       continuation token for the (possibly filtered) query;
- *                       the filter chain is baked into the token itself.
+ *                       the filter chain is baked into the token itself;
+ *  {s:"ecat",   k, o, t}   P19 explore category browse — offset window
+ *                       through category k's cached merged seed pool (t =
+ *                       each seed query's first-page continuation token,
+ *                       captured at compose time; k never crosses categories);
+ *  {s:"ecats",  k, qi, t}  P19 explore category browse — live
+ *                       search-continuation paging for category k's seed
+ *                       query `qi` (t = that query's current token).
  *
  * Laws:
  *  - decode NEVER throws — garbage yields null and callers answer honestly
@@ -48,11 +55,37 @@ export interface SearchPageCursor {
   t: string;
 }
 
+/** Explore category browse (P19): offset window through category k's pool. */
+export interface ExploreCategoryPoolCursor {
+  s: "ecat";
+  /** the category key the pool was composed for ("Music", …) */
+  k: string;
+  /** the next window's offset into the category's merged pool */
+  o: number;
+  /** per-seed-query first-page continuation tokens (null = failed/none) */
+  t: (string | null)[];
+}
+
+/** Explore category browse (P19): live continuation for category k's seed qi. */
+export interface ExploreCategorySearchCursor {
+  s: "ecats";
+  /** the category key the chain pages for */
+  k: string;
+  /** the seed-query index this chain pages through */
+  qi: number;
+  /** the query's current InnerTube search continuation token */
+  t: string;
+}
+
 /** The rung-3 compose shapes (what feeds.ts routes). */
 export type ComposeCursor = PoolCursor | ComposeSearchCursor;
 
 /** Every envelope this module issues. */
-export type Cursor = ComposeCursor | SearchPageCursor;
+export type Cursor =
+  | ComposeCursor
+  | SearchPageCursor
+  | ExploreCategoryPoolCursor
+  | ExploreCategorySearchCursor;
 
 /** base64url(JSON) — URL-safe, unpadded, opaque to the client. */
 export function encodeCursor(cursor: Cursor): string {
@@ -104,6 +137,19 @@ export function decodeCursor(raw: string | null | undefined): Cursor | null {
     if (typeof env.t !== "string" || env.t.length === 0) return null;
     return { s: "page", t: env.t };
   }
+  if (env.s === "ecat") {
+    if (typeof env.k !== "string" || env.k.length === 0 || env.k.length > 64) return null;
+    if (!Number.isInteger(env.o) || (env.o as number) < 0) return null;
+    if (!Array.isArray(env.t)) return null;
+    if (!env.t.every((tok) => tok === null || typeof tok === "string")) return null;
+    return { s: "ecat", k: env.k, o: env.o as number, t: env.t as (string | null)[] };
+  }
+  if (env.s === "ecats") {
+    if (typeof env.k !== "string" || env.k.length === 0 || env.k.length > 64) return null;
+    if (!Number.isInteger(env.qi) || (env.qi as number) < 0) return null;
+    if (typeof env.t !== "string" || env.t.length === 0) return null;
+    return { s: "ecats", k: env.k, qi: env.qi as number, t: env.t };
+  }
   return null;
 }
 
@@ -127,4 +173,26 @@ export function decodeComposeCursor(
 export function decodeSearchCursor(raw: string | null | undefined): SearchPageCursor | null {
   const cursor = decodeCursor(raw);
   return cursor?.s === "page" ? cursor : null;
+}
+
+/** The P19 explore-category envelope shapes (what explore-categories.ts routes). */
+export type ExploreCategoryCursor = ExploreCategoryPoolCursor | ExploreCategorySearchCursor;
+
+/**
+ * Decode ONLY the explore-category shapes ("ecat"/"ecats"), scoped to the
+ * requested category and bounded to its seed-query count — a cursor minted
+ * for another category (or any other surface's envelope, or a native
+ * InnerTube token) returns null, so the caller answers its honest 400.
+ */
+export function decodeExploreCategoryCursor(
+  raw: string | null | undefined,
+  key: string,
+  seedQueryCount: number,
+): ExploreCategoryCursor | null {
+  const cursor = decodeCursor(raw);
+  if (!cursor) return null;
+  if (cursor.s !== "ecat" && cursor.s !== "ecats") return null;
+  if (cursor.k !== key) return null;
+  if (cursor.s === "ecat") return cursor;
+  return cursor.qi < seedQueryCount ? cursor : null;
 }
