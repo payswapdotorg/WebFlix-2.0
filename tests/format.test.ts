@@ -8,6 +8,8 @@ import {
   historyGroupLabel,
   formatSubscribers,
   watchProgress,
+  isUpcomingPremiere,
+  formatPremiereDate,
 } from "@/lib/format";
 
 const NOW = new Date("2026-09-28T22:30:00Z");
@@ -107,5 +109,39 @@ describe("history grouping + watch progress", () => {
     expect(watchProgress(999, 596)).toBe(1);
     expect(watchProgress(0, 596)).toBe(0);
     expect(watchProgress(10, 0)).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P21-LIVE-PREMIERES — the card/watch premiere state helpers
+// ---------------------------------------------------------------------------
+
+describe("premiere state (isUpcomingPremiere)", () => {
+  test("premieredAt in the future → the premiere state", () => {
+    expect(isUpcomingPremiere({ premieredAt: "2026-12-15T18:00:00Z" }, NOW)).toBe(true);
+    expect(isUpcomingPremiere({ premieredAt: new Date(NOW.getTime() + 1000).toISOString() }, NOW)).toBe(true);
+  });
+  test("past / null / invalid → not the premiere state (never a guess)", () => {
+    expect(isUpcomingPremiere({ premieredAt: "2014-11-10T00:00:00Z" }, NOW)).toBe(false);
+    expect(isUpcomingPremiere({ premieredAt: null }, NOW)).toBe(false);
+    expect(isUpcomingPremiere({ premieredAt: "not-a-date" }, NOW)).toBe(false);
+  });
+  test("the exact start second is not upcoming (the premiere has begun)", () => {
+    expect(isUpcomingPremiere({ premieredAt: NOW.toISOString() }, NOW)).toBe(false);
+  });
+});
+
+describe("premiere card date (formatPremiereDate — YouTube's wording)", () => {
+  test("same year → \"Premieres M/D\"", () => {
+    expect(formatPremiereDate("2026-10-12T18:00:00Z", NOW)).toBe("Premieres 10/12");
+    expect(formatPremiereDate("2026-01-05T00:00:00Z", NOW)).toBe("Premieres 1/5");
+  });
+  test("a different year appends it", () => {
+    expect(formatPremiereDate("2027-01-05T18:00:00Z", NOW)).toBe("Premieres 1/5/2027");
+    expect(formatPremiereDate("2025-12-31T18:00:00Z", NOW)).toBe("Premieres 12/31/2025");
+  });
+  test("invalid dates → empty string (never invented)", () => {
+    expect(formatPremiereDate("not-a-date", NOW)).toBe("");
+    expect(formatPremiereDate("", NOW)).toBe("");
   });
 });

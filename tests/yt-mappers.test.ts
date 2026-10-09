@@ -25,6 +25,8 @@ import {
   mapChannelHeader,
   videoThumbnailUrl,
   shortsThumbnailUrl,
+  isUpcomingFromRenderer,
+  scheduledStartToDate,
 } from "@/lib/youtube/mappers";
 import { mapRelatedPage } from "@/lib/youtube/related";
 import { mapAutoplay } from "@/lib/youtube/autoplay";
@@ -524,5 +526,113 @@ describe("search filter params (base64 protobuf)", () => {
     expect(
       parseSearchFilters({ sort: "bogus", uploadDate: "today", duration: "x", type: "video" })
     ).toEqual({ uploadDate: "today", type: "video" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P21-LIVE-PREMIERES — upcoming premieres / scheduled live streams
+// (real logged-out captures: search "live premiere" → search_premiere.json
+// with 3 UPCOMING videoRenderers carrying upcomingEventData.startTime; the
+// watch `next` of one of them → next_premiere.json with dateText
+// "Scheduled for Oct 9, 2026" and "1 waiting")
+// ---------------------------------------------------------------------------
+
+describe("premiere scheduled-start parsing (scheduledStartToDate)", () => {
+  test.each([
+    ["1791586800", "2026-10-09T23:00:00.000Z"], // the real captured value (string seconds)
+    [1791590400, "2026-10-10T00:00:00.000Z"], // numeric seconds pass too
+    ["0", null], // epoch = no data (never invented)
+    ["-5", null], // negative = no data
+    ["not-a-number", null], // garbage = no data
+  ] as [string | number, string | null][])("%s → %s", (raw, expected) => {
+    expect(scheduledStartToDate({ upcomingEventData: { startTime: raw } })).toBe(expected);
+  });
+
+  test("missing upcomingEventData → null (the honest absence)", () => {
+    expect(scheduledStartToDate(null)).toBeNull();
+    expect(scheduledStartToDate({})).toBeNull();
+    expect(scheduledStartToDate({ upcomingEventData: {} })).toBeNull();
+  });
+});
+
+describe("upcoming renderer detection (isUpcomingFromRenderer)", () => {
+  const UPCOMING_RENDERER = {
+    thumbnailOverlays: [
+      { thumbnailOverlayTimeStatusRenderer: { style: "UPCOMING", text: { simpleText: "Upcoming" } } },
+    ],
+  };
+  test("the UPCOMING thumbnail overlay style marks an upcoming stream", () => {
+    expect(isUpcomingFromRenderer(UPCOMING_RENDERER)).toBe(true);
+  });
+  test("LIVE / no overlays → not upcoming", () => {
+    expect(
+      isUpcomingFromRenderer({
+        thumbnailOverlays: [{ thumbnailOverlayTimeStatusRenderer: { style: "LIVE" } }],
+      })
+    ).toBe(false);
+    expect(isUpcomingFromRenderer({ thumbnailOverlays: [] })).toBe(false);
+    expect(isUpcomingFromRenderer(null)).toBe(false);
+  });
+});
+
+describe("P21: search renderers → premieredAt (search_premiere fixture)", () => {
+  const videos = mapVideos(load("search_premiere"), { dedupe: true });
+
+  test("the fixture carries 6 cards: 3 upcoming + 3 regular", () => {
+    expect(videos).toHaveLength(6);
+    expect(videos.filter((v) => v.premieredAt !== null)).toHaveLength(3);
+  });
+
+  test("upcoming renderers map premieredAt from the real scheduled starts, exactly", () => {
+    const byId = new Map(videos.map((v) => [v.id, v]));
+    // the real captured upcomingEventData.startTime values (unix seconds)
+    expect(byId.get("JWvUZX_RXKY")?.premieredAt).toBe("2026-10-09T23:00:00.000Z");
+    expect(byId.get("ZJdNgsL2a38")?.premieredAt).toBe("2026-10-10T00:00:00.000Z");
+    expect(byId.get("Fvmp-yvr28Y")?.premieredAt).toBe("2026-10-10T18:00:00.000Z");
+  });
+
+  test("an upcoming premiere NEVER claims isLive (the fake-LIVE bug this lane fixes)", () => {
+    for (const v of videos.filter((x) => x.premieredAt !== null)) {
+      expect(v.isLive).toBe(false);
+      // no duration/views exist before the premiere starts (upstream carries none)
+      expect(v.durationSec).toBeNull();
+      expect(v.views).toBe(0);
+    }
+  });
+
+  test("regular renderers keep premieredAt null (live and VOD both)", () => {
+    const regular = videos.filter((v) => v.premieredAt === null);
+    expect(regular.some((v) => v.isLive)).toBe(true); // the live one stays live
+    expect(regular.some((v) => !v.isLive && v.durationSec !== null)).toBe(true); // the VOD stays a VOD
+    for (const v of regular) expect(v.premieredAt).toBeNull();
+  });
+
+  test("mapVideoRenderer alone behaves the same (the single-renderer path)", () => {
+    const upcoming = videos.find((v) => v.id === "JWvUZX_RXKY")!;
+    const again = mapVideoRenderer(
+      walkTree(load("search_premiere"), "videoRenderer").find(
+        (r: any) => r.videoId === upcoming.id
+      )
+    );
+    expect(again?.premieredAt).toBe(upcoming.premieredAt);
+    expect(again?.isLive).toBe(false);
+  });
+});
+
+describe("P21: watch `next` → premieredAt (next_premiere fixture)", () => {
+  test("a scheduled premiere's dateText maps to premieredAt (date-granular)", () => {
+    const meta = mapWatchMetadata("ZJdNgsL2a38", load("next_premiere"));
+    // the real dateText: "Scheduled for Oct 9, 2026" (no exact time in `next`)
+    expect(meta.video.premieredAt).toBe("2026-10-09T00:00:00.000Z");
+    // YouTube's own wording flows through publishedText (the description row)
+    expect(meta.video.publishedText).toBe("Scheduled for Oct 9, 2026");
+    expect(meta.video.isLive).toBe(false); // not live — the premiere hasn't started
+  });
+
+  test("a regular video's dateText never maps to premieredAt (regression guard)", () => {
+    const meta = mapWatchMetadata("dQw4w9WgXcQ", load("next_dQw4"));
+    expect(meta.video.premieredAt).toBeNull();
+    expect(meta.video.publishedText).toBe("16 years ago");
+    expect(meta.video.createdAt).toBe("2009-10-25T00:00:00.000Z");
   });
 });

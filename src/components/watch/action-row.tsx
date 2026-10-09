@@ -47,6 +47,7 @@ export function ActionRow({
   yourLike,
   savedWatchLater,
   guest = false,
+  premiere = false,
   onLikeResult,
   onSavedChange,
   onShare,
@@ -63,6 +64,10 @@ export function ActionRow({
   savedWatchLater: boolean;
   /** WFX2-P2-AU: no WebFlix account → writes route to the sign-in prompt */
   guest?: boolean;
+  /** P21-LIVE-PREMIERES: a scheduled premiere — like/dislike render disabled
+   * with the count honestly absent (no rating exists before the premiere
+   * starts, per youtube.com's premiere page). Share/Save/queue stay live. */
+  premiere?: boolean;
   onLikeResult: (r: { likes: number; dislikes: number; yourLike: LikeValue | null }) => void;
   onSavedChange?: (watchLater: boolean) => void;
   onShare: () => void;
@@ -160,30 +165,40 @@ export function ActionRow({
         className="flex h-9 items-center rounded-full bg-secondary sm:h-10"
         role="group"
         aria-label="Rate this video"
+        aria-disabled={premiere || undefined}
+        title={premiere ? "Rating opens when the premiere starts" : undefined}
       >
         <button
           type="button"
           onClick={() => toggleLike("like")}
           aria-pressed={state.yourLike === "like"}
-          aria-label={`Like this video along with ${compactCount(state.likes)} other people`}
-          className="flex h-full items-center gap-2 rounded-l-full pl-3.5 pr-3 text-sm font-medium transition hover:bg-secondary/70 active:scale-[0.97] disabled:opacity-50"
-          disabled={busy}
+          aria-label={
+            premiere
+              ? "Like this video — opens when the premiere starts"
+              : `Like this video along with ${compactCount(state.likes)} other people`
+          }
+          className="flex h-full items-center gap-2 rounded-l-full pl-3.5 pr-3 text-sm font-medium transition hover:bg-secondary/70 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={busy || premiere}
         >
           <ThumbsUp
             className={cn("size-5", state.yourLike === "like" && "fill-current text-[#f03]")}
             aria-hidden="true"
           />
-          <span className="tabular-nums">{compactCount(state.likes)}</span>
+          {!premiere && <span className="tabular-nums">{compactCount(state.likes)}</span>}
         </button>
         <div className="h-6 w-px bg-border" aria-hidden="true" />
         <button
           type="button"
           onClick={() => toggleLike("dislike")}
           aria-pressed={state.yourLike === "dislike"}
-          aria-label={`Dislike this video along with ${compactCount(state.dislikes)} other people`}
-          title={`${compactCount(state.dislikes)} dislikes`}
-          className="flex h-full items-center rounded-r-full px-3.5 transition hover:bg-secondary/70 active:scale-[0.97] disabled:opacity-50"
-          disabled={busy}
+          aria-label={
+            premiere
+              ? "Dislike this video — opens when the premiere starts"
+              : `Dislike this video along with ${compactCount(state.dislikes)} other people`
+          }
+          title={premiere ? undefined : `${compactCount(state.dislikes)} dislikes`}
+          className="flex h-full items-center rounded-r-full px-3.5 transition hover:bg-secondary/70 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={busy || premiere}
         >
           <ThumbsDown
             className={cn("size-5", state.yourLike === "dislike" && "fill-current text-[#f03]")}

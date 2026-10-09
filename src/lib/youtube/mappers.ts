@@ -279,10 +279,51 @@ function isLiveFromRenderer(node: any): boolean {
   if (badgeStyles(node).some((s) => s.includes("live"))) return true;
   for (const overlay of node?.thumbnailOverlays ?? []) {
     const style = overlay?.thumbnailOverlayTimeStatusRenderer?.style;
-    if (style === "LIVE" || style === "UPCOMING") return true;
+    // P21-LIVE-PREMIERES: UPCOMING is NOT live — an upcoming premiere /
+    // scheduled stream maps to the premiere state (premieredAt below), so
+    // the card carries YouTube's PREMIERE badge, never a fake LIVE one.
+    if (style === "LIVE") return true;
   }
   const views = runsText(node?.shortViewCountText) || runsText(node?.viewCountText);
   return /watching now$/i.test(views);
+}
+
+/**
+ * P21-LIVE-PREMIERES — an upcoming videoRenderer/gridVideoRenderer marker:
+ * YouTube styles the thumbnail overlay UPCOMING for both video premieres and
+ * scheduled live streams (verified live on search "live premiere" — the
+ * recorded shape is tests/fixtures/yt/search_premiere.json).
+ */
+export function isUpcomingFromRenderer(node: any): boolean {
+  for (const overlay of node?.thumbnailOverlays ?? []) {
+    if (overlay?.thumbnailOverlayTimeStatusRenderer?.style === "UPCOMING") return true;
+  }
+  return false;
+}
+
+/**
+ * P21-LIVE-PREMIERES — the scheduled start from upcomingEventData.startTime
+ * (unix SECONDS as a string, the real upstream field) → ISO; null when the
+ * renderer carries none (the honest absence — never invented).
+ */
+export function scheduledStartToDate(node: any): string | null {
+  const raw = node?.upcomingEventData?.startTime;
+  if (raw === null || raw === undefined) return null;
+  const sec = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(sec) || sec <= 0) return null;
+  return new Date(sec * 1000).toISOString();
+}
+
+/**
+ * P21-LIVE-PREMIERES — the premiere state for a renderer-based card: an
+ * UPCOMING renderer maps premieredAt from its scheduled start (null when the
+ * timestamp is absent — badge state then stays honestly unset) and NEVER
+ * claims isLive (that is YouTube's LIVE badge's job, actual live only).
+ */
+function applyPremiereState(dto: VideoDTO, node: any): void {
+  if (!isUpcomingFromRenderer(node)) return;
+  dto.isLive = false;
+  dto.premieredAt = scheduledStartToDate(node);
 }
 
 /** Channel-lite from a byline runs array (search/owner text). */
@@ -334,6 +375,7 @@ export function mapVideoRenderer(r: any): VideoDTO | null {
     dto.channel.verified || dto.badges.some((b) => b.startsWith("verified"));
   dto.isMembersOnly = dto.badges.some((b) => b.includes("members only"));
   dto.isLive = isLiveFromRenderer(r);
+  applyPremiereState(dto, r);
   return dto;
 }
 
@@ -357,6 +399,7 @@ export function mapCompactVideoRenderer(r: any): VideoDTO | null {
   dto.channel.verified = dto.badges.some((b) => b.startsWith("verified"));
   dto.isMembersOnly = dto.badges.some((b) => b.includes("members only"));
   dto.isLive = isLiveFromRenderer(r);
+  applyPremiereState(dto, r);
   return dto;
 }
 
@@ -376,6 +419,7 @@ export function mapGridVideoRenderer(r: any): VideoDTO | null {
   dto.badges = badgeStyles(r);
   dto.channel.verified = dto.badges.some((b) => b.startsWith("verified"));
   dto.isLive = isLiveFromRenderer(r);
+  applyPremiereState(dto, r);
   return dto;
 }
 

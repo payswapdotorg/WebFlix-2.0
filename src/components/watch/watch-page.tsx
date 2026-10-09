@@ -58,12 +58,14 @@ import type {
 } from "@/lib/watch/types";
 import { useWebFlixSession } from "@/hooks/use-webflix-session";
 import { signInHref } from "@/lib/auth/client";
+import { isUpcomingPremiere } from "@/lib/format";
 import { addToQueue } from "@/lib/queue/queue-actions";
 import { useQueueStore, type QueueItem } from "@/lib/queue/queue-store";
 import { startQueueEngine } from "@/lib/queue/queue-engine";
 import { QueuePanel } from "./queue-panel";
 import { AmbientBackdrop } from "./ambient-backdrop";
 import { AutoplayCountdownOverlay } from "./autoplay-countdown-overlay";
+import { PremiereStage } from "./premiere-stage";
 import { SubscribeButton } from "./subscribe-button";
 import { ActionRow } from "./action-row";
 import { ShareDialog } from "./share-dialog";
@@ -113,6 +115,11 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
   const [currentTime, setCurrentTime] = useState(0);
   const [subCount, setSubCount] = useState<number | null>(null);
   const [docked, setDocked] = useState(false);
+  // P21-LIVE-PREMIERES: flips true when the premiere countdown reaches zero
+  // (the stage's onStarted) — the page then leaves the premiere state and
+  // the embed beneath takes over (fresh mount per video via key, so this
+  // never leaks across videos).
+  const [premiereStarted, setPremiereStarted] = useState(false);
 
   // WFX2-C-S: the watch-next countdown machine (advance on "fired").
   const [countdown, dispatch] = useReducer(countdownReducer, initialCountdown);
@@ -435,6 +442,14 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
 
   const { video, state } = detail;
   const isLive = video.durationSec === 0;
+  // P21-LIVE-PREMIERES: the scheduled-premiere state — premieredAt in the
+  // future (the UPCOMING search renderer's upcomingEventData.startTime, or
+  // the watch page's own "Scheduled for …" date). The player area carries
+  // the premiere stage, the engagement row renders its disabled state, and
+  // the chat panel shows YouTube's pre-premiere state. Live videos
+  // (premieredAt past + isLive) keep the existing live behavior.
+  const premiereStartsAt =
+    !premiereStarted && isUpcomingPremiere(video) ? video.premieredAt : null;
 
   const countdownNext = queueNext
     ? {
@@ -465,6 +480,15 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
             <div className="relative aspect-video w-full overflow-hidden bg-black">
               <div ref={setSlotEl} className="absolute inset-0" />
               {countdownOverlay}
+              {premiereStartsAt && (
+                <PremiereStage
+                  videoId={videoId}
+                  startsAt={premiereStartsAt}
+                  title={video.title}
+                  thumbnailUrl={video.thumbnailUrl}
+                  onStarted={() => setPremiereStarted(true)}
+                />
+              )}
             </div>
           </div>
         </div>
@@ -514,6 +538,15 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
                       </button>
                     )}
                     {countdownOverlay}
+                    {premiereStartsAt && !docked && (
+                      <PremiereStage
+                        videoId={videoId}
+                        startsAt={premiereStartsAt}
+                        title={video.title}
+                        thumbnailUrl={video.thumbnailUrl}
+                        onStarted={() => setPremiereStarted(true)}
+                      />
+                    )}
                   </div>
                 </div>
               </div>
@@ -612,6 +645,7 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
                 yourLike={state.like}
                 savedWatchLater={state.savedWatchLater}
                 guest={guest}
+                premiere={!!premiereStartsAt}
                 onLikeResult={(r) => {
                   // server truth → page-level state (honest counts)
                   setDetail((d) =>
@@ -699,7 +733,11 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
         {/* related rail */}
         <aside aria-label="Related videos" className={theater ? "min-w-0" : "px-3 sm:px-0"}>
           {detail && !theater && (
-            <LiveChatPanel videoId={videoId} currentTimeSec={positionSec} />
+            <LiveChatPanel
+              videoId={videoId}
+              currentTimeSec={positionSec}
+              premiereStartsAt={premiereStartsAt}
+            />
           )}
           <RelatedRail videoId={videoId} onFirstPage={setNextVideo} />
         </aside>
