@@ -556,6 +556,25 @@ export type LivePageDTO = {
   videos: VideoDTO[];
 };
 
+/**
+ * The explore category browse surface (/explore/category/[key] — P19). The
+ * grid is composed from REAL per-category seed searches (merged pool + live
+ * search continuations — the home-ladder rung-3 machinery).
+ */
+export type ExploreCategoryPageDTO = {
+  category: string;
+  videos: VideoDTO[];
+  /** the next page's opaque envelope (null = the chain honestly ended) */
+  nextCursor: string | null;
+  /** "search" = the seed-search compose — YouTube's own signed-in category
+   *  browse is session-walled, so this is the honest data path (the same
+   *  label discipline as home's search-compose rung and trending's fallback). */
+  source: "search";
+  /** true when no YouTube operator session is configured (public mode) —
+   *  the UI keys its honest degradation banner on this. */
+  publicMode: boolean;
+};
+
 /** In-channel search results ("Search this channel"). */
 export type ChannelSearchDTO = {
   query: string;

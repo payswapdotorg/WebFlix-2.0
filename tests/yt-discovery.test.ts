@@ -715,18 +715,15 @@ describe("GET /api/playlist/[id] — the public playlist page", () => {
 // ---------------------------------------------------------------------------
 
 describe("categoryDestination — sidebar EXPLORE links land on real-data pages", () => {
-  test("Music / Gaming → the trending category pages", () => {
-    expect(categoryDestination("Music")).toBe("/trending?category=Music");
-    expect(categoryDestination("Gaming")).toBe("/trending?category=Gaming");
+  test("the 13 browse categories → their own category browse pages (P19)", () => {
+    expect(categoryDestination("Music")).toBe("/explore/category/Music");
+    expect(categoryDestination("Gaming")).toBe("/explore/category/Gaming");
+    expect(categoryDestination("News")).toBe("/explore/category/News");
+    expect(categoryDestination("Podcasts")).toBe("/explore/category/Podcasts");
+    expect(categoryDestination("Cooking")).toBe("/explore/category/Cooking");
   });
 
-  test("Live → the Live surface", () => {
+  test("Live → the Live surface (unchanged — its own destination)", () => {
     expect(categoryDestination("Live")).toBe("/explore/live");
-  });
-
-  test("the rest → scoped search with the category pre-applied", () => {
-    expect(categoryDestination("News")).toBe("/search?q=News&type=video");
-    expect(categoryDestination("Podcasts")).toBe("/search?q=Podcasts&type=video");
-    expect(categoryDestination("Cooking")).toBe("/search?q=Cooking&type=video");
   });
 });
