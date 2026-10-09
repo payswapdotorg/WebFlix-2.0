@@ -1,18 +1,34 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { Camera, Info } from "lucide-react";
 import {
   FEEDBACK_CATEGORIES,
+  FEEDBACK_CATEGORY_NOTE,
   FEEDBACK_DISCLOSURE,
+  FEEDBACK_LEGAL_NOTICE,
+  FEEDBACK_SCREENSHOT_DISCLOSURE,
   MAX_FEEDBACK_LENGTH,
 } from "./shared";
 
 /**
- * WFX2-P5-SS — the send-feedback form. Submits to the local capture endpoint
- * (/api/feedback), which appends to the server's local store. The page
- * discloses the honest delivery model up front and after success: stored for
- * the WebFlix operator, never posted to YouTube. Text-only by choice — no
- * screenshot affordance that would pretend to attach anything.
+ * WFX2-P20 — the send-feedback form at YouTube's real structure depth:
+ *
+ *   - the category select over YouTube's ACTUAL feedback-tool list
+ *     (mirrored verbatim, provenance disclosed),
+ *   - the description textarea with the live character count,
+ *   - the screenshot-attach row — YouTube's real row, honestly absent:
+ *     no checkbox, no file input, no fake capture; the disclosure says
+ *     exactly why,
+ *   - the legal notice line — YouTube's "Some account and system
+ *     information may be sent to…" wording, honestly adapted to WebFlix's
+ *     text-only local store,
+ *   - submit → the existing /api/feedback local capture, with the success
+ *     state in YouTube's confirmation wording on top of the honest copy.
+ *
+ * Honest delivery model (unchanged from P5-SS): submissions are stored
+ * locally for the WebFlix operator — never posted to YouTube — and the
+ * page discloses it before submission and after success.
  */
 export function FeedbackView() {
   const [category, setCategory] = useState<string>(FEEDBACK_CATEGORIES[0]);
@@ -63,10 +79,10 @@ export function FeedbackView() {
           className="mt-6 rounded-xl border border-border p-5"
           role="status"
         >
-          <h2 className="text-base font-semibold">Thanks — your feedback was saved.</h2>
+          <h2 className="text-base font-semibold">Thanks for your feedback!</h2>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            It's stored on this WebFlix server's local store for the operator to read.{" "}
-            {FEEDBACK_DISCLOSURE}
+            Thanks — your feedback was saved. It's stored on this WebFlix server's local store
+            for the operator to read. {FEEDBACK_DISCLOSURE}
           </p>
           <button
             type="button"
@@ -78,10 +94,11 @@ export function FeedbackView() {
         </div>
       ) : (
         <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-5">
-          <label className="flex flex-col gap-2 text-sm font-medium">
-            What's it about?
+          <div className="flex flex-col gap-2 text-sm font-medium">
+            <label htmlFor="feedback-category">Feedback Type</label>
             <select
-              aria-label="Feedback category"
+              id="feedback-category"
+              aria-label="Feedback Type"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
               className="max-w-sm rounded-lg border border-border bg-transparent px-3 py-2 text-sm font-normal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -92,12 +109,18 @@ export function FeedbackView() {
                 </option>
               ))}
             </select>
-          </label>
+            <span
+              data-feedback-category-note
+              className="text-xs font-normal leading-relaxed text-muted-foreground"
+            >
+              {FEEDBACK_CATEGORY_NOTE}
+            </span>
+          </div>
 
           <label className="flex flex-col gap-2 text-sm font-medium">
-            Your feedback
+            Describe your issue
             <textarea
-              aria-label="Feedback message"
+              aria-label="Describe your issue"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               rows={6}
@@ -105,10 +128,33 @@ export function FeedbackView() {
               placeholder="What happened, and where in WebFlix did it happen?"
               className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm font-normal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
-            <span className="text-xs font-normal text-muted-foreground">
+            <span data-feedback-char-count className="text-xs font-normal text-muted-foreground">
               {remaining} characters left
             </span>
           </label>
+
+          {/* YouTube's screenshot-attach row — present in structure, honestly absent in capability */}
+          <div
+            data-feedback-screenshot-row
+            className="flex items-start gap-3 rounded-xl border border-dashed border-border p-4"
+          >
+            <Camera aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Include screenshot</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                {FEEDBACK_SCREENSHOT_DISCLOSURE}
+              </p>
+            </div>
+          </div>
+
+          {/* YouTube's legal notice line, honestly adapted */}
+          <p
+            data-feedback-legal
+            className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground"
+          >
+            <Info aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+            {FEEDBACK_LEGAL_NOTICE}
+          </p>
 
           {error ? (
             <p role="alert" className="text-sm text-yt-red">
