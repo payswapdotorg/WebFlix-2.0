@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Bell, Radio } from "lucide-react";
+import { Bell, CheckCheck, MoreVertical, Radio, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { postJson, useApi } from "@/hooks/use-api";
 import { formatRelativeDate } from "@/lib/format";
@@ -10,8 +10,16 @@ import type { NotificationDTO } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { PersonalSurfaceGate } from "@/components/auth/personal-surface-gate";
 import { effectiveRead, effectiveUnread, openNotification, useLocalRead } from "./local-read-store";
+import { channelAllowsNotification, useChannelPrefs, useChannelPrefsHydration } from "./channel-prefs-store";
+import { ChannelPrefsSheet } from "./channel-prefs-sheet";
 
 type CenterPayload = {
   items: NotificationDTO[];
@@ -34,6 +42,14 @@ type CenterPayload = {
  * (the session-local overlay + the menu re-read — documented in
  * local-read-store.ts), the poll cadence from the upstream's own
  * pollIntervalMs, and the honest empty/promo + error states.
+ *
+ * P18-SUBS-NOTIFS (additive): the header carries the YouTube bell-menu
+ * "gear" flow — ChannelPrefsSheet (per-channel All / Personalized / None,
+ * persisted in this browser); rows from channels set to None are filtered
+ * from THIS view (a WebFlix-side view filter — the badge math, poll cadence
+ * and open-marks-read behavior stay untouched); and each unread row carries
+ * a per-item kebab with "Mark as read" (the same local-overlay + menu
+ * re-read semantics as opening it).
  */
 export default function NotificationsCenterPage() {
   return (
@@ -51,6 +67,13 @@ function NotificationsCenter() {
   const readIds = useLocalRead((s) => s.readIds);
   const reconcile = useLocalRead((s) => s.reconcile);
   const resetOverlay = useLocalRead((s) => s.reset);
+  const markLocalRead = useLocalRead((s) => s.markLocalRead);
+
+  // P18: the per-channel prefs (gear → sheet). skipHydration + mount
+  // rehydrate — no SSR mismatch; rows only paint after the fetch resolves.
+  const prefs = useChannelPrefs((s) => s.prefs);
+  useChannelPrefsHydration();
+  const [prefsOpen, setPrefsOpen] = useState(false);
 
   // Fetched pages accumulate ("Show more" appends honest server slices).
   // Merging happens in the RENDER phase (the useApi guarded-state pattern —
@@ -80,8 +103,14 @@ function NotificationsCenter() {
     .map(Number)
     .sort((a, b) => a - b)
     .flatMap((p) => pages[p]);
+  // P18: the per-channel view filter (None → hidden in THIS view; the
+  // upstream badge math and the sheet's row set use the UNFILTERED items).
+  const visibleItems = items.filter((n) => channelAllowsNotification(n, prefs));
   const effectiveUnreadValue = effectiveUnread(data?.unread ?? 0, readIds);
   const empty = !data?.loginRequired && (data?.items ?? []).length === 0 && !error;
+  // every row's channel muted in this browser — the honest all-filtered state
+  // (YouTube never shows this: its filtering is server-side; this one is ours)
+  const allMuted = !empty && !error && items.length > 0 && visibleItems.length === 0;
 
   async function markAllRead() {
     try {
@@ -94,9 +123,19 @@ function NotificationsCenter() {
     }
   }
 
+  /** P18: mark ONE row read without opening it — the same semantics as the
+   * open-marks-read path (the session-local overlay owns the view state; the
+   * best-effort per-item menu re-read reconciles upstream truth). */
+  function markOneRead(id: string) {
+    markLocalRead(id);
+    void postJson(`/api/notifications/${encodeURIComponent(id)}/read`, {})
+      .then(() => null)
+      .catch(() => null);
+  }
+
   return (
     <main className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6">
-      <div className="flex items-center justify-between border-b border-border pb-4">
+      <div className="flex items-center justify-between gap-3 border-b border-border pb-4">
         <h1 className="text-xl font-semibold">
           Notifications
           {effectiveUnreadValue > 0 && (
@@ -105,15 +144,30 @@ function NotificationsCenter() {
             </span>
           )}
         </h1>
-        {data && !data.loginRequired && items.length > 0 && (
-          <button
-            type="button"
-            onClick={markAllRead}
-            data-testid="mark-all-read"
-            className="text-xs text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Mark all as read
-          </button>
+        {data && !data.loginRequired && (
+          <div className="flex shrink-0 items-center gap-2">
+            {items.length > 0 && (
+              <button
+                type="button"
+                onClick={markAllRead}
+                data-testid="mark-all-read"
+                className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Mark all as read
+              </button>
+            )}
+            {/* P18 — the YouTube bell-menu gear flow: per-channel prefs */}
+            <button
+              type="button"
+              onClick={() => setPrefsOpen(true)}
+              aria-label="Channel notification settings"
+              title="Channel notification settings"
+              data-testid="channel-prefs-gear"
+              className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <Settings className="size-4" />
+            </button>
+          </div>
         )}
       </div>
 
@@ -152,8 +206,27 @@ function NotificationsCenter() {
           </div>
         )}
 
-        {!error && !data?.loginRequired && items.map((n) => (
-          <CenterRow key={n.id} notification={n} read={effectiveRead(n, readIds)} />
+        {allMuted && (
+          <div data-testid="notifications-all-muted" className="flex flex-col items-center gap-3 px-4 py-16 text-center sm:px-6">
+            <Bell className="size-10 text-muted-foreground/60" aria-hidden="true" />
+            <p className="font-medium">Every channel in this feed is set to None</p>
+            <p className="max-w-md text-sm text-muted-foreground">
+              Notifications are hidden in this view by your per-channel settings (this
+              browser) — the account&apos;s inbox itself is unchanged.
+            </p>
+            <Button variant="outline" onClick={() => setPrefsOpen(true)}>
+              Channel notifications
+            </Button>
+          </div>
+        )}
+
+        {!error && !data?.loginRequired && visibleItems.map((n) => (
+          <CenterRow
+            key={n.id}
+            notification={n}
+            read={effectiveRead(n, readIds)}
+            onMarkRead={markOneRead}
+          />
         ))}
 
         {!error && !data && loading && (
@@ -183,61 +256,101 @@ function NotificationsCenter() {
           </div>
         )}
       </div>
+
+      <ChannelPrefsSheet open={prefsOpen} onOpenChange={setPrefsOpen} items={items} />
     </main>
   );
 }
 
 /** One full feed row — youtube.com's center rendering: the video thumbnail
- * (channel avatar for community posts), channel, snippet, age, unread dot. */
-function CenterRow({ notification: n, read }: { notification: NotificationDTO; read: boolean }) {
+ * (channel avatar for community posts), channel, snippet, age, unread dot.
+ * P18: unread rows carry a per-item kebab with "Mark as read" (the local
+ * overlay + menu re-read — the open-marks-read semantics, without opening);
+ * read rows carry no menu (the single honest action doesn't apply). */
+function CenterRow({
+  notification: n,
+  read,
+  onMarkRead,
+}: {
+  notification: NotificationDTO;
+  read: boolean;
+  onMarkRead: (id: string) => void;
+}) {
   const href = n.videoId ? `/watch/${n.videoId}` : n.channel?.handle ? `/channel/${n.channel.handle}` : "#";
   const thumbnail = n.videoId ? n.videoThumbnailUrl : n.channel?.avatarUrl || n.videoThumbnailUrl;
   const channelName = n.channel?.name ?? "";
   const title = channelName ? n.title.replace(channelName, "").trim() : n.title;
   return (
-    <Link
-      href={href}
-      onClick={() => openNotification(n.id)}
-      data-testid="notification-center-row"
+    <div
       className={cn(
-        "flex gap-4 px-2 py-4 transition-colors hover:bg-accent/50 sm:px-4",
+        "flex items-start gap-1 px-2 py-4 transition-colors hover:bg-accent/50 sm:px-4",
         !read && "bg-primary/[0.06]"
       )}
     >
-      {n.videoId ? (
-        <div className="relative aspect-video w-[160px] shrink-0 overflow-hidden rounded-xl bg-secondary sm:w-[246px]">
-          {thumbnail ? (
-            <img src={thumbnail} alt="" loading="lazy" className="size-full object-cover" />
-          ) : null}
-          {n.kind === "live" && (
-            <span className="absolute bottom-1 right-1 flex items-center gap-0.5 rounded-full bg-yt-red px-1.5 py-0.5 text-[9px] font-bold uppercase text-white">
-              <Radio className="size-2.5" /> Live
-            </span>
-          )}
+      <Link
+        href={href}
+        onClick={() => openNotification(n.id)}
+        data-testid="notification-center-row"
+        className="flex min-w-0 flex-1 gap-4"
+      >
+        {n.videoId ? (
+          <div className="relative aspect-video w-[160px] shrink-0 overflow-hidden rounded-xl bg-secondary sm:w-[246px]">
+            {thumbnail ? (
+              <img src={thumbnail} alt="" loading="lazy" className="size-full object-cover" />
+            ) : null}
+            {n.kind === "live" && (
+              <span className="absolute bottom-1 right-1 flex items-center gap-0.5 rounded-full bg-yt-red px-1.5 py-0.5 text-[9px] font-bold uppercase text-white">
+                <Radio className="size-2.5" /> Live
+              </span>
+            )}
+          </div>
+        ) : (
+          <div className="relative size-12 shrink-0">
+            {thumbnail ? (
+              <img src={thumbnail} alt="" loading="lazy" className="size-12 rounded-full object-cover" />
+            ) : (
+              <div className="size-12 rounded-full bg-secondary" aria-hidden="true" />
+            )}
+          </div>
+        )}
+        <div className="min-w-0 flex-1 pt-1">
+          <p className="line-clamp-2 text-sm text-foreground">
+            {channelName && <span className="font-medium">{channelName}</span>} {title}
+          </p>
+          <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{n.body}</p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">{formatRelativeDate(n.createdAt)}</p>
         </div>
-      ) : (
-        <div className="relative size-12 shrink-0">
-          {thumbnail ? (
-            <img src={thumbnail} alt="" loading="lazy" className="size-12 rounded-full object-cover" />
-          ) : (
-            <div className="size-12 rounded-full bg-secondary" aria-hidden="true" />
-          )}
-        </div>
-      )}
-      <div className="min-w-0 flex-1 pt-1">
-        <p className="line-clamp-2 text-sm text-foreground">
-          {channelName && <span className="font-medium">{channelName}</span>} {title}
-        </p>
-        <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{n.body}</p>
-        <p className="mt-0.5 text-[11px] text-muted-foreground">{formatRelativeDate(n.createdAt)}</p>
-      </div>
+        {!read && (
+          <span
+            data-testid="unread-dot"
+            className="mt-3 size-2 shrink-0 rounded-full bg-primary"
+            aria-label="unread"
+          />
+        )}
+      </Link>
       {!read && (
-        <span
-          data-testid="unread-dot"
-          className="mt-3 size-2 shrink-0 rounded-full bg-primary"
-          aria-label="unread"
-        />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={`Actions for this notification`}
+              data-testid="notification-row-kebab"
+              className="mt-1 size-8 shrink-0 rounded-full text-muted-foreground"
+            >
+              <MoreVertical className="size-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuItem
+              onSelect={() => onMarkRead(n.id)}
+              data-testid="notification-mark-read"
+            >
+              <CheckCheck className="size-4" /> Mark as read
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
-    </Link>
+    </div>
   );
 }
