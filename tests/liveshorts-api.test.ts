@@ -14,9 +14,17 @@
  * - search_lofi.json (REAL search) + reel_sequence_synth (SYNTHETIC-shaped)
  * - next_dQw4.json + comments_dQw4.json (REAL)
  * - updated_metadata_synth.json (SYNTHETIC-shaped-from-real, real values)
+ *
+ * P17-SHORTS-CREATOR (appended section): the shorts comments sheet's
+ * creator detection (operator mode + the canonical watch detail flag —
+ * never a channel-vs-viewer guess) + the row affordances (the watch kebab
+ * idiom), via happy-dom component asserts (the livechat-send pattern).
  */
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { NextRequest } from "next/server";
+import { Window } from "happy-dom";
+import { createRoot, type Root } from "react-dom/client";
+import { act, createElement, type ReactElement, type ReactNode } from "react";
 import { GET as getLiveChat } from "@/app/api/videos/[id]/livechat/route";
 import {
   GET as getLiveChatReplay,
@@ -24,6 +32,8 @@ import {
 import { GET as getLiveStatus } from "@/app/api/videos/[id]/live-status/route";
 import { GET as getShorts } from "@/app/api/shorts/route";
 import { GET as getShortMeta } from "@/app/api/shorts/[id]/route";
+import type { ShortsCommentRowProps } from "@/components/shorts/shorts-comment-row";
+import type { CommentDto } from "@/lib/watch/types";
 
 const aljazeera = await Bun.file(
   "tests/fixtures/yt/livechat_aljazeera.json",
@@ -407,5 +417,446 @@ describe("GET /api/shorts/[id] — per-short meta mocked", () => {
       { params: Promise.resolve({ id: "nonexistent1" }) },
     );
     expect(res.status).toBe(404);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* P17-SHORTS-CREATOR — creator affordances on the shorts comments    */
+/* sheet: the detection wiring (operator mode + the canonical watch   */
+/* detail flag — never a channel-vs-viewer guess) + the affordance    */
+/* wiring (the watch kebab idiom: heart any depth, pin top-level      */
+/* only, optimistic set → server truth → honest revert).              */
+/* happy-dom + createRoot/act (the livechat-send/comment-local-rung   */
+/* component pattern); all client fetches stubbed — fixtures only,    */
+/* no live network.                                                   */
+/* ------------------------------------------------------------------ */
+
+const win17 = new Window();
+for (const p of [
+  "window",
+  "document",
+  "HTMLElement",
+  "HTMLTextAreaElement",
+  "HTMLInputElement",
+  "HTMLButtonElement",
+  "HTMLAnchorElement",
+  "Element",
+  "Node",
+  "NodeFilter",
+  "NodeListOf",
+  "Event",
+  "FocusEvent",
+  "InputEvent",
+  "KeyboardEvent",
+  "MouseEvent",
+  "PointerEvent",
+  "CustomEvent",
+  "MutationObserver",
+  "IntersectionObserver",
+  "ResizeObserver",
+  "DOMParser",
+  "getComputedStyle",
+  "requestAnimationFrame",
+  "cancelAnimationFrame",
+  "navigator",
+] as const) {
+  Object.defineProperty(globalThis, p, {
+    value: (win17 as unknown as Record<string, unknown>)[p],
+    configurable: true,
+    writable: true,
+  });
+}
+Object.defineProperty(globalThis, "localStorage", {
+  value: win17.localStorage,
+  configurable: true,
+  writable: true,
+});
+Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
+  value: true,
+  configurable: true,
+  writable: true,
+});
+
+/* sonner stubbed — toasts captured for the honest-failure asserts */
+const toasts17: string[] = [];
+mock.module("sonner", () => ({
+  toast: Object.assign((msg: string) => toasts17.push(String(msg)), {
+    success: (m: string) => toasts17.push(`success:${m}`),
+    error: (m: string) => toasts17.push(`error:${m}`),
+    info: (m: string) => toasts17.push(`info:${m}`),
+  }),
+}));
+
+/* next/link → a plain <a> (the composer imports it; no Next router in bun) */
+mock.module("next/link", () => ({
+  default: ({ href, children, ...rest }: {
+    href: string;
+    children?: ReactNode;
+    [key: string]: unknown;
+  }) => createElement("a", { href, ...rest } as Record<string, unknown>, children),
+}));
+
+const SHORT_ID17 = "dQw4w9WgXcQ";
+const CHANNEL_ID17 = "UCuAXFkgsw1L7xaCfnd5JJOw";
+
+/** a canonical-route CommentDto (the shape /api/videos/[id]/comments serves) */
+const SHORT_COMMENT17 = (over: Record<string, unknown> = {}) => ({
+  id: "Ugzge340dBgB75hWBm54AaABAg",
+  parentId: null,
+  body: "the pinned fixture comment",
+  likes: 12,
+  heartedByCreator: false,
+  pinned: false,
+  edited: false,
+  moderation: "approved",
+  createdAt: "2026-01-01T00:00:00.000Z",
+  author: {
+    id: "yt-author-1",
+    handle: "@fixture_author",
+    name: "Fixture Author",
+    avatarUrl: "",
+    isMember: false,
+    isCreator: false,
+  },
+  yourLike: null,
+  isOwn: false,
+  replyCount: 0,
+  totalReplyCount: 0,
+  ...over,
+});
+
+const VIEWER17 = {
+  id: "local-user-1",
+  handle: "demo",
+  name: "Demo Viewer",
+  avatarUrl: "https://x/a.png",
+};
+
+let root17: Root | null = null;
+let host17: ReturnType<typeof win17.document.createElement> | null = null;
+
+const mount17 = async (el: ReactElement) => {
+  host17 = win17.document.createElement("div");
+  win17.document.body.appendChild(host17);
+  root17 = createRoot(host17 as unknown as Parameters<typeof createRoot>[0]);
+  await act(async () => {
+    root17!.render(el);
+  });
+};
+
+const all17 = (sel: string): HTMLElement[] =>
+  host17
+    ? Array.from(host17.querySelectorAll(sel) as unknown as HTMLElement[])
+    : [];
+const bodyText17 = (): string => win17.document.body.textContent ?? "";
+
+const unmount17 = () => {
+  act(() => {
+    root17?.unmount();
+  });
+  host17?.remove();
+  root17 = null;
+  host17 = null;
+};
+
+/** the sheet's client calls, routed to fixtures (fixtures-only, no network) */
+function stubSheetFetch(opts: {
+  operatorSession: boolean;
+  isCreator?: boolean;
+  detailFails?: boolean;
+  comment?: Record<string, unknown>;
+}) {
+  const calls: string[] = [];
+  globalThis.fetch = (async (url: string | URL | Request) => {
+    const u = String(url);
+    calls.push(u);
+    const json = (data: unknown, status = 200) =>
+      new Response(JSON.stringify(data), {
+        status,
+        headers: { "Content-Type": "application/json" },
+      });
+    if (u === "/api/watch/session") {
+      return json({ viewer: VIEWER17, operatorSession: opts.operatorSession });
+    }
+    if (u.includes(`/api/videos/${SHORT_ID17}/comments`)) {
+      return json({
+        items: [SHORT_COMMENT17(opts.comment)],
+        total: 1,
+        nextCursor: null,
+      });
+    }
+    if (u === `/api/videos/${SHORT_ID17}`) {
+      if (opts.detailFails) return new Response("boom", { status: 500 });
+      return json({
+        video: { id: SHORT_ID17, title: "fixture short", channelId: CHANNEL_ID17 },
+        state: { isCreator: opts.isCreator === true },
+      });
+    }
+    return new Response("not found", { status: 404 });
+  }) as unknown as typeof fetch;
+  return calls;
+}
+
+/** the row's write calls, captured (body + url) for the wire asserts */
+const writeCalls17: { url: string; body: Record<string, unknown> }[] = [];
+function stubWriteFetch(respond: (url: string) => unknown = () => ({})) {
+  writeCalls17.length = 0;
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    const u = String(url);
+    const body = typeof init?.body === "string" ? JSON.parse(init.body) : {};
+    writeCalls17.push({ url: u, body });
+    return new Response(JSON.stringify(respond(u)), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }) as unknown as typeof fetch;
+}
+
+const heartBadge17 = (): unknown =>
+  host17 ? host17.querySelector("[aria-label='Loved by creator']") : null;
+
+const kebab17 = (): HTMLButtonElement | undefined =>
+  Array.from(
+    win17.document.body.querySelectorAll("button") as unknown as HTMLElement[],
+  ).find(
+    (b) => (b.getAttribute("aria-label") ?? "").startsWith("Comment actions for "),
+  ) as HTMLButtonElement | undefined;
+
+const openKebab17 = async () => {
+  const trigger = kebab17();
+  expect(trigger).toBeDefined();
+  await act(async () => {
+    trigger!.dispatchEvent(
+      new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0 }),
+    );
+  });
+  await act(async () => {});
+};
+
+const menuItem17 = (label: string): HTMLElement | undefined =>
+  Array.from(
+    win17.document.body.querySelectorAll("[role='menuitem']") as unknown as HTMLElement[],
+  ).find((el) => (el.textContent ?? "").trim() === label);
+
+describe("P17 — ShortsCommentsSheet creator detection (canonical flag, never a guess)", () => {
+  const mountSheet = async () => {
+    const { ShortsCommentsSheet } = await import("@/components/shorts/shorts-comments-sheet");
+    await mount17(
+      createElement(ShortsCommentsSheet, {
+        videoId: SHORT_ID17,
+        meta: {
+          id: SHORT_ID17,
+          title: "fixture short",
+          channel: { id: CHANNEL_ID17, handle: "RickAstleyYT", name: "Rick Astley", avatarUrl: null },
+          viewsText: "1M views",
+          likesText: "100K",
+          commentsCountText: "1 Comment",
+          thumbnailUrl: null,
+          dateText: null,
+          comments: [],
+          commentsNextToken: null,
+        },
+        open: true,
+        onClose: () => {},
+        guest: false,
+      }),
+    );
+    await act(async () => {}); // flush the probe + list effects
+    await act(async () => {});
+  };
+
+  afterEach(() => {
+    unmount17();
+    globalThis.fetch = realFetch;
+  });
+
+  test("operator mode + detail isCreator:true → the creator kebab renders on rows", async () => {
+    stubSheetFetch({ operatorSession: true, isCreator: true });
+    await mountSheet();
+    expect(bodyText17()).toContain("the pinned fixture comment");
+    expect(kebab17()).toBeDefined();
+  });
+
+  test("operator mode + detail isCreator:false → NO kebab (non-creator parity)", async () => {
+    stubSheetFetch({ operatorSession: true, isCreator: false });
+    await mountSheet();
+    expect(bodyText17()).toContain("the pinned fixture comment");
+    expect(kebab17()).toBeUndefined();
+  });
+
+  test("public mode → NO kebab AND the detail route is never called (the zero-call honest path)", async () => {
+    const calls = stubSheetFetch({ operatorSession: false });
+    await mountSheet();
+    expect(kebab17()).toBeUndefined();
+    expect(calls).not.toContain(`/api/videos/${SHORT_ID17}`);
+  });
+
+  test("detail fetch failure → NO kebab (uncertain → the honest default)", async () => {
+    stubSheetFetch({ operatorSession: true, detailFails: true });
+    await mountSheet();
+    expect(kebab17()).toBeUndefined();
+  });
+
+  test("a channel-vs-viewer handle COINCIDENCE never fabricates the affordance (route semantics law)", async () => {
+    // the viewer's local handle equals the short's YouTube channel handle —
+    // the session probe alone must NOT surface creator powers (the routes
+    // gate on operatorIsCreator + auth, not on handle collisions)
+    const calls = stubSheetFetch({ operatorSession: true, isCreator: false });
+    await mountSheet();
+    expect(kebab17()).toBeUndefined();
+    expect(calls).toContain(`/api/videos/${SHORT_ID17}`); // the flag WAS consulted
+  });
+});
+
+describe("P17 — ShortsCommentRow creator affordances (the watch kebab idiom)", () => {
+  const rowProps = (over: Partial<ShortsCommentRowProps> = {}): ShortsCommentRowProps => ({
+    comment: SHORT_COMMENT17() as unknown as CommentDto,
+    videoId: SHORT_ID17,
+    viewer: VIEWER17,
+    operatorSession: true,
+    guest: false,
+    viewerIsCreator: true,
+    depth: 0,
+    ...over,
+  });
+
+  const mountRow = async (props: ShortsCommentRowProps) => {
+    const { ShortsCommentRow } = await import("@/components/shorts/shorts-comment-row");
+    await mount17(createElement(ShortsCommentRow, props));
+  };
+
+  beforeEach(() => {
+    toasts17.length = 0;
+  });
+
+  afterEach(() => {
+    unmount17();
+    globalThis.fetch = realFetch;
+  });
+
+  test("non-creator rows render NO kebab (byte-identical P16 row)", async () => {
+    stubWriteFetch();
+    await mountRow(rowProps({ viewerIsCreator: false }));
+    expect(kebab17()).toBeUndefined();
+    // the read-only badges still render from the canonical data
+    expect(all17("p").some((p) => (p.textContent ?? "").trim() === "Pinned")).toBe(false);
+    unmount17();
+    await mountRow(
+      rowProps({
+        viewerIsCreator: false,
+        comment: SHORT_COMMENT17({ pinned: true, heartedByCreator: true }),
+      }),
+    );
+    expect(all17("p").some((p) => (p.textContent ?? "").trim() === "Pinned")).toBe(true);
+    expect(heartBadge17()).not.toBeNull();
+    expect(kebab17()).toBeUndefined();
+  });
+
+  test("creator kebab: Heart + Pin at depth 0; Heart only at depth 1 (YouTube's constraint)", async () => {
+    stubWriteFetch();
+    await mountRow(rowProps());
+    await openKebab17();
+    expect(menuItem17("Heart")).toBeDefined();
+    expect(menuItem17("Pin")).toBeDefined();
+    unmount17();
+
+    await mountRow(rowProps({ depth: 1 }));
+    await openKebab17();
+    expect(menuItem17("Heart")).toBeDefined();
+    expect(menuItem17("Pin")).toBeUndefined();
+  });
+
+  test("Heart: POST /api/comments/{id}/heart with {videoId, commentText} → server truth renders the badge", async () => {
+    stubWriteFetch((u) =>
+      u.endsWith("/heart") ? { ok: true, heartedByCreator: true } : {},
+    );
+    await mountRow(rowProps());
+    await openKebab17();
+    await act(async () => {
+      menuItem17("Heart")!.click();
+    });
+    await act(async () => {});
+    expect(writeCalls17).toHaveLength(1);
+    expect(writeCalls17[0].url).toBe(`/api/comments/${SHORT_COMMENT17().id}/heart`);
+    expect(writeCalls17[0].body).toEqual({
+      videoId: SHORT_ID17,
+      commentText: "the pinned fixture comment",
+    });
+    // server truth → the hearted badge renders (aria-label parity)
+    expect(heartBadge17()).not.toBeNull();
+    expect(toasts17).toEqual([]); // heart stays silent on success (watch parity)
+  });
+
+  test("Heart failure → honest revert (no badge) + the error toast", async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ error: "Only the video's channel owner can heart comments" }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      })) as unknown as typeof fetch;
+    await mountRow(rowProps());
+    await openKebab17();
+    await act(async () => {
+      menuItem17("Heart")!.click();
+    });
+    await act(async () => {});
+    expect(heartBadge17()).toBeNull();
+    expect(toasts17.some((t) => t.startsWith("error:") && t.includes("heart"))).toBe(true);
+  });
+
+  test("Pin: POST /api/comments/{id}/pin → server truth renders 'Pinned' + the success toast", async () => {
+    stubWriteFetch((u) => (u.endsWith("/pin") ? { ok: true, pinned: true } : {}));
+    await mountRow(rowProps());
+    await openKebab17();
+    await act(async () => {
+      menuItem17("Pin")!.click();
+    });
+    await act(async () => {});
+    expect(writeCalls17).toHaveLength(1);
+    expect(writeCalls17[0].url).toBe(`/api/comments/${SHORT_COMMENT17().id}/pin`);
+    expect(writeCalls17[0].body).toEqual({
+      videoId: SHORT_ID17,
+      commentText: "the pinned fixture comment",
+    });
+    expect(all17("p").some((p) => (p.textContent ?? "").trim() === "Pinned")).toBe(true);
+    expect(toasts17).toContain("success:Comment pinned");
+  });
+
+  test("Pin failure → honest revert (no badge) + the error toast", async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ error: "Only the video's channel owner can pin comments" }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      })) as unknown as typeof fetch;
+    await mountRow(rowProps());
+    await openKebab17();
+    await act(async () => {
+      menuItem17("Pin")!.click();
+    });
+    await act(async () => {});
+    expect(all17("p").some((p) => (p.textContent ?? "").trim() === "Pinned")).toBe(false);
+    expect(toasts17.some((t) => t.startsWith("error:") && t.includes("pin"))).toBe(true);
+  });
+
+  test("an already-hearted/pinned comment offers Remove heart / Unpin (the toggle labels)", async () => {
+    stubWriteFetch();
+    await mountRow(
+      rowProps({ comment: SHORT_COMMENT17({ heartedByCreator: true, pinned: true }) }),
+    );
+    // the read-only state renders first…
+    expect(all17("p").some((p) => (p.textContent ?? "").trim() === "Pinned")).toBe(true);
+    await openKebab17();
+    expect(menuItem17("Remove heart")).toBeDefined();
+    expect(menuItem17("Unpin")).toBeDefined();
+  });
+
+  test("guest + creator flag → clicking Heart never writes (the AU signed-out law)", async () => {
+    stubWriteFetch();
+    await mountRow(rowProps({ guest: true }));
+    await openKebab17();
+    await act(async () => {
+      menuItem17("Heart")!.click();
+    });
+    await act(async () => {});
+    expect(writeCalls17).toHaveLength(0); // no heart POST from a guest, ever
   });
 });

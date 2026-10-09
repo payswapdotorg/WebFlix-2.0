@@ -26,13 +26,21 @@
  * SORT CONTROL: Top comments / Newest first — the watch `comments-section`
  * changeSort idiom (refetch on change, cursor reset, the `?sort=` seam).
  *
- * CREATOR AFFORDANCES (heart/pin writes): honestly omitted — the
- * creator-context detection (`viewerIsCreator` from the watch session
- * state) requires the watch detail route (`/api/videos/[id]`), a heavier
- * call the shorts sheet doesn't make; shipping the affordances without
- * the detection would either show them to non-creators (wrong) or
- * require a new server call out of scope. The DISPLAY of
- * `heartedByCreator`/`pinned` (read-only badges) stays. See the report.
+ * CREATOR AFFORDANCES (P17): heart/pin writes via the honest, cheapest
+ * creator detection — `operatorSession` (the existing session probe) AND
+ * the canonical watch detail flag `GET /api/videos/{videoId}` →
+ * `state.isCreator` (operatorIsCreator — the operator's youtube.com
+ * session IS the short's channel; the SAME seam the watch page uses,
+ * serving shorts videoIds AS-IS). The sheet-suggested channel-vs-viewer
+ * comparisons are dishonest here: ShortDTO.channel.id is a YouTube `UC…`
+ * browseId and channel.handle a YouTube handle, while ViewerDto.id/handle
+ * are LOCAL WebFlix identity — neither equality can be TRUE for the
+ * channel owner (id: never; handle: only by coincidence, which the
+ * heart/pin routes would 403 as fabrication). Public mode
+ * (operatorSession false) → isCreator is provably false (no cookies →
+ * operatorIsCreator → null) → NO extra call, NO affordance. Detection
+ * failure → NO affordance (the honest default — never fabricated). The
+ * read-only heartedByCreator/pinned badges stay for everyone else.
  *
  * HONEST PAGING: the sheet fetches its own list from the canonical route
  * `/api/videos/{videoId}/comments?sort=` (independent of `meta.comments`);
@@ -64,6 +72,7 @@ import type {
   CommentDto,
   CommentVideoSnapshotDto,
   CommentsPageDto,
+  VideoDetailDto,
   ViewerDto,
 } from "@/lib/watch/types";
 import type { ShortMetaDTO } from "@/lib/youtube/shorts";
@@ -89,6 +98,14 @@ export function ShortsCommentsSheet({
   // ---- session probe (viewer + operatorSession) — one fetch per open ----
   const [viewer, setViewer] = useState<ViewerDto | null>(null);
   const [operatorSession, setOperatorSession] = useState(true);
+
+  // ---- creator context (P17): the per-videoId detection truth, resolved
+  // only via the canonical detail flag (never fabricated; null/other-video
+  // entries render NO affordance) ----
+  const [creatorCtx, setCreatorCtx] = useState<{
+    videoId: string;
+    isCreator: boolean;
+  } | null>(null);
 
   // ---- the canonical comments list (independent of meta.comments) ----
   const [items, setItems] = useState<CommentDto[] | null>(null);
@@ -125,10 +142,29 @@ export function ShortsCommentsSheet({
         if (!alive) return;
         setViewer(r.viewer);
         setOperatorSession(r.operatorSession !== false);
+        // P17 creator detection — operator mode only: the canonical watch
+        // detail flag for THIS short (the same /api/videos/{id} →
+        // state.isCreator seam the watch page uses — operatorIsCreator on
+        // the short's YouTube channel id; serves shorts videoIds AS-IS,
+        // server-cached). Public mode → provably false, NO call. Failure
+        // → false (uncertain → NO affordance, the honest default).
+        if (r.operatorSession !== false) {
+          void api<VideoDetailDto>(`/api/videos/${videoId}`)
+            .then((d) => {
+              if (!alive) return;
+              setCreatorCtx({ videoId, isCreator: d.state?.isCreator === true });
+            })
+            .catch(() => {
+              if (alive) setCreatorCtx({ videoId, isCreator: false });
+            });
+        } else {
+          setCreatorCtx({ videoId, isCreator: false });
+        }
       })
       .catch(() => {
         // honest — leave viewer null + operatorSession true (the default);
-        // the composer/row gates own the signed-out states
+        // the composer/row gates own the signed-out states. The creator
+        // flag keeps its last-known truth for THIS videoId (never guessed)
       });
 
     load(sort)
@@ -194,6 +230,11 @@ export function ShortsCommentsSheet({
   const countText =
     meta?.commentsCountText ??
     (total > 0 ? `${total} Comments` : "Comments");
+
+  // P17: the creator affordances render ONLY on the detection truth for
+  // THIS videoId (stale/other-video resolutions never leak across shorts)
+  const viewerIsCreator =
+    creatorCtx !== null && creatorCtx.videoId === videoId && creatorCtx.isCreator;
 
   return (
     <Sheet open={open} onOpenChange={(next) => (!next ? onClose() : undefined)}>
@@ -319,6 +360,7 @@ export function ShortsCommentsSheet({
                         operatorSession={operatorSession}
                         guest={guest}
                         video={video}
+                        viewerIsCreator={viewerIsCreator}
                         depth={0}
                       />
                     </li>

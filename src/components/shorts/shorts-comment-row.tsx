@@ -26,24 +26,37 @@
  * Public-mode (operator session off) → the watch row's "Sign in to
  * continue" dialog (honest, links /account).
  *
- * CREATOR AFFORDANCES: honestly omitted on the shorts sheet — the
- * creator-context detection (`viewerIsCreator` from the watch session
- * state) requires the watch detail route (`/api/videos/[id]`), a heavier
- * call the shorts sheet doesn't make. The DISPLAY of `heartedByCreator`
- * and `pinned` (read-only badges) stays. See the completion report.
+ * CREATOR AFFORDANCES (P17): when the viewer IS the short's channel
+ * creator (the sheet's `viewerIsCreator` — operator mode + the canonical
+ * watch detail flag, see shorts-comments-sheet.tsx), each row grows the
+ * watch `comment-row` kebab idiom: ⋮ → Heart / Remove heart (any depth)
+ * + Pin / Unpin (top-level only, YouTube's constraint) via the SAME
+ * canonical routes (`POST /api/comments/{id}/heart|pin` with {videoId,
+ * commentText}), optimistic set → server truth → honest revert +
+ * toastActionError on failure. Non-creators keep byte-identical rows
+ * (no kebab renders; the heartedByCreator/pinned badges stay read-only).
  */
 import { useState } from "react";
+import { toast } from "sonner";
 import {
   ChevronDown,
   ChevronUp,
   Heart,
+  MoreVertical,
   Pin,
+  PinOff,
   ThumbsDown,
   ThumbsUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -76,6 +89,10 @@ export interface ShortsCommentRowProps {
   guest: boolean;
   /** WFX2-P6-CR: the watch payload's snapshot (the local rung's shadow rows) */
   video?: CommentVideoSnapshotDto;
+  /** P17: the viewer IS this short's channel creator → the watch kebab
+   * idiom (heart/pin writes) renders; default false (the honest default —
+   * uncertain/degraded detection shows NO affordance) */
+  viewerIsCreator?: boolean;
   /** nesting depth (0 = top-level; 1 = rendered reply level) */
   depth?: number;
 }
@@ -87,6 +104,7 @@ export function ShortsCommentRow({
   operatorSession,
   guest,
   video,
+  viewerIsCreator = false,
   depth = 0,
 }: ShortsCommentRowProps) {
   // ---- like state (session-local on top of the canonical route's honest value)
@@ -105,6 +123,10 @@ export function ShortsCommentRow({
   const [threadLoading, setThreadLoading] = useState(false);
   const [threadLoadingMore, setThreadLoadingMore] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
+  // ---- creator write state (P17): starts at the canonical truth, then
+  // optimistic set → server truth → honest revert (the row's like idiom) ----
+  const [hearted, setHearted] = useState(comment.heartedByCreator);
+  const [pinned, setPinned] = useState(comment.pinned);
 
   /** P15/P13: guests go to /signin (redirect back to /shorts); public-mode
    * operator gaps keep the honest "Sign in to continue" dialog. */
@@ -147,6 +169,49 @@ export function ShortsCommentRow({
     } catch (e) {
       setLike(prev);
       toastActionError(e, "Failed to rate comment");
+    }
+  };
+
+  // ---- CREATOR HEART/PIN (P17): the watch `comment-row` idiom verbatim —
+  // the same canonical routes + {videoId, commentText} payload + toasts +
+  // guest gate — on the sheet's self-held state (optimistic set → server
+  // truth → honest revert + toastActionError, the row's like style) ----
+  const doHeart = async () => {
+    if (guest) {
+      promptSignIn();
+      return;
+    }
+    const prev = hearted;
+    setHearted(!prev); // optimistic
+    try {
+      const r = await post<{ heartedByCreator: boolean }>(
+        `/api/comments/${comment.id}/heart`,
+        { videoId, commentText: comment.body },
+      );
+      setHearted(r.heartedByCreator); // server truth
+    } catch (e) {
+      setHearted(prev); // honest revert
+      toastActionError(e, "Failed to heart");
+    }
+  };
+
+  const doPin = async () => {
+    if (guest) {
+      promptSignIn();
+      return;
+    }
+    const prev = pinned;
+    setPinned(!prev); // optimistic
+    try {
+      const r = await post<{ pinned: boolean }>(
+        `/api/comments/${comment.id}/pin`,
+        { videoId, commentText: comment.body },
+      );
+      setPinned(r.pinned); // server truth
+      toast.success(r.pinned ? "Comment pinned" : "Comment unpinned");
+    } catch (e) {
+      setPinned(prev); // honest revert
+      toastActionError(e, "Failed to pin");
     }
   };
 
@@ -218,7 +283,7 @@ export function ShortsCommentRow({
       </Avatar>
 
       <div className="min-w-0 flex-1">
-        {comment.pinned && depth === 0 && (
+        {pinned && depth === 0 && (
           <p className="mb-0.5 flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
             <Pin className="size-3" aria-hidden="true" /> Pinned
           </p>
@@ -294,7 +359,7 @@ export function ShortsCommentRow({
             />
           </button>
 
-          {comment.heartedByCreator && (
+          {hearted && (
             <span
               className="flex items-center rounded-full px-2 py-1"
               title="Loved by creator"
@@ -320,6 +385,48 @@ export function ShortsCommentRow({
             >
               Reply
             </button>
+          )}
+
+          {/* CREATOR KEBAB (P17): the watch `comment-row` placement (ml-auto,
+              ⋮ menu) — rendered ONLY for the short's channel creator, so
+              non-creator rows stay byte-identical. Heart at any depth; pin
+              top-level only (YouTube's constraint, the watch rule). */}
+          {viewerIsCreator && (
+            <div className="ml-auto">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={`Comment actions for ${comment.author.name}'s comment`}
+                    className="flex min-h-8 min-w-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-accent hover:text-foreground"
+                  >
+                    <MoreVertical className="size-4" aria-hidden="true" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem
+                    onClick={doHeart}
+                    className="cursor-pointer gap-3 py-2.5 text-sm"
+                  >
+                    <Heart className="size-4" aria-hidden="true" />
+                    {hearted ? "Remove heart" : "Heart"}
+                  </DropdownMenuItem>
+                  {depth === 0 && (
+                    <DropdownMenuItem
+                      onClick={doPin}
+                      className="cursor-pointer gap-3 py-2.5 text-sm"
+                    >
+                      {pinned ? (
+                        <PinOff className="size-4" aria-hidden="true" />
+                      ) : (
+                        <Pin className="size-4" aria-hidden="true" />
+                      )}
+                      {pinned ? "Unpin" : "Pin"}
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           )}
         </div>
 
@@ -391,6 +498,7 @@ export function ShortsCommentRow({
                       operatorSession={operatorSession}
                       guest={guest}
                       video={video}
+                      viewerIsCreator={viewerIsCreator}
                       depth={1}
                     />
                   ))
