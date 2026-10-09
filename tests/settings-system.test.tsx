@@ -658,7 +658,7 @@ describe("P5-SS feedback: the page discloses the honest delivery model", () => {
     const post = fetchLog.find((f) => f.method === "POST" && f.url.includes("/api/feedback"));
     expect(post).toBeDefined();
     expect(post!.body).toMatchObject({
-      category: "General",
+      category: "General Feedback", // YouTube's actual list's default option (P20)
       message: "The queue button eats the first click on mobile.",
     });
     expect(q("[data-feedback-sent]")).not.toBeNull();
@@ -724,23 +724,23 @@ describe("P5-SS /api/feedback: the local capture endpoint", () => {
     expect(payload.ok).toBe(true);
     expect(typeof payload.id).toBe("string");
 
-    await post({ category: "General", message: "second submission" }); // append, not overwrite
+    await post({ category: "General Feedback", message: "second submission" }); // append, not overwrite
     const lines = readFileSync(logFile, "utf8").trim().split("\n");
     expect(lines).toHaveLength(2);
     const record = JSON.parse(lines[0]) as { id: string; category: string; message: string; at: string };
     expect(record.id).toBe(payload.id);
-    expect(record.category).toBe("Something's broken");
+    expect(record.category).toBe(FEEDBACK_CATEGORIES[5]); // YouTube's actual list, index 5 (P20)
     expect(record.message).toBe("The watch page queue button does nothing."); // trimmed
     expect(typeof record.at).toBe("string");
   });
 
   test("rejects an empty message", async () => {
-    const res = await post({ category: "General", message: "   " });
+    const res = await post({ category: "General Feedback", message: "   " });
     expect(res.status).toBe(400);
   });
 
   test("rejects an over-long message", async () => {
-    const res = await post({ category: "General", message: "x".repeat(4001) });
+    const res = await post({ category: "General Feedback", message: "x".repeat(4001) });
     expect(res.status).toBe(400);
   });
 
@@ -837,7 +837,7 @@ describe("P5-SS /report-history: the honest split (local video reports + the not
     expect(host!.textContent).toContain("Sintel");
     expect(host!.textContent).toContain("Reported for Spam or misleading");
     expect(all('[data-report-item="v1"]').length).toBe(1);
-    expect(host!.textContent).toContain("In review");
+    expect(host!.textContent).toContain("Under review"); // YouTube's state wording (P20)
     expect(all("a").find((a) => a.getAttribute("href") === "/watch/v1")).toBeDefined();
   });
 });
