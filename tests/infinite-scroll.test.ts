@@ -34,6 +34,7 @@ import { readFileSync } from "node:fs";
 import { setUpstream } from "@/lib/youtube/innertube";
 import { clearCache } from "@/lib/youtube/cache";
 import { mapVideos } from "@/lib/youtube/mappers";
+import { searchContinuationToken } from "@/lib/youtube/search";
 import {
   decodeComposeCursor,
   decodeCursor,
@@ -51,37 +52,26 @@ const load = (name: string): any => JSON.parse(readFileSync(`${FIXTURE_DIR}/${na
 const searchLofi = load("search_lofi"); // REAL search capture (45 mappable cards)
 const nudge = load("home_feed"); // REAL walled browse shape (logged-out nudge)
 const reelSeq = load("reel_sequence_synth");
+// WFX2-P22-C: a REAL page-2 continuation capture (the appendContinuationItemsAction
+// shape — NO sectionListRenderer anywhere; the walker regression fixture).
+const searchPage2 = load("search_page2_append");
 
-/** Mirror of the lib's searchContinuationToken walk (test-side extraction). */
-function continuationTokenOf(body: any): string | null {
-  const sections: any[] = [];
-  (function walk(node: unknown): void {
-    if (!node || typeof node !== "object") return;
-    if (Array.isArray(node)) {
-      node.forEach(walk);
-      return;
-    }
-    if ((node as Record<string, unknown>).sectionListRenderer) {
-      sections.push((node as Record<string, unknown>).sectionListRenderer);
-    }
-    Object.values(node).forEach(walk);
-  })(body);
-  for (const section of sections) {
-    for (const item of section?.continuationItems ?? section?.contents ?? []) {
-      const token = item?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token;
-      if (typeof token === "string" && token) return token;
-    }
-    const token = section?.continuations?.[0]?.nextContinuationData?.continuation;
-    if (typeof token === "string" && token) return token;
-  }
-  return null;
-}
+// WFX2-P22-C: the lib's own walk (searchContinuationToken is now the exported
+// canonical — the test-side mirror is retired; drift is impossible).
+const continuationTokenOf = searchContinuationToken;
 
 // The compose's first seed query rides the REAL capture; its captured token:
 const T_LOFI = continuationTokenOf(searchLofi) as string;
 if (typeof T_LOFI !== "string") {
   // a hard import-time guard: the whole suite hangs off the real token
   throw new Error("fixture drift: search_lofi lost its continuation token");
+}
+
+// WFX2-P22-C: the REAL page-2 capture's own token (import-time drift guard —
+// the append-shape regression hangs off it).
+const T_PAGE2 = continuationTokenOf(searchPage2) as string;
+if (typeof T_PAGE2 !== "string") {
+  throw new Error("fixture drift: search_page2_append lost its continuation token");
 }
 
 // Synthetic first pages for seeds 1–2 (disjoint ids + DISTINCT captured
@@ -613,5 +603,174 @@ describe("PART 2 — /api/search: infinite results", () => {
       expect(typeof ((await res.json()) as { error: string }).error).toBe("string");
     }
     expect(up.recorded).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WFX2-P22-C — the append-shape regression (the infinite-scroll fix)
+// ---------------------------------------------------------------------------
+
+describe("P22-C — search continuation tokens: EVERY page's shape (the regression)", () => {
+  test("the walker reads a FIRST page's token (the sectionListRenderer shape, unchanged)", () => {
+    // the REAL capture: the token sits at the section tail
+    expect(continuationTokenOf(searchLofi)).toBe(T_LOFI);
+  });
+
+  test("the walker reads a CONTINUATION page's token (the appendContinuationItemsAction shape — the bug)", () => {
+    // the REAL page-2 capture: onResponseReceivedCommands[0].appendContinuationItemsAction
+    // .continuationItems — NO sectionListRenderer anywhere. The old walk read
+    // null here (the search grid died after page 2; the home compose's search
+    // phase got ONE page per seed query).
+    expect(searchPage2.sectionListRenderer).toBeUndefined();
+    expect(JSON.stringify(searchPage2).includes("sectionListRenderer")).toBe(false);
+    expect(continuationTokenOf(searchPage2)).toBe(T_PAGE2);
+  });
+
+  test("the walker ignores the header chip-bar tokens (filter chips are NOT pagination)", () => {
+    // the REAL page-2 capture carries chipCloudChipRenderer continuation tokens
+    // in its header — the walk must return the RESULTS tail token, never a chip's
+    const chipTokens = JSON.stringify(searchPage2).match(/chipCloudChipRenderer/g) ?? [];
+    expect(chipTokens.length).toBe(0); // the sanitizer keeps the header shape-only
+    // belt-and-braces with an inline chip bar (the real page-1 shape has one)
+    const withChips = {
+      ...searchLofi,
+      header: {
+        searchHeaderRenderer: {
+          chipBar: {
+            chipCloudRenderer: {
+              chips: [
+                {
+                  chipCloudChipRenderer: {
+                    navigationEndpoint: { continuationCommand: { token: "CHIP-TOKEN-NOT-PAGINATION" } },
+                  },
+                },
+              ],
+            },
+          },
+        },
+      },
+    };
+    expect(continuationTokenOf(withChips)).toBe(T_LOFI);
+  });
+
+  test("the /api/search cursor chain survives a REAL append-shape page (page 2 → page 3)", async () => {
+    // serve the REAL page-2 capture as seed 0's first continuation answer,
+    // then a synthetic page 3 off ITS token — the chain must hand page 3's
+    // cursor to the client (pre-P22-C this is exactly where nextCursor went
+    // null and the grid died).
+    const up = upstreamFake();
+    setUpstream(
+      async (url: string, init?: RequestInit): Promise<Response> => {
+        if (url.includes("/youtubei/v1/search")) {
+          const body = init?.body ? JSON.parse(String(init.body)) : null;
+          if (body?.continuation === T_LOFI) {
+            return new Response(JSON.stringify(searchPage2), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            });
+          }
+        }
+        return up.impl(url, init);
+      },
+    );
+    // extend the fake: the page-2 token answers a page 3 (synthetic, first-page shape)
+    const origImpl = up.impl;
+    setUpstream(async (url: string, init?: RequestInit): Promise<Response> => {
+      if (url.includes("/youtubei/v1/search")) {
+        const body = init?.body ? JSON.parse(String(init.body)) : null;
+        if (body?.continuation === T_PAGE2) {
+          return new Response(
+            JSON.stringify(searchPageBody([synthVideo("P22C3", "Page three after the append shape")], null)),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        if (body?.continuation === T_LOFI) {
+          return new Response(JSON.stringify(searchPage2), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+      }
+      return origImpl(url, init);
+    });
+
+    const first = (await (
+      await searchRoute(new Request("http://localhost/api/search?q=lofi"))
+    ).json()) as any;
+    expect(first.nextCursor).toBeTruthy();
+
+    // page 2 — the REAL append-shape body: videos mapped + THE NEXT CURSOR
+    const second = (await (
+      await searchRoute(
+        new Request(`http://localhost/api/search?q=lofi&cursor=${first.nextCursor}`)
+      )
+    ).json()) as any;
+    expect(second.videos.length).toBeGreaterThan(0);
+    expect(second.nextCursor).toBeTruthy(); // the P22-C fix (was null → dead grid)
+    expect(decodeCursor(second.nextCursor)?.t).toBe(T_PAGE2);
+
+    // page 3 — the chain keeps going (honest null only when upstream ends)
+    const third = (await (
+      await searchRoute(
+        new Request(`http://localhost/api/search?q=lofi&cursor=${second.nextCursor}`)
+      )
+    ).json()) as any;
+    expect(third.videos.map((v: any) => v.id)).toEqual(["P22C3"]);
+    expect(third.nextCursor).toBeNull(); // the honest end (this upstream's chain ends)
+  });
+
+  test("the home compose search phase chains DEEP through append-shape pages (not one page per query)", async () => {
+    // pre-P22-C: seed qi's first continuation answered an append-shape body →
+    // nextCursor null → the compose ADVANCED to the next seed and the whole
+    // chain ended after ~one page per query. Now the append token keeps the
+    // SAME query's chain alive.
+    const up = upstreamFake();
+    const origImpl = up.impl;
+    setUpstream(async (url: string, init?: RequestInit): Promise<Response> => {
+      if (url.includes("/youtubei/v1/search")) {
+        const body = init?.body ? JSON.parse(String(init.body)) : null;
+        if (body?.continuation === T_LOFI) {
+          // the REAL append-shape page 2, with ITS OWN token at the tail
+          return new Response(JSON.stringify(searchPage2), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        if (body?.continuation === T_PAGE2) {
+          // page 3 of the SAME seed query (the deep chain proof)
+          return new Response(
+            JSON.stringify(searchPageBody([synthVideo("P22Cdeep", "Deep continuation of seed 0")], null)),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+      }
+      return origImpl(url, init);
+    });
+
+    // walk: pool windows → search phase qi:0 → its page 2 (append shape) → page 3
+    let cursor: string | null = null;
+    const seen: string[] = [];
+    for (let i = 0; i < 12; i++) {
+      const url = cursor
+        ? `http://localhost/api/videos?cursor=${encodeURIComponent(cursor)}`
+        : "http://localhost/api/videos";
+      const { page } = await videosPage(url);
+      seen.push(...page.videos.map((v) => v.id));
+      if (!page.nextCursor) break;
+      cursor = page.nextCursor;
+      const decoded = decodeComposeCursor(cursor, 3);
+      if (decoded?.s === "search" && decoded.t === T_PAGE2) {
+        // the append token is in flight — one more page lands the deep proof
+        const { page: deep } = await videosPage(
+          `http://localhost/api/videos?cursor=${encodeURIComponent(cursor)}`
+        );
+        // P22Cdeep is served ONLY by the T_PAGE2 branch — serving it proves
+        // the append-shape token was POSTed upstream (the wrapper intercepts
+        // before origImpl records, so the page content IS the recording).
+        expect(deep.videos.map((v) => v.id)).toContain("P22Cdeep");
+        return; // the deep chain held seed 0 across an append-shape page
+      }
+    }
+    throw new Error("the search phase never reached the append token — chain ended early");
   });
 });

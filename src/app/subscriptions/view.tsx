@@ -1,12 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Layers, LayoutGrid, List, Loader2 } from "lucide-react";
+import { Layers, LayoutGrid, List } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
 import { VideoCard } from "@/components/video/video-card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { VerifiedBadge } from "@/components/app/verified-badge";
 import { formatSubscribers, formatDuration, displayViews, displayPublished } from "@/lib/format";
@@ -28,7 +27,13 @@ type SubscriptionsPayload = {
  * P18-SUBS-NOTIFS: the feed header carries YouTube's grid/list layout
  * switcher; the choice persists in localStorage (wf-subs-layout — the
  * layout-store, the sidebar-store idiom) and only changes how the SAME real
- * rows render. */
+ * rows render.
+ * WFX2-P22-C: the feed scrolls infinitely — the house sentinel pattern
+ * (IntersectionObserver, rootMargin 600px, the search view's idiom) replaces
+ * the old "Load more" button. youtube.com's subscriptions feed auto-loads;
+ * the button was the parity gap behind "I don't have infinite scrolling
+ * anymore". The /api/subscriptions?cursor= contract is unchanged; a failed
+ * page keeps the rows and the sentinel re-arms to retry. */
 export default function SubscriptionsPage() {
   return (
     <PersonalSurfaceGate surface="subscriptions">
@@ -44,6 +49,7 @@ function SubscriptionsContent() {
     cursor: null,
     loading: false,
   });
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
   // P18: the persisted grid ⇄ list choice (skipHydration + mount rehydrate —
   // no SSR mismatch; rows paint after the fetch, after rehydration).
@@ -53,22 +59,58 @@ function SubscriptionsContent() {
 
   const channels = data?.channels ?? [];
   const videos = [...(data?.videos ?? []), ...extraVideos];
-  const hasMore = Boolean(paging.cursor ?? data?.nextCursor);
+  // WFX2-P22-C: the sentinel lives on the CHAIN's own cursor only — the old
+  // button-era fallback (paging.cursor ?? data.nextCursor) would keep the
+  // sentinel mounted after the honest end (the first page's cursor never
+  // clears), and an in-view sentinel re-fires its observer on every
+  // re-subscription — a refetch loop. The chain's null IS the honest end.
+
+  const hasMore = Boolean(paging.cursor);
+
+  // WFX2-P22-C: adopt the fresh first page's cursor once per fetch (the
+  // cursor state must survive until the chain honestly ends, so it is never
+  // derived live from `data` — the search view's adoptedRef idiom).
+  const adoptedRef = useRef(false);
+  useEffect(() => {
+    if (data && !adoptedRef.current) {
+      adoptedRef.current = true;
+      setPaging((p) => ({ ...p, cursor: data.nextCursor }));
+    }
+  }, [data]);
 
   async function loadMore() {
     const cursor = paging.cursor ?? data?.nextCursor ?? null;
-    if (!cursor) return;
+    if (!cursor || paging.loading) return;
     setPaging({ cursor, loading: true });
     try {
       const res = await fetch(`/api/subscriptions?cursor=${encodeURIComponent(cursor)}`);
       const body = (await res.json()) as SubscriptionsPayload & { error?: string };
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
-      setExtraVideos((prev) => [...prev, ...body.videos]);
+      setExtraVideos((prev) => {
+        const seen = new Set(prev.map((v) => v.id));
+        const fresh = body.videos.filter((v) => !seen.has(v.id));
+        return [...prev, ...fresh];
+      });
       setPaging({ cursor: body.nextCursor, loading: false });
     } catch {
       setPaging({ cursor, loading: false });
     }
   }
+
+  // WFX2-P22-C: the auto-load sentinel (the house pattern — always-resubscribed
+  // idempotent observer; the loading flag dedupes concurrent chain loads).
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) void loadMore();
+      },
+      { rootMargin: "600px 0px" }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  });
 
   return (
     <div className="pb-6">
@@ -219,23 +261,49 @@ function SubscriptionsContent() {
               ))}
             </div>
           )}
+          {/* WFX2-P22-C — the auto-load sentinel + row skeletons (the house
+              pattern): renders only while the chain holds a cursor; the
+              honest end of the feed is simply no sentinel. */}
           {hasMore && (
-            <div className="flex justify-center px-4 py-6 sm:px-6">
-              <Button
-                variant="secondary"
-                className="rounded-full"
-                onClick={loadMore}
-                disabled={paging.loading}
-              >
-                {paging.loading ? (
-                  <>
-                    <Loader2 className="mr-2 size-4 animate-spin" /> Loading…
-                  </>
-                ) : (
-                  "Load more"
-                )}
-              </Button>
-            </div>
+            <>
+              <div
+                ref={sentinelRef}
+                data-testid="subs-infinite-scroll-sentinel"
+                className="h-1"
+                aria-hidden="true"
+              />
+              {paging.loading && (
+                <div
+                  className={cn(
+                    "px-4 py-6 sm:px-6",
+                    layout === "list"
+                      ? "flex flex-col gap-4"
+                      : "grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4"
+                  )}
+                  aria-busy="true"
+                  aria-label="Loading more subscriptions"
+                >
+                  {Array.from({ length: 4 }).map((_, i) =>
+                    layout === "list" ? (
+                      <div key={i} className="flex gap-4" aria-hidden="true">
+                        <Skeleton className="aspect-video w-[168px] shrink-0 rounded-xl" />
+                        <div className="flex-1 space-y-2 pt-1">
+                          <Skeleton className="h-4 w-11/12" />
+                          <Skeleton className="h-3 w-1/3" />
+                          <Skeleton className="h-3 w-1/2" />
+                        </div>
+                      </div>
+                    ) : (
+                      <div key={i} className="flex flex-col gap-3" aria-hidden="true">
+                        <Skeleton className="aspect-video w-full rounded-xl" />
+                        <Skeleton className="h-4 w-11/12" />
+                        <Skeleton className="h-3 w-2/3" />
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
+            </>
           )}
         </section>
       )}
