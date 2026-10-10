@@ -28,14 +28,36 @@ export interface SearchResults {
   nextCursor: string | null;
 }
 
-function searchContinuationToken(response: unknown): string | null {
-  const sections = walkTree(response, "sectionListRenderer");
-  for (const section of sections) {
-    for (const item of section?.continuationItems ?? section?.contents ?? []) {
-      const token =
-        item?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token;
-      if (typeof token === "string" && token) return token;
-    }
+/**
+ * The next-page continuation token from a search response — ANY page's shape.
+ *
+ * WFX2-P22-C (the infinite-scroll regression): first pages wrap results in
+ * `contents.twoColumnSearchResultsRenderer.primaryContents.sectionListRenderer`
+ * (token = the section's trailing continuationItemRenderer), but CONTINUATION
+ * pages (a {continuation} POST) return `onResponseReceivedCommands[0]
+ * .appendContinuationItemsAction.continuationItems` with NO sectionListRenderer
+ * anywhere (live-verified 2026-10-10 — see tests/fixtures/yt/search_page2_append.json,
+ * a real page-2 capture). Walking only sectionListRenderer therefore read
+ * page 1's token and then null on every later page: the search grid died
+ * after 2 pages, and the home compose's search phase got ONE page per seed
+ * query before the whole chain ended — "I don't have infinite scrolling
+ * anymore".
+ *
+ * The fix mirrors feeds' feedContinuationToken / subscriptions'
+ * subscriptionsContinuationToken: walk the WHOLE tree for
+ * `continuationItemRenderer` nodes (present in BOTH shapes, at the results
+ * tail) and take the first token. The header chip bar's
+ * chipCloudChipRenderer.navigationEndpoint tokens are NOT inside a
+ * continuationItemRenderer, so they can never be mistaken for the
+ * pagination token. The legacy `sectionListRenderer.continuations`
+ * arm stays for old-shape captures.
+ */
+export function searchContinuationToken(response: unknown): string | null {
+  for (const item of walkTree(response, "continuationItemRenderer")) {
+    const token = item?.continuationEndpoint?.continuationCommand?.token;
+    if (typeof token === "string" && token) return token;
+  }
+  for (const section of walkTree(response, "sectionListRenderer")) {
     const token = section?.continuations?.[0]?.nextContinuationData?.continuation;
     if (typeof token === "string" && token) return token;
   }

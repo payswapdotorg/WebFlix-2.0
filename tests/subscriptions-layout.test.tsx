@@ -17,7 +17,7 @@
  *    app's own persisted bytes round-trip across a simulated reload, and an
  *    invalid stored value falls back to grid;
  *  - THE UNCHANGED SEAMS: list-view skeletons, the honest error state, and
- *    cursor paging (Load more appends rows in list view too).
+ *    cursor paging (the P22-C sentinel auto-loads rows in list view too).
  */
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { createElement, type ReactElement } from "react";
@@ -36,11 +36,27 @@ Object.defineProperty(globalThis, "localStorage", {
   configurable: true,
   writable: true,
 });
+// WFX2-P22-C: a firing stub — the sentinel tests need the observer callback
+// (records it so a test can simulate the sentinel entering the viewport; the
+// real browser fires it on scroll, rootMargin 600px).
+let ioCallback: ((entries: { isIntersecting: boolean }[]) => void) | null = null;
 win.IntersectionObserver = class {
+  constructor(cb: (entries: { isIntersecting: boolean }[]) => void) {
+    ioCallback = cb;
+  }
   observe() {}
-  disconnect() {}
+  disconnect() {
+    ioCallback = null;
+  }
   unobserve() {}
 } as unknown as typeof IntersectionObserver;
+const fireSentinel = () =>
+  act(async () => {
+    ioCallback?.([{ isIntersecting: true }]);
+  });
+// the component references the GLOBAL IntersectionObserver — the stub must
+// live on globalThis too, not just the happy-dom window
+(globalThis as Record<string, unknown>).IntersectionObserver = win.IntersectionObserver;
 (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 
 // ---- module mocks (the search-layout set) ----
@@ -415,15 +431,17 @@ describe("P18 — the unchanged seams (skeletons, error, paging)", () => {
     expect(alert[0].textContent).toContain("Failed to load subscriptions");
   });
 
-  test("cursor paging — Load more appends rows in list view (the unchanged seam)", async () => {
+  test("cursor paging — the sentinel auto-loads rows in list view (the P22-C seam)", async () => {
     feedData = FEED;
     await render(createElement(SubscriptionsPage));
     await act(async () => {
       all('[data-testid="subs-layout-list"]')[0].click();
     });
     await act(async () => {});
-    const loadMore = all("button").find((b) => (b.textContent ?? "").trim() === "Load more");
-    expect(loadMore).toBeDefined();
+    // the house sentinel renders while the chain holds a cursor (no button —
+    // youtube.com's subscriptions feed auto-loads)
+    expect(all('button').some((b) => (b.textContent ?? "").includes("Load more"))).toBe(false);
+    expect(all('[data-testid="subs-infinite-scroll-sentinel"]').length).toBe(1);
     fetchHandler = () =>
       new Response(
         JSON.stringify({
@@ -435,14 +453,41 @@ describe("P18 — the unchanged seams (skeletons, error, paging)", () => {
         }),
         { status: 200, headers: { "Content-Type": "application/json" } }
       );
-    await act(async () => {
-      loadMore!.click();
-    });
+    await fireSentinel();
     await act(async () => {});
     expect(fetchLog.filter((u) => u.includes("/api/subscriptions?cursor=CUR1"))).toHaveLength(1);
-    expect(all('[data-testid="subs-list-row"]').length).toBe(3); // 2 + the appended page
-    // NOTE: the existing hasMore fallback (paging.cursor ?? data.nextCursor —
-    // the FIRST page's cursor) keeps the Load more affordance mounted after
-    // the last page; that seam predates this lane and stays untouched.
+    expect(all('[data-testid="subs-list-row"]').length).toBe(3); // 2 + the auto-loaded page
+    // WFX2-P22-C: the chain's honest end UNMOUNTS the sentinel (hasMore is
+    // the chain cursor only) — no in-view sentinel, no refetch loop.
+    expect(all('[data-testid="subs-infinite-scroll-sentinel"]').length).toBe(0);
+  });
+
+  test("cursor paging — the honest end unmounts the sentinel (no refetch loop)", async () => {
+    feedData = { ...FEED, nextCursor: null }; // a one-page feed
+    await render(createElement(SubscriptionsPage));
+    await act(async () => {});
+    expect(all('[data-testid="subs-infinite-scroll-sentinel"]').length).toBe(0);
+    expect(all('[data-thumb-anchor]').length).toBe(2);
+    expect(fetchLog.filter((u) => u.includes("/api/subscriptions?cursor="))).toHaveLength(0);
+  });
+
+  test("cursor paging — a failed page keeps the rows and the sentinel re-arms (retry on the next pass)", async () => {
+    feedData = FEED;
+    await render(createElement(SubscriptionsPage));
+    fetchHandler = () => new Response("{}", { status: 500 });
+    await fireSentinel();
+    await act(async () => {});
+    // the rows are intact and NO duplicate fetch storm: the loading flag
+    // guards concurrency, the failed cursor is kept for the retry
+    expect(all('[data-thumb-anchor]').length).toBe(2);
+    expect(all('[data-testid="subs-infinite-scroll-sentinel"]').length).toBe(1);
+    fetchHandler = () =>
+      new Response(
+        JSON.stringify({ channels: [], videos: [video("v9")], nextCursor: null, loginRequired: false, session: true }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    await fireSentinel();
+    await act(async () => {});
+    expect(all('[data-thumb-anchor]').length).toBe(3);
   });
 });

@@ -74,16 +74,19 @@ const PLAYER_CLIENTS: Record<string, PlayerClientContext> = {
   MWEB: { clientName: "MWEB", clientVersion: "2.20260925.08.00" },
   WEB_EMBEDDED_PLAYER: { clientName: "WEB_EMBEDDED_PLAYER", clientVersion: "2.20260925.08.00" },
   WEB_REMIX: { clientName: "WEB_REMIX", clientVersion: "0.1" },
-  // native app context (realistic iPhone 15 Pro Max / iOS 17.5.2 shape) —
-  // historically the last client family to keep plain-url progressive formats
+  // native app context (realistic iPhone 16 Pro Max / iOS 18.3.2 shape).
+  // P22-C: 19.29.1 is DEAD upstream — the player endpoint answers HTTP 400
+  // "Precondition check failed" for it (live-probed 2026-10-10), silently
+  // killing rung 1's second client. 20.10.4 answers normally (LOGIN_REQUIRED
+  // from walled egresses, OK from healthy ones — the chain's lottery ticket).
   IOS: {
     clientName: "IOS",
-    clientVersion: "19.29.1",
+    clientVersion: "20.10.4",
     deviceMake: "Apple",
     deviceModel: "iPhone16,2",
     osName: "iPhone",
-    osVersion: "17.5.2.21H",
-    userAgent: "com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_2 like Mac OS X;)",
+    osVersion: "18.3.2.22D82",
+    userAgent: "com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)",
   },
 };
 

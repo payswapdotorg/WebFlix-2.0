@@ -20,6 +20,7 @@ import { readFileSync } from "node:fs";
 import { setUpstream } from "@/lib/youtube/innertube";
 import { clearCache } from "@/lib/youtube/cache";
 import { mapVideos } from "@/lib/youtube/mappers";
+import { searchContinuationToken } from "@/lib/youtube/search";
 import {
   decodeCursor,
   decodeExploreCategoryCursor,
@@ -39,30 +40,11 @@ const searchNews = load("search_news"); // REAL capture — News seed 0
 const hadCookies = process.env.YT_COOKIES;
 delete process.env.YT_COOKIES;
 
-/** Mirror of the lib's searchContinuationToken walk (test-side extraction). */
-function continuationTokenOf(body: any): string | null {
-  const sections: any[] = [];
-  (function walk(node: unknown): void {
-    if (!node || typeof node !== "object") return;
-    if (Array.isArray(node)) {
-      node.forEach(walk);
-      return;
-    }
-    if ((node as Record<string, unknown>).sectionListRenderer) {
-      sections.push((node as Record<string, unknown>).sectionListRenderer);
-    }
-    Object.values(node).forEach(walk);
-  })(body);
-  for (const section of sections) {
-    for (const item of section?.continuationItems ?? section?.contents ?? []) {
-      const token = item?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token;
-      if (typeof token === "string" && token) return token;
-    }
-    const token = section?.continuations?.[0]?.nextContinuationData?.continuation;
-    if (typeof token === "string" && token) return token;
-  }
-  return null;
-}
+// WFX2-P22-C: the lib's own walk (searchContinuationToken is now the exported
+// canonical — the test-side mirror is retired; the walk covers BOTH the
+// first-page sectionListRenderer shape and continuation pages'
+// appendContinuationItemsAction shape).
+const continuationTokenOf = searchContinuationToken;
 
 // the REAL captures' own continuation tokens (import-time drift guards)
 const T_MUSIC = continuationTokenOf(searchMusic);
@@ -510,5 +492,57 @@ describe("GET /api/explore/category — honest answers (never a 500)", () => {
     expect(page.videos[2].id).toBe("SYNTHEG3-1");
     const cursor = decodeExploreCategoryCursor(page.nextCursor, "Gaming", 3);
     expect(cursor).toEqual({ s: "ecat", k: "Gaming", o: 12, t: [T_GAMING, T_G2, null] });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WFX2-P22-C — the append-shape regression on the category grid
+// ---------------------------------------------------------------------------
+
+describe("P22-C — the category cursor chain survives append-shape continuation pages", () => {
+  test("T_MUSIC (append shape in flight) keeps the SAME seed's chain alive (not one page per query)", async () => {
+    // serve the REAL page-2 capture for Music's first continuation, then a
+    // page 3 off ITS token — pre-P22-C the append shape read nextCursor:null
+    // and the grid's chain advanced/died instead of paging on.
+    const searchPage2 = load("search_page2_append");
+    const T_PAGE2 = searchContinuationToken(searchPage2) as string;
+    expect(typeof T_PAGE2).toBe("string");
+    const origImpl = upstream.impl;
+    setUpstream(async (url: string, init?: RequestInit): Promise<Response> => {
+      if (url.includes("/youtubei/v1/search")) {
+        const body = init?.body ? JSON.parse(String(init.body)) : null;
+        if (body?.continuation === T_MUSIC) {
+          return new Response(JSON.stringify(searchPage2), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        if (body?.continuation === T_PAGE2) {
+          return new Response(
+            JSON.stringify(
+              searchPageBody([synthVideo("P22CEXP3", "Category page three")], null),
+            ),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+      }
+      return origImpl(url, init);
+    });
+
+    // walk the chain until the search phase holds the append token, then page it
+    let url = "http://localhost/api/explore/category?key=Music&limit=24";
+    for (let i = 0; i < 16; i++) {
+      const { page } = await categoryPage(url);
+      if (!page.nextCursor) break;
+      url = `http://localhost/api/explore/category?key=Music&limit=24&cursor=${encodeURIComponent(page.nextCursor)}`;
+      const decoded = decodeExploreCategoryCursor(page.nextCursor, "Music", 3);
+      if (decoded?.s === "ecats" && decoded.t === T_PAGE2) {
+        const { page: deep } = await categoryPage(url);
+        // P22CEXP3 is served ONLY by the T_PAGE2 branch — the append token paged on
+        expect(deep.videos.map((v) => v.id)).toContain("P22CEXP3");
+        return;
+      }
+    }
+    throw new Error("the category chain never reached the append token — it ended early");
   });
 });

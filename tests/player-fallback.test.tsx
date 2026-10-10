@@ -8,8 +8,9 @@
  *    iframe lane for the fallback INSIDE the persistent wrapper:
  *      · streamFormats available → a native <video controls autoplay> fed
  *        by /api/stream?url=<encoded googlevideo url> (poster = thumbnail);
- *      · no formats → the blocked card ("Playback is blocked by YouTube in
- *        the embedded player" + Open on YouTube + Retry embed);
+ *      · no formats → the blocked card (the P22-C what-to-try wording:
+ *        "This video can't play here right now" + the youtube.com-sign-in
+ *        hint + Open on YouTube + Retry embed);
  *  - Retry embed clears the verdict → the iframe lane re-mounts fresh.
  *
  * happy-dom + createRoot/act (the miniplayer.test.tsx pattern); next/navigation
@@ -290,7 +291,7 @@ describe("Task 2-c — the player swap chain", () => {
     expect(video.hasAttribute("autoplay")).toBe(true);
   });
 
-  test("blocked + NO formats → the blocked card with Open on YouTube + Retry embed", async () => {
+  test("blocked + NO formats → the blocked card with the P22-C what-to-try wording + actions", async () => {
     await renderApp();
     await attach("NOFMT000001");
     await act(async () => {
@@ -301,11 +302,21 @@ describe("Task 2-c — the player swap chain", () => {
     });
     const card = q('[aria-label="Playback unavailable in the embedded player"]');
     expect(card).not.toBeNull();
-    expect(card!.textContent).toContain("Playback is blocked by YouTube in the embedded player");
+    // P22-C — the honest-exhaustion card says WHAT TO TRY (youtube-style):
+    // the bot-check explanation + the youtube.com sign-in cure + the retry.
+    expect(card!.textContent).toContain("This video can't play here right now");
+    expect(card!.textContent).toContain("confirm you're not a bot");
+    expect(card!.textContent).toContain("Signing in on youtube.com in this browser usually clears the check");
     const openLink = card!.querySelector(
       'a[aria-label="Open this video on YouTube in a new tab"]'
     ) as HTMLAnchorElement;
     expect(openLink.getAttribute("href")).toBe("https://www.youtube.com/watch?v=NOFMT000001");
+    // the sign-in affordance (the actual bot-wall cure, its own CTA now)
+    const signInLink = card!.querySelector(
+      'a[aria-label="Open youtube.com to sign in, in a new tab"]'
+    ) as HTMLAnchorElement | null;
+    expect(signInLink).not.toBeNull();
+    expect(signInLink!.getAttribute("href")).toBe("https://www.youtube.com/");
     const retry = card!.querySelector(
       'button[aria-label="Retry the embedded YouTube player"]'
     ) as HTMLButtonElement | null;
@@ -339,5 +350,164 @@ describe("Task 2-c — the player swap chain", () => {
     expect(mainDestroyed()).toHaveLength(1);
     expect(liveMainPlayers()).toHaveLength(1);
     expect(q("video")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P22-C — the wall never shows: the cover + the stall re-probe chain
+// ---------------------------------------------------------------------------
+
+describe("P22-C — the embed-wall cover (the wall text is never visible)", () => {
+  /** The current video's live probe player (created ~a microtask after attach). */
+  const probeFor = (videoId: string): MockYTPlayer | undefined =>
+    MockYTPlayer.instances.find(
+      (p) => isProbePlayer(p) && p.options["videoId"] === videoId && !MockYTPlayer.destroyed.includes(p)
+    );
+
+  test("a fresh attach shows the poster cover until the probe's healthy verdict", async () => {
+    await renderApp();
+    await attach("COVER00001");
+    // pending verdict + no proof of playback → the opaque cover is up (the
+    // iframe's wall text — cross-origin, unreadable — cannot surface)
+    const cover = q('[data-testid="embed-wall-cover"]');
+    expect(cover).not.toBeNull();
+    expect(cover!.getAttribute("role")).toBe("status");
+    expect(cover!.textContent).toContain("Starting playback");
+    // the cover carries the poster (the same i.ytimg.com thumbnail)
+    const poster = cover!.querySelector("img");
+    expect(poster?.getAttribute("src")).toBe("https://i.ytimg.com/vi/COVER00001/hqdefault.jpg");
+    // healthy verdict → the cover lifts, the embed lane stands
+    const probe = probeFor("COVER00001");
+    expect(probe).toBeDefined();
+    await act(async () => {
+      (probe!.options["events"] as any).onStateChange({ data: 1 }); // PLAYING — health proof
+    });
+    await sleep(10);
+    expect(q('[data-testid="embed-wall-cover"]')).toBeNull();
+    expect(liveMainPlayers()).toHaveLength(1);
+    expect(usePlayerHost.getState().blockedVideoId).toBeNull();
+  });
+
+  test("the cover lifts the moment the MAIN player proves playback (probe still pending)", async () => {
+    await renderApp();
+    await attach("COVER00002");
+    expect(q('[data-testid="embed-wall-cover"]')).not.toBeNull();
+    const main = liveMainPlayers()[0];
+    await act(async () => {
+      (main.options["events"] as any).onStateChange({ data: 1 }); // main PLAYING
+    });
+    await sleep(10);
+    // playing proof beats a pending verdict — the video is visible NOW
+    expect(q('[data-testid="embed-wall-cover"]')).toBeNull();
+    // hygiene: settle the still-pending probe (healthy — no lane change) so
+    // no 7s deadline timer outlives the test
+    const probe = probeFor("COVER00002");
+    await act(async () => {
+      (probe!.options["events"] as any).onStateChange({ data: 1 });
+    });
+    await sleep(10);
+    expect(usePlayerHost.getState().blockedVideoId).toBeNull();
+  });
+
+  test("a walled first probe swaps straight to the ladder (no wall window at all)", async () => {
+    await renderApp();
+    await attach("WALLCOVER3");
+    expect(q('[data-testid="embed-wall-cover"]')).not.toBeNull();
+    const probe = probeFor("WALLCOVER3");
+    await act(async () => {
+      (probe!.options["events"] as any).onError(); // the probe's blocked verdict
+    });
+    await act(async () => {
+      await sleep(30); // the fallback's playback fetch settles
+    });
+    expect(usePlayerHost.getState().blockedVideoId).toBe("WALLCOVER3");
+    // the ladder owned the wrapper: native <video> (formats available for this id)
+    expect(q('[data-testid="embed-wall-cover"]')).toBeNull();
+    expect(q("video")).not.toBeNull();
+  });
+});
+
+describe("P22-C — the mid-playback stall → re-probe (the 'playing some videos' wall)", () => {
+  const probeFor = (videoId: string): MockYTPlayer | undefined =>
+    MockYTPlayer.instances.find(
+      (p) => isProbePlayer(p) && p.options["videoId"] === videoId && !MockYTPlayer.destroyed.includes(p)
+    );
+
+  test("reset-after-playing (state -1) re-covers, re-probes, and a walled verdict swaps the ladder in", async () => {
+    await renderApp();
+    await attach("STALLWALL1");
+    // establish healthy playback (cover lifts, hadPlayed latches in the player)
+    const main = liveMainPlayers()[0];
+    await act(async () => {
+      (main.options["events"] as any).onStateChange({ data: 1 });
+    });
+    await sleep(10);
+    expect(q('[data-testid="embed-wall-cover"]')).toBeNull();
+    // the mid-play wall: the player resets to UNSTARTED (-1) — never a user
+    // pause (that's state 2) — the stall reports, the cover re-arms while a
+    // FRESH probe runs
+    await act(async () => {
+      (main.options["events"] as any).onStateChange({ data: -1 });
+    });
+    await sleep(10);
+    expect(q('[data-testid="embed-wall-cover"]')).not.toBeNull();
+    // the stall arm's wording (a recheck, not a first start)
+    expect(q('[data-testid="embed-wall-cover"]')!.textContent).toContain("Checking playback");
+    // the fresh probe walls → the ladder swap (not the embed lane)
+    const probe = probeFor("STALLWALL1");
+    await act(async () => {
+      (probe!.options["events"] as any).onError();
+    });
+    await act(async () => {
+      await sleep(30);
+    });
+    expect(usePlayerHost.getState().blockedVideoId).toBe("STALLWALL1");
+    expect(q("video")).not.toBeNull(); // the native lane (formats available)
+    expect(q('[data-testid="embed-wall-cover"]')).toBeNull();
+  });
+
+  test("a HEALTHY re-probe after a stall lifts the cover and never blocks (a stall is not a verdict)", async () => {
+    await renderApp();
+    await attach("STALLHEAL1");
+    const main = liveMainPlayers()[0];
+    await act(async () => {
+      (main.options["events"] as any).onStateChange({ data: 1 });
+    });
+    await sleep(10);
+    await act(async () => {
+      (main.options["events"] as any).onStateChange({ data: -1 }); // stall (a hiccup)
+    });
+    await sleep(10);
+    expect(q('[data-testid="embed-wall-cover"]')).not.toBeNull();
+    const probe = probeFor("STALLHEAL1");
+    await act(async () => {
+      (probe!.options["events"] as any).onStateChange({ data: 1 }); // still healthy
+    });
+    await sleep(10);
+    expect(q('[data-testid="embed-wall-cover"]')).toBeNull();
+    expect(usePlayerHost.getState().blockedVideoId).toBeNull();
+    expect(liveMainPlayers()).toHaveLength(1); // the embed lane kept its slot
+  });
+
+  test("a user PAUSE (state 2) never reports a stall", async () => {
+    await renderApp();
+    await attach("STALLPAU1");
+    const main = liveMainPlayers()[0];
+    await act(async () => {
+      (main.options["events"] as any).onStateChange({ data: 1 }); // playing
+    });
+    await act(async () => {
+      (main.options["events"] as any).onStateChange({ data: 2 }); // user pause
+    });
+    await sleep(10);
+    expect(q('[data-testid="embed-wall-cover"]')).toBeNull(); // no re-cover
+    expect(usePlayerHost.getState().blockedVideoId).toBeNull();
+    // hygiene: settle the pending initial probe healthy (playback was proven)
+    const probe = probeFor("STALLPAU1");
+    await act(async () => {
+      (probe!.options["events"] as any).onStateChange({ data: 1 });
+    });
+    await sleep(10);
+    expect(usePlayerHost.getState().blockedVideoId).toBeNull();
   });
 });

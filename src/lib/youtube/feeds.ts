@@ -35,6 +35,7 @@ import {
 } from "./cursors";
 import { hasSession } from "./session";
 import { mapVideos, mapShorts, walkTree, runsText, viewsFromTexts, watchUrl, shortsThumbnailUrl } from "./mappers";
+import { searchContinuationToken } from "./search";
 import { getShortsSeed, type ShortDTO, type ShortsFeedDTO } from "./shorts";
 import { buildSearchParam, parseSearchFilters } from "./filters";
 import type { ContinueVideoDTO, HomeFeedDTO, HomeFeedSource, VideoDTO } from "@/lib/types";
@@ -588,25 +589,17 @@ export interface VideoPage {
   nextCursor: string | null;
 }
 
-function searchContinuationToken(response: unknown): string | null {
-  const sections = walkTree(response, "sectionListRenderer");
-  for (const section of sections) {
-    for (const item of section?.continuationItems ?? section?.contents ?? []) {
-      const token =
-        item?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token;
-      if (typeof token === "string" && token) return token;
-    }
-    const token = section?.continuations?.[0]?.nextContinuationData?.continuation;
-    if (typeof token === "string" && token) return token;
-  }
-  return null;
-}
-
-/** One search-backed page of videos with its continuation cursor.
+/**
+ * One search-backed page of videos with its continuation cursor.
+ * WFX2-P22-C: the token walk is the canonical searchContinuationToken
+ * (search.ts) — shape-agnostic across first pages (sectionListRenderer) and
+ * continuation pages (appendContinuationItemsAction), so the compose
+ * search-phase chains DEEP into each seed query instead of one page each.
  * WFX2-C-W: cursorless (first) pages are cached through the Upstash adapter —
  * search is NOT walled for Vercel egress, so this is pure performance; the
  * adapter still adds last-good on upstream failure. Continuation pages use
- * unique opaque tokens — they pass straight through. */
+ * unique opaque tokens — they pass straight through.
+ */
 export async function getSearchVideoPage(
   query: string,
   filters: { sort?: string; uploadDate?: string; duration?: string; type?: string },

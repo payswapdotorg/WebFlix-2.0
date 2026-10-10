@@ -281,11 +281,11 @@ export function BlockedPlayerCard({
       <ShieldAlert className="size-10 shrink-0 text-white/70 sm:size-12" aria-hidden="true" />
       <div className="max-w-md">
         <p className="text-base font-semibold text-white sm:text-lg">
-          Playback is blocked by YouTube in the embedded player
+          This video can&apos;t play here right now
         </p>
         <p className="mt-1.5 text-sm text-white/70">
           {detail ??
-            "YouTube is asking this browser to sign in before it will play here."}
+            "YouTube is asking this browser to confirm you're not a bot before it will play this video here, and every alternate playback path (the player clients, the watch page, the broker) came back empty. Signing in on youtube.com in this browser usually clears the check — then come back and retry."}
         </p>
       </div>
       <div className="flex flex-col gap-2 sm:flex-row">
@@ -298,6 +298,20 @@ export function BlockedPlayerCard({
           >
             <ExternalLink className="size-4" aria-hidden="true" />
             Open on YouTube
+          </a>
+        </Button>
+        <Button
+          asChild
+          variant="outline"
+          className="border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white"
+        >
+          <a
+            href="https://www.youtube.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Open youtube.com to sign in, in a new tab"
+          >
+            Sign in on youtube.com
           </a>
         </Button>
         <Button

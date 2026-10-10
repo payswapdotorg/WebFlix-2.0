@@ -44,6 +44,19 @@ export type EmbedBlockedReason =
   /** the iframe_api script itself could not be loaded */
   | "api-dead";
 
+/**
+ * P22-C — a suspicious mid-playback stall (NOT a block verdict): the embed
+ * reached PLAYING once and then reset to UNSTARTED (the mid-play
+ * "Sign in to confirm you're not a bot" wall resets the player; a user
+ * pause is state 2, never -1), or the tap-to-unmute attempt failed to
+ * resume playback within the check window. The host layer answers a stall
+ * with a FRESH embed-health probe (ground truth — an offscreen muted
+ * player of the same video): blocked → the ladder swap; healthy → cover
+ * lifts and playback continues. Never a direct block: a stall alone is not
+ * proof (a network hiccup can look identical).
+ */
+export type EmbedStallSignal = "reset-after-playing" | "unmute-no-resume";
+
 const STATE_NAMES: Record<number, YoutubePlayerState> = {
   [-1]: "unstarted",
   0: "ended",
@@ -99,6 +112,10 @@ const PERSIST_EVERY_TICKS = 5; // ~5s
  * mute-then-retry fallback arms (youtube.com's own policy: try sound,
  * fall back to muted + a tap-to-unmute affordance). */
 const AUTOPLAY_CHECK_MS = 1500;
+/** P22-C — after a tap-to-unmute (+play) attempt, how long the embed gets
+ * to reach PLAYING before the stall is reported (healthy embeds resume in
+ * well under a second; the mid-play bot wall parks the player). */
+const UNMUTE_RESUME_CHECK_MS = 3000;
 
 /* ---------- iframe_api loader (once per page) ---------- */
 
@@ -330,6 +347,9 @@ export interface YoutubePlayerProps {
   handleRef?: Ref<YoutubePlayerHandle>;
   /** Task 2-c — fires ONCE per videoId when the embed cannot play (the fallback chain's trigger). */
   onBlocked?: (reason: EmbedBlockedReason) => void;
+  /** P22-C — a suspicious mid-playback stall (see EmbedStallSignal); the
+   * host layer answers with a fresh embed-health probe, never a blind block. */
+  onStall?: (signal: EmbedStallSignal) => void;
 }
 
 export function YoutubePlayer({
@@ -341,6 +361,7 @@ export function YoutubePlayer({
   className,
   handleRef,
   onBlocked,
+  onStall,
 }: YoutubePlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YTPlayerInstance | null>(null);
@@ -350,6 +371,10 @@ export function YoutubePlayer({
   const liveRef = useRef(false);
   const readyRef = useRef(false);
   const blockedFiredRef = useRef(false);
+  // P22-C — stall detection bookkeeping: hadPlayed gates the reset signal;
+  // the unmute-resume timer is cleared the moment playback resumes.
+  const hadPlayedRef = useRef(false);
+  const unmuteCheckRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // P12-UX — the muted-autostart fallback state + its one-shot timer.
   const [mutedAutostart, setMutedAutostart] = useState(false);
   const autoplayCheckRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -359,11 +384,13 @@ export function YoutubePlayer({
   const onEndedRef = useRef(onEnded);
   const onStateChangeRef = useRef(onStateChange);
   const onBlockedRef = useRef(onBlocked);
+  const onStallRef = useRef(onStall);
   useEffect(() => {
     onProgressRef.current = onProgress;
     onEndedRef.current = onEnded;
     onStateChangeRef.current = onStateChange;
     onBlockedRef.current = onBlocked;
+    onStallRef.current = onStall;
   });
 
   /** Task 2-c — report the embed as blocked (once per mount/videoId). */
@@ -414,6 +441,14 @@ export function YoutubePlayer({
     }, AUTOPLAY_CHECK_MS);
   }, [clearAutoplayCheck]);
 
+  /** P22-C — cancel a pending unmute-resume check (play resumed or player gone). */
+  const clearUnmuteCheck = useCallback(() => {
+    if (unmuteCheckRef.current) {
+      clearTimeout(unmuteCheckRef.current);
+      unmuteCheckRef.current = null;
+    }
+  }, []);
+
   const stopProgressLoop = useCallback(() => {
     if (intervalRef.current !== null) {
       clearInterval(intervalRef.current);
@@ -437,6 +472,8 @@ export function YoutubePlayer({
       const named = STATE_NAMES[state] ?? "unstarted";
       onStateChangeRef.current?.(named);
       if (named === "playing") {
+        hadPlayedRef.current = true; // P22-C — the reset-after-playing gate
+        clearUnmuteCheck(); // P22-C — the unmute attempt resumed — no stall
         clearAutoplayCheck(); // autoplay succeeded (or the mute-retry took) — stop checking
         const p = playerRef.current;
         if (p) {
@@ -462,9 +499,15 @@ export function YoutubePlayer({
         savePosition();
         onProgressRef.current?.(safeNum(playerRef.current?.getDuration() ?? 0), 0);
         onEndedRef.current?.();
+      } else if (state === -1 && hadPlayedRef.current) {
+        // P22-C — UNSTARTED after PLAYING: the player was reset mid-playback
+        // (the mid-play bot wall does exactly this; a user pause is state 2,
+        // never -1). Report the stall — the host layer re-probes (ground
+        // truth), never blocks on this signal alone.
+        onStallRef.current?.("reset-after-playing");
       }
     },
-    [clearAutoplayCheck, savePosition, stopProgressLoop, videoId]
+    [clearAutoplayCheck, clearUnmuteCheck, savePosition, stopProgressLoop, videoId]
   );
 
   // mount: load the API, create the player
@@ -544,6 +587,7 @@ export function YoutubePlayer({
       cancelled = true;
       if (noReadyTimer) clearTimeout(noReadyTimer);
       clearAutoplayCheck();
+      clearUnmuteCheck(); // P22-C
       stopProgressLoop();
       savePosition();
       try {
@@ -562,6 +606,8 @@ export function YoutubePlayer({
       liveRef.current = false;
       tickCountRef.current = 0;
       blockedFiredRef.current = false; // a new video gets a fresh blocked verdict
+      hadPlayedRef.current = false; // P22-C — and a fresh stall gate
+      clearUnmuteCheck(); // P22-C — the old video's pending check is moot
       readyRef.current = false;
       setMutedAutostart(false); // P12-UX — a new video gets a fresh sound attempt
       playerRef.current.loadVideoById({
@@ -572,7 +618,7 @@ export function YoutubePlayer({
       // P12-UX — each takeover load re-attempts unmuted autoplay.
       armAutoplayCheck();
     }
-  }, [videoId, startSec]);
+  }, [videoId, startSec, armAutoplayCheck, clearUnmuteCheck]);
 
   // save position on unmount of the video (navigation away)
   useEffect(() => savePosition, [savePosition]);
@@ -622,10 +668,27 @@ export function YoutubePlayer({
           onClick={() => {
             try {
               playerRef.current?.unMute();
+              playerRef.current?.playVideo();
             } catch {
               /* player gone */
             }
             setMutedAutostart(false);
+            // P22-C — the unmute attempt is OUR interaction: if the embed
+            // doesn't reach PLAYING within the window, that's the mid-play
+            // wall parking the player (the bot wall often strikes exactly on
+            // the switch from muted to audible). Report the stall — the host
+            // layer re-probes; a healthy embed clears the check on PLAYING.
+            clearUnmuteCheck();
+            unmuteCheckRef.current = setTimeout(() => {
+              unmuteCheckRef.current = null;
+              let state = -1;
+              try {
+                state = playerRef.current?.getPlayerState() ?? -1;
+              } catch {
+                return; // player gone — the fallback chain owns dead embeds
+              }
+              if (state !== 1) onStallRef.current?.("unmute-no-resume");
+            }, UNMUTE_RESUME_CHECK_MS);
           }}
           aria-label="Tap to unmute"
           className="absolute bottom-3 left-3 z-10 flex min-h-11 items-center gap-1.5 rounded-full bg-black/80 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-black"
