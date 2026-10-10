@@ -7,6 +7,7 @@ import { useApi } from "@/hooks/use-api";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FilterPanel, AppliedFilterChips } from "@/components/search/filter-panel";
 import { SearchVideoCard } from "@/components/search/search-video-card";
+import { useHoverPreview } from "@/components/video/video-hover-preview";
 import { ChannelResultCard } from "@/components/search/channel-result-card";
 import { PlaylistResultCard } from "@/components/search/playlist-result-card";
 import {
@@ -357,25 +358,7 @@ function SearchContent() {
                   <h2 className="pb-3 text-base font-medium text-foreground">Shorts</h2>
                   <div className="-mx-2 flex gap-3 overflow-x-auto px-2 pb-2 slim-scrollbar">
                     {shorts.map((short) => (
-                      <Link
-                        key={short.id}
-                        href="/shorts"
-                        className="group flex w-[160px] shrink-0 flex-col gap-2"
-                        aria-label={short.title}
-                      >
-                        <div className="relative aspect-[9/16] w-full overflow-hidden rounded-xl bg-secondary">
-                          <img
-                            src={short.thumbnailUrl}
-                            alt={short.title}
-                            loading="lazy"
-                            className="absolute inset-0 h-full w-full object-cover transition-transform group-hover:scale-105"
-                          />
-                        </div>
-                        <p className="line-clamp-2 text-sm font-medium leading-snug">{short.title}</p>
-                        <p className="-mt-1 text-xs text-muted-foreground">
-                          {short.viewsText ?? `${short.views.toLocaleString()} views`}
-                        </p>
-                      </Link>
+                      <SearchShortsTile key={short.id} short={short} />
                     ))}
                   </div>
                 </section>
@@ -440,4 +423,40 @@ function withFilterParams(base: string, q: string, state: SearchFilterState): st
   if (state.live) params.set("live", "1");
   if (state.verbatim) params.set("verbatim", "1");
   return `${base}?${params.toString()}`;
+}
+
+/**
+ * One shorts tile in the results shelf (P22-A): shorts PLAY ON HOVER now —
+ * youtube.com spawns its own muted video preview on these tiles (verified
+ * live 2026-10-10) — so the tile rides the SAME useHoverPreview pipeline
+ * as every 16:9 card (embed mini player → storyboard → ken-burns). Its own
+ * component because each tile needs its own hook instance.
+ */
+function SearchShortsTile({ short }: { short: VideoDTO }) {
+  const hover = useHoverPreview(short);
+  return (
+    <Link
+      href="/shorts"
+      className="group flex w-[160px] shrink-0 flex-col gap-2"
+      aria-label={short.title}
+      onMouseEnter={hover.onMouseEnter}
+      onMouseLeave={hover.onMouseLeave}
+    >
+      <div
+        data-thumb-anchor=""
+        className="relative aspect-[9/16] w-full overflow-hidden rounded-xl bg-secondary"
+      >
+        <img
+          src={short.thumbnailUrl}
+          alt={short.title}
+          loading="lazy"
+          className="absolute inset-0 h-full w-full object-cover transition-transform group-hover:scale-105"
+        />
+      </div>
+      <p className="line-clamp-2 text-sm font-medium leading-snug">{short.title}</p>
+      <p className="-mt-1 text-xs text-muted-foreground">
+        {short.viewsText ?? `${short.views.toLocaleString()} views`}
+      </p>
+    </Link>
+  );
 }
