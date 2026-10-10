@@ -21,10 +21,10 @@
  * the queue-drawer toggle. The drawer itself is QueueDrawer (queue-drawer.tsx,
  * globally mounted in the AppShell next to this layer).
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { ListVideo, Maximize2, SkipBack, SkipForward, X } from "lucide-react";
+import { ListVideo, Loader2, Maximize2, SkipBack, SkipForward, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { playerHost, usePlayerHost } from "@/lib/player/player-host";
 import { useQueueStore } from "@/lib/queue/queue-store";
@@ -32,6 +32,43 @@ import { selectPrevBefore, selectNext, selectPrev } from "@/lib/queue/queue-neig
 import { useQueueDrawer } from "@/components/player/queue-drawer";
 import { YoutubePlayer, probeEmbedHealth } from "@/components/watch/youtube-player";
 import { PlayerFallback } from "@/components/player/player-fallback";
+
+/**
+ * P22-C — the embed-wall cover: while a wall verdict is PENDING and the
+ * main player hasn't proven playback, an opaque poster + spinner covers the
+ * iframe. youtube.com's "Sign in to confirm you're not a bot" renders
+ * INSIDE the iframe (cross-origin — unreadable); before the cover existed
+ * it stayed fully visible for the whole probe window (up to 7–14s), which
+ * is exactly what the operator reported. With the cover the wall is never
+ * visible: pending → covered; healthy → the cover lifts on PLAYING; blocked
+ * → the ladder swap replaces the iframe entirely.
+ */
+function EmbedPendingCover({
+  posterUrl,
+  label,
+}: {
+  posterUrl: string | null;
+  label: string;
+}) {
+  return (
+    <div
+      data-testid="embed-wall-cover"
+      role="status"
+      aria-label={label}
+      className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black"
+    >
+      {posterUrl ? (
+        <img
+          src={posterUrl}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover opacity-40"
+        />
+      ) : null}
+      <Loader2 className="relative size-8 animate-spin text-white/80" aria-hidden="true" />
+      <p className="relative text-sm font-medium text-white/90">{label}</p>
+    </div>
+  );
+}
 
 export function PlayerHostLayer() {
   const router = useRouter();
@@ -46,6 +83,19 @@ export function PlayerHostLayer() {
   // proxied stream, or the blocked card) instead of the iframe.
   const blockedVideoId = usePlayerHost((s) => s.blockedVideoId);
   const blocked = videoId !== null && blockedVideoId === videoId;
+  const playing = usePlayerHost((s) => s.playing);
+
+  // P22-C — the wall-cover state machine. coverReason distinguishes the two
+  // arms: "initial" (a fresh video, no proof of playback yet — the cover
+  // stands until the probe's verdict OR the main player reaches PLAYING) and
+  // "stall" (a mid-playback stall recheck — the cover re-arms only because
+  // the PLAYER reported the stall, never on a mere pause). A user pause
+  // during a still-pending initial probe therefore never re-covers (playback
+  // was already proven); the wall text can never surface either way.
+  // (probeEmbedHealth dedupes concurrent calls per videoId, so a stall
+  // re-arm while a probe is in flight is harmless — it shares the promise.)
+  const [probeGen, setProbeGen] = useState(0);
+  const [coverReason, setCoverReason] = useState<"initial" | "stall" | null>(null);
 
   // The persistent wrapper (created once via lazy state init — client only;
   // NEVER removed by React). A state initializer is the sanctioned pattern
@@ -129,17 +179,49 @@ export function PlayerHostLayer() {
   // healthy embed changes nothing; a walled one (never reaches PLAYING)
   // flips the host to the fallback chain. The main player's own onError
   // (101/150) and no-ready signals markBlocked directly, inside the player.
+  // P22-C — probeGen re-runs the probe on reported stalls (the mid-play
+  // wall: reset-after-playing / unmute-no-resume — a stall is a RECHECK
+  // trigger, never a block verdict on its own).
   useEffect(() => {
     if (videoId === null || blocked) return; // blocked already — no probe needed
     let alive = true;
     void probeEmbedHealth(videoId).then((healthy) => {
-      if (!alive || healthy) return;
-      playerHost.markBlocked(videoId, "wall");
+      if (!alive) return;
+      setCoverReason(null);
+      if (!healthy) playerHost.markBlocked(videoId, "wall");
     });
     return () => {
       alive = false;
     };
-  }, [videoId, blocked]);
+  }, [videoId, blocked, probeGen]);
+
+  // P22-C — a fresh video arms the initial cover until the first
+  // verdict/PLAYING. The guarded RENDER-PHASE reset (the house idiom —
+  // setState in an effect body is the cascading anti-pattern the linter
+  // rightly rejects): a new videoId synchronously arms the probe; null
+  // (close) disarms.
+  const [armedFor, setArmedFor] = useState<string | null>(null);
+  if (armedFor !== videoId) {
+    setArmedFor(videoId);
+    setCoverReason(videoId !== null ? "initial" : null);
+    if (videoId !== null) setProbeGen((g) => g + 1);
+  }
+
+  // P22-C — playback proof retires the INITIAL arm (a later pause never
+  // re-covers: the cover's stall arm re-arms only via an explicit stall
+  // report). Render-phase adjust on the playing transition — the idiom again.
+  const [wasPlaying, setWasPlaying] = useState(false);
+  if (playing !== wasPlaying) {
+    setWasPlaying(playing);
+    if (playing && coverReason === "initial") setCoverReason(null);
+  }
+
+  // P22-C — the player's stall reports: re-probe under the cover (ground
+  // truth beats inference; a healthy re-probe simply lifts the cover).
+  const onStall = useCallback(() => {
+    setCoverReason("stall");
+    setProbeGen((g) => g + 1);
+  }, []);
 
   return (
     <>
@@ -162,15 +244,27 @@ export function PlayerHostLayer() {
                 onRetryEmbed={() => playerHost.retryEmbed()}
               />
             ) : (
-              <YoutubePlayer
-                handleRef={playerHost.handleRef}
-                videoId={videoId}
-                startSec={startSec}
-                onProgress={(sec, dur) => playerHost.progress(sec, dur)}
-                onEnded={() => playerHost.ended()}
-                onStateChange={(st) => playerHost.stateChange(st)}
-                onBlocked={(reason) => playerHost.markBlocked(videoId, reason)}
-              />
+              <>
+                <YoutubePlayer
+                  handleRef={playerHost.handleRef}
+                  videoId={videoId}
+                  startSec={startSec}
+                  onProgress={(sec, dur) => playerHost.progress(sec, dur)}
+                  onEnded={() => playerHost.ended()}
+                  onStateChange={(st) => playerHost.stateChange(st)}
+                  onBlocked={(reason) => playerHost.markBlocked(videoId, reason)}
+                  onStall={onStall}
+                />
+                {/* P22-C — the wall cover: the initial arm (no proof of
+                    playback yet) or a stall recheck — the iframe's wall text
+                    never surfaces in either state. */}
+                {coverReason !== null && !playing && (
+                  <EmbedPendingCover
+                    posterUrl={meta?.thumbnailUrl ?? null}
+                    label={coverReason === "stall" ? "Checking playback…" : "Starting playback…"}
+                  />
+                )}
+              </>
             ),
             wrapper,
           )

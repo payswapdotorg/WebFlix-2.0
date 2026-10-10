@@ -14,6 +14,7 @@ import {
   YoutubePlayer,
   probeEmbedHealth,
   type EmbedBlockedReason,
+  type EmbedStallSignal,
 } from "@/components/watch/youtube-player";
 
 // ---- happy-dom as the global DOM (set before any component runs) ----
@@ -129,6 +130,7 @@ interface TestPlayerProps {
   onProgress?: (sec: number, durationSec: number) => void;
   onEnded?: () => void;
   onBlocked?: (reason: EmbedBlockedReason) => void;
+  onStall?: (signal: EmbedStallSignal) => void;
 }
 
 async function mountPlayer(props: TestPlayerProps) {
@@ -444,4 +446,132 @@ describe("P12-UX — autoplay policy (sound attempt → mute+retry fallback)", (
     expect(win.document.querySelector('button[aria-label="Tap to unmute"]')).toBeNull();
     await unmount();
   });
+});
+
+// ---------------------------------------------------------------------------
+// P22-C — the stall signals (onStall: the mid-play wall recheck trigger)
+// ---------------------------------------------------------------------------
+
+describe("P22-C — onStall (a stall is a RECHECK trigger, never a block verdict)", () => {
+  test("UNSTARTED after PLAYING (state -1) → onStall('reset-after-playing')", async () => {
+    MockYTPlayer.instances = [];
+    MockYTPlayer.destroyed = [];
+    MockYTPlayer.state = 1;
+    win.sessionStorage.clear();
+    const stalls: EmbedStallSignal[] = [];
+    const { unmount } = await mountPlayer({
+      videoId: "STALLSIG001",
+      onStall: (s) => stalls.push(s),
+    });
+    const player = MockYTPlayer.instances[0];
+    const events = player.options["events"] as {
+      onStateChange: (e: { data: number }) => void;
+    };
+    await act(async () => {
+      events.onStateChange({ data: 1 }); // PLAYING — latches hadPlayed
+    });
+    expect(stalls).toHaveLength(0);
+    await act(async () => {
+      events.onStateChange({ data: -1 }); // the mid-play wall reset
+    });
+    expect(stalls).toEqual(["reset-after-playing"]);
+    await unmount();
+  });
+
+  test("a user PAUSE (state 2) never reports a stall; a first UNSTARTED (never played) neither", async () => {
+    MockYTPlayer.instances = [];
+    MockYTPlayer.destroyed = [];
+    MockYTPlayer.state = 1;
+    win.sessionStorage.clear();
+    const stalls: EmbedStallSignal[] = [];
+    const { unmount } = await mountPlayer({
+      videoId: "STALLSIG002",
+      onStall: (s) => stalls.push(s),
+    });
+    const player = MockYTPlayer.instances[0];
+    const events = player.options["events"] as {
+      onStateChange: (e: { data: number }) => void;
+    };
+    await act(async () => {
+      events.onStateChange({ data: -1 }); // pre-play unstarted — no hadPlayed
+    });
+    await act(async () => {
+      events.onStateChange({ data: 1 }); // PLAYING
+    });
+    await act(async () => {
+      events.onStateChange({ data: 2 }); // user pause
+    });
+    await act(async () => {
+      events.onStateChange({ data: 3 }); // buffering
+    });
+    expect(stalls).toHaveLength(0);
+    await unmount();
+  });
+
+  test("tap-to-unmute that fails to resume → onStall('unmute-no-resume') within the window", async () => {
+    MockYTPlayer.instances = [];
+    MockYTPlayer.destroyed = [];
+    MockYTPlayer.state = -1; // the player parks UNSTARTED after the unmute attempt (the wall)
+    win.sessionStorage.clear();
+    const stalls: EmbedStallSignal[] = [];
+    const { unmount } = await mountPlayer({
+      videoId: "STALLSIG003",
+      onStall: (s) => stalls.push(s),
+    });
+    const player = MockYTPlayer.instances[0];
+    const events = player.options["events"] as { onReady: () => void };
+    await act(async () => {
+      events.onReady();
+    });
+    await act(async () => {
+      await sleep(1700); // past AUTOPLAY_CHECK_MS — the muted fallback arms
+    });
+    const btn = win.document.querySelector('button[aria-label="Tap to unmute"]');
+    expect(btn).not.toBeNull();
+    await act(async () => {
+      (btn as unknown as HTMLElement).click(); // unMute + playVideo + the 3s check
+    });
+    expect(player.unmuteCalls).toBe(1);
+    expect(stalls).toHaveLength(0); // not yet — the window is still open
+    await act(async () => {
+      await sleep(3200); // past UNMUTE_RESUME_CHECK_MS (3000), still UNSTARTED
+    });
+    expect(stalls).toEqual(["unmute-no-resume"]);
+    await unmount();
+  }, 8000);
+
+  test("the unmute check is cleared the moment playback resumes (no false stall)", async () => {
+    MockYTPlayer.instances = [];
+    MockYTPlayer.destroyed = [];
+    MockYTPlayer.state = -1;
+    win.sessionStorage.clear();
+    const stalls: EmbedStallSignal[] = [];
+    const { unmount } = await mountPlayer({
+      videoId: "STALLSIG004",
+      onStall: (s) => stalls.push(s),
+    });
+    const player = MockYTPlayer.instances[0];
+    const events = player.options["events"] as {
+      onReady: () => void;
+      onStateChange: (e: { data: number }) => void;
+    };
+    await act(async () => {
+      events.onReady();
+    });
+    await act(async () => {
+      await sleep(1700); // the muted fallback arms
+    });
+    const btn = win.document.querySelector('button[aria-label="Tap to unmute"]');
+    await act(async () => {
+      (btn as unknown as HTMLElement).click(); // the unmute attempt + the 3s check
+    });
+    await act(async () => {
+      events.onStateChange({ data: 1 }); // PLAYING — resumes within the window
+    });
+    await act(async () => {
+      await sleep(3200); // past the window — the check was cleared on PLAYING
+    });
+    expect(stalls).toHaveLength(0);
+    await unmount();
+  }, 8000);
 });

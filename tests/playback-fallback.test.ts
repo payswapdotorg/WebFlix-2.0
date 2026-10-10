@@ -368,18 +368,20 @@ describe("getPlayback — the chain (player endpoint → watch page → honest e
     const playerCalls = recorded.filter((r) => r.url.includes("/youtubei/v1/player"));
     expect(playerCalls.map((r) => r.body.context.client.clientName)).toEqual(["WEB", "IOS"]);
     // the IOS request carried the realistic native-app context
+    // (P22-C: 20.10.4 — 19.29.1 answers HTTP 400 "Precondition check failed"
+    // upstream, killing rung 1's second client; live-probed 2026-10-10)
     expect(playerCalls[1].body.context.client).toMatchObject({
       clientName: "IOS",
-      clientVersion: "19.29.1",
+      clientVersion: "20.10.4",
       deviceMake: "Apple",
       deviceModel: "iPhone16,2",
       osName: "iPhone",
-      osVersion: "17.5.2.21H",
+      osVersion: "18.3.2.22D82",
       hl: "en",
       gl: "US",
     });
     expect(playerCalls[1].body.context.client.userAgent).toContain(
-      "com.google.ios.youtube/19.29.1"
+      "com.google.ios.youtube/20.10.4"
     );
     expect(recorded.some((r) => r.url.includes("youtube.com/watch"))).toBe(false);
   });
