@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   ChefHat,
   Clapperboard,
+  Clock,
   Code,
   Compass,
   Cpu,
@@ -21,6 +22,7 @@ import {
   Layers,
   ListVideo,
   Mic,
+  MonitorPlay,
   Music,
   Newspaper,
   Plane,
@@ -29,6 +31,8 @@ import {
   SquarePlay,
   ThumbsUp,
   Trophy,
+  UserRound,
+  Download,
   MessageSquarePlus,
   type LucideIcon,
 } from "lucide-react";
@@ -52,11 +56,30 @@ const MAIN_NAV: NavItem[] = [
   { href: "/subscriptions", label: "Subscriptions", icon: Layers },
 ];
 
+/**
+ * P22-B — the You section, measured against youtube.com's guide (the
+ * operator's signed-in view; the signed-out guide carries only
+ * Home/Shorts/Subscriptions/You/History — measured live 2026-10-11).
+ * youtube.com's You section carries, in order: Your channel, History,
+ * Playlists, Your videos, Watch later, Liked videos, Downloads.
+ * Mapping to WebFlix's real surfaces:
+ *   Your channel → the operator's REAL channel page (the /api/me
+ *                  ownedChannel seam — honestly hidden when unresolved)
+ *   Your videos  → /studio (WebFlix's your-videos surface — the same target
+ *                  the /you hub's Your-videos section links)
+ *   Watch later  → /playlist/WL (the special-list read, P22-B)
+ *   Downloads    → /downloads (the honest no-tier page)
+ * Creator Studio moved OUT of the You section (youtube.com carries no
+ * studio row in its guide — creator tools live in the account menu and the
+ * /you hub's More-from-WebFlix rail on both youtube.com and WebFlix).
+ */
 const YOU_NAV: NavItem[] = [
   { href: "/history", label: "History", icon: History },
   { href: "/playlists", label: "Playlists", icon: ListVideo },
+  { href: "/studio", label: "Your videos", icon: MonitorPlay },
+  { href: "/playlist/WL", label: "Watch later", icon: Clock },
   { href: "/liked", label: "Liked videos", icon: ThumbsUp },
-  { href: "/studio", label: "Creator Studio", icon: Clapperboard },
+  { href: "/downloads", label: "Downloads", icon: Download },
 ];
 
 const MORE_NAV: NavItem[] = [
@@ -146,6 +169,11 @@ function Divider() {
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const isActive = useIsActive();
   const { data: me } = useApi<MeDTO>("/api/me");
+  // P22-B: "Your channel" resolves to the operator's REAL channel (the
+  // ownedChannel seam). Honest hide when unresolved — youtube.com's own guide
+  // always resolves it (every Google account has a channel); WebFlix degrades
+  // by hiding the row, never by guessing a target.
+  const yourChannel = me?.ownedChannel ?? null;
 
   return (
     <nav aria-label="Main navigation" className="flex flex-col gap-0.5 px-2 pb-4">
@@ -155,6 +183,17 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 
       <Divider />
       <SectionHeader>You</SectionHeader>
+      {yourChannel && (
+        <NavRow
+          item={{
+            href: `/channel/${yourChannel.handle}`,
+            label: "Your channel",
+            icon: UserRound,
+          }}
+          active={isActive(`/channel/${yourChannel.handle}`)}
+          onNavigate={onNavigate}
+        />
+      )}
       {YOU_NAV.map((item) => (
         <NavRow key={item.href} item={item} active={isActive(item.href)} onNavigate={onNavigate} />
       ))}
@@ -239,12 +278,18 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 /** Collapsed icon rail (desktop, collapsed state). */
 export function SidebarRail() {
   const isActive = useIsActive();
+  const { data: me } = useApi<MeDTO>("/api/me");
+  const yourChannel = me?.ownedChannel ?? null;
   const railItems: NavItem[] = [
     ...MAIN_NAV,
+    ...(yourChannel
+      ? [{ href: `/channel/${yourChannel.handle}`, label: "Your channel", icon: UserRound }]
+      : []),
     { href: "/history", label: "History", icon: History },
     { href: "/playlists", label: "Playlists", icon: ListVideo },
+    { href: "/playlist/WL", label: "Watch later", icon: Clock },
     { href: "/liked", label: "Liked", icon: ThumbsUp },
-    { href: "/studio", label: "Studio", icon: Clapperboard },
+    { href: "/downloads", label: "Downloads", icon: Download },
   ];
   return (
     <nav

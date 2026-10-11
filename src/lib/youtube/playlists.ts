@@ -35,6 +35,15 @@ export interface PlaylistItemsPage {
   nextCursor: string | null;
   /** true when the list exists but is auth-gated (WL/LL without a session) */
   loginRequired: boolean;
+  /**
+   * P22-B: true when a YouTube session IS configured but the read did not
+   * yield the list (the special lists answer the "playlist does not exist"
+   * alert even with cookies — the operator's LL/WL may be empty upstream or
+   * not served to this egress). Honest unavailability — NEVER "login
+   * required" for a signed-in deployment (the user cannot fix it by signing
+   * in; the WebFlix session is separate from the YouTube session).
+   */
+  unavailable: boolean;
   /** true when the playlist id is genuinely unknown upstream */
   notFound: boolean;
 }
@@ -193,14 +202,27 @@ function playlistHeader(response: unknown, fallbackId: string): PlaylistDTO | nu
 
 /** Map a VL browse response (first page or continuation) or an SSR playlist page. */
 export function mapPlaylistItemsPage(response: unknown, playlistId: string): PlaylistItemsPage {
-  // upstream alerts: ERROR "The playlist does not exist." (WL/LL without a
-  // session answer exactly this — the special lists exist only signed in)
+  // upstream alerts: ERROR "The playlist does not exist." (the special
+  // lists answer exactly this — measured live: the public browse VLLL/LL read
+  // answers it without cookies, and the operator-session read on the
+  // production deploy answers the SAME alert WITH cookies, so it is NOT
+  // evidence of a missing session — P22-B splits the two honestly)
   for (const alert of walkTree(response, "alertRenderer")) {
     if (alert?.type === "ERROR") {
       if (isSpecialPlaylistId(playlistId)) {
-        return { playlist: null, videos: [], nextCursor: null, loginRequired: true, notFound: false };
+        return {
+          playlist: null,
+          videos: [],
+          nextCursor: null,
+          // no session configured → the honest auth-gated state; a session
+          // IS configured → the read simply did not yield the list (never a
+          // login ask for a signed-in deployment)
+          loginRequired: !hasSession(),
+          unavailable: hasSession(),
+          notFound: false,
+        };
       }
-      return { playlist: null, videos: [], nextCursor: null, loginRequired: false, notFound: true };
+      return { playlist: null, videos: [], nextCursor: null, loginRequired: false, unavailable: false, notFound: true };
     }
   }
 
@@ -235,7 +257,7 @@ export function mapPlaylistItemsPage(response: unknown, playlistId: string): Pla
   if (!playlist && videos.length === 0 && isSpecialPlaylistId(playlistId) && !hasSession()) {
     // the SSR page for WL/LL answers an empty skeleton when signed out — the
     // special lists exist only for the signed-in operator
-    return { playlist: null, videos: [], nextCursor: null, loginRequired: true, notFound: false };
+    return { playlist: null, videos: [], nextCursor: null, loginRequired: true, unavailable: false, notFound: false };
   }
   return {
     playlist: playlist
@@ -244,6 +266,7 @@ export function mapPlaylistItemsPage(response: unknown, playlistId: string): Pla
     videos,
     nextCursor,
     loginRequired: false,
+    unavailable: false,
     notFound: false,
   };
 }

@@ -8,6 +8,7 @@
  */
 import { innertubeBrowse } from "./innertube";
 import { cached, TTL } from "./cache";
+import { getPlaylistItems, isSpecialPlaylistId, type PlaylistItemsPage } from "./playlists";
 import { mapVideos, walkTree, findFirst } from "./mappers";
 import type { PlaylistPageDTO } from "@/lib/types";
 
@@ -56,13 +57,29 @@ function mapPlaylistHeader(response: unknown): {
   return { title, channelName, videoCountText, viewsText, description };
 }
 
-/** The public playlist page: header + videos (+ continuation cursor). */
+/** The public playlist page: header + videos (+ continuation cursor).
+ *
+ * P22-B: the SPECIAL lists (WL/LL — youtube.com's own guide links "Watch
+ * later" to /playlist?list=WL) route through the special-list read
+ * (getPlaylistItems — session semantics + the honest unavailable/login
+ * states) instead of the public VL read, which rejects them. The mapped
+ * PlaylistPageDTO carries the state flags so the page can degrade honestly
+ * (never a login ask — the guest note explains the single-tenant session).
+ */
 export async function getPublicPlaylist(
   playlistId: string,
   cursor?: string
 ): Promise<PlaylistPageDTO | null> {
   const id = playlistId.trim();
-  if (!PLAYLIST_ID_RE.test(id)) return null;
+  if (!PLAYLIST_ID_RE.test(id)) {
+    // the special lists exist only for the signed-in session — youtube.com's
+    // own "Watch later" guide entry points at exactly this route
+    if (isSpecialPlaylistId(id)) {
+      const page = await getPlaylistItems(id, { cursor });
+      return specialListToPage(id, page);
+    }
+    return null;
+  }
 
   const browseId = `VL${id}`;
   const response = await cached(`yt:playlist:${browseId}:${cursor ?? ""}`, TTL.FEED_MS, () =>
@@ -84,5 +101,28 @@ export async function getPublicPlaylist(
     },
     videos,
     nextCursor: playlistContinuationToken(response),
+  };
+}
+
+/** Map a special-list read (WL/LL) onto the public-playlist page DTO. */
+function specialListToPage(id: string, page: PlaylistItemsPage): PlaylistPageDTO {
+  const dto = page.playlist;
+  const fallbackTitle = id === "WL" ? "Watch later" : "Liked videos";
+  return {
+    playlist: {
+      id,
+      title: dto?.title ?? fallbackTitle,
+      // the special lists belong to the viewer — youtube.com labels the
+      // owner row "You" on the Watch later page (measured live 2026-10-11)
+      channelName: "You",
+      videoCountText: dto ? `${dto.videoCount} videos` : null,
+      viewsText: null,
+      description: null,
+    },
+    videos: page.videos,
+    nextCursor: page.nextCursor,
+    special: true,
+    loginRequired: page.loginRequired,
+    unavailable: page.unavailable,
   };
 }

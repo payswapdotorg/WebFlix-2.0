@@ -212,10 +212,29 @@ describe("playlists mapping", () => {
   });
 
   test("special list without auth (REAL capture: browse_vl_ll_public.json) is honestly login-required", () => {
+    delete process.env.YT_COOKIES;
     const page = mapPlaylistItemsPage(load("browse_vl_ll_public"), "LL");
     expect(page.loginRequired).toBe(true);
+    expect(page.unavailable).toBe(false);
     expect(page.notFound).toBe(false);
     expect(page.videos).toEqual([]);
+  });
+
+  test("P22-B: the SAME alert WITH a session is honestly unavailable — never a login ask (the production deploy's shape)", () => {
+    // measured live 2026-10-11: the production deploy answers the "playlist
+    // does not exist" alert for LL WITH the operator session configured —
+    // that is not evidence of a missing session; it is the read not being
+    // served. The split is keyed on hasSession() alone.
+    process.env.YT_COOKIES = "SAPISID=fixture; SID=fixture";
+    try {
+      const page = mapPlaylistItemsPage(load("browse_vl_ll_public"), "LL");
+      expect(page.unavailable).toBe(true);
+      expect(page.loginRequired).toBe(false);
+      expect(page.notFound).toBe(false);
+      expect(page.videos).toEqual([]);
+    } finally {
+      delete process.env.YT_COOKIES;
+    }
   });
 
   test("a genuinely unknown playlist is notFound (not login-required)", () => {
@@ -223,6 +242,7 @@ describe("playlists mapping", () => {
     const page = mapPlaylistItemsPage(alert, "PLdoesnotexist123");
     expect(page.notFound).toBe(true);
     expect(page.loginRequired).toBe(false);
+    expect(page.unavailable).toBe(false);
   });
 
   test("playlist lockup mapping tolerates missing count parts", () => {

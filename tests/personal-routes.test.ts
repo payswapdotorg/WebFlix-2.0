@@ -8,7 +8,7 @@
  * hasSession() is true (personal mode); it is deleted in the public-mode
  * describes so the honest login-required degradation is exercised.
  */
-import { afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 import { setUpstream } from "@/lib/youtube/innertube";
@@ -18,13 +18,34 @@ import { mintSessionCookie } from "./helpers";
 import { GET as historyRoute, DELETE as historyDelete, PATCH as historyPatch } from "@/app/api/history/route";
 import { GET as playlistsRoute } from "@/app/api/playlists/route";
 import { GET as playlistItemsRoute, DELETE as playlistDelete } from "@/app/api/playlists/[id]/route";
+import { GET as playlistPageRoute } from "@/app/api/playlist/[id]/route";
 import { GET as likedRoute } from "@/app/api/liked/route";
+import { GET as meRoute } from "@/app/api/me/route";
 import { GET as notificationsRoute } from "@/app/api/notifications/route";
 import { POST as notificationsReadRoute } from "@/app/api/notifications/read/route";
 import { GET as subscriptionsRoute } from "@/app/api/subscriptions/route";
 
 const FIXTURE_DIR = "tests/fixtures/yt";
 const load = (name: string): any => JSON.parse(readFileSync(`${FIXTURE_DIR}/${name}.json`, "utf8"));
+
+// ---------------------------------------------------------------------------
+// P22-B: the /api/me ownedChannel seam — the operator-channel lookup is
+// MOCKED at the module seam (the playlist-edit broker idiom): the me route's
+// branching (the operator's REAL channel first, the DB mirror as the
+// fallback, honest null when neither resolves) is what's under test — the
+// ladder itself lives in operator.ts and is live-verified on the deploy.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const realStudio = { ...require("@/lib/youtube/studio") } as Record<string, unknown>;
+let meLookup: {
+  browseId: string;
+  handle: string;
+  header: { name: string } | null;
+  homeResponse: unknown;
+} | null = null;
+mock.module("@/lib/youtube/studio", () => ({
+  ...realStudio,
+  operatorChannelLookup: async () => meLookup,
+}));
 
 /** NextRequest-compatible request factory (the routes type against NextRequest).
  * WFX2-P2-AU: every request carries the minted WebFlix session cookie —
@@ -395,6 +416,102 @@ describe("GET /api/playlists/[id] — browse VL items", () => {
     );
     expect(res.status).toBe(400);
   });
+
+  test("P22-B: WL with a session + the not-exist alert → honest unavailable (the dialog's flag)", async () => {
+    process.env.YT_COOKIES = "SAPISID=fixture; SID=fixture";
+    const res = await playlistItemsRoute(
+      req("http://localhost/api/playlists/WL"),
+      { params: Promise.resolve({ id: "WL" }) }
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.unavailable).toBe(true);
+    expect(data.loginRequired).toBe(false);
+    expect(data.special).toBe(true);
+    expect(data.videos).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("GET /api/playlist/[id] — the special lists through the playlist PAGE route (P22-B)", () => {
+  beforeEach(() => {
+    process.env.YT_COOKIES = "SAPISID=fixture; SID=fixture";
+    setUpstream(upstream.impl);
+  });
+
+  test("WL + the not-exist alert WITH a session → the honest unavailable special page (never a login ask)", async () => {
+    const res = await playlistPageRoute(
+      req("http://localhost/api/playlist/WL"),
+      { params: Promise.resolve({ id: "WL" }) }
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.special).toBe(true);
+    expect(data.unavailable).toBe(true);
+    expect(data.loginRequired).toBe(false);
+    // the honest identity of the list survives the failed read
+    expect(data.playlist.channelName).toBe("You");
+    expect(data.playlist.title).toBe("Watch later");
+    expect(data.playlist.viewsText).toBeNull();
+    expect(data.videos).toEqual([]);
+    // the read went through the special-list browse (the session semantics)
+    const browse = upstream.recorded.filter((r) => r.url.includes("/youtubei/v1/browse"));
+    expect(browse.at(-1)?.body.browseId).toBe("VLWL");
+  });
+
+  test("WL without a session → the honest login-required special page", async () => {
+    delete process.env.YT_COOKIES;
+    const res = await playlistPageRoute(
+      req("http://localhost/api/playlist/WL"),
+      { params: Promise.resolve({ id: "WL" }) }
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.special).toBe(true);
+    expect(data.loginRequired).toBe(true);
+    expect(data.unavailable).toBe(false);
+    expect(data.playlist.title).toBe("Watch later");
+  });
+
+  test("a SERVED WL read maps onto the playlist page DTO (You owner row + count + the videos)", async () => {
+    // a custom upstream serving a REAL served playlist fixture for VLWL —
+    // the served path: the upstream's own title wins (the fallback only
+    // applies when the read carries no header), the owner row is "You"
+    // (youtube.com labels the WL page's owner "You" — measured 2026-10-11)
+    const served = load("browse_vl_public");
+    setUpstream(async (url: string, init?: RequestInit) => {
+      if (url.includes("/youtubei/v1/browse")) {
+        const body = init?.body ? JSON.parse(String(init.body)) : null;
+        if (body?.browseId === "VLWL") {
+          return new Response(JSON.stringify(served), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({}), { status: 200 });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    const res = await playlistPageRoute(
+      req("http://localhost/api/playlist/WL"),
+      { params: Promise.resolve({ id: "WL" }) }
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.special).toBe(true);
+    expect(data.unavailable).toBe(false);
+    expect(data.loginRequired).toBe(false);
+    expect(data.playlist.channelName).toBe("You");
+    // the served read's OWN title wins (the fallback only applies when the
+    // read carries no header) — here the fixture's real title, a known
+    // fixture artifact on the WL route
+    expect(data.playlist.title).toBe("💕Lofi Hip Hop💕 Bart 2021");
+    expect(typeof data.playlist.videoCountText).toBe("string");
+    expect(data.playlist.videoCountText).toContain("videos");
+    expect(data.videos.length).toBeGreaterThan(0);
+    expect(data.videos[0].id).toBe("oHaGR0shnvA");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -423,6 +540,31 @@ describe("GET /api/liked — the LL surface", () => {
     expect(res.status).toBe(200);
     const browse = upstream.recorded.filter((r) => r.url.includes("/youtubei/v1/browse"));
     expect(browse[0].body.browseId).toBe("VLLL");
+  });
+
+  test("P22-B: with a session, the not-exist alert is honestly UNAVAILABLE — never login-required (the production deploy's shape)", async () => {
+    // the fixture upstream answers the "playlist does not exist" alert for
+    // VLLL regardless of cookies — exactly what the production deploy does
+    // WITH the operator session configured (measured live 2026-10-11). The
+    // split: a session IS configured → the read was not served.
+    process.env.YT_COOKIES = "SAPISID=fixture; SID=fixture";
+    const res = await likedRoute(req("http://localhost/api/liked"));
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.unavailable).toBe(true);
+    expect(data.loginRequired).toBe(false);
+    expect(data.session).toBe(true);
+    expect(data.videos).toEqual([]);
+    expect(data.playlist).toBeNull();
+  });
+
+  test("without a session, the same alert stays honestly login-required", async () => {
+    delete process.env.YT_COOKIES;
+    const res = await likedRoute(req("http://localhost/api/liked"));
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.loginRequired).toBe(true);
+    expect(data.unavailable).toBe(false);
   });
 });
 
@@ -470,4 +612,63 @@ describe("POST /api/notifications/read — broker tier", () => {
     const body = (await res.json()) as { error: string };
     expect(body.error).toContain("offline");
   });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("GET /api/me — the ownedChannel seam (P22-B)", () => {
+  afterEach(() => {
+    meLookup = null;
+  });
+
+  test("public mode (no YT session) → the DB mirror fallback (the seeded demo channel)", async () => {
+    delete process.env.YT_COOKIES;
+    const res = await meRoute();
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    // the operator seam is skipped entirely without a session — the honest
+    // DB fallback (the demo account's owned channel) carries "Your channel"
+    expect(data.ownedChannel).toEqual({ handle: "codecraft", name: "CodeCraft" });
+    expect(data.subscriptions).toEqual([]);
+  });
+
+  test("with a session + the operator resolved → the operator's REAL channel wins over the DB mirror", async () => {
+    process.env.YT_COOKIES = "SAPISID=fixture; SID=fixture";
+    meLookup = {
+      browseId: "UCop",
+      handle: "@opchan",
+      header: { name: "Operator Channel" },
+      homeResponse: null,
+    };
+    const res = await meRoute();
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.ownedChannel).toEqual({ handle: "@opchan", name: "Operator Channel" });
+  });
+
+  test("with a session + the lookup unresolved → the honest DB fallback (never a guess)", async () => {
+    process.env.YT_COOKIES = "SAPISID=fixture; SID=fixture";
+    meLookup = null;
+    const res = await meRoute();
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.ownedChannel).toEqual({ handle: "codecraft", name: "CodeCraft" });
+  });
+
+  test("with a session + a headerless lookup → the honest DB fallback (header required)", async () => {
+    process.env.YT_COOKIES = "SAPISID=fixture; SID=fixture";
+    meLookup = {
+      browseId: "UCop",
+      handle: "@opchan",
+      header: null,
+      homeResponse: null,
+    };
+    const res = await meRoute();
+    const data = (await res.json()) as any;
+    expect(data.ownedChannel).toEqual({ handle: "codecraft", name: "CodeCraft" });
+  });
+});
+
+afterAll(() => {
+  mock.module("@/lib/youtube/studio", () => realStudio);
 });
