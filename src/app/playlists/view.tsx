@@ -42,6 +42,8 @@ import type { PlaylistDTO, VideoDTO } from "@/lib/types";
 type PlaylistsPayload = {
   playlists: PlaylistDTO[];
   loginRequired: boolean;
+  /** P22-B: a session IS configured but the read was not served */
+  unavailable?: boolean;
   session: boolean;
 };
 
@@ -152,8 +154,18 @@ function PlaylistsContent() {
           {error}
         </p>
       )}
-      {data && data.loginRequired && (
-        <div className="px-4 py-16 text-center sm:px-6" role="status">
+      {data && data.unavailable && (
+        <div className="px-4 py-16 text-center sm:px-6" role="status" data-testid="playlists-unavailable">
+          <p className="text-lg font-medium">Playlists are unavailable right now</p>
+          <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+            The YouTube session is connected, but it didn&apos;t return your playlists — they may be
+            empty on YouTube, or YouTube didn&apos;t serve them to WebFlix. Open them on youtube.com
+            to check.
+          </p>
+        </div>
+      )}
+      {data && !data.unavailable && data.loginRequired && (
+        <div className="px-4 py-16 text-center sm:px-6" role="status" data-testid="playlists-no-session">
           <p className="text-lg font-medium">Playlists are unavailable right now</p>
           <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
             Playlists are personal to the YouTube account this WebFlix deployment rides
@@ -163,7 +175,7 @@ function PlaylistsContent() {
           </p>
         </div>
       )}
-      {data && !data.loginRequired && playlists.length === 0 && (
+      {data && !data.loginRequired && !data.unavailable && playlists.length === 0 && (
         <div className="px-4 py-16 text-center sm:px-6">
           <p className="text-lg font-medium">No playlists yet</p>
           <p className="mt-1 text-sm text-muted-foreground">

@@ -132,6 +132,17 @@ function YouContent() {
           <WatchLaterCard state={playlists} />
           <LikedCard state={playlists} />
         </div>
+        {/* P22-B: the read wasn't served — the cards above honestly carry no
+            counts (never fabricated); this says why, in the family wording */}
+        {playlists.data?.unavailable && (
+          <p
+            className="-mt-6 px-4 text-xs text-muted-foreground sm:px-6"
+            data-testid="you-special-cards-unavailable"
+          >
+            The YouTube session is connected, but it didn&apos;t return your lists — the counts
+            can&apos;t be shown. Open them on youtube.com to check.
+          </p>
+        )}
         <MoreFromRail />
       </div>
     </div>

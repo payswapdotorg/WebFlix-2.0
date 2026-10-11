@@ -113,12 +113,26 @@ export function mapPlaylistLockup(l: any): PlaylistDTO | null {
   };
 }
 
-/** Map a /feed/playlists SSR response (real-shaped grid or promo skeleton). */
-export function mapPlaylistsPage(response: unknown): { playlists: PlaylistDTO[]; loginRequired: boolean } {
+/** Map a /feed/playlists SSR response (real-shaped grid or promo skeleton).
+ *
+ * P22-B: the empty-read split. With a session configured, an empty read is
+ * honestly UNAVAILABLE — never the "no playlists yet" claim: a served
+ * signed-in /feed/playlists ALWAYS carries the Watch later lockup (WL is
+ * YouTube's own system list, present even at count 0 — the same invariant
+ * the /you hub's cards ride), so zero lockups WITH a session means the read
+ * was not served (the production deploy's /you screenshot shows exactly
+ * this: the Playlists section claiming "Playlists you create will show up
+ * here" while the LL/WL reads answer the not-exist alert). loginRequired
+ * stays the no-session state (public mode / the signed-out promo page). */
+export function mapPlaylistsPage(response: unknown): {
+  playlists: PlaylistDTO[];
+  loginRequired: boolean;
+  unavailable: boolean;
+} {
   for (const promo of walkTree(response, "backgroundPromoRenderer")) {
     const cta = JSON.stringify(promo?.ctaButton ?? {});
     if (/accounts\.google\.com\/ServiceLogin/.test(cta)) {
-      return { playlists: [], loginRequired: true };
+      return { playlists: [], loginRequired: !hasSession(), unavailable: hasSession() };
     }
   }
   const playlists: PlaylistDTO[] = [];
@@ -130,14 +144,22 @@ export function mapPlaylistsPage(response: unknown): { playlists: PlaylistDTO[];
     seen.add(dto.id);
     playlists.push(dto);
   }
-  return { playlists, loginRequired: playlists.length === 0 && !hasSession() };
+  // the WL-invariant split: zero lockups WITH a session = not served
+  const empty = playlists.length === 0;
+  return { playlists, loginRequired: empty && !hasSession(), unavailable: empty && hasSession() };
 }
 
 /**
  * The operator's playlists. Session-gated: public mode → the page answers a
- * near-empty skeleton (real public capture) → honest loginRequired empties.
+ * near-empty skeleton (real public capture) → honest loginRequired empties;
+ * a session configured but an unserved read → honest unavailable empties
+ * (the P22-B split — same semantics as the special lists).
  */
-export async function getPlaylists(): Promise<{ playlists: PlaylistDTO[]; loginRequired: boolean }> {
+export async function getPlaylists(): Promise<{
+  playlists: PlaylistDTO[];
+  loginRequired: boolean;
+  unavailable: boolean;
+}> {
   if (!hasSession()) {
     const response = await cached("yt:playlists:public", TTL.FEED_MS, () =>
       fetchYtInitialData("/feed/playlists", { cookies: null })

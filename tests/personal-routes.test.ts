@@ -346,6 +346,38 @@ describe("GET /api/playlists — public mode", () => {
     expect(res.status).toBe(200);
     const data = (await res.json()) as any;
     expect(data.loginRequired).toBe(true);
+    expect(data.unavailable).toBe(false);
+    expect(data.playlists).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("GET /api/playlists — P22-B unavailable (session configured, read not served)", () => {
+  test("an empty /feed/playlists WITH a session → honest unavailable empties (never the no-playlists claim)", async () => {
+    // the custom upstream serves the promo-skeleton page (the REAL public
+    // capture) for /feed/playlists even with cookies — the shape the
+    // production deploy answers while its LL/WL reads answer the not-exist
+    // alert. The WL-invariant: a served signed-in /feed/playlists always
+    // carries the Watch later lockup, so zero lockups WITH a session = the
+    // read was not served.
+    process.env.YT_COOKIES = "SAPISID=fixture; SID=fixture";
+    const skeleton = load("ssr_playlists_public");
+    setUpstream(async (url: string, init?: RequestInit) => {
+      if (url.includes("/feed/playlists")) {
+        return new Response(
+          `<!doctype html><html><head></head><body><script>var ytInitialData = ${JSON.stringify(skeleton)};</script></body></html>`,
+          { status: 200, headers: { "Content-Type": "text/html" } }
+        );
+      }
+      return new Response("not found", { status: 404 });
+    });
+    const res = await playlistsRoute(req("http://localhost/api/playlists"));
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.unavailable).toBe(true);
+    expect(data.loginRequired).toBe(false);
+    expect(data.session).toBe(true);
     expect(data.playlists).toEqual([]);
   });
 });
