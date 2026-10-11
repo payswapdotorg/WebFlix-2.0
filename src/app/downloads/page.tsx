@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import DownloadsView from "./view";
 
 export const metadata: Metadata = {
-  title: "Downloads — WebFlix",
+  title: "Downloads",
   description:
     "WebFlix streams online only — there are no offline downloads. On youtube.com this page lists videos saved for offline watching (a YouTube Premium feature).",
 };
