@@ -42,6 +42,8 @@ import type { PlaylistDTO, VideoDTO } from "@/lib/types";
 type PlaylistsPayload = {
   playlists: PlaylistDTO[];
   loginRequired: boolean;
+  /** P22-B: a session IS configured but the read was not served */
+  unavailable?: boolean;
   session: boolean;
 };
 
@@ -50,6 +52,8 @@ type PlaylistItemsPayload = {
   videos: VideoDTO[];
   nextCursor: string | null;
   loginRequired: boolean;
+  /** P22-B: a session IS configured but the read was not served */
+  unavailable?: boolean;
   special: boolean;
 };
 
@@ -150,16 +154,28 @@ function PlaylistsContent() {
           {error}
         </p>
       )}
-      {data && data.loginRequired && (
-        <div className="px-4 py-16 text-center sm:px-6">
-          <p className="text-lg font-medium">Sign in to see your playlists</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Playlists are personal — they read from the YouTube account this WebFlix session
-            rides (single-tenant live mode). No session is configured right now.
+      {data && data.unavailable && (
+        <div className="px-4 py-16 text-center sm:px-6" role="status" data-testid="playlists-unavailable">
+          <p className="text-lg font-medium">Playlists are unavailable right now</p>
+          <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+            The YouTube session is connected, but it didn&apos;t return your playlists — they may be
+            empty on YouTube, or YouTube didn&apos;t serve them to WebFlix. Open them on youtube.com
+            to check.
           </p>
         </div>
       )}
-      {data && !data.loginRequired && playlists.length === 0 && (
+      {data && !data.unavailable && data.loginRequired && (
+        <div className="px-4 py-16 text-center sm:px-6" role="status" data-testid="playlists-no-session">
+          <p className="text-lg font-medium">Playlists are unavailable right now</p>
+          <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+            Playlists are personal to the YouTube account this WebFlix deployment rides
+            (single-tenant live mode). No YouTube session is connected to this deployment yet —
+            your WebFlix sign-in is fine; the operator session (YT_COOKIES) needs to be
+            connected.
+          </p>
+        </div>
+      )}
+      {data && !data.loginRequired && !data.unavailable && playlists.length === 0 && (
         <div className="px-4 py-16 text-center sm:px-6">
           <p className="text-lg font-medium">No playlists yet</p>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -228,7 +244,12 @@ function PlaylistsContent() {
   );
 }
 
-function PlaylistDetailsDialog({
+/**
+ * The details dialog — exported for the component tests (the
+ * ChannelHeaderBlock idiom): the P22-B states (unavailable vs no-session)
+ * are pinned view-side.
+ */
+export function PlaylistDetailsDialog({
   playlist,
   onClose,
   onDelete,
@@ -477,13 +498,21 @@ function PlaylistDetailsDialog({
                   {error}
                 </p>
               )}
-              {data?.loginRequired && (
-                <p className="px-6 py-6 text-center text-sm text-muted-foreground">
-                  This list is private to the YouTube account — sign in (configure the
-                  session) to read it.
+              {data?.unavailable && (
+                <p className="px-6 py-6 text-center text-sm text-muted-foreground" data-testid="dialog-unavailable">
+                  The YouTube session is connected, but it didn&apos;t return this list — it may
+                  be empty on YouTube, or YouTube didn&apos;t serve it to WebFlix. Open it on
+                  youtube.com to check.
                 </p>
               )}
-              {!loading && !error && !data?.loginRequired && listedVideos.length === 0 && (
+              {!data?.unavailable && data?.loginRequired && (
+                <p className="px-6 py-6 text-center text-sm text-muted-foreground" data-testid="dialog-no-session">
+                  This list is personal to the YouTube account this WebFlix deployment rides —
+                  no YouTube session is connected right now (P22-B: never a login ask; the
+                  WebFlix sign-in is separate).
+                </p>
+              )}
+              {!loading && !error && !data?.loginRequired && !data?.unavailable && listedVideos.length === 0 && (
                 <p className="px-6 py-6 text-center text-sm text-muted-foreground">
                   Empty playlist — add videos via the kebab menu on any card.
                 </p>

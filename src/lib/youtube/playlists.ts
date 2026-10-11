@@ -35,6 +35,15 @@ export interface PlaylistItemsPage {
   nextCursor: string | null;
   /** true when the list exists but is auth-gated (WL/LL without a session) */
   loginRequired: boolean;
+  /**
+   * P22-B: true when a YouTube session IS configured but the read did not
+   * yield the list (the special lists answer the "playlist does not exist"
+   * alert even with cookies — the operator's LL/WL may be empty upstream or
+   * not served to this egress). Honest unavailability — NEVER "login
+   * required" for a signed-in deployment (the user cannot fix it by signing
+   * in; the WebFlix session is separate from the YouTube session).
+   */
+  unavailable: boolean;
   /** true when the playlist id is genuinely unknown upstream */
   notFound: boolean;
 }
@@ -104,12 +113,26 @@ export function mapPlaylistLockup(l: any): PlaylistDTO | null {
   };
 }
 
-/** Map a /feed/playlists SSR response (real-shaped grid or promo skeleton). */
-export function mapPlaylistsPage(response: unknown): { playlists: PlaylistDTO[]; loginRequired: boolean } {
+/** Map a /feed/playlists SSR response (real-shaped grid or promo skeleton).
+ *
+ * P22-B: the empty-read split. With a session configured, an empty read is
+ * honestly UNAVAILABLE — never the "no playlists yet" claim: a served
+ * signed-in /feed/playlists ALWAYS carries the Watch later lockup (WL is
+ * YouTube's own system list, present even at count 0 — the same invariant
+ * the /you hub's cards ride), so zero lockups WITH a session means the read
+ * was not served (the production deploy's /you screenshot shows exactly
+ * this: the Playlists section claiming "Playlists you create will show up
+ * here" while the LL/WL reads answer the not-exist alert). loginRequired
+ * stays the no-session state (public mode / the signed-out promo page). */
+export function mapPlaylistsPage(response: unknown): {
+  playlists: PlaylistDTO[];
+  loginRequired: boolean;
+  unavailable: boolean;
+} {
   for (const promo of walkTree(response, "backgroundPromoRenderer")) {
     const cta = JSON.stringify(promo?.ctaButton ?? {});
     if (/accounts\.google\.com\/ServiceLogin/.test(cta)) {
-      return { playlists: [], loginRequired: true };
+      return { playlists: [], loginRequired: !hasSession(), unavailable: hasSession() };
     }
   }
   const playlists: PlaylistDTO[] = [];
@@ -121,14 +144,22 @@ export function mapPlaylistsPage(response: unknown): { playlists: PlaylistDTO[];
     seen.add(dto.id);
     playlists.push(dto);
   }
-  return { playlists, loginRequired: playlists.length === 0 && !hasSession() };
+  // the WL-invariant split: zero lockups WITH a session = not served
+  const empty = playlists.length === 0;
+  return { playlists, loginRequired: empty && !hasSession(), unavailable: empty && hasSession() };
 }
 
 /**
  * The operator's playlists. Session-gated: public mode → the page answers a
- * near-empty skeleton (real public capture) → honest loginRequired empties.
+ * near-empty skeleton (real public capture) → honest loginRequired empties;
+ * a session configured but an unserved read → honest unavailable empties
+ * (the P22-B split — same semantics as the special lists).
  */
-export async function getPlaylists(): Promise<{ playlists: PlaylistDTO[]; loginRequired: boolean }> {
+export async function getPlaylists(): Promise<{
+  playlists: PlaylistDTO[];
+  loginRequired: boolean;
+  unavailable: boolean;
+}> {
   if (!hasSession()) {
     const response = await cached("yt:playlists:public", TTL.FEED_MS, () =>
       fetchYtInitialData("/feed/playlists", { cookies: null })
@@ -193,14 +224,27 @@ function playlistHeader(response: unknown, fallbackId: string): PlaylistDTO | nu
 
 /** Map a VL browse response (first page or continuation) or an SSR playlist page. */
 export function mapPlaylistItemsPage(response: unknown, playlistId: string): PlaylistItemsPage {
-  // upstream alerts: ERROR "The playlist does not exist." (WL/LL without a
-  // session answer exactly this — the special lists exist only signed in)
+  // upstream alerts: ERROR "The playlist does not exist." (the special
+  // lists answer exactly this — measured live: the public browse VLLL/LL read
+  // answers it without cookies, and the operator-session read on the
+  // production deploy answers the SAME alert WITH cookies, so it is NOT
+  // evidence of a missing session — P22-B splits the two honestly)
   for (const alert of walkTree(response, "alertRenderer")) {
     if (alert?.type === "ERROR") {
       if (isSpecialPlaylistId(playlistId)) {
-        return { playlist: null, videos: [], nextCursor: null, loginRequired: true, notFound: false };
+        return {
+          playlist: null,
+          videos: [],
+          nextCursor: null,
+          // no session configured → the honest auth-gated state; a session
+          // IS configured → the read simply did not yield the list (never a
+          // login ask for a signed-in deployment)
+          loginRequired: !hasSession(),
+          unavailable: hasSession(),
+          notFound: false,
+        };
       }
-      return { playlist: null, videos: [], nextCursor: null, loginRequired: false, notFound: true };
+      return { playlist: null, videos: [], nextCursor: null, loginRequired: false, unavailable: false, notFound: true };
     }
   }
 
@@ -235,7 +279,7 @@ export function mapPlaylistItemsPage(response: unknown, playlistId: string): Pla
   if (!playlist && videos.length === 0 && isSpecialPlaylistId(playlistId) && !hasSession()) {
     // the SSR page for WL/LL answers an empty skeleton when signed out — the
     // special lists exist only for the signed-in operator
-    return { playlist: null, videos: [], nextCursor: null, loginRequired: true, notFound: false };
+    return { playlist: null, videos: [], nextCursor: null, loginRequired: true, unavailable: false, notFound: false };
   }
   return {
     playlist: playlist
@@ -244,6 +288,7 @@ export function mapPlaylistItemsPage(response: unknown, playlistId: string): Pla
     videos,
     nextCursor,
     loginRequired: false,
+    unavailable: false,
     notFound: false,
   };
 }

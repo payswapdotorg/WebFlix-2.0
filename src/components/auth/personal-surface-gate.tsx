@@ -21,6 +21,7 @@ export type PersonalSurface =
   | "playlists"
   | "subscriptions"
   | "notifications"
+  | "downloads"
   | "account"
   | "studio";
 
@@ -30,6 +31,12 @@ const SURFACE_COPY: Record<PersonalSurface, { title?: string; message: string }>
   playlists: { message: "Sign in to see your playlists on WebFlix" },
   subscriptions: { message: "Sign in to see your subscriptions on WebFlix" },
   notifications: { message: "Sign in to see your notifications on WebFlix" },
+  downloads: {
+    // honest copy: signing in does NOT unlock downloads (WebFlix has none —
+    // it streams online only); the page behind the gate says exactly that
+    message:
+      "Sign in to open the Downloads page — WebFlix has no offline downloads (it streams online only), and the page says so honestly.",
+  },
   account: {
     title: "Your WebFlix account",
     message: "Sign in to manage your WebFlix identity and see how WebFlix connects to YouTube.",

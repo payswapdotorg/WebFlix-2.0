@@ -40,13 +40,21 @@ export async function GET(req: NextRequest) {
       const playlists = await listPlaylists(videoId, viewer.id);
       return NextResponse.json({ playlists });
     }
-    const { playlists, loginRequired } = await getPlaylists();
+    const { playlists, loginRequired, unavailable } = await getPlaylists();
     // YouTube's special cards (WL) are flagged for the UI's pinned layout
     const flagged: PlaylistDTO[] = playlists.map((p) => ({
       ...p,
       isWatchLater: isSpecialPlaylistId(p.id) ? p.id === "WL" : p.isWatchLater,
     }));
-    return NextResponse.json({ playlists: flagged, loginRequired, session: hasSession() });
+    return NextResponse.json({
+      playlists: flagged,
+      loginRequired,
+      // P22-B: a session IS configured but the read was not served (the
+      // empty-read split — the WL lockup YouTube always carries for a served
+      // signed-in /feed/playlists was absent)
+      unavailable,
+      session: hasSession(),
+    });
   } catch (err) {
     console.error("GET /api/playlists failed", err);
     return NextResponse.json({ error: "Failed to load playlists" }, { status: 502 });

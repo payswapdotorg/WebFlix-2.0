@@ -28,6 +28,27 @@ type HistoryPayload = {
   session: boolean;
 };
 
+/**
+ * The honest no-session state (P22-B): NEVER a "Sign in to …" ask — the
+ * viewer is already signed in to WebFlix (the gate passed); what's missing
+ * is the deployment's YouTube session, which no WebFlix sign-in can fix.
+ * youtube.com never asks a signed-in viewer to sign in again.
+ */
+function HistoryUnavailableNote({ session }: { session: boolean }) {
+  return (
+    <div className="px-4 py-16 text-center sm:px-6" role="status">
+      <p className="text-lg font-medium">Watch history is unavailable right now</p>
+      <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+        History is personal to the YouTube account this WebFlix deployment rides (single-tenant
+        live mode).{" "}
+        {session
+          ? "The YouTube session is connected but didn't serve your watch history — open it on youtube.com to check."
+          : "No YouTube session is connected to this deployment yet — your WebFlix sign-in is fine; the operator session (YT_COOKIES) needs to be connected."}
+      </p>
+    </div>
+  );
+}
+
 /** History — the operator's REAL YouTube watch history (SSR /feed/history).
  * WFX2-P2-AU: guests get the youtube.com signed-out screen (the gate). */
 export default function HistoryPage() {
@@ -184,15 +205,7 @@ function HistoryContent() {
           {error}
         </p>
       )}
-      {data && data.loginRequired && (
-        <div className="px-4 py-16 text-center sm:px-6">
-          <p className="text-lg font-medium">Sign in to see your watch history</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Watch history is personal — it reads from the YouTube account this WebFlix
-            session rides (single-tenant live mode). No session is configured right now.
-          </p>
-        </div>
-      )}
+      {data && data.loginRequired && <HistoryUnavailableNote session={data.session} />}
       {data && !data.loginRequired && total === 0 && (
         <div className="px-4 py-16 text-center sm:px-6">
           <p className="text-lg font-medium">No watch history yet</p>

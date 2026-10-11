@@ -33,6 +33,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       videos: page.videos,
       nextCursor: page.nextCursor,
       loginRequired: page.loginRequired,
+      // P22-B: a session IS configured but the read was not served — the
+      // honest unavailable state (never a login ask for a signed-in user)
+      unavailable: page.unavailable,
       special: isSpecialPlaylistId(id),
     });
   } catch (err) {

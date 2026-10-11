@@ -12,8 +12,30 @@ type LikedPayload = {
   videos: VideoDTO[];
   nextCursor: string | null;
   loginRequired: boolean;
+  unavailable: boolean;
   session: boolean;
 };
+
+/**
+ * The honest degradation states (P22-B). NEVER a "Sign in to …" ask: the
+ * viewer is signed in to WebFlix (the gate passed); the missing piece is the
+ * deployment's YouTube session or the read itself — a WebFlix sign-in can
+ * never fix either (measured live: the production deploy answers the
+ * "playlist does not exist" alert for LL WITH the operator session
+ * configured, while its history read serves real rows).
+ */
+function LikedUnavailableNote({ state }: { state: "unavailable" | "no-session" }) {
+  return (
+    <div className="px-4 py-16 text-center sm:px-6" role="status">
+      <p className="text-lg font-medium">Liked videos are unavailable right now</p>
+      <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+        {state === "unavailable"
+          ? "The YouTube session is connected, but it didn't return your liked videos — they may be empty on YouTube, or YouTube didn't serve them to WebFlix. Open your liked list on youtube.com to check."
+          : "Liked videos are personal to the YouTube account this WebFlix deployment rides (single-tenant live mode). No YouTube session is connected to this deployment yet — your WebFlix sign-in is fine; the operator session (YT_COOKIES) needs to be connected."}
+      </p>
+    </div>
+  );
+}
 
 /** Liked videos — the operator's REAL Liked playlist (YouTube's own `LL`).
  * WFX2-P2-AU: guests get the youtube.com signed-out screen (the gate). */
@@ -51,16 +73,11 @@ function LikedContent() {
           {error}
         </p>
       )}
-      {data && data.loginRequired && (
-        <div className="px-4 py-16 text-center sm:px-6">
-          <p className="text-lg font-medium">Sign in to see your liked videos</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Liked videos are personal — they read from the YouTube account this WebFlix
-            session rides (single-tenant live mode). No session is configured right now.
-          </p>
-        </div>
+      {data && data.unavailable && <LikedUnavailableNote state="unavailable" />}
+      {data && !data.unavailable && data.loginRequired && (
+        <LikedUnavailableNote state="no-session" />
       )}
-      {data && !data.loginRequired && videos.length === 0 && (
+      {data && !data.loginRequired && !data.unavailable && videos.length === 0 && (
         <div className="px-4 py-16 text-center sm:px-6">
           <p className="text-lg font-medium">No liked videos yet</p>
           <p className="mt-1 text-sm text-muted-foreground">

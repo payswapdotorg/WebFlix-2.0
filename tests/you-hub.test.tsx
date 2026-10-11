@@ -462,7 +462,30 @@ describe("YouView — History section (the real /api/history seam)", () => {
     serveYouSeams();
     await render(<YouView />);
     await act(async () => {});
-    expect(win.document.body.textContent ?? "").toContain("connect the operator session");
+    expect(win.document.body.textContent ?? "").toContain(
+      "the operator session (YT_COOKIES) needs to be connected"
+    );
+    expect(win.document.body.textContent ?? "").toContain("your WebFlix sign-in is fine");
+    expect(win.document.body.textContent ?? "").not.toContain("Videos you watch will show up here.");
+  });
+
+  test("P22-B: loginRequired WITH a session → the didn't-serve-it note (never a login ask)", async () => {
+    historyPayload = {
+      groups: [],
+      nextCursor: null,
+      loginRequired: true,
+      watchHistoryPaused: null,
+      searchHistoryPaused: null,
+      total: 0,
+      session: true,
+    };
+    serveYouSeams();
+    await render(<YouView />);
+    await act(async () => {});
+    expect(win.document.body.textContent ?? "").toContain(
+      "didn't serve your watch history"
+    );
+    expect(win.document.body.textContent ?? "").toContain("open it on youtube.com to check");
     expect(win.document.body.textContent ?? "").not.toContain("Videos you watch will show up here.");
   });
 });
@@ -500,6 +523,30 @@ describe("YouView — Playlists section (the real /api/playlists seam)", () => {
     await act(async () => {});
     expect(win.document.body.textContent ?? "").toContain("Playlists you create will show up here.");
     expect(all("[data-testid='you-playlist-card']")).toHaveLength(0);
+  });
+
+  test("P22-B: unavailable (session configured, read not served) → the didn't-return-them note, never the no-playlists claim", async () => {
+    playlistsPayload = {
+      playlists: [],
+      loginRequired: false,
+      unavailable: true,
+      session: true,
+    };
+    serveYouSeams();
+    await render(<YouView />);
+    await act(async () => {});
+    const body = win.document.body.textContent ?? "";
+    expect(body).toContain("didn't return your playlists");
+    expect(body).toContain("Open them on youtube.com to check");
+    // the honest-empty claim is suppressed while the read is unserved
+    expect(body).not.toContain("Playlists you create will show up here");
+    // the special-cards grid note says why the cards carry no counts
+    expect(q("[data-testid='you-special-cards-unavailable']")?.textContent ?? "").toContain(
+      "the counts can't be shown"
+    );
+    // the cards stay honest-absent (no fabricated counts)
+    expect(q("[data-testid='you-watch-later']")?.textContent).toContain("Videos you save for later");
+    expect(q("[data-testid='you-liked']")?.textContent).toContain("Videos you like");
   });
 });
 

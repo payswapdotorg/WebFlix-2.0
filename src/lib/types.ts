@@ -549,6 +549,16 @@ export type PlaylistPageDTO = {
   };
   videos: VideoDTO[];
   nextCursor: string | null;
+  /**
+   * P22-B: the special lists (WL/LL) ride this page (youtube.com's own guide
+   * links "Watch later" to /playlist?list=WL). `special` marks them; the
+   * honest state flags let the page degrade without a login ask:
+   *   loginRequired — no YouTube session configured (public mode)
+   *   unavailable   — a session IS configured but the read was not served
+   */
+  special?: boolean;
+  loginRequired?: boolean;
+  unavailable?: boolean;
 };
 
 /**

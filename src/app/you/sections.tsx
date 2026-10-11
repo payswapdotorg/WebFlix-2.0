@@ -41,6 +41,8 @@ export type YouHistoryPayload = {
 export type YouPlaylistsPayload = {
   playlists: PlaylistDTO[];
   loginRequired: boolean;
+  /** P22-B: a session IS configured but the read was not served */
+  unavailable?: boolean;
   session: boolean;
 };
 
@@ -186,8 +188,9 @@ export function HistorySection({ state }: { state: ApiState<YouHistoryPayload> }
       )}
       {state.data && state.data.loginRequired && (
         <SectionNote>
-          History is personal to the YouTube account this WebFlix session rides — connect
-          the operator session (YT_COOKIES) to read it.
+          {state.data.session
+            ? "The YouTube session is connected but didn't serve your watch history — open it on youtube.com to check. Your WebFlix sign-in is fine; the operator session (YT_COOKIES) is what reads it."
+            : "History is personal to the YouTube account this WebFlix deployment rides (single-tenant live mode). No YouTube session is connected yet — your WebFlix sign-in is fine; the operator session (YT_COOKIES) needs to be connected."}
         </SectionNote>
       )}
       {state.data && !state.data.loginRequired && recent.length === 0 && (
@@ -314,13 +317,21 @@ export function PlaylistsSection({ state }: { state: ApiState<YouPlaylistsPayloa
           {state.error}
         </p>
       )}
-      {state.data && state.data.loginRequired && (
+      {state.data && state.data.unavailable && (
         <SectionNote>
-          Playlists are personal to the YouTube account this WebFlix session rides —
-          connect the operator session (YT_COOKIES) to read them.
+          The YouTube session is connected, but it didn&apos;t return your playlists — they may
+          be empty on YouTube, or YouTube didn&apos;t serve them to WebFlix. Open them on
+          youtube.com to check.
         </SectionNote>
       )}
-      {state.data && !state.data.loginRequired && created.length === 0 && (
+      {state.data && !state.data.unavailable && state.data.loginRequired && (
+        <SectionNote>
+          Playlists are personal to the YouTube account this WebFlix deployment rides
+          (single-tenant live mode). No YouTube session is connected yet — your WebFlix
+          sign-in is fine; the operator session (YT_COOKIES) needs to be connected.
+        </SectionNote>
+      )}
+      {state.data && !state.data.loginRequired && !state.data.unavailable && created.length === 0 && (
         <EmptyNote
           text="Playlists you create will show up here."
           linkHref="/playlists"

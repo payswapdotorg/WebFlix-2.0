@@ -28,6 +28,10 @@ export async function GET(req: Request) {
       playlist: page.playlist,
       nextCursor: page.nextCursor,
       loginRequired: page.loginRequired,
+      /** P22-B: the honest unavailable state (session configured, read not
+       *  served) — the client renders the honest degradation, never a login
+       *  ask for a signed-in user. */
+      unavailable: page.unavailable,
       session: hasSession(),
     });
   } catch (err) {
