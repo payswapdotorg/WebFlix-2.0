@@ -33,12 +33,12 @@
 import { upstreamFetch } from "./upstream";
 import { BROWSER_UA } from "./innertube";
 import { getCookieHeader, hasSession } from "./session";
-import { fetchPageHtml, fetchYtInitialData } from "./ssr";
 import { cached, TTL } from "./cache";
 import { resolveChannel, getChannelPage } from "./channels";
+import { operatorChannelRef } from "./operator";
 import { getWatchMetadata } from "./watch";
 import { listLiveComments } from "./comments";
-import { findFirst, walkTree, type ChannelHeaderDTO } from "./mappers";
+import { walkTree, type ChannelHeaderDTO } from "./mappers";
 import type { ChannelLookup } from "./channels";
 import type {
   StudioAnalyticsDTO,
@@ -84,6 +84,8 @@ const CHANNEL_ID_IN_HTML_RE = /"CHANNEL_ID"\s*:\s*"(UC[\w-]{20,})"/;
  * The operator's channel id from a signed-in youtube.com page's `ytcfg`
  * bootstrap (`"CHANNEL_ID":"UC…"` — the session's own channel, distinct from
  * any grid item's channelId). Pure (exported for fixture-driven tests).
+ * P22-B: kept for the tests + as rung 3 of the resolution ladder (operator.ts
+ * owns the ladder now — this pure twin stays for the studio lane's own tests).
  */
 export function extractChannelIdFromHtml(html: string): string | null {
   const m = CHANNEL_ID_IN_HTML_RE.exec(html);
@@ -91,43 +93,24 @@ export function extractChannelIdFromHtml(html: string): string | null {
 }
 
 /**
- * Resolve the operator's own channel via the session cookie:
- *  1. the youtube.com home page's ytcfg `CHANNEL_ID`
- *  2. `https://www.youtube.com/@me` (YouTube's signed-in self-handle — the
- *     followed page IS the operator's channel page)
- * Both steps only run with YT_COOKIES set; failures fall through to null
- * (the honest unresolved state — the studio then links out to the Studio
- * root, which resolves the channel via Google auth).
+ * Resolve the operator's own channel via the session cookie.
+ * P22-B: the resolution LADDER lives in operator.ts (account/account_menu →
+ * /feed/you header → the home page ytcfg CHANNEL_ID → /@me — the old
+ * single-mechanism seam was dead on live youtube.com: the current pages
+ * carry no CHANNEL_ID key, measured 2026-10-11). This seam delegates and
+ * resolves the channel page; failures are the honest unresolved state
+ * (never a guess).
  */
 export async function operatorChannelLookup(): Promise<ChannelLookup | null> {
   if (!hasSession()) return null;
-
+  const ref = await operatorChannelRef();
+  const key = ref?.id ?? ref?.handle ?? null;
+  if (!key) return null;
   try {
-    const homeHtml = await cached("yt:studio:home-html", TTL.FEED_MS, () =>
-      fetchPageHtml("/")
-    );
-    const channelId = extractChannelIdFromHtml(homeHtml);
-    if (channelId) {
-      const lookup = await resolveChannel(channelId);
-      if (lookup) return lookup;
-    }
+    return await resolveChannel(key);
   } catch {
-    // fall through to the @me mechanism
+    return null; // honest unresolved
   }
-
-  try {
-    const ssr = await cached("yt:studio:atme", TTL.FEED_MS, () =>
-      fetchYtInitialData("/@me")
-    );
-    const externalId = findFirst(ssr, "channelMetadataRenderer")?.externalId;
-    if (typeof externalId === "string" && externalId) {
-      return resolveChannel(externalId);
-    }
-  } catch {
-    // honest unresolved
-  }
-
-  return null;
 }
 
 // ---------------------------------------------------------------------------
