@@ -246,3 +246,27 @@ P6–P10 retro-documented 2026-10-05 — see docs/plans/2026-10-05-post-roadmap-
 
 - The post-roadmap lanes ran as commit-history lanes (no claims staked here): P6 production-data + parity (1034 → 1134 root tests, both totals recorded), P7 broker 2026 DOM refresh + membership + watch analytics (→ 1174), P8 yt-parity production fixes, P9 broker read path + connection UI, P10-OPS broker route restoration + re-arm automation (1237/1237 at `225eba0`, recorded in WORKLOG.md).
 - The retro doc records per-lane scope, key commits, acceptance evidence, and production impact — documentation only (P11-DOCS), zero code changes.
+
+## 2026-10-15 — PARITY COMPLETION PROGRAM (P23) claims staked by the RESIDENT TL STATION (operator directive, verbatim)
+
+Operator directive 2026-10-15: "Use the existing pat, this is an informed
+decision I'm making. Also focus on feature parity of the web app with
+youtube.com." The resident station (CDP-free Mission Control lineage) now
+holds the PAT (push+admin, verified live against both repos this date) and
+arms the full loop on THIS repo: monitor → harvest → review →
+approve/require-changes → dispatch next. Audit + wave map:
+`docs/plans/2026-10-15-parity-audit.md`.
+
+| Lane | Branch | Scope | Claimed | Binding | Status |
+|---|---|---|---|---|---|
+| P23-A | wfx2/p23-clip-stats | Clip create/share/resolve + stats-for-nerds (audit G1+G2) | 2026-10-15 resident-TL | 4h+standing | DISPATCHED |
+| P23-B | wfx2/p23-ask-ai | Ask-search + watch Ask panel + AI summaries, env-keyed LLM seam + honest degradation (G3+G4) | 2026-10-15 resident-TL | 4h+standing | DISPATCHED |
+| P23-C | wfx2/p23-sound-region | Shorts sound disc + sound pages + Remix entry + trending region switcher (G5+G6+G7) | 2026-10-15 resident-TL | 4h+standing | DISPATCHED |
+
+- Base: main @ the audit commit (this push). Merge order: any-ready-first
+  (disjoint surfaces); conflicts resolved by the lead at merge time (union law).
+- Workers: fresh-create agent dispatches under the station account; packets
+  self-contained; first commit records the packet verbatim as
+  `docs/work-items/<NN>-P23-<lane>.md` with the dated dispatch header.
+- P24 (monetize-send family) and P25 (podcasts + shorts AI editing) queue
+  behind P23 merges per the audit's wave plan.
