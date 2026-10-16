@@ -19,6 +19,7 @@
  * Transport: browser-like headers + optional session cookie, request timeout,
  * and a single retry with jitter on network errors / 429 / 5xx.
  */
+import { createHash } from "node:crypto";
 import { upstreamFetch, setUpstream, isTestUpstream, type UpstreamFetch } from "./upstream";
 import { getCookieHeader } from "./session";
 
@@ -59,8 +60,41 @@ export function innerTubeHeaders(cookies?: string | null): Record<string, string
     "X-Youtube-Client-Version": WEB_CLIENT.clientVersion,
   };
   const cookie = cookies !== undefined ? cookies : getCookieHeader();
-  if (cookie) headers.Cookie = cookie;
+  if (cookie) {
+    headers.Cookie = cookie;
+    // 2026-10-16 operator pass (WL/LL "unavailable" fix): the special lists
+    // (VLWL / VLLL) answer "The playlist does not exist." to a plain-Cookie
+    // browse even WITH a valid session — InnerTube's personal-list reads
+    // need the SAPISIDHASH Authorization header (SHA1 of SAPISID + origin +
+    // unix time), exactly what youtube.com's own web client sends. Derived
+    // from the SAPISID (or __Secure-3PAPISID) value in the same jar.
+    const auth = sapisidhashFor(cookie, "https://www.youtube.com");
+    if (auth) headers.Authorization = auth;
+  }
   return headers;
+}
+
+/**
+ * Build youtube.com's SAPISIDHASH Authorization header from a cookie jar.
+ * Returns null when the jar carries no SAPISID / __Secure-3PAPISID (public
+ * mode — no auth header, exactly like before).
+ */
+function sapisidhashFor(cookieHeader: string, origin: string): string | null {
+  const jar = new Map<string, string>();
+  for (const part of cookieHeader.split(";")) {
+    const idx = part.indexOf("=");
+    if (idx <= 0) continue;
+    const name = part.slice(0, idx).trim();
+    const value = part.slice(idx + 1).trim();
+    if (name && value) jar.set(name, value);
+  }
+  const sapisid = jar.get("SAPISID") ?? jar.get("__Secure-3PAPISID") ?? null;
+  if (!sapisid) return null;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const digest = createHash("sha1")
+    .update(`${sapisid} ${origin} ${nowSec}`)
+    .digest("hex");
+  return `SAPISIDHASH ${digest} ${origin} ${nowSec}`;
 }
 
 export class InnertubeError extends Error {

@@ -116,7 +116,85 @@ const store: PreviewStore =
     },
   });
 
-const DWELL_MS = 600;
+const DWELL_MS = 450;
+
+/**
+ * 2026-10-16 operator pass (hover speed) — the global playback prefetch
+ * queue. Cards enqueue their video id on mount; ONE request runs at a time
+ * (120ms spacing, 24 per session — the playback route is rate-limited and
+ * each call is a server-side player fetch, so the queue keeps the warm-up
+ * invisible to the rate limiter while making the FIRST sheet of every
+ * likely-hovered card browser-cached). fetchPlayback itself dedupes per
+ * session, and the resolved storyboard's sheet 0 is preloaded as an Image
+ * so frame 0 paints the instant the preview layer shows.
+ */
+const PREFETCH_LIMIT = 24;
+const PREFETCH_SPACING_MS = 120;
+
+type PrefetchQueue = {
+  queued: string[];
+  started: Set<string>;
+  running: boolean;
+};
+
+const prefetchRef = globalThis as unknown as { __wfxPlaybackPrefetch?: PrefetchQueue };
+const prefetchQueue: PrefetchQueue =
+  prefetchRef.__wfxPlaybackPrefetch ??
+  (prefetchRef.__wfxPlaybackPrefetch = { queued: [], started: new Set(), running: false });
+
+function enqueuePlaybackPrefetch(videoId: string): void {
+  if (prefetchQueue.started.has(videoId) || prefetchQueue.started.size >= PREFETCH_LIMIT) return;
+  if (!prefetchEligible()) return;
+  prefetchQueue.queued.push(videoId);
+  void drainPlaybackPrefetch();
+}
+
+/**
+ * The prefetch is a REAL-browser optimization only: it must never fire in
+ * test DOMs (happy-dom windows are about:blank — the repo's fixture-only
+ * law: no stray fetches in the harness) nor on coarse-pointer devices (the
+ * app's own previewModeForDevice policy — touch gets no preview at all).
+ */
+function prefetchEligible(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const proto = window.location?.protocol ?? "";
+    if (!proto.startsWith("http")) return false;
+    if (typeof window.matchMedia === "function") {
+      if (window.matchMedia("(pointer: coarse)").matches) return false;
+    }
+  } catch {
+    return false;
+  }
+  return true;
+}
+
+async function drainPlaybackPrefetch(): Promise<void> {
+  if (prefetchQueue.running) return;
+  prefetchQueue.running = true;
+  try {
+    while (prefetchQueue.queued.length > 0) {
+      const next = prefetchQueue.queued.shift();
+      if (!next || prefetchQueue.started.has(next)) continue;
+      prefetchQueue.started.add(next);
+      if (prefetchQueue.started.size > PREFETCH_LIMIT) break;
+      try {
+        const playback = await fetchPlayback(next);
+        const level = playback ? pickStoryboardLevel(playback.storyboards) : null;
+        if (level && typeof window !== "undefined" && typeof Image === "function") {
+          // warm the first sprite sheet into the browser image cache
+          const img = new Image();
+          img.src = storyboardSheetUrl(level.templateUrl, 0);
+        }
+      } catch {
+        /* a failed prefetch costs nothing — the hover lane fetches on demand */
+      }
+      await new Promise((resolve) => setTimeout(resolve, PREFETCH_SPACING_MS));
+    }
+  } finally {
+    prefetchQueue.running = false;
+  }
+}
 
 /**
  * P22-A — how long the embed gets for its IFrame to come ready. The watch
@@ -184,6 +262,17 @@ export function useHoverPreview(video: PreviewVideo) {
   useEffect(() => {
     current.current = video;
   }, [video]);
+
+  // 2026-10-16 operator pass (hover speed): prefetch the playback data for
+  // this card the moment it MOUNTS (throttled globally — one request at a
+  // time, small spacing, session-capped) so that by the time a dwell fires,
+  // the storyboard data + its first sprite sheet are already in the browser
+  // cache and the preview can start moving INSTANTLY (youtube.com's own
+  // previews feel immediate because their player data is preloaded with the
+  // feed; the embed iframe then crossfades in over the animating frames).
+  useEffect(() => {
+    if (video.id) enqueuePlaybackPrefetch(video.id);
+  }, [video.id]);
 
   useEffect(
     () => () => {
@@ -479,12 +568,20 @@ export function VideoHoverPreviewLayer() {
     };
   }, [shownId, mode]);
 
-  // The effective phase: the embed lane owns the card while alive; once
-  // dead (or in storyboard mode) the storyboard/degrade takes over.
+  // The effective phase — the 2026-10-16 operator pass (hover speed):
+  // while the embed boots (embedLane, not yet alive) the STORYBOARD now
+  // animates immediately whenever its data is in hand (prefetched at card
+  // mount) — the preview starts moving the moment the dwell fires, exactly
+  // like youtube.com's instant previews, and the real video crossfades in
+  // over the moving frames when the embed reports playback. The spinner+
+  // ken-burns "loading" chrome only shows when there is genuinely no
+  // storyboard data yet (fetch still in flight).
   const phase: Phase = embedLane
     ? embedAlive
       ? "embed"
-      : "loading"
+      : level
+        ? "storyboard"
+        : "loading"
     : level
       ? "storyboard"
       : fetchDone
@@ -527,9 +624,11 @@ export function VideoHoverPreviewLayer() {
 
   const visible = !!video && !!rect;
 
-  // storyboard geometry for the current frame (sheet/col/row)
+  // storyboard geometry for the current frame (sheet/col/row) — also kept
+  // mounted during the "embed" phase so the video crossfades in OVER the
+  // animating frames (no thumbnail flash mid-fade)
   const geom = (() => {
-    if (!level || phase !== "storyboard") return null;
+    if (!level || (phase !== "storyboard" && phase !== "embed")) return null;
     const perSheet = level.cols * level.rows;
     const clamped = Math.min(frame, Math.max(0, level.frameCount - 1));
     const sheet = Math.floor(clamped / perSheet);

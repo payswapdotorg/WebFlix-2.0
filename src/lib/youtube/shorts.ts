@@ -112,10 +112,11 @@ export async function callReel(
 export async function callSearchForShorts(
   query: string,
   fetcher: typeof fetch = fetch,
+  sp?: string,
 ): Promise<Record<string, unknown>> {
   return postInnerTube(
     "search",
-    { context: shortsContext(), query },
+    { context: shortsContext(), query, ...(sp ? { params: sp } : {}) },
     fetcher,
   );
 }
@@ -148,6 +149,13 @@ export type ShortDTO = {
   likesText: string | null;
   commentsCountText: string | null;
   thumbnailUrl: string | null;
+  /**
+   * 2026-10-16 operator pass — LIVE shorts. youtube.com's shorts surfaces
+   * mix live vertical streams into the feed (the mobile app's "browse
+   * through live shorts"); a live short renders the red LIVE badge and its
+   * viewsText carries the concurrent viewers ("1.2K watching now").
+   */
+  isLive?: boolean;
 };
 
 export type ShortCommentDTO = {
@@ -274,6 +282,13 @@ export function mapShortsLockup(lockup: unknown): ShortDTO | null {
     }
   }
 
+  // live shorts (2026-10-16 operator pass): a live lockup's secondary text
+  // carries "N watching" instead of a view count — the tile signal
+  // youtube.com itself uses (the bare word "live" in the a11y text is NOT a
+  // signal: it false-positives on titles like "come join my live right now",
+  // verified live 2026-10-16).
+  const isLive = viewsText !== null && /watching/i.test(viewsText);
+
   return {
     id: videoId,
     title: parsedTitle,
@@ -282,6 +297,7 @@ export function mapShortsLockup(lockup: unknown): ShortDTO | null {
     likesText: null,
     commentsCountText: null,
     thumbnailUrl,
+    isLive,
   };
 }
 
@@ -337,9 +353,13 @@ export function extractShortsFromSearch(
 
 /**
  * Map a reel_watch_sequence response (verified real shape):
- * {entries: [{command: {reelWatchEndpoint: {videoId, params}}}],
+ * {entries: [{command: {reelWatchEndpoint: {videoId, params,
+ *   overlay: {reelPlayerOverlayRenderer: {style}}}}}],
  *  continuationEndpoint: {continuationCommand: {token}}}
  * Entries carry no metadata → title/channel empty (client hydrates per id).
+ * 2026-10-16 operator pass (live shorts): the overlay style is the feed's own
+ * LIVE signal — REEL_PLAYER_OVERLAY_STYLE_LIVE entries are live shorts (the
+ * mobile feed's mechanism); anything else is a recorded short.
  */
 export function mapReelSequence(
   sequenceResponse: unknown,
@@ -350,6 +370,11 @@ export function mapReelSequence(
     const ep = asObj(asObj(asObj(e)?.command)?.reelWatchEndpoint);
     const videoId = typeof ep?.videoId === "string" ? ep.videoId : "";
     if (!videoId) continue;
+    // live overlay style → the mobile feed's own live-shorts flag
+    const overlayStyle = String(
+      asObj(asObj(asObj(ep?.overlay)?.reelPlayerOverlayRenderer)?.style) ?? "",
+    );
+    const isLive = overlayStyle === "REEL_PLAYER_OVERLAY_STYLE_LIVE";
     // keep sequence context on the DTO for potential deep-links (params)
     items.push({
       id: videoId,
@@ -359,6 +384,7 @@ export function mapReelSequence(
       likesText: null,
       commentsCountText: null,
       thumbnailUrl: null,
+      isLive,
     });
   }
   const token = asObj(
@@ -630,6 +656,14 @@ export async function getShortMeta(
     }
   }
 
+  // live shorts (2026-10-16 operator pass): a live short's watch page
+  // answers a liveStreamRenderer badge (or "N watching" in the view count
+  // / "Started streaming" date) — the same signals the web watch page uses.
+  const isLive =
+    /watching/i.test(viewsText ?? "") ||
+    /^started/i.test(dateText ?? "") ||
+    JSON.stringify(list).includes("liveStreamRenderer");
+
   return {
     id: videoId,
     title,
@@ -641,6 +675,7 @@ export async function getShortMeta(
     dateText,
     comments,
     commentsNextToken,
+    isLive,
   };
 }
 
@@ -674,6 +709,17 @@ export async function getShortsSeed(
   }
   return { items, nextCursor };
 }
+
+/**
+ * 2026-10-16 operator pass (live shorts) — REMOVED the Live-filtered search
+ * seed: the sp=EgJAAg%3D%3D filter strips the shorts shelves from the
+ * response entirely (verified live — 0 lockups), so it can never seed a
+ * live feed. Live shorts ride the REAL signal paths instead: the reel
+ * sequence's REEL_PLAYER_OVERLAY_STYLE_LIVE entries (the exact mobile-feed
+ * mechanism) and the per-short next{} hydration ("N watching" / liveStream
+ * badges). The Live chip on the shorts page is a client-side filter over
+ * those honest flags.
+ */
 
 /** Cursor page: reel_watch_sequence with the token as sequenceParams. */
 export async function getShortsPage(

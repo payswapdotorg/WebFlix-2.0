@@ -157,12 +157,16 @@ describe("P22-A — the shorts shelf: youtube.com-parity sizing", () => {
     expect(section).not.toBeNull();
     expect(qAll('[aria-label^="Open Shorts: "]')).toHaveLength(3);
     const tile = q('[aria-label^="Open Shorts: "]')!;
-    // the measured ladder — every class, in the tile's own className
-    expect(tile.className).toContain("w-[160px]");
+    // the measured ladder — every class, in the tile's own className.
+    // 2026-10-16 operator pass: the HOME-shelf scale (one step above the
+    // P22-A search-shelf ladder at every width — the operator reported the
+    // tiles smaller than youtube.com's home shelf; base 168 → sm 192 →
+    // lg 234 → xl 264 → 2xl 296, still 9:16)
+    expect(tile.className).toContain("w-[168px]");
     expect(tile.className).toContain("sm:w-[192px]");
-    expect(tile.className).toContain("lg:w-[216px]");
-    expect(tile.className).toContain("xl:w-[232px]");
-    expect(tile.className).toContain("2xl:w-[256px]");
+    expect(tile.className).toContain("lg:w-[234px]");
+    expect(tile.className).toContain("xl:w-[264px]");
+    expect(tile.className).toContain("2xl:w-[296px]");
     // P12's flat 208px is gone (youtube.com outgrew it at every desktop width)
     expect(tile.className).not.toContain("w-[208px]");
     // the thumb box stays 9:16 (the home-shelf proportion, 160×284)
