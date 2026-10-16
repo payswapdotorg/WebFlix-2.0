@@ -270,3 +270,15 @@ approve/require-changes → dispatch next. Audit + wave map:
   `docs/work-items/<NN>-P23-<lane>.md` with the dated dispatch header.
 - P24 (monetize-send family) and P25 (podcasts + shorts AI editing) queue
   behind P23 merges per the audit's wave plan.
+
+## 2026-10-16 — UX-PARITY-1 merged by the RESIDENT TL (operator directive: youtube.com reference standard)
+
+| Lane | Branch | Scope | Claimed | Binding | Status |
+|---|---|---|---|---|---|
+| UX-PARITY-1 | wfx2/ux-parity-1 @ 65a91c2 | the operator's seven parity reports: shorts shelf interleave + tile ladder; hover-preview speed (warm IFrame API + prefetch + animating storyboard); shorts light theme + exact 9:16; history page two-column rebuild; watch-later SAPISIDHASH root cause + playlist layout; live shorts honest signals | 2026-10-15 station (hands-on era) | delivered | **VERIFIED 1508/0** (station re-run 2026-10-16, lint 0e/tsc 0) → merged 9fb1df0 |
+
+- Base was main @ 138591e; merge --no-ff; production auto-deploy via Vercel.
+- The 2026-10-15 P23 platform dispatches were wall-era corpses (superseded);
+  P23-A/B/C re-dispatch from INSIDE THE REPLAY follows at the NEW base 9fb1df0
+  (P23-C touches the shorts surfaces UX-PARITY-1 changed — the merged base
+  avoids the conflict).
