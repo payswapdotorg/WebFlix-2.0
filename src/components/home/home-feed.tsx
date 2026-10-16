@@ -14,15 +14,25 @@ import type { HomeFeedDTO } from "@/lib/types";
 /**
  * The WebFlix home feed (P12-UX: youtube.com parity).
  *
- * Layout — exactly youtube.com's home shape: category chips → the regular
- * thumbnail grid from the FIRST row (the giant "Trending #1" hero and its
- * side list are gone), then the feature rails (continue-watching,
- * because-you-watched) with FULL-SIZE cards, the shorts shelf inline, and
- * the demoted trending rail (the old hero's trending surface folded into
- * it — nothing data-driven was deleted). The infinite-scroll sentinel
- * renders at the very END of the feed so appended grid pages never push
- * the rails away mid-scroll.
+ * Layout — youtube.com's home shape (2026-10-16 operator pass: the shorts
+ * shelf is INTERLEAVED with the long-form grid, not parked at the bottom):
+ * category chips → the first rows of the regular thumbnail grid → the
+ * SHORTS SHELF (full-width, horizontal rail) → the rest of the grid → the
+ * feature rails (continue-watching, because-you-watched) → the demoted
+ * trending rail. youtube.com places its shorts shelf within the first 1-2
+ * rows of the feed so shorts and long-form mix exactly the way the
+ * operator sees on youtube.com; the rest of the grid flows on below it.
+ * The infinite-scroll sentinel renders at the very END of the feed so
+ * appended grid pages never push the rails away mid-scroll.
  */
+
+/**
+ * How many recommended videos render ABOVE the shorts shelf — youtube.com
+ * interleaves the shelf within the first two rows of the grid (4-up desktop
+ * ≈ 8 videos; on 1-2-up viewports the shelf simply arrives sooner, which is
+ * youtube.com's own behavior on narrow layouts).
+ */
+const SHORTS_SHELF_AFTER = 8;
 export function HomeFeed() {
   const params = useSearchParams();
   const category = normalizeCategory(params.get("category"));
@@ -63,7 +73,24 @@ export function HomeFeed() {
             data.shorts.length === 0 &&
             data.recommended.length === 0 && <CategoryEmptyState category={category} />}
 
-          <RecommendedGrid videos={recommendedVideos} loading={loadingMore} />
+          {/**
+           * The interleaved feed: first rows of long-form videos, the shorts
+           * shelf, then the rest — youtube.com's own home composition (the
+           * shelf rides WITHIN the grid flow, never pinned to the bottom).
+           * A category filter hides the shelf exactly like youtube.com does
+           * (shorts shelves only ride the unfiltered home feed).
+           */}
+          <RecommendedGrid videos={recommendedVideos.slice(0, SHORTS_SHELF_AFTER)} loading={false} />
+
+          {category === "All" && <ShortsShelf shorts={data.shorts} />}
+
+          {recommendedVideos.length > SHORTS_SHELF_AFTER && (
+            <RecommendedGrid
+              videos={recommendedVideos.slice(SHORTS_SHELF_AFTER)}
+              loading={loadingMore}
+              className="pt-0"
+            />
+          )}
 
           <ContinueWatchingRail videos={data.continueWatching} />
 

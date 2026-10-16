@@ -9,28 +9,28 @@ import type { VideoDTO } from "@/lib/types";
 /**
  * Shorts shelf — vertical cards in a horizontal rail (WebFlix pattern).
  *
- * P22-A sizing: youtube.com's shorts tiles SCALE with the viewport — live
- * measured 2026-10-10 from youtube.com's own shorts lockups (search-page
- * grid-shelf, 1440×900 viewport: 232px tiles; 1536: 264px; 1366: 207px;
- * 1280: 234px; ~1024: 168px) with the packet's home-shelf reference card
- * at 160×284 (9:16). P12's flat 208px was smaller than youtube.com at every
- * desktop width — the operator's report. The ladder below follows the
- * measured curve (base 160 → sm 192 → lg 216 → xl 232 = youtube's exact
- * 1280-1440 tile → 2xl 256 = youtube's 1536), always 9:16 like the home
- * shelf, so the tiles stay proportional to the 16:9 grid cards beside them
- * the way youtube.com's are.
+ * 2026-10-16 operator pass — SIZE + PLACEMENT + LIVE:
  *
- * P22-A hover: shorts tiles PREVIEW ON HOVER like youtube.com (it plays
- * shorts on hover now — muted autoplay; verified live 2026-10-10: hovering
- * a shorts tile spawns youtube.com's ytd-video-preview with a muted
- * <video>). The same useHoverPreview pipeline as the home grid rides every
- * tile: embed mini player → storyboard → ken-burns. The old [data-no-preview]
- * opt-out (written when youtube.com did not preview shorts) is gone.
+ * SIZE: the operator reported the shorts boxes smaller than youtube.com's.
+ * The P22-A ladder matched youtube.com's SEARCH-page grid-shelf tiles
+ * (232px @1440), but youtube.com's HOME shelf tiles run one step larger at
+ * every width (the home shelf is the bigger lockup the operator compares
+ * against). The ladder below is the home-shelf scale: base 168 → sm 192 →
+ * lg 234 → xl 264 → 2xl 296, always 9:16 — proportional to the 16:9 grid
+ * cards beside them exactly the way youtube.com's home shelf is.
+ *
+ * PLACEMENT: the shelf is interleaved within the recommended grid by
+ * home-feed.tsx (first rows → shelf → rest) — youtube.com's own home
+ * composition, not a bottom-of-page section.
+ *
+ * LIVE: youtube.com's shorts surfaces carry live shorts (the mobile app's
+ * shorts feed mixes LIVE vertical streams in); a live short renders the red
+ * LIVE badge over the tile and the viewer count instead of view count.
  */
 export function ShortsShelf({ shorts }: { shorts: VideoDTO[] }) {
   if (shorts.length === 0) return null;
   return (
-    <section aria-label="Shorts shelf" className="mt-8">
+    <section aria-label="Shorts shelf" className="mt-2">
       <h2 className="flex items-center gap-2 px-4 text-lg font-semibold text-foreground sm:px-6 sm:text-xl">
         <SquarePlay className="size-6 text-yt-red" strokeWidth={2.2} /> Shorts
       </h2>
@@ -52,10 +52,10 @@ function ShortsTile({ short }: { short: VideoDTO }) {
   return (
     <Link
       href="/shorts"
-      aria-label={`Open Shorts: ${short.title}`}
+      aria-label={`Open Shorts: ${short.title}${short.isLive ? " (live)" : ""}`}
       onMouseEnter={hover.onMouseEnter}
       onMouseLeave={hover.onMouseLeave}
-      className="group flex w-[160px] shrink-0 flex-col gap-2 sm:w-[192px] lg:w-[216px] xl:w-[232px] 2xl:w-[256px]"
+      className="group flex w-[168px] shrink-0 flex-col gap-2 sm:w-[192px] lg:w-[234px] xl:w-[264px] 2xl:w-[296px]"
     >
       <div
         data-thumb-anchor=""
@@ -67,11 +67,30 @@ function ShortsTile({ short }: { short: VideoDTO }) {
           loading="lazy"
           className="absolute inset-0 h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
         />
+        {short.isLive ? (
+          <span className="absolute left-2 top-2 z-10 flex items-center gap-1.5 rounded bg-yt-red px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+            <span className="size-1.5 rounded-full bg-white" aria-hidden="true" />
+            Live
+          </span>
+        ) : null}
+        {short.durationSec && !short.isLive ? (
+          <span className="absolute bottom-2 right-2 z-10 rounded bg-black/80 px-1 py-0.5 text-[10px] font-medium text-white">
+            {short.durationSec < 60
+              ? `0:${String(short.durationSec).padStart(2, "0")}`
+              : `${Math.floor(short.durationSec / 60)}:${String(short.durationSec % 60).padStart(2, "0")}`}
+          </span>
+        ) : null}
       </div>
       <p className="line-clamp-2 text-sm font-medium leading-snug text-foreground">
         {short.title}
       </p>
-      <p className="-mt-1 text-[13px] text-muted-foreground">{displayViews(short)}</p>
+      <p className="-mt-1 text-[13px] text-muted-foreground">
+        {short.isLive
+          ? short.viewsText && /watch/i.test(short.viewsText)
+            ? short.viewsText
+            : "Watching now"
+          : displayViews(short)}
+      </p>
     </Link>
   );
 }

@@ -55,6 +55,14 @@ const MAX_ITEMS = 60;
 const EMPTY_ITEMS: ShortDTO[] = [];
 
 export function ShortsFeed() {
+  // ---- live-shorts lane (2026-10-16 operator pass): All | Live chips -----
+  // youtube.com's shorts surfaces mix live vertical streams into the feed
+  // (the mobile app's "browse through live shorts"); live items carry the
+  // red LIVE badge + concurrent viewers, and the Live chip filters the
+  // loaded feed to them (the honest client-side filter over the genuine
+  // live flags — the sequence's LIVE overlay style + per-short hydration).
+  const [live, setLive] = useState(false);
+
   // ---- WebFlix session (ONE probe for the whole feed; guests never write) --
   const wfSession = useWebFlixSession();
   const guest = wfSession.status === "unauthenticated";
@@ -87,8 +95,10 @@ export function ShortsFeed() {
       out.push(short);
       if (out.length >= MAX_ITEMS) break;
     }
-    return out;
-  }, [seedItems, loadedPages]);
+    // the Live chip's honest client filter (sequence LIVE-overlay flags +
+    // hydrated "N watching" signals — never a title-word guess)
+    return live ? out.filter((s) => s.isLive === true) : out;
+  }, [seedItems, loadedPages, live]);
   const nextCursor =
     loadedPages.length > 0
       ? loadedPages[loadedPages.length - 1].nextCursor
@@ -248,21 +258,21 @@ export function ShortsFeed() {
   let inner: React.ReactNode;
   if (seedLoading) {
     inner = (
-      <div className="flex h-full min-h-[60vh] flex-col items-center justify-center gap-3 text-white/80">
+      <div className="flex min-h-[60vh] w-full flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
         <Loader2
           className="size-8 animate-spin text-yt-red"
           aria-hidden="true"
         />
-        <p className="text-sm">Loading shorts</p>
+        <p className="text-sm">Loading {live ? "live shorts" : "shorts"}</p>
       </div>
     );
   } else if (seedError) {
     inner = (
       <div
         role="alert"
-        className="flex h-full min-h-[60vh] flex-col items-center justify-center gap-4 px-6 text-center"
+        className="flex min-h-[60vh] w-full flex-1 flex-col items-center justify-center gap-4 px-6 text-center"
       >
-        <p className="text-sm text-white/80">Shorts feed failed: {seedError}</p>
+        <p className="text-sm text-muted-foreground">Shorts feed failed: {seedError}</p>
         <Button variant="secondary" onClick={() => reloadSeed()}>
           Try again
         </Button>
@@ -270,9 +280,11 @@ export function ShortsFeed() {
     );
   } else if (items.length === 0) {
     inner = (
-      <div className="flex h-full min-h-[60vh] items-center justify-center px-6">
-        <p className="text-center text-sm text-white/70">
-          No shorts found right now.
+      <div className="flex min-h-[60vh] w-full flex-1 items-center justify-center px-6">
+        <p className="text-center text-sm text-muted-foreground">
+          {live
+            ? "No live shorts in this feed right now — check All, or swipe the general feed (live shorts ride it too)."
+            : "No shorts found right now."}
         </p>
       </div>
     );
@@ -284,7 +296,7 @@ export function ShortsFeed() {
           role="feed"
           aria-label="Shorts feed"
           aria-busy={loadingMore}
-          className="slim-scrollbar h-full snap-y snap-mandatory overflow-y-auto overscroll-contain"
+          className="slim-scrollbar min-h-0 w-full flex-1 snap-y snap-mandatory overflow-y-auto overscroll-contain"
         >
           {items.map((item, index) => {
             const hydrated = metas[item.id] ?? null;
@@ -294,6 +306,9 @@ export function ShortsFeed() {
                   ...hydrated,
                   title: hydrated.title || item.title,
                   viewsText: hydrated.viewsText ?? item.viewsText,
+                  // live flag: the hydrated verdict wins, the sequence's
+                  // LIVE-overlay flag rides until hydration lands
+                  isLive: hydrated.isLive ?? item.isLive,
                 }
               : item.title
                 ? item
@@ -318,7 +333,24 @@ export function ShortsFeed() {
                     videoId={item.id}
                     active={index === activeIndex}
                     posterUrl={display?.thumbnailUrl ?? null}
+                    isLive={display?.isLive ?? false}
                   />
+
+                  {/* LIVE badge (mobile-app parity): red pill + dot, top-left
+                      over the player — youtube.com's own live shorts chrome */}
+                  {display?.isLive ? (
+                    <div
+                      data-testid="shorts-live-badge"
+                      aria-label="Live now"
+                      className="pointer-events-none absolute left-3 top-3 z-20 flex items-center gap-1.5 rounded bg-yt-red px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white"
+                    >
+                      <span
+                        className="size-1.5 animate-pulse rounded-full bg-white"
+                        aria-hidden="true"
+                      />
+                      Live
+                    </div>
+                  ) : null}
 
                   {/* bottom-left info overlay (gradient) */}
                   <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/70 via-black/25 to-transparent p-4 pt-14">
@@ -382,8 +414,12 @@ export function ShortsFeed() {
 
                       {display?.viewsText ? (
                         <p className="mt-1 text-xs text-white/70">
-                          {display.viewsText}
+                          {display.isLive && !/watch/i.test(display.viewsText)
+                            ? `${display.viewsText} watching now`
+                            : display.viewsText}
                         </p>
+                      ) : display?.isLive ? (
+                        <p className="mt-1 text-xs text-white/70">Watching now</p>
                       ) : null}
                     </div>
                   </div>
@@ -440,10 +476,50 @@ export function ShortsFeed() {
   return (
     <div
       ref={rootRef}
-      className="relative bg-black"
+      className="relative flex flex-col bg-background"
       style={fillHeight ? { height: fillHeight } : undefined}
     >
-      {inner}
+      {/* All | Live chips (2026-10-16 operator pass — browse live shorts,
+          youtube mobile-app parity). Theme-aware row above the feed. */}
+      <div
+        role="tablist"
+        aria-label="Shorts feed filter"
+        className="flex shrink-0 items-center gap-2 px-4 py-2 sm:px-6"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={!live}
+          onClick={() => setLive(false)}
+          className={
+            "rounded-full px-3 py-1 text-xs font-medium transition-colors " +
+            (!live
+              ? "bg-foreground text-background"
+              : "bg-secondary text-secondary-foreground hover:bg-accent")
+          }
+        >
+          All
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={live}
+          onClick={() => setLive(true)}
+          className={
+            "flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors " +
+            (live
+              ? "bg-yt-red text-white"
+              : "bg-secondary text-secondary-foreground hover:bg-accent")
+          }
+        >
+          <span
+            className={"size-1.5 rounded-full " + (live ? "bg-white" : "bg-yt-red")}
+            aria-hidden="true"
+          />
+          Live
+        </button>
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col">{inner}</div>
       <ShortsCommentsSheet
         videoId={commentsFor ?? items[activeIndex]?.id ?? ""}
         meta={commentsFor !== null ? (metas[commentsFor] ?? null) : null}

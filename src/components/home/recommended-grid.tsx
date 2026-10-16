@@ -83,12 +83,17 @@ export function useRecommendedInfiniteScroll(
 export function RecommendedGrid({
   videos,
   loading,
+  className = "",
 }: {
   videos: VideoDTO[];
   loading: boolean;
+  className?: string;
 }) {
   return (
-    <section aria-label="Recommended videos" className="px-4 pb-4 pt-2 sm:px-6">
+    <section
+      aria-label="Recommended videos"
+      className={`px-4 pb-4 pt-2 sm:px-6 ${className}`}
+    >
       <div className="grid grid-cols-1 gap-x-4 gap-y-9 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
         {videos.map((video) => (
           <VideoCard key={video.id} video={video} />

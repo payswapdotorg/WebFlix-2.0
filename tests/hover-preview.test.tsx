@@ -569,7 +569,10 @@ describe("P22-A — the embed lane: the fair health gate (the zoom bug's fix)", 
     const seek = q('[data-testid="hover-preview-seek"]');
     expect(seek).not.toBeNull();
     expect(seek!.getAttribute("role")).toBe("slider");
-    expect(q('[data-testid="storyboard-frame"]')).toBeNull(); // storyboard waits its turn
+    // 2026-10-16 operator pass (hover speed): the storyboard frame stays
+    // mounted UNDER the live embed — the crossfade base (no thumbnail flash
+    // mid-fade); the embed owns the card visually.
+    expect(q('[data-testid="storyboard-frame"]')).not.toBeNull();
   });
 
   test("P22-A — a ready-but-slow embed SURVIVES past P12's 1.5s construction deadline (the regression pin)", async () => {
@@ -593,7 +596,11 @@ describe("P22-A — the embed lane: the fair health gate (the zoom bug's fix)", 
       await sleep(1700); // > 1500 (old deadline), < EMBED_PLAYING_MS (4000)
     });
     expect(MockYTPlayer.destroyed).toHaveLength(0); // STILL ALIVE
-    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("loading");
+    // 2026-10-16 operator pass (hover speed): with storyboard data in hand
+    // (prefetched at card mount), the frames ANIMATE while the embed boots —
+    // instant motion at the dwell exactly like youtube.com; the spinner
+    // "loading" phase only shows when there is genuinely no storyboard yet.
+    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
     // and when playback finally starts, the embed wins the card
     await act(async () => {
       playerEvents(player).onStateChange({ data: 1 });

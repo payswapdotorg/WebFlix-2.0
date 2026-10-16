@@ -32,11 +32,14 @@ export function ShortsPlayerSlot({
   videoId,
   active,
   posterUrl,
+  isLive = false,
 }: {
   videoId: string;
   active: boolean;
   /** Hydrated ShortDTO.thumbnailUrl when the feed has one (optional). */
   posterUrl?: string | null;
+  /** 2026-10-16 operator pass — live shorts: no loop, live stream playback. */
+  isLive?: boolean;
 }) {
   const poster = posterUrl || posterFor(videoId);
   // P22-C — per-videoId wall verdict for the ACTIVE slide only (inactive
@@ -97,7 +100,9 @@ export function ShortsPlayerSlot({
         <>
           <iframe
             key={active ? "on" : "off"}
-            src={`${YT_EMBED_BASE}/${videoId}?playsinline=1&autoplay=1&mute=1&controls=0&loop=1&playlist=${videoId}&rel=0`}
+            src={`${YT_EMBED_BASE}/${videoId}?playsinline=1&autoplay=1&mute=1&controls=0${
+              isLive ? "" : "&loop=1&playlist=" + videoId
+            }&rel=0`}
             title={videoId}
             loading="lazy"
             allow="autoplay; encrypted-media; picture-in-picture"
