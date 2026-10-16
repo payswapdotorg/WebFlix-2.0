@@ -282,3 +282,14 @@ approve/require-changes → dispatch next. Audit + wave map:
   P23-A/B/C re-dispatch from INSIDE THE REPLAY follows at the NEW base 9fb1df0
   (P23-C touches the shorts surfaces UX-PARITY-1 changed — the merged base
   avoids the conflict).
+
+## 2026-10-16 — P23 RE-DISPATCHED from inside the replay (wall-era corpses superseded; the replay-dispatch era)
+
+The 2026-10-15 platform dispatches never spawned (the spawn-wall era; the
+wall-era-chat law — chats created during the wall never generate). Superseded
+by FRESH agent sessions dispatched 2026-10-16 ~06:35Z through the replay
+browser (agents tab, GLM-5.3, Full-Stack skill, insert 100%, send VERIFIED —
+the dispatcher's 7-step hard verification): **p23-a** chat 21f38ff8, **p23-b**
+chat 1d5f58b1, **p23-c** chat f5c2d5b1 — all at base 523cbd5 (post
+UX-PARITY-1). The resident TL station (replay era) monitors → harvests →
+re-runs gates → merges.
