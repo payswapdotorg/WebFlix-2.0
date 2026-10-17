@@ -64,6 +64,29 @@ export function searchResultCountText(response: unknown): string | null {
 
 const PLAYLIST_ID_RE = /^(?:PL|RD|OL|UU|FL|LL)[A-Za-z0-9_-]{4,}$/;
 
+/**
+ * REA-1 G19 — the mix lockup's seed video, honestly extracted from the
+ * renderer's OWN data (measured 2026-10-17): the lockup's inline
+ * watchEndpoint (the whole-card click → /watch?v=<seed>&list=RD…&start_radio=1)
+ * or the primary thumbnail's /vi/<videoId>/ path. Null when neither carries
+ * it (never a guessed attribution).
+ */
+function mixSeedFromLockup(l: any): string | null {
+  const fromEndpoint =
+    l?.itemPlayback?.inlinePlayerData?.onSelect?.innertubeCommand?.watchEndpoint?.videoId ?? null;
+  if (typeof fromEndpoint === "string" && /^[A-Za-z0-9_-]{11}$/.test(fromEndpoint)) {
+    return fromEndpoint;
+  }
+  const sources =
+    l?.contentImage?.collectionThumbnailViewModel?.primaryThumbnail?.thumbnailViewModel?.image
+      ?.sources ?? [];
+  for (const s of sources) {
+    const m = /\/vi\/([A-Za-z0-9_-]{11})\//.exec(String(s?.url ?? ""));
+    if (m) return m[1] ?? null;
+  }
+  return null;
+}
+
 function playlistVideoCount(l: any): { count: number | null; text: string | null } {
   const overlays =
     l?.contentImage?.collectionThumbnailViewModel?.primaryThumbnail?.thumbnailViewModel
@@ -116,6 +139,7 @@ export function mapPlaylistLockupViewModel(l: any): PlaylistLiteDTO | null {
     channelName,
     updatedText,
     isMix: id.startsWith("RD"),
+    mixSeedVideoId: id.startsWith("RD") ? mixSeedFromLockup(l) : null,
   };
 }
 
@@ -135,6 +159,14 @@ export function mapSearchPlaylists(response: unknown, limit?: number): PlaylistL
   for (const r of walkTree(response, "playlistRenderer")) {
     const mapped = mapPlaylistRenderer(r);
     if (!mapped) continue;
+    // REA-1 G19 — the classic renderer's mixes derive the seed from the id
+    // itself (RD<videoId> / RDAMVM<videoId>) — the playlistId IS the family
+    // that carries it; opaque ids derive nothing (null).
+    const seedFromId = /^RD[A-Za-z0-9_-]{11}$/.test(mapped.id)
+      ? mapped.id.slice(2)
+      : /^RDAMVM[A-Za-z0-9_-]{11}$/.test(mapped.id)
+        ? mapped.id.slice(6)
+        : null;
     push({
       id: mapped.id,
       title: mapped.title,
@@ -144,6 +176,7 @@ export function mapSearchPlaylists(response: unknown, limit?: number): PlaylistL
       channelName: mapped.channelName,
       updatedText: mapped.updatedText,
       isMix: mapped.id.startsWith("RD"),
+      mixSeedVideoId: mapped.id.startsWith("RD") ? seedFromId : null,
     });
   }
   return limit ? out.slice(0, limit) : out;

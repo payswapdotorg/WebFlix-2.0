@@ -493,6 +493,14 @@ export type PlaylistLiteDTO = {
   updatedText: string | null;
   /** RD… mixes / radios */
   isMix?: boolean;
+  /**
+   * REA-1 G19 — the mix's seed video, extracted from the renderer's own
+   * watchEndpoint/thumbnail data (or derived from the RD<videoId> id family).
+   * The card's click = youtube.com's measured start-radio behavior:
+   * /watch?v=<seed>&list=RD…&start_radio=1. Null → the card keeps the
+   * playlist-page link (which renders youtube.com's unviewable verdict).
+   */
+  mixSeedVideoId?: string | null;
 };
 
 /** The spelling correction the search page renders (real renderer data). */
@@ -561,6 +569,15 @@ export type PlaylistPageDTO = {
   special?: boolean;
   loginRequired?: boolean;
   unavailable?: boolean;
+  /**
+   * REA-1 G19: youtube.com's own verdict for a mix list id (RD…) —
+   * "This playlist type is unviewable." (measured live 2026-10-17). The page
+   * renders exactly that wording; `mixSeedVideoId` carries the seed video
+   * DERIVED from the id itself (RD<videoId> / RDAMVM<videoId>) when present,
+   * powering the start-radio affordance (the watch route's queue).
+   */
+  mixUnviewable?: boolean;
+  mixSeedVideoId?: string | null;
 };
 
 /**
@@ -600,6 +617,20 @@ export type ChannelSearchDTO = {
   query: string;
   channelId: string;
   channelName: string;
+  videos: VideoDTO[];
+  nextCursor: string | null;
+};
+
+/**
+ * REA-1 G17 — the hashtag browse page (/hashtag/[tag]). The header ("#tag"
+ * + youtube.com's own meta text, e.g. "7M videos • 1.4M channels") and the
+ * real video grid from the FEhashtag browse read; `nextCursor` pages the
+ * infinite scroll (the response's own continuation token).
+ */
+export type HashtagPageDTO = {
+  tag: string;
+  title: string;
+  metaText: string | null;
   videos: VideoDTO[];
   nextCursor: string | null;
 };

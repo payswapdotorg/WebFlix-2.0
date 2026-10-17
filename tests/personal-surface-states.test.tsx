@@ -323,7 +323,10 @@ describe("PlaylistPage — the special lists (WL) on the playlist page route", (
     expect(all("a[href^='/watch/']").length).toBeGreaterThanOrEqual(3);
     const playAll = all("a").find((a) => /Play all/.test(a.textContent ?? ""));
     expect(playAll).toBeDefined();
-    expect(playAll!.getAttribute("href")).toBe("/watch/v1");
+    // REA-1 G16: Play all carries the list context (youtube.com's measured
+    // /watch?v=<first>&list=<id> — the watch page's queue follows the list);
+    // updated from the pre-G16 bare /watch/v1 assertion by the lane contract.
+    expect(playAll!.getAttribute("href")).toBe("/watch/v1?list=WL");
     // the special lists cannot be reordered — no ⋯ affordance anywhere
     expect(all("[aria-label^='Actions for']")).toHaveLength(0);
     expect(win.document.body.textContent ?? "").not.toContain("Move up");

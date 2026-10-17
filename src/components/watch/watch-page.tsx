@@ -63,6 +63,9 @@ import { addToQueue } from "@/lib/queue/queue-actions";
 import { useQueueStore, type QueueItem } from "@/lib/queue/queue-store";
 import { startQueueEngine } from "@/lib/queue/queue-engine";
 import { QueuePanel } from "./queue-panel";
+/* REA-1 G16/G19 — the playlist queue panel + DTO (the ?list= context) */
+import { PlaylistQueuePanel } from "./playlist-queue-panel";
+import type { WatchQueueDto } from "@/lib/youtube/watch-queue";
 import { AmbientBackdrop } from "./ambient-backdrop";
 import { AutoplayCountdownOverlay } from "./autoplay-countdown-overlay";
 import { PremiereStage } from "./premiere-stage";
@@ -93,7 +96,19 @@ const LiveChatPanel = dynamic(
 
 const AUTOPLAY_KEY = "wfx2-autoplay";
 
-export function WatchPage({ videoId, startAt }: { videoId: string; startAt: number | null }) {
+export function WatchPage({
+  videoId,
+  startAt,
+  listId = null,
+  shuffleSeed = null,
+}: {
+  videoId: string;
+  startAt: number | null;
+  /** REA-1 G16/G19 — the playlist context (?list=…): the queue panel + the autoplay chain follow the list. */
+  listId?: string | null;
+  /** REA-1 G16 — the deterministic shuffle seed (?shuffle=…) riding the context. */
+  shuffleSeed?: number | null;
+}) {
   const router = useRouter();
   // WFX2-P2-AU: the account gate source of truth — guests get the
   // youtube.com write prompts (composer box, like/subscribe/save/report
@@ -166,6 +181,67 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
   const queueItems = useQueueStore((s) => s.items);
   const queued = useQueueStore((s) => s.has(videoId));
   const queueNext = useQueueStore((s) => s.nextAfter(videoId));
+
+  // REA-1 G16/G19 — the playlist queue (the ?list= context): fetched from
+  // /api/watch/queue (the measured next-panel seam; the shuffle applied
+  // route-side over the fetched page). The panel renders in the secondary
+  // column above the related rail (youtube.com's placement, measured); the
+  // autoplay chain gives it FIRST priority — the queue follows the list.
+  const [playlistQueue, setPlaylistQueue] = useState<WatchQueueDto | null>(null);
+  const [pqHasMore, setPqHasMore] = useState(false);
+  const [pqLoadingMore, setPqLoadingMore] = useState(false);
+  const playlistNext = useMemo(() => {
+    if (!playlistQueue || playlistQueue.items.length === 0) return null;
+    const idx = playlistQueue.items.findIndex((it) => it.videoId === videoId);
+    const nextIdx = idx >= 0 ? idx + 1 : 0;
+    return playlistQueue.items[nextIdx] ?? null;
+  }, [playlistQueue, videoId]);
+  const playlistNextRef = useRef<WatchQueueDto["items"][number] | null>(null);
+  const playlistListRef = useRef<string | null>(null);
+  const playlistSeedRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!listId) return;
+    let alive = true;
+    const base = new URLSearchParams({ videoId, list: listId });
+    if (shuffleSeed !== null) base.set("shuffle", String(shuffleSeed));
+    api<WatchQueueDto>(`/api/watch/queue?${base.toString()}`)
+      .then((q) => {
+        if (!alive) return;
+        setPlaylistQueue(q);
+        setPqHasMore(q.nextCursor !== null && q.nextCursor !== "");
+      })
+      .catch(() => {
+        /* the honest absence — no panel; autoplay keeps its prior chain */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [listId, shuffleSeed, videoId]);
+
+  // the infinite autoload (the mix family): continuation pages append after
+  // the possibly-shuffled first page — the seed never re-applies (the law)
+  function loadMoreQueue() {
+    if (!listId || !playlistQueue?.nextCursor || pqLoadingMore) return;
+    setPqLoadingMore(true);
+    const params = new URLSearchParams({ videoId, list: listId, cursor: playlistQueue.nextCursor });
+    fetch(`/api/watch/queue?${params.toString()}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((page: WatchQueueDto) => {
+        setPlaylistQueue((prev) => {
+          if (!prev) return page;
+          const seen = new Set(prev.items.map((it) => it.videoId));
+          return {
+            ...prev,
+            items: [...prev.items, ...page.items.filter((it) => !seen.has(it.videoId))],
+            nextCursor: page.nextCursor,
+          };
+        });
+        setPqHasMore(page.nextCursor !== null && page.nextCursor !== "");
+      })
+      .catch(() => toast.error("Failed to load more of the queue"))
+      .finally(() => setPqLoadingMore(false));
+  }
 
   // WFX2-P4-QT: the queue engine (continuous play when the miniplayer owns
   // the player). Idempotent — the subscription lives on the playerHost
@@ -293,13 +369,19 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
     autoplayRef.current = autoplay;
     nextVideoRef.current = nextVideo;
     queueNextRef.current = queueNext;
-  }, [autoplay, nextVideo, queueNext]);
+    playlistNextRef.current = playlistNext;
+    playlistListRef.current = listId;
+    playlistSeedRef.current = shuffleSeed;
+  }, [autoplay, nextVideo, queueNext, playlistNext, listId, shuffleSeed]);
   useEffect(() => {
     return playerHost.onEnded(() => {
       dispatch({
         type: "ENDED",
         autoplay: autoplayRef.current,
-        hasNext: nextVideoRef.current !== null || queueNextRef.current !== null,
+        hasNext:
+          nextVideoRef.current !== null ||
+          queueNextRef.current !== null ||
+          playlistNextRef.current !== null,
         now: Date.now(),
       });
     });
@@ -311,10 +393,22 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
   }, []);
 
   // "fired" (wall-clock deadline or FIRE click) → advance exactly once.
-  // WFX2-P4-QT: the queue's next wins over the related next; consuming the
-  // played video only leaves the SESSION queue (it stays in Watch Later).
+  // REA-1 G16/G19: the playlist queue's next wins over everything (the
+  // queue follows the list — youtube.com's ?list= chain); the advance keeps
+  // the list + shuffle context riding the URL. Then the WL queue's next
+  // (WFX2-P4-QT — consuming the played video only leaves the SESSION queue,
+  // it stays in Watch Later); then the related next.
   useEffect(() => {
     if (countdown.status !== "fired") return;
+    const pq = playlistNextRef.current;
+    if (pq && playlistListRef.current) {
+      const params = new URLSearchParams({ list: playlistListRef.current });
+      if (playlistSeedRef.current !== null) {
+        params.set("shuffle", String(playlistSeedRef.current));
+      }
+      router.push(`/watch/${pq.videoId}?${params.toString()}`);
+      return;
+    }
     const qn = queueNextRef.current;
     if (qn) {
       useQueueStore.getState().markPlayed(videoId);
@@ -472,21 +566,30 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
   const premiereStartsAt =
     !premiereStarted && isUpcomingPremiere(video) ? video.premieredAt : null;
 
-  const countdownNext = queueNext
+  // REA-1 G16/G19: the countdown's next-preview — the playlist queue's next
+  // wins (the queue follows the list), then the WL queue, then related.
+  const countdownNext = playlistNext
     ? {
-        id: queueNext.videoId,
-        title: queueNext.title,
-        channelName: queueNext.channelName,
-        thumbnailUrl: queueNext.thumbnailUrl,
+        id: playlistNext.videoId,
+        title: playlistNext.title,
+        channelName: playlistNext.channelName,
+        thumbnailUrl: playlistNext.thumbnailUrl,
       }
-    : nextVideo
+    : queueNext
       ? {
-          id: nextVideo.id,
-          title: nextVideo.title,
-          channelName: nextVideo.channel.name,
-          thumbnailUrl: nextVideo.thumbnailUrl,
+          id: queueNext.videoId,
+          title: queueNext.title,
+          channelName: queueNext.channelName,
+          thumbnailUrl: queueNext.thumbnailUrl,
         }
-      : null;
+      : nextVideo
+        ? {
+            id: nextVideo.id,
+            title: nextVideo.title,
+            channelName: nextVideo.channel.name,
+            thumbnailUrl: nextVideo.thumbnailUrl,
+          }
+        : null;
 
   const countdownOverlay =
     countdown.status === "counting" && countdownNext ? (
@@ -628,6 +731,16 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
                   <button
                     type="button"
                     onClick={() => {
+                      // REA-1 G16/G19: the playlist queue's next keeps the list
+                      // + shuffle context riding the URL (the queue follows)
+                      if (playlistNext && listId) {
+                        const params = new URLSearchParams({ list: listId });
+                        if (shuffleSeed !== null) {
+                          params.set("shuffle", String(shuffleSeed));
+                        }
+                        router.push(`/watch/${playlistNext.videoId}?${params.toString()}`);
+                        return;
+                      }
                       if (queueNext) useQueueStore.getState().markPlayed(videoId);
                       router.push(`/watch/${countdownNext.id}`);
                     }}
@@ -782,8 +895,25 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
         </div>
 
         {/* related rail — P23-B (G4): while the Ask panel is open it takes
-            the rail's place; closing the panel restores the rail */}
+            the rail's place; closing the panel restores the rail.
+            REA-1 G16/G19: the playlist queue panel renders ABOVE everything
+            else in the secondary column (youtube.com's measured placement —
+            the queue panel is the rail's first block on /watch?v=…&list=…). */}
         <aside aria-label="Related videos" className={theater ? "min-w-0" : "px-3 sm:px-0"}>
+          {playlistQueue && (
+            <div className="mb-3">
+              <PlaylistQueuePanel
+                queue={playlistQueue}
+                videoId={videoId}
+                listId={listId ?? playlistQueue.playlist.id}
+                shuffleSeed={shuffleSeed}
+                currentIndex={playlistQueue.items.findIndex((it) => it.videoId === videoId)}
+                loadingMore={pqLoadingMore}
+                hasMore={pqHasMore}
+                onLoadMore={loadMoreQueue}
+              />
+            </div>
+          )}
           {detail && !theater && (
             <LiveChatPanel
               videoId={videoId}
