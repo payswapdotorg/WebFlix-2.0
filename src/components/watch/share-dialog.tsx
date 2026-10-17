@@ -266,17 +266,15 @@ function ClipTab({
   const onHandlePointerMove = (e: React.PointerEvent) => {
     if (dragging === null || created) return;
     const proposed = secFromClientX(e.clientX);
-    setWindow((w) => {
-      const anchor = dragging === "start" ? w.endSec : w.startSec;
-      const clamped = clampClipHandle(dragging, proposed, anchor, duration);
-      const next =
-        dragging === "start"
-          ? { startSec: clamped, endSec: w.endSec }
-          : { startSec: w.startSec, endSec: clamped };
-      setStartText(formatTimeInput(next.startSec));
-      setEndText(formatTimeInput(next.endSec));
-      return next;
-    });
+    const anchor = dragging === "start" ? window_.endSec : window_.startSec;
+    const clamped = clampClipHandle(dragging, proposed, anchor, duration);
+    const next =
+      dragging === "start"
+        ? { startSec: clamped, endSec: window_.endSec }
+        : { startSec: window_.startSec, endSec: clamped };
+    setStartText(formatTimeInput(next.startSec));
+    setEndText(formatTimeInput(next.endSec));
+    setWindow(next);
   };
 
   const onHandlePointerUp = () => {
@@ -292,17 +290,15 @@ function ClipTab({
       return;
     }
     setTimeWarning(null);
-    setWindow((w) => {
-      const anchor = which === "start" ? w.endSec : w.startSec;
-      const clamped = clampClipHandle(which, parsed, anchor, duration);
-      const next =
-        which === "start"
-          ? { startSec: clamped, endSec: w.endSec }
-          : { startSec: w.startSec, endSec: clamped };
-      setStartText(formatTimeInput(next.startSec));
-      setEndText(formatTimeInput(next.endSec));
-      return next;
-    });
+    const anchor = which === "start" ? window_.endSec : window_.startSec;
+    const clamped = clampClipHandle(which, parsed, anchor, duration);
+    const next =
+      which === "start"
+        ? { startSec: clamped, endSec: window_.endSec }
+        : { startSec: window_.startSec, endSec: clamped };
+    setStartText(formatTimeInput(next.startSec));
+    setEndText(formatTimeInput(next.endSec));
+    setWindow(next);
   };
 
   /* ---- create ---- */

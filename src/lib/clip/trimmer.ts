@@ -16,10 +16,13 @@ export interface ClipWindow {
 }
 
 /**
- * Clamp a drag position to the law: 0 ≤ start, end ≤ duration, and the
- * window length pinned to [CLIP_MIN_SEC, CLIP_MAX_SEC] against the
- * ANCHORED side (youtube.com's handle semantics: dragging one handle
- * moves that edge; the other edge stays; the length law clamps).
+ * Clamp a drag position to the law: the window length pinned to
+ * [CLIP_MIN_SEC, CLIP_MAX_SEC] against the ANCHORED side (youtube.com's
+ * handle semantics: dragging one handle moves that edge; the other edge
+ * stays; the length law clamps), THEN bounded to the timeline — and the
+ * start handle additionally obeys the runway law (a 15s window needs 15s
+ * of video ahead, so start can never pass duration − MIN; youtube.com's
+ * own trimmer behaves the same).
  */
 export function clampClipHandle(
   dragging: "start" | "end",
@@ -28,13 +31,19 @@ export function clampClipHandle(
   durationSec: number
 ): number {
   const max = Math.max(0, durationSec || 0);
-  const raw = Math.min(Math.max(proposed, 0), max);
   if (dragging === "start") {
-    // start ≤ anchor - MIN and ≥ anchor - MAX
-    return Math.min(Math.max(raw, anchor - CLIP_MAX_SEC), anchor - CLIP_MIN_SEC);
+    // window law: start ∈ [anchor − MAX, anchor − MIN]
+    let v = Math.min(Math.max(proposed, anchor - CLIP_MAX_SEC), anchor - CLIP_MIN_SEC);
+    if (max > 0) {
+      // timeline + runway law: [0, duration − MIN]
+      v = Math.min(Math.max(v, 0), Math.max(0, max - CLIP_MIN_SEC));
+    }
+    return Math.max(0, v);
   }
-  // end ≥ anchor + MIN and ≤ anchor + MAX
-  return Math.min(Math.max(raw, anchor + CLIP_MIN_SEC), anchor + CLIP_MAX_SEC);
+  // window law: end ∈ [anchor + MIN, anchor + MAX]
+  let v = Math.min(Math.max(proposed, anchor + CLIP_MIN_SEC), anchor + CLIP_MAX_SEC);
+  if (max > 0) v = Math.min(v, max);
+  return Math.max(0, v);
 }
 
 /** The default window when the trimmer opens: 15s at the playhead. */
@@ -45,8 +54,14 @@ export function defaultClipWindow(currentTime: number, durationSec: number): Cli
     // window (the create refuses; the UI shows the reason)
     return { startSec: 0, endSec: dur };
   }
-  const start = Math.min(Math.max(0, Math.floor(currentTime)), Math.max(0, dur - CLIP_MIN_SEC));
-  return { startSec: start, endSec: Math.min(start + CLIP_MIN_SEC, dur || start + CLIP_MIN_SEC) };
+  // duration unknown (0/null — the `next` read carries no length) → the
+  // playhead window without a timeline clamp
+  const start =
+    dur > 0
+      ? Math.min(Math.max(0, Math.floor(currentTime)), Math.max(0, dur - CLIP_MIN_SEC))
+      : Math.max(0, Math.floor(currentTime));
+  const end = dur > 0 ? Math.min(start + CLIP_MIN_SEC, dur) : start + CLIP_MIN_SEC;
+  return { startSec: start, endSec: end };
 }
 
 /** Parse an m:ss / h:mm:ss / s / m.ss timestamp (the input pattern). */

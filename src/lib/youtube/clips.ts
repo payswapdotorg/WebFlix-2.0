@@ -171,9 +171,12 @@ export function mapClipResolve(
   const owner = findAll(data, "videoOwnerRenderer")[0] as Record<string, any> | undefined;
   const channelName = runsText(owner?.title) ?? "";
   const browse = owner?.navigationEndpoint?.browseEndpoint ?? {};
-  const channelHandle =
-    typeof browse?.canonicalBaseUrl === "string" && browse.canonicalBaseUrl.startsWith("@")
-      ? browse.canonicalBaseUrl
+  const canonicalBase =
+    typeof browse?.canonicalBaseUrl === "string" ? browse.canonicalBaseUrl : "";
+  const channelHandle = canonicalBase.startsWith("@")
+    ? canonicalBase
+    : canonicalBase.startsWith("/@")
+      ? `@${canonicalBase.slice(2)}`
       : null;
   const channelAvatarUrl =
     (owner?.thumbnail?.thumbnails as { url?: string }[] | undefined)?.[0]?.url ?? null;
