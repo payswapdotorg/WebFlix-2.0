@@ -29,6 +29,7 @@ function rmsg(id: string, offsetSec: number | null): LiveChatMessageDTO {
     kind: "text",
     isSuperChat: false,
     superChat: null,
+    poll: null,
     isMember: false,
     isMemberMilestone: false,
     memberMilestoneText: null,

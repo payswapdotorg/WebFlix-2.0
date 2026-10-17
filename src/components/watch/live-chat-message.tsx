@@ -41,6 +41,9 @@ import {
   type LiveChatReportResult,
 } from "@/lib/livechat/report";
 import type { LiveChatMessageDTO } from "@/lib/youtube/livechat";
+/* REA-2 (G20) — the poll card (display-only; the measured pollRenderer
+ * family — live-chat-poll-card.tsx). */
+import { LiveChatPollCard } from "./live-chat-poll-card";
 
 /** 15–20% alpha over the super chat color (#rrggbb → #rrggbb2b). */
 const SUPERCHAT_ALPHA = "2b";
@@ -350,6 +353,13 @@ export function LiveChatMessage({
         {body && <p className="mt-0.5 break-words text-sm leading-snug">{message.body}</p>}
       </div>
     );
+  }
+
+  // --- REA-2 (G20): live poll — the display-only card (no author row; the
+  // card owns its whole layout from the measured payload; no report
+  // affordance — the poll is the platform's, not an authored chat row).
+  if (message.kind === "poll") {
+    return <LiveChatPollCard message={message} />;
   }
 
   // --- super chat / super sticker: purchase-tinted row -------------------

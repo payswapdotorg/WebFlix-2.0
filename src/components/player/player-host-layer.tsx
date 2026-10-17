@@ -3,6 +3,32 @@
 /**
  * WFX2-C-S — the persistent player host layer (miniplayer persistence).
  *
+ * REA-2 (G18) — the END-SCREENS + INFO-CARDS honest-absence ledger (the
+ * shorts-engagement-rail pattern; the decisions the lead should know):
+ *
+ * WebFlix's player is the YouTube IFrame embed. This run's measurements
+ * (2026-10-17, recorded in WORKLOG.md REA-2):
+ * - The IFrame API exposes NO endscreen/card payload: the real /embed/
+ *   page's own player object lists no getEndscreen / getCards (or any
+ *   end/card-prefixed method) — only the send-prefixed and getVideo-
+ *   prefixed families. The creator-configured endscreen stack and the (i)
+ *   info cards exist ONLY inside youtube.com's watch-page player response (measured there:
+ *   endscreenRenderer.elements[] with CHANNEL/VIDEO/LINK styles, geometry
+ *   fractions, startMs/endMs; cardCollectionRenderer.cards[] with the
+ *   corrections teaser + cueRanges) — none of it is served to embeds.
+ * - Therefore WebFlix does NOT fabricate an endscreen overlay or a card
+ *   overlay: at ENDED the player shows the EMBED's own end state (the
+ *   iframe renders its internal end screen; rel=0 scopes it to the same
+ *   channel) plus the page-side "up next" card (the autoplay countdown,
+ *   queue-first over the related rail's top — watch-page.tsx, WFX2-C-S).
+ * - The (i) affordances degrade cleanly — no dead buttons: the only
+ *   page-side info affordances are the Stats-for-nerds family (P23-A),
+ *   whose unavailable fields render an honest "–" from REAL API signals
+ *   (getVideoData et al.) — never an invented card.
+ * - The miniplayer at ENDED keeps the queue engine's advance-in-place
+ *   behavior (queue-engine.ts); no mini up-next card was invented —
+ *   youtube.com's mini end state was unmeasurable this run (the bot wall).
+ *
  * Mounted ONCE in the AppShell ABOVE the route tree (sibling of the hover
  * preview layer), it:
  * - renders the single YoutubePlayer into the persistent wrapper node via

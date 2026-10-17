@@ -85,6 +85,7 @@ function lmsg(id: string, body: string): LiveChatMessageDTO {
     kind: "text",
     isSuperChat: false,
     superChat: null,
+    poll: null,
     isMember: false,
     isMemberMilestone: false,
     memberMilestoneText: null,

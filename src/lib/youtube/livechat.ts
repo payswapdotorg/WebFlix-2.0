@@ -21,6 +21,29 @@
  * - live status: POST /youtubei/v1/updated_metadata {videoId} →
  *   updateViewershipAction (isLive + "N watching now") + likeCountEntity.
  *
+ * REA-2 (G20) — live POLLS, display-only, from MEASURED payloads (the
+ *   2026-10-17 probe sweep, sanitized captures in tests/fixtures/yt/):
+ *   real frames on live sports/esports streams carry TWO action shapes,
+ *   both mapped here (fixture-pinned, never invented):
+ *   - updateLiveChatPollAction.pollToUpdate.pollRenderer — the state
+ *     update: choices carry voteRatio + votePercentage ("64%"), the header
+ *     carries pollQuestion + metadataText ("@author • 3h ago • 1,078 votes")
+ *     + liveChatPollType (LIVE_CHAT_POLL_TYPE_CREATOR on every capture);
+ *   - showLiveChatActionPanelAction.panelToShow.liveChatActionPanelRenderer
+ *     .contents.pollRenderer — the panel form (same header/choices; the
+ *     signed-out capture carries signinEndpoint per choice and NO tallies).
+ *   No other poll delivery form is mapped — an unmeasured shape would be an
+ *   invention (the Wave-A law); unknown actions land in the skipped counter.
+ *   The vote WRITE is honestly absent: the poll-card DOM on youtube.com's
+ *   live watch page was unreachable this run (the bot wall — the P23-A
+ *   precedent), so no broker vote kind exists and the card renders no vote
+ *   buttons — display-only, never a fake vote success.
+ *   PREDICTIONS: no prediction payload was found in ANY reachable stream
+ *   this run (gaming/esports/poker/chess live sweeps + replay walks — the
+ *   probe reports are the record); per the Wave-A law no prediction mapper
+ *   exists — an invented shape would be a fabrication. The honest absence
+ *   is recorded in WORKLOG.md (the honest-absence ledger pattern).
+ *
  * HARD RULE (architecture doc): the `player` endpoint is never called here.
  */
 
@@ -166,6 +189,43 @@ export type SuperChatDTO = {
   color: string | null;
 };
 
+/** REA-2 (G20) — one poll choice, from the measured pollRenderer.choices[]. */
+export type LiveChatPollChoiceDTO = {
+  /** runsToText(choice.text) — e.g. "Ohio State " (verbatim, spaces kept). */
+  text: string;
+  /** voteRatio (0..1) — null when the carrying action had no tally (the
+   * panel form / a pre-tally update). Never fabricated. */
+  ratio: number | null;
+  /** votePercentage.simpleText ("64%") — null when absent. */
+  percentText: string | null;
+  /** The payload's own selected flag (the signed-in user's own vote);
+   * null when the action carries none. Pass-through, never inferred. */
+  selected: boolean | null;
+};
+
+/** REA-2 (G20) — a live poll, display-only (the measured pollRenderer). */
+export type LiveChatPollDTO = {
+  /** liveChatPollId (the dedupe/refresh key). */
+  pollId: string;
+  /** header.pollHeaderRenderer.pollQuestion (runs joined). */
+  question: string;
+  /** header.pollHeaderRenderer.metadataText runs joined — the full meta
+   * line ("@LyTieuSua • 3h ago • 1,078 votes") exactly as served. */
+  metaText: string | null;
+  /** The first metadata run when it starts with "@" ("@LyTieuSua"), else
+   * null — pass-through, never a synthesized author. */
+  authorText: string | null;
+  /** header.thumbnail.thumbnails (the channel avatar) — null when absent. */
+  avatarUrl: string | null;
+  /** The last metadata run when it matches /votes$/i ("1,078 votes"), else null. */
+  votesText: string | null;
+  /** liveChatPollType mapped: LIVE_CHAT_POLL_TYPE_CREATOR → "creator";
+   * unknown values pass through lower-cased after the prefix strip; null
+   * when the action carries none. */
+  pollType: string | null;
+  choices: LiveChatPollChoiceDTO[];
+};
+
 export type LiveChatMessageKind =
   | "text"
   | "superchat"
@@ -173,7 +233,9 @@ export type LiveChatMessageKind =
   | "member-milestone"
   | "membership-gift"
   | "system"
-  | "banner";
+  | "banner"
+  /** REA-2 (G20) — a live poll card (display-only; message.poll). */
+  | "poll";
 
 export type LiveChatMessageDTO = {
   id: string;
@@ -183,6 +245,8 @@ export type LiveChatMessageDTO = {
   kind: LiveChatMessageKind;
   isSuperChat: boolean;
   superChat: SuperChatDTO | null;
+  /** REA-2 (G20) — present only on kind "poll" (null elsewhere). */
+  poll: LiveChatPollDTO | null;
   isMember: boolean;
   isMemberMilestone: boolean;
   memberMilestoneText: string | null;
@@ -455,6 +519,7 @@ function mapChatItem(item: Json): LiveChatMessageDTO | null {
       kind: "text",
       isSuperChat: false,
       superChat: null,
+      poll: null,
       isMember: author.badges.includes("member"),
       isMemberMilestone: false,
       memberMilestoneText: null,
@@ -474,6 +539,7 @@ function mapChatItem(item: Json): LiveChatMessageDTO | null {
       kind: "superchat",
       isSuperChat: true,
       superChat,
+      poll: null,
       isMember: author.badges.includes("member"),
       isMemberMilestone: false,
       memberMilestoneText: null,
@@ -500,6 +566,7 @@ function mapChatItem(item: Json): LiveChatMessageDTO | null {
       kind: "supersticker",
       isSuperChat: true,
       superChat,
+      poll: null,
       isMember: author.badges.includes("member"),
       isMemberMilestone: false,
       memberMilestoneText: null,
@@ -521,6 +588,7 @@ function mapChatItem(item: Json): LiveChatMessageDTO | null {
       kind: "member-milestone",
       isSuperChat: false,
       superChat: null,
+      poll: null,
       isMember: true,
       isMemberMilestone: true,
       memberMilestoneText: memberSince || null,
@@ -542,6 +610,7 @@ function mapChatItem(item: Json): LiveChatMessageDTO | null {
       kind: "membership-gift",
       isSuperChat: false,
       superChat: null,
+      poll: null,
       isMember: true,
       isMemberMilestone: false,
       memberMilestoneText: null,
@@ -565,6 +634,7 @@ function mapChatItem(item: Json): LiveChatMessageDTO | null {
       kind: "system",
       isSuperChat: false,
       superChat: null,
+      poll: null,
       isMember: false,
       isMemberMilestone: false,
       memberMilestoneText: null,
@@ -590,6 +660,7 @@ function mapChatItem(item: Json): LiveChatMessageDTO | null {
       kind: "system",
       isSuperChat: false,
       superChat: null,
+      poll: null,
       isMember: false,
       isMemberMilestone: false,
       memberMilestoneText: null,
@@ -598,6 +669,112 @@ function mapChatItem(item: Json): LiveChatMessageDTO | null {
   }
   // liveChatPlaceholderItemRenderer and unknown renderers → null (skipped+counted).
   return null;
+}
+
+/* ------------------------------------------------------------------ */
+/* REA-2 (G20) — the poll family (display-only, measured shapes)        */
+/* ------------------------------------------------------------------ */
+
+/** Pick the largest thumbnail (the measured header carries 32/64px picks). */
+function pollAvatarUrl(thumbnail: unknown): string | null {
+  const thumbs = arr(asObj(thumbnail)?.thumbnails);
+  let best: { url?: unknown; width?: unknown } | null = null;
+  for (const t of thumbs) {
+    const o = asObj(t);
+    if (!o || typeof o.url !== "string") continue;
+    const w = typeof o.width === "number" ? o.width : 0;
+    if (!best || w >= (typeof best.width === "number" ? best.width : 0)) best = o;
+  }
+  return best ? (best.url as string) : null;
+}
+
+/** liveChatPollType → the display word; unknown values degrade to the
+ * lower-cased suffix after the LIVE_CHAT_POLL_TYPE_ strip; null when none. */
+function mapPollType(raw: unknown): string | null {
+  if (typeof raw !== "string" || !raw) return null;
+  if (raw === "LIVE_CHAT_POLL_TYPE_CREATOR") return "creator";
+  if (raw === "LIVE_CHAT_POLL_TYPE_MARKET") return "market";
+  const suffix = raw.replace(/^LIVE_CHAT_POLL_TYPE_/, "").toLowerCase();
+  return suffix || raw.toLowerCase();
+}
+
+/** The metadata runs → the pass-through meta fields (never synthesized). */
+function mapPollMeta(metadataText: unknown): {
+  metaText: string | null;
+  authorText: string | null;
+  votesText: string | null;
+} {
+  const runs = arr(asObj(metadataText)?.runs).map((r) => (asObj(r)?.text as string | undefined) ?? "");
+  if (runs.length === 0) {
+    // simpleText form (unmeasured variant) — degrade to the joined text only.
+    const simple = typeof asObj(metadataText)?.simpleText === "string" ? (asObj(metadataText)!.simpleText as string) : null;
+    return { metaText: simple, authorText: null, votesText: null };
+  }
+  const metaText = runs.join("").trim() || null;
+  const authorText = runs.length > 0 && runs[0].startsWith("@") ? runs[0] : null;
+  const votesCandidate = runs[runs.length - 1] ?? "";
+  const votesText = /votes/i.test(votesCandidate) ? votesCandidate : null;
+  return { metaText, authorText, votesText };
+}
+
+/** One measured pollRenderer → the poll DTO (null when the renderer is too
+ * broken to display honestly — never a fabricated poll). */
+export function mapPollRenderer(renderer: Json): LiveChatPollDTO | null {
+  const header = asObj(asObj(renderer.header)?.pollHeaderRenderer);
+  const pollId = typeof renderer.liveChatPollId === "string" ? renderer.liveChatPollId : "";
+  const question = header ? runsToText(header.pollQuestion) : "";
+  const choices: LiveChatPollChoiceDTO[] = [];
+  for (const c of arr(renderer.choices)) {
+    const o = asObj(c);
+    if (!o) continue;
+    const text = runsToText(o.text);
+    if (!text) continue; // an unlabeled choice cannot be displayed honestly
+    const ratioRaw = o.voteRatio;
+    const ratio = typeof ratioRaw === "number" && Number.isFinite(ratioRaw) ? ratioRaw : null;
+    const percent = asObj(o.votePercentage);
+    const percentText = percent && typeof percent.simpleText === "string" ? percent.simpleText : null;
+    const selected = typeof o.selected === "boolean" ? o.selected : null;
+    choices.push({ text, ratio, percentText, selected });
+  }
+  if (!pollId || !question || choices.length === 0) return null;
+  const meta = header ? mapPollMeta(header.metadataText) : { metaText: null, authorText: null, votesText: null };
+  return {
+    pollId,
+    question,
+    metaText: meta.metaText,
+    authorText: meta.authorText,
+    avatarUrl: header ? pollAvatarUrl(header.thumbnail) : null,
+    votesText: meta.votesText,
+    pollType: header ? mapPollType(header.liveChatPollType) : null,
+    choices,
+  };
+}
+
+/** The pollRenderer → the chat message DTO (kind "poll"). */
+function mapPollItem(renderer: Json): LiveChatMessageDTO | null {
+  const poll = mapPollRenderer(renderer);
+  if (!poll) return null;
+  return {
+    id: poll.pollId,
+    author: {
+      id: "",
+      name: poll.authorText ?? "Live poll",
+      avatarUrl: poll.avatarUrl,
+      badges: [],
+      memberSinceText: null,
+    },
+    body: poll.question,
+    timestampUsec: "", // the measured poll payload carries no timestamp — the
+    // meta line's "3h ago" is display text; nothing is synthesized here.
+    kind: "poll",
+    isSuperChat: false,
+    superChat: null,
+    poll,
+    isMember: false,
+    isMemberMilestone: false,
+    memberMilestoneText: null,
+    offsetMsec: null,
+  };
 }
 
 /**
@@ -671,12 +848,38 @@ export function mapChatAction(action: unknown): LiveChatMessageDTO[] {
         kind: "superchat",
         isSuperChat: true,
         superChat,
+        poll: null,
         isMember: author.badges.includes("member"),
         isMemberMilestone: false,
         memberMilestoneText: null,
         offsetMsec: null,
       });
     }
+    return out;
+  }
+
+  // REA-2 (G20) — the poll STATE update (the measured
+  // updateLiveChatPollAction.pollToUpdate.pollRenderer; choices carry
+  // voteRatio + votePercentage). The chat row keeps the poll's id, so the
+  // panel refreshes the SAME card when later updates arrive (the hook's
+  // poll replace-on-collision) instead of stacking duplicates.
+  const pollUpdate = asObj(asObj(a.updateLiveChatPollAction)?.pollToUpdate)?.pollRenderer;
+  if (pollUpdate) {
+    const m = mapPollItem(asObj(pollUpdate) ?? {});
+    if (m) out.push(m);
+    return out;
+  }
+
+  // REA-2 (G20) — the poll PANEL form (the measured
+  // showLiveChatActionPanelAction.panelToShow.liveChatActionPanelRenderer
+  // .contents.pollRenderer; the signed-out capture carries signinEndpoint
+  // per choice and no tallies). Same id (liveChatPollId) → the same card.
+  const panelPoll = asObj(
+    asObj(asObj(asObj(a.showLiveChatActionPanelAction)?.panelToShow)?.liveChatActionPanelRenderer)?.contents,
+  )?.pollRenderer;
+  if (panelPoll) {
+    const m = mapPollItem(asObj(panelPoll) ?? {});
+    if (m) out.push(m);
     return out;
   }
 
