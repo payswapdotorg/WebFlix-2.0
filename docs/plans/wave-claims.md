@@ -336,3 +336,20 @@ re-runs gates → merges.
 - youtube.com's AI surfaces are experiment/sign-in-gated: measured at the
   served-string-table level only (ASK_BUTTON_LABEL etc.) — the honest
   measurement law applied.
+
+## 2026-10-17 — P23-C MERGED (the third REA-era merge: the sound-region lane)
+
+| Lane | Branch | Scope | Claimed | Binding | Status |
+|---|---|---|---|---|---|
+| P23-C | wfx2/p23-sound-region @ a9ead8e | G5 shorts sound disc + /sound/<key> pages (the measured audio-pivot: pivotButtonViewModel + engagement-panel browse continuation; the NEXT-16 param codec — page params UNDECODED vs API params decode-once, client-safe sound-key.ts) + G6 Remix in youtube.com's own aria-disabled honest form (no shorts-creation seam — broker registry verified) + G7 trending region switcher (Globe control, 105-country static map w/ honest session-gated note, ?gl= SSR read, gl-shaped search fallback US/GB/JP measured, persisted wf-trending-region) + the LIVE-overlay asObj-on-string fix | 2026-10-17 3rd-landing worker (chat 7dc0aff3) | COMPLETE 16:44Z (server-confirmed) | **VERIFIED 1698/0** (station re-run 2026-10-17: 699+566+127+108+126+34+38, lint 0e/1 pre-existing, tsc clean; PAT redaction verified, sound-key codec + Remix honest form + region store spot-checked) → merged |
+
+- The 3rd r-drive landed 15:44Z on the re-based packet (523cbd5 → 4601ba6)
+  and generated ~1h; the completion report landed server-side 16:44Z and the
+  queue_watch retired itself cleanly on the marker gate (the second
+  fully-automatic completion of the REA era).
+- Honest-degradation callouts: youtube.com's account Content-location list is
+  session-gated — the 105-country map ships as the house static map with the
+  honest note, while the REAL mechanisms (?gl= SSR read + gl-shaped search
+  reshape) were measured and verified this run (evidence/wfx2p23c/).
+- The LIVE-overlay flag fix (asObj-on-string) closed a UX-PARITY-1-era dead
+  flag found during the lane — lane-scoped, station-reviewed.
