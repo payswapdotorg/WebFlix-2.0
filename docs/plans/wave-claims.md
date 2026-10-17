@@ -293,3 +293,26 @@ the dispatcher's 7-step hard verification): **p23-a** chat 21f38ff8, **p23-b**
 chat 1d5f58b1, **p23-c** chat f5c2d5b1 — all at base 523cbd5 (post
 UX-PARITY-1). The resident TL station (replay era) monitors → harvests →
 re-runs gates → merges.
+
+## 2026-10-17 — P23-A MERGED at 419b10a (first REA-era harvest; the sandbox-outlives-the-view lesson)
+
+| Lane | Branch | Scope | Claimed | Binding | Status |
+|---|---|---|---|---|---|
+| P23-A | wfx2/p23-clip-stats @ 65dd40f | G1 clip lifecycle (Clip tab in the Share dialog — measured creation family + 15-60s law + runway law; WebFlix-local create with the honest upstream note — youtube.com's web create seam is flag-removed today, measured; /clip/<id> ranged player for both id families — clipConfig + loopCommand semantics, attribution panel, Watch-full-video disarm + Return-to-clip, measured dead-clip wording) + G2 stats-for-nerds (measured ytp-sfn field set/order/styling, REAL IFrame API signals + derived buffer health + honest dashes, context-menu + control-row entries) | 2026-10-17 worker (chat a7798c9a r4) | delivered 10:14Z | **VERIFIED 1568/0** (station re-run 2026-10-17: 592+543+127+108+126+34+38, lint 0e/1 pre-existing, tsc clean; PAT redaction + real fixture + evidence spot-checked) → merged 419b10a |
+
+- Forensics: the r4 chat's STREAM died ~09:48Z (chars frozen, server tree
+  assistant len=0 forever) but the agent SANDBOX kept executing server-side
+  and pushed the finished branch at 10:14Z — 26 minutes after the view died.
+  The chat message tree is NOT a progress signal; the branch push is. The
+  station harvested the branch on origin, not the chat marker.
+- Stand-down: the queue_watch assault ladder had already re-driven a frozen
+  r5 duplicate (chat fff43747, completions accepted-but-empty — the soft
+  re-wall). Voided at 13:31Z to free the generation slot for the parked
+  lanes; the P23-A lane is CLOSED-delivered.
+- p23-b recovery armed: its watch tab was CDP-wedged (WebSocketTimeout since
+  ~12:18Z); renderer-reclaimed at 13:31Z (fresh tab B7F64AD3) — the assault
+  ladder now owns the dead-session verdict (no branch push after 4h13m vs
+  the 51min P23-A reference run).
+- Base was main @ b595f43 (the ledger's re-dispatch base was 523cbd5; the
+  branch carried its own packet commit); merge --no-ff; production
+  auto-deploy via Vercel.
