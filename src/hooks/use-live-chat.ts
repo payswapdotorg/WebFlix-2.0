@@ -221,14 +221,40 @@ export function useLiveChat(
     }
   }
 
-  /** Append a frame's messages, deduped by id, capped at MAX_MESSAGES. */
+  /** Append a frame's messages, deduped by id, capped at MAX_MESSAGES.
+   * REA-2 (G20): a same-id POLL row is a state refresh, not a duplicate —
+   * the measured updateLiveChatPollAction stream re-delivers the SAME
+   * liveChatPollId with new tallies (the capture showed 606→607 votes and
+   * drifting ratios across consecutive frames). The refresh REPLACES the
+   * existing card's payload in place (its stream position is kept); every
+   * other kind stays append-only (true re-deliveries drop as before). */
   const mergeMessages = useCallback((frame: LiveChatMessageDTO[]) => {
     if (frame.length === 0) return;
     setMessages((prev) => {
       const seen = new Set(prev.map((m) => m.id));
-      const fresh = frame.filter((m) => !seen.has(m.id));
-      if (fresh.length === 0) return prev;
-      const merged = [...prev, ...fresh];
+      const refreshed = new Map<string, LiveChatMessageDTO["poll"]>();
+      const fresh: LiveChatMessageDTO[] = [];
+      for (const m of frame) {
+        if (seen.has(m.id)) {
+          // a poll carrying state → the refresh map; anything else → a true
+          // duplicate (dropped, the pre-G20 behavior).
+          if (m.kind === "poll" && m.poll) refreshed.set(m.id, m.poll);
+          continue;
+        }
+        fresh.push(m);
+        seen.add(m.id); // within-frame dupes (panel form + update in one
+        // frame) resolve here too: the later state wins via the refresh map.
+      }
+      const applyRefresh = (p: LiveChatMessageDTO): LiveChatMessageDTO =>
+        p.kind === "poll" && refreshed.has(p.id)
+          ? { ...p, poll: refreshed.get(p.id) ?? p.poll }
+          : p;
+      // refreshes apply to BOTH the existing rows (position kept) and the
+      // just-arrived ones (panel form + state update delivered in one frame).
+      const base = refreshed.size > 0 ? prev.map(applyRefresh) : prev;
+      const freshApplied = refreshed.size > 0 ? fresh.map(applyRefresh) : fresh;
+      if (freshApplied.length === 0 && refreshed.size === 0) return prev;
+      const merged = [...base, ...freshApplied];
       return merged.length > MAX_MESSAGES
         ? merged.slice(merged.length - MAX_MESSAGES)
         : merged;

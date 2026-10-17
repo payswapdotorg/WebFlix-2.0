@@ -1,0 +1,305 @@
+{
+ "continuationContents": {
+  "liveChatContinuation": {
+   "actions": [
+    {
+     "replayChatItemAction": {
+      "videoOffsetTimeMsec": "3187000",
+      "actions": [
+       {
+        "updateLiveChatPollAction": {
+         "pollToUpdate": {
+          "pollRenderer": {
+           "choices": [
+            {
+             "text": {
+              "runs": [
+               {
+                "text": "SRG "
+               }
+              ]
+             },
+             "selected": false,
+             "voteRatio": 0.7907742857933044,
+             "votePercentage": {
+              "simpleText": "79%"
+             },
+             "signinEndpoint": {
+              "commandMetadata": {
+               "webCommandMetadata": {
+                "url": "https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den&hl=en",
+                "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                "rootVe": 83769
+               }
+              },
+              "signInEndpoint": {
+               "nextEndpoint": {}
+              }
+             }
+            },
+            {
+             "text": {
+              "runs": [
+               {
+                "text": "IG"
+               }
+              ]
+             },
+             "selected": false,
+             "voteRatio": 0.20922569930553436,
+             "votePercentage": {
+              "simpleText": "21%"
+             },
+             "signinEndpoint": {
+              "commandMetadata": {
+               "webCommandMetadata": {
+                "url": "https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den&hl=en",
+                "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                "rootVe": 83769
+               }
+              },
+              "signInEndpoint": {
+               "nextEndpoint": {}
+              }
+             }
+            }
+           ],
+           "liveChatPollId": "ChwKGkNOWGJ1NTJFd1pjREZZNUNUQWdkeG9nUjBn",
+           "header": {
+            "pollHeaderRenderer": {
+             "pollQuestion": {
+              "runs": [
+               {
+                "text": "IG VS SRG"
+               }
+              ]
+             },
+             "thumbnail": {
+              "thumbnails": [
+               {
+                "url": "https://yt4.ggpht.com/ytc/AIdro_m_dwCZ4ukN9Jmlx2SyH1QfCrOXpli0ESFuzHbDmd3rgMw=s32-c-k-c0x00ffffff-no-rj",
+                "width": 32,
+                "height": 32
+               },
+               {
+                "url": "https://yt4.ggpht.com/ytc/AIdro_m_dwCZ4ukN9Jmlx2SyH1QfCrOXpli0ESFuzHbDmd3rgMw=s64-c-k-c0x00ffffff-no-rj",
+                "width": 64,
+                "height": 64
+               }
+              ]
+             },
+             "metadataText": {
+              "runs": [
+               {
+                "text": "@HilmanAufa"
+               },
+               {
+                "text": " • "
+               },
+               {
+                "text": "3h ago"
+               },
+               {
+                "text": " • "
+               },
+               {
+                "text": "607 votes"
+               }
+              ]
+             },
+             "liveChatPollType": "LIVE_CHAT_POLL_TYPE_CREATOR",
+             "contextMenuButton": {
+              "buttonRenderer": {
+               "icon": {
+                "iconType": "MORE_VERT"
+               },
+               "accessibility": {
+                "label": "Chat actions"
+               },
+               "accessibilityData": {
+                "accessibilityData": {
+                 "label": "Chat actions"
+                }
+               },
+               "targetId": "live-chat-action-panel-poll-context-menu",
+               "command": {
+                "commandMetadata": {
+                 "webCommandMetadata": {
+                  "ignoreNavigation": true
+                 }
+                },
+                "liveChatItemContextMenuEndpoint": {
+                 "params": "Q2g0S0hBb2FRMDVZWW5VMU1rVjNXbU5FUmxrMVExUkJaMlI0YjJkU01HY2FLU29uQ2hoVlF6VnNkbFJIZVZwRWRqTmxWMVkyWnpKR2JubFRZVkVTQzE5cllVVllYMEV6Wldrd0lBRW9CRElhQ2hoVlF6VnNkbFJIZVZwRWRqTmxWMVkyWnpKR2JubFRZVkU0QTBnQVVCVSUzRA=="
+                }
+               }
+              }
+             }
+            }
+           }
+          }
+         }
+        }
+       }
+      ]
+     }
+    },
+    {
+     "replayChatItemAction": {
+      "videoOffsetTimeMsec": "3188000",
+      "actions": [
+       {
+        "clickTrackingParams": "CAEQl98BIhMI9-yhtLPBlwMVT0APAh0gLQUnygEEGLrMtQ==",
+        "showLiveChatActionPanelAction": {
+         "panelToShow": {
+          "liveChatActionPanelRenderer": {
+           "contents": {
+            "pollRenderer": {
+             "choices": [
+              {
+               "text": {
+                "runs": [
+                 {
+                  "text": "SRG "
+                 }
+                ]
+               },
+               "selected": false,
+               "signinEndpoint": {
+                "clickTrackingParams": "CDYQiK0HIhMI9-yhtLPBlwMVT0APAh0gLQUnygEEGLrMtQ==",
+                "commandMetadata": {
+                 "webCommandMetadata": {
+                  "url": "https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den&hl=en",
+                  "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                  "rootVe": 83769
+                 }
+                },
+                "signInEndpoint": {
+                 "nextEndpoint": {
+                  "clickTrackingParams": "CDYQiK0HIhMI9-yhtLPBlwMVT0APAh0gLQUnygEEGLrMtQ=="
+                 }
+                }
+               }
+              },
+              {
+               "text": {
+                "runs": [
+                 {
+                  "text": "IG"
+                 }
+                ]
+               },
+               "selected": false,
+               "signinEndpoint": {
+                "clickTrackingParams": "CDYQiK0HIhMI9-yhtLPBlwMVT0APAh0gLQUnygEEGLrMtQ==",
+                "commandMetadata": {
+                 "webCommandMetadata": {
+                  "url": "https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den&hl=en",
+                  "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                  "rootVe": 83769
+                 }
+                },
+                "signInEndpoint": {
+                 "nextEndpoint": {
+                  "clickTrackingParams": "CDYQiK0HIhMI9-yhtLPBlwMVT0APAh0gLQUnygEEGLrMtQ=="
+                 }
+                }
+               }
+              }
+             ],
+             "trackingParams": "CDYQiK0HIhMI9-yhtLPBlwMVT0APAh0gLQUn",
+             "liveChatPollId": "ChwKGkNOWGJ1NTJFd1pjREZZNUNUQWdkeG9nUjBn",
+             "header": {
+              "pollHeaderRenderer": {
+               "pollQuestion": {
+                "runs": [
+                 {
+                  "text": "IG VS SRG"
+                 }
+                ]
+               },
+               "thumbnail": {
+                "thumbnails": [
+                 {
+                  "url": "https://yt4.ggpht.com/ytc/AIdro_m_dwCZ4ukN9Jmlx2SyH1QfCrOXpli0ESFuzHbDmd3rgMw=s32-c-k-c0x00ffffff-no-rj",
+                  "width": 32,
+                  "height": 32
+                 },
+                 {
+                  "url": "https://yt4.ggpht.com/ytc/AIdro_m_dwCZ4ukN9Jmlx2SyH1QfCrOXpli0ESFuzHbDmd3rgMw=s64-c-k-c0x00ffffff-no-rj",
+                  "width": 64,
+                  "height": 64
+                 }
+                ]
+               },
+               "metadataText": {
+                "runs": [
+                 {
+                  "text": "@HilmanAufa"
+                 },
+                 {
+                  "text": " • "
+                 },
+                 {
+                  "text": "3h ago"
+                 },
+                 {
+                  "text": " • "
+                 },
+                 {
+                  "text": "606 votes"
+                 }
+                ]
+               },
+               "liveChatPollType": "LIVE_CHAT_POLL_TYPE_CREATOR",
+               "contextMenuButton": {
+                "buttonRenderer": {
+                 "icon": {
+                  "iconType": "MORE_VERT"
+                 },
+                 "accessibility": {
+                  "label": "Chat actions"
+                 },
+                 "trackingParams": "CDcQ8FsiEwj37KG0s8GXAxVPQA8CHSAtBSc=",
+                 "accessibilityData": {
+                  "accessibilityData": {
+                   "label": "Chat actions"
+                  }
+                 },
+                 "targetId": "live-chat-action-panel-poll-context-menu",
+                 "command": {
+                  "clickTrackingParams": "CDcQ8FsiEwj37KG0s8GXAxVPQA8CHSAtBSfKAQQYusy1",
+                  "commandMetadata": {
+                   "webCommandMetadata": {
+                    "ignoreNavigation": true
+                   }
+                  },
+                  "liveChatItemContextMenuEndpoint": {
+                   "params": "Q2g0S0hBb2FRMDVZWW5VMU1rVjNXbU5FUmxrMVExUkJaMlI0YjJkU01HY2FLU29uQ2hoVlF6VnNkbFJIZVZwRWRqTmxWMVkyWnpKR2JubFRZVkVTQzE5cllVVllYMEV6Wldrd0lBRW9CRElhQ2hoVlF6VnNkbFJIZVZwRWRqTmxWMVkyWnpKR2JubFRZVkU0QTBnQVVCVSUzRA=="
+                  }
+                 }
+                }
+               }
+              }
+             }
+            }
+           },
+           "id": "ChwKGkNOWGJ1NTJFd1pjREZZNUNUQWdkeG9nUjBn",
+           "targetId": "live-chat-action-panel"
+          }
+         }
+        }
+       }
+      ]
+     }
+    }
+   ],
+   "continuations": [
+    {
+     "liveChatReplayContinuationData": {
+      "continuation": "REA2-REPLAY-TOKEN-PLACEHOLDER"
+     }
+    }
+   ]
+  }
+ }
+}
