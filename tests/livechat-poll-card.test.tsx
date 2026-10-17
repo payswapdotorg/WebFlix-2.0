@@ -204,7 +204,7 @@ beforeEach(() => {
 afterEach(() => {
   if (root) {
     act(() => {
-      root.unmount();
+      root!.unmount();
     });
   }
   root = null;

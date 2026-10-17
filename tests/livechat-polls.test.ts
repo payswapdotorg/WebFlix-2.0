@@ -24,7 +24,6 @@ import {
   mapChatAction,
   mapPollRenderer,
   parseLiveChatFrame,
-  type LiveChatMessageDTO,
 } from "@/lib/youtube/livechat";
 
 const liveFrame = await Bun.file("tests/fixtures/yt/livechat_poll_frame.json").json();
@@ -51,7 +50,7 @@ describe("REA-2 G20 — the poll family on the REAL live capture", () => {
   });
 
   test("the panel form maps with NO tallies (the honest pre-tally state)", () => {
-    const panel = frame.messages[0] as Extract<LiveChatMessageDTO, { kind: "poll" }>;
+    const panel = frame.messages[0];
     expect(panel.poll!.question).toBe("IG VS SRG");
     expect(panel.poll!.metaText).toBe("@HilmanAufa • 3h ago • 606 votes");
     expect(panel.poll!.authorText).toBe("@HilmanAufa");
@@ -67,7 +66,7 @@ describe("REA-2 G20 — the poll family on the REAL live capture", () => {
   });
 
   test("the state updates map the tallies byte-exact (79% / 21%)", () => {
-    const upd = frame.messages[1] as Extract<LiveChatMessageDTO, { kind: "poll" }>;
+    const upd = frame.messages[1];
     const [srg, ig] = upd.poll!.choices;
     expect(srg.ratio).toBeCloseTo(0.7904, 4);
     expect(srg.percentText).toBe("79%");
@@ -80,7 +79,7 @@ describe("REA-2 G20 — the poll family on the REAL live capture", () => {
   });
 
   test("consecutive updates stay same-id (the refresh key for the panel)", () => {
-    const second = frame.messages[2] as Extract<LiveChatMessageDTO, { kind: "poll" }>;
+    const second = frame.messages[2];
     expect(second.id).toBe(POLL_ID);
     expect(second.poll!.choices[0].percentText).toBe("79%");
   });
