@@ -156,6 +156,23 @@ export type ShortDTO = {
    * viewsText carries the concurrent viewers ("1.2K watching now").
    */
   isLive?: boolean;
+  /**
+   * P23-C (G5, 2026-10-17) — the sound disc data. Measured live (see
+   * evidence/wfx2p23c/): the reel sequence's entries[0..k] carry
+   * `unserializedPrefetchData.reelItemWatchResponse`, whose actionBar ships
+   * the pivot disc (soundAttributionTitle + the disc thumbnail) and whose
+   * engagementPanels ship the audio-pivot browse continuation (the sound
+   * grid's identity). Bare entries carry NEITHER — the disc hides (honest
+   * absence, never a dead link). The per-short `next{}` hydration does NOT
+   * carry sound metadata (measured — no sound attribution in the next
+   * payload); the sound rides the sequence payload only.
+   */
+  /** The audio-pivot browse continuation token — /sound/<key> read key (absent = no disc). */
+  soundId?: string;
+  /** "Original Sound" or the track title (the pivot's soundAttributionTitle). */
+  soundTitle?: string;
+  /** The disc artwork (the pivot thumbnail's largest source). */
+  soundImageUrl?: string | null;
 };
 
 export type ShortCommentDTO = {
@@ -352,6 +369,86 @@ export function extractShortsFromSearch(
 // ---------------------------------------------------------------------------
 
 /**
+ * P23-C (G5, 2026-10-17) — the sound-disc data off one reel sequence entry.
+ *
+ * Measured shape (evidence/wfx2p23c/reel_sequence_web_sound.json — live
+ * youtube.com, WEB client): entry.command.reelWatchEndpoint.
+ * unserializedPrefetchData.reelItemWatchResponse →
+ *  - overlay.reelPlayerOverlayRenderer.playerOverlay.
+ *    reelPlayerOverlayViewModel.actionBar.reelActionBarViewModel.
+ *    buttonViewModels[k].pivotButtonViewModel:
+ *      {thumbnail.sources[48/88/176], soundAttributionTitle.content,
+ *       contentDescription: "See more videos using this sound",
+ *       waveformAnimationStyle, backgroundAnimationStyle}
+ *  - engagementPanels[].engagementPanelSectionListRenderer with identifier
+ *    {surface: ENGAGEMENT_PANEL_SURFACE_SHORTS, tag:
+ *    "engagement-panel-shorts-audio-pivot"} → content.richGridRenderer.
+ *    contents[0].continuationItemRenderer.continuationEndpoint.
+ *    continuationCommand.token  ← the audio-pivot BROWSE CONTINUATION
+ *    (the sound grid's identity — POST /youtubei/v1/browse {continuation}).
+ *
+ * Bare entries (the majority) carry no unserializedPrefetchData → null —
+ * the disc hides (honest absence, never a dead link). Both the title AND
+ * the grid token must be present; either alone is not a linkable sound.
+ */
+export function extractSoundFromReelEntry(
+  entry: unknown,
+): { soundId: string; soundTitle: string; soundImageUrl: string | null } | null {
+  const rwe = asObj(asObj(asObj(entry)?.command)?.reelWatchEndpoint);
+  const riw = asObj(
+    asObj(rwe?.unserializedPrefetchData)?.reelItemWatchResponse,
+  );
+  if (!riw) return null;
+
+  const overlayVm = asObj(
+    asObj(
+      asObj(asObj(riw.overlay)?.reelPlayerOverlayRenderer)?.playerOverlay,
+    )?.reelPlayerOverlayViewModel,
+  );
+  const actionBar = asObj(
+    asObj(overlayVm?.actionBar)?.reelActionBarViewModel,
+  );
+  const pivotRaw = arr(actionBar?.buttonViewModels).find((b) =>
+    asObj(asObj(b)?.pivotButtonViewModel),
+  );
+  const pivot = asObj(asObj(pivotRaw)?.pivotButtonViewModel);
+  if (!pivot) return null;
+
+  // the sound title ("Original Sound" / the track name)
+  const soundTitle = String(asObj(pivot.soundAttributionTitle)?.content ?? "");
+
+  // the disc artwork — walk to the LAST source (the largest; 3 sizes measured)
+  let soundImageUrl: string | null = null;
+  for (const s of arr(asObj(pivot.thumbnail)?.sources)) {
+    const u = asObj(s)?.url;
+    if (typeof u === "string" && u) soundImageUrl = u;
+  }
+
+  // the audio-pivot browse continuation token (the sound page's read key)
+  let soundId: string | null = null;
+  for (const epRaw of arr(riw.engagementPanels)) {
+    const panel = asObj(asObj(epRaw)?.engagementPanelSectionListRenderer);
+    const tag = String(asObj(panel?.identifier)?.tag ?? "");
+    if (tag !== "engagement-panel-shorts-audio-pivot") continue;
+    const grid = asObj(asObj(panel?.content)?.richGridRenderer);
+    for (const c of arr(grid?.contents)) {
+      const cir = asObj(asObj(c)?.continuationItemRenderer);
+      const token = asObj(
+        asObj(cir?.continuationEndpoint)?.continuationCommand,
+      )?.token;
+      if (typeof token === "string" && token) {
+        soundId = token;
+        break;
+      }
+    }
+    if (soundId) break;
+  }
+
+  if (!soundId || !soundTitle) return null;
+  return { soundId, soundTitle, soundImageUrl };
+}
+
+/**
  * Map a reel_watch_sequence response (verified real shape):
  * {entries: [{command: {reelWatchEndpoint: {videoId, params,
  *   overlay: {reelPlayerOverlayRenderer: {style}}}}}],
@@ -370,11 +467,18 @@ export function mapReelSequence(
     const ep = asObj(asObj(asObj(e)?.command)?.reelWatchEndpoint);
     const videoId = typeof ep?.videoId === "string" ? ep.videoId : "";
     if (!videoId) continue;
-    // live overlay style → the mobile feed's own live-shorts flag
-    const overlayStyle = String(
-      asObj(asObj(asObj(ep?.overlay)?.reelPlayerOverlayRenderer)?.style) ?? "",
-    );
+    // live overlay style → the mobile feed's own live-shorts flag.
+    // P23-C bug fix (2026-10-17): `.style` is a STRING — the old
+    // `String(asObj(…?.style) ?? "")` wrapped it in asObj (null for
+    // strings) so the sequence-level LIVE flag never fired; the read is
+    // now the direct string (the UX-PARITY-1 contract's documented intent
+    // — no existing fixture pinned the broken form; verified this run).
+    const overlayRenderer = asObj(asObj(ep?.overlay)?.reelPlayerOverlayRenderer);
+    const overlayStyle = typeof overlayRenderer?.style === "string" ? overlayRenderer.style : "";
     const isLive = overlayStyle === "REEL_PLAYER_OVERLAY_STYLE_LIVE";
+    // P23-C (G5): the sound-disc data when this entry carries it (else the
+    // disc hides — honest absence, never a dead link)
+    const sound = extractSoundFromReelEntry(e);
     // keep sequence context on the DTO for potential deep-links (params)
     items.push({
       id: videoId,
@@ -385,6 +489,7 @@ export function mapReelSequence(
       commentsCountText: null,
       thumbnailUrl: null,
       isLive,
+      ...(sound ?? {}),
     });
   }
   const token = asObj(

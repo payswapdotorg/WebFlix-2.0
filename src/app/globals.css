@@ -186,3 +186,31 @@
     animation: none;
   }
 }
+
+/* P23-C (G5) — the shorts sound disc: youtube.com's rotating disc. The disc
+   spins continuously while its short plays; the rotation pauses (animation-
+   play-state) when the slide is not the active one. Duration note (honest):
+   the exact per-rotation duration could not be measured from this sandbox's
+   egress (the shorts player never boots there — evidence/wfx2p23c/), so the
+   4s/linear infinite turn is the audit-description implementation of
+   youtube.com's known disc behavior, reduced-motion aware per the house law. */
+@keyframes wfx-sound-disc-spin {
+  from {
+    transform: rotate(0turn);
+  }
+  to {
+    transform: rotate(1turn);
+  }
+}
+.wfx-sound-disc {
+  animation: wfx-sound-disc-spin 4s linear infinite;
+  will-change: transform;
+}
+.wfx-sound-disc[data-paused="true"] {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wfx-sound-disc {
+    animation: none;
+  }
+}
