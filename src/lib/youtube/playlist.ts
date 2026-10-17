@@ -10,6 +10,7 @@ import { innertubeBrowse } from "./innertube";
 import { cached, TTL } from "./cache";
 import { getPlaylistItems, isSpecialPlaylistId, type PlaylistItemsPage } from "./playlists";
 import { mapVideos, walkTree, findFirst } from "./mappers";
+import { mixSeedVideoId } from "./watch-queue";
 import type { PlaylistPageDTO } from "@/lib/types";
 
 const PLAYLIST_ID_RE = /^(?:PL|RD|OL|UU|FL|LL)[A-Za-z0-9_-]{4,}$/;
@@ -65,6 +66,13 @@ function mapPlaylistHeader(response: unknown): {
  * states) instead of the public VL read, which rejects them. The mapped
  * PlaylistPageDTO carries the state flags so the page can degrade honestly
  * (never a login ask — the guest note explains the single-tenant session).
+ *
+ * REA-1 G19: a MIX list id (RD…) answers youtube.com's OWN honest verdict —
+ * "This playlist type is unviewable." (measured live 2026-10-17 at both the
+ * /playlist?list=RD… page and the browse VL<RD…> alert) — mapped onto the
+ * `mixUnviewable` flag: the page renders youtube.com's wording + the
+ * start-radio affordance (the watch route's queue) when the seed video is
+ * derivable from the id (RD<videoId> / RDAMVM<videoId>).
  */
 export async function getPublicPlaylist(
   playlistId: string,
@@ -87,6 +95,25 @@ export async function getPublicPlaylist(
       ? innertubeBrowse({ browseId, continuation: cursor })
       : innertubeBrowse({ browseId })
   );
+  // REA-1 G19 — the mix verdict: youtube.com will not render an RD… list as
+  // a playlist page ("This playlist type is unviewable." — the measured
+  // alertRenderer); the honest DTO says so (never a fabricated grid).
+  if (isMixUnviewableAlert(response)) {
+    return {
+      playlist: {
+        id,
+        title: "Mix",
+        channelName: "",
+        videoCountText: null,
+        viewsText: null,
+        description: null,
+      },
+      videos: [],
+      nextCursor: null,
+      mixUnviewable: true,
+      mixSeedVideoId: mixSeedVideoId(id),
+    };
+  }
   const header = mapPlaylistHeader(response);
   if (!header.title) return null;
   const videos = mapVideos(response, { dedupe: true, limit: 48 });
@@ -125,4 +152,15 @@ function specialListToPage(id: string, page: PlaylistItemsPage): PlaylistPageDTO
     loginRequired: page.loginRequired,
     unavailable: page.unavailable,
   };
+}
+
+/** REA-1 G19 — youtube.com's measured mix verdict on a browse VL<RD…> read. */
+function isMixUnviewableAlert(response: unknown): boolean {
+  for (const alert of walkTree(response, "alertRenderer")) {
+    const text =
+      alert?.text?.simpleText ??
+      (Array.isArray(alert?.text?.runs) ? alert.text.runs.map((r: any) => r?.text ?? "").join("") : "");
+    if (/this playlist type is unviewable/i.test(String(text))) return true;
+  }
+  return false;
 }

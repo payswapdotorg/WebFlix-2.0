@@ -12,7 +12,7 @@ import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { compactCount, exactCount, fullDate, formatDuration, humanizeWatchSec, relativeTime } from "@/lib/watch/format";
-import { parseChapters, parseHashtags, tokenizeDescriptionLine } from "@/lib/watch/chapters";
+import { parseChapters, parseHashtags, tokenizeDescriptionLine, hashtagHref } from "@/lib/watch/chapters";
 
 export function DescriptionBox({
   videoId,
@@ -77,8 +77,9 @@ export function DescriptionBox({
         {hashtags.slice(0, expanded ? hashtags.length : 3).map((tag) => (
           <Link
             key={tag}
-            href={`/search?q=${encodeURIComponent(tag)}`}
+            href={hashtagHref(tag)}
             onClick={(e) => e.stopPropagation()}
+            data-testid="description-hashtag"
             className={cn(
               "text-xs font-medium",
               expanded
@@ -122,7 +123,7 @@ export function DescriptionBox({
                         return (
                           <Link
                             key={j}
-                            href={`/search?q=${encodeURIComponent(tok.tag)}`}
+                            href={tok.href}
                             onClick={(e) => e.stopPropagation()}
                             className="font-medium text-primary/90 hover:underline"
                           >

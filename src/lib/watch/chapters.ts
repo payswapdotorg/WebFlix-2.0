@@ -85,6 +85,15 @@ export type DescToken =
   | { kind: "hashtag"; tag: string; href: string }
   | { kind: "timestamp"; label: string; sec: number };
 
+/**
+ * REA-1 G17 — the hashtag destination: youtube.com's DEDICATED /hashtag/<tag>
+ * browse surface (measured live 2026-10-17 — the watch page's own hashtag
+ * links resolve there), replacing the old hashtag-to-search-query routing.
+ */
+export function hashtagHref(tag: string): string {
+  return `/hashtag/${encodeURIComponent(tag.replace(/^#/, ""))}`;
+}
+
 /** Split a description line into text / hashtag / timestamp tokens. */
 export function tokenizeDescriptionLine(line: string): DescToken[] {
   const tokens: DescToken[] = [];
@@ -94,7 +103,7 @@ export function tokenizeDescriptionLine(line: string): DescToken[] {
   while ((m = re.exec(line))) {
     if (m.index > last) tokens.push({ kind: "text", text: line.slice(last, m.index) });
     if (m[1]) {
-      tokens.push({ kind: "hashtag", tag: m[1], href: `/search?q=${encodeURIComponent(m[1])}` });
+      tokens.push({ kind: "hashtag", tag: m[1], href: hashtagHref(m[1]) });
     } else if (m[2]) {
       const sec = parseClockTime(m[2]);
       tokens.push({ kind: "timestamp", label: m[2], sec: sec ?? 0 });

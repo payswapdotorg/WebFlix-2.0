@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import {
   ListVideo,
   Play,
@@ -14,12 +14,14 @@ import {
   ThumbsUp,
   Shuffle,
   UserRound,
+  AudioLines,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useApi } from "@/hooks/use-api";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { PersonalSurfaceGate } from "@/components/auth/personal-surface-gate";
+import { makeShuffleSeed, seededShuffle } from "@/lib/playlist/shuffle";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -118,7 +120,35 @@ function SpecialListEmptyNote({ list }: { list: "WL" | "LL" }) {
   );
 }
 
+/**
+ * REA-1 G19 — youtube.com's OWN verdict for a mix list id, measured live
+ * 2026-10-17: /playlist?list=RD… renders exactly "This playlist type is
+ * unviewable." Mixes are watch-page constructs — the start-radio affordance
+ * (the watch route's queue, youtube.com's /watch?v=<seed>&list=RD…&start_radio=1
+ * cue) opens the mix where the seed video is derivable from the id itself.
+ */
+function MixUnviewableNote({ listId, seedVideoId }: { listId: string; seedVideoId: string | null }) {
+  return (
+    <div className="py-16 text-center" role="status" data-testid="playlist-mix-unviewable">
+      <p className="text-lg font-medium">This playlist type is unviewable.</p>
+      <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+        Mixes play in the watch page&apos;s queue, not as a playlist page — that&apos;s
+        YouTube&apos;s own behavior for this list.
+      </p>
+      {seedVideoId && (
+        <Button asChild className="mt-4 gap-2 rounded-full" data-testid="playlist-mix-start-radio">
+          <Link href={`/watch/${seedVideoId}?list=${encodeURIComponent(listId)}&start_radio=1`}>
+            <AudioLines className="size-4" aria-hidden />
+            Start radio
+          </Link>
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function PlaylistContent({ id, special }: { id: string; special: boolean }) {
+  const router = useRouter();
   const { data, loading, error, reload } = useApi<PlaylistPageDTO>(
     id ? `/api/playlist/${encodeURIComponent(id)}` : null
   );
@@ -222,11 +252,29 @@ function PlaylistContent({ id, special }: { id: string; special: boolean }) {
   const servedEmpty =
     specialList !== null && data && !unavailable && !noSession && listedVideos.length === 0;
   const hasMore = Boolean(moreCursor ?? data?.nextCursor);
-  const playAllHref = listedVideos.length > 0 ? `/watch/${listedVideos[0].id}` : null;
-  const shuffleHref =
-    listedVideos.length > 1
-      ? `/watch/${listedVideos[Math.floor(Math.random() * listedVideos.length)].id}`
+  const mixUnviewable = data?.mixUnviewable === true;
+
+  // REA-1 G16 — youtube.com's Play all (measured): /watch?v=<first>&list=<id>
+  // — the watch page's queue panel follows the list. Special lists ride the
+  // same context (their queue is the session read).
+  const playAllHref =
+    !mixUnviewable && listedVideos.length > 0
+      ? `/watch/${listedVideos[0].id}?list=${encodeURIComponent(id)}`
       : null;
+
+  // REA-1 G16 — the deterministic Shuffle (the work order's contract):
+  // a fresh seed per click; the seeded Fisher–Yates order over the
+  // ALREADY-FETCHED list (local playback-order logic, no YouTube write);
+  // navigation starts at the shuffled head carrying the seed in the URL so
+  // the watch route rebuilds the exact same queue (shareable/reloadable).
+  function shufflePlay() {
+    if (listedVideos.length === 0) return;
+    const seed = makeShuffleSeed();
+    const shuffled = seededShuffle(listedVideos, seed);
+    const first = shuffled[0];
+    if (!first) return;
+    router.push(`/watch/${first.id}?list=${encodeURIComponent(id)}&shuffle=${seed}`);
+  }
 
   return (
     <div className="pb-10">
@@ -285,10 +333,20 @@ function PlaylistContent({ id, special }: { id: string; special: boolean }) {
                     <Clock className="size-4" aria-hidden />
                   ) : specialList === "LL" ? (
                     <ThumbsUp className="size-4" aria-hidden />
+                  ) : mixUnviewable ? (
+                    <AudioLines className="size-4" aria-hidden />
                   ) : (
                     <ListVideo className="size-4" aria-hidden />
                   )}
-                  {data.playlist.id.startsWith("RD") ? "Mix" : "Playlist"}
+                  {specialList === "WL"
+                    ? "Watch later"
+                    : specialList === "LL"
+                      ? "Liked videos"
+                      : mixUnviewable
+                        ? "Mix"
+                        : data.playlist.id.startsWith("RD")
+                          ? "Mix"
+                          : "Playlist"}
                 </p>
                 <h1 className="mt-1 text-xl font-bold" data-testid="playlist-title">
                   {specialList === "WL"
@@ -318,18 +376,21 @@ function PlaylistContent({ id, special }: { id: string; special: boolean }) {
                 <div className="mt-4 flex items-center gap-2">
                   {playAllHref ? (
                     <Button asChild className="gap-2 rounded-full">
-                      <Link href={playAllHref}>
+                      <Link href={playAllHref} data-testid="playlist-play-all">
                         <Play className="size-4" aria-hidden />
                         {listedVideos.length > 1 ? "Play all" : "Play"}
                       </Link>
                     </Button>
                   ) : null}
-                  {shuffleHref ? (
-                    <Button asChild variant="secondary" className="gap-2 rounded-full">
-                      <Link href={shuffleHref}>
-                        <Shuffle className="size-4" aria-hidden />
-                        Shuffle
-                      </Link>
+                  {!mixUnviewable && listedVideos.length > 1 ? (
+                    <Button
+                      variant="secondary"
+                      className="gap-2 rounded-full"
+                      onClick={shufflePlay}
+                      data-testid="playlist-shuffle"
+                    >
+                      <Shuffle className="size-4" aria-hidden />
+                      Shuffle
                     </Button>
                   ) : null}
                 </div>
@@ -339,6 +400,7 @@ function PlaylistContent({ id, special }: { id: string; special: boolean }) {
 
           {/* -------- the row list (youtube.com's right column) -------------- */}
           <div className="min-w-0">
+            {mixUnviewable && <MixUnviewableNote listId={id} seedVideoId={data.mixSeedVideoId ?? null} />}
             {specialList && unavailable && <SpecialListUnavailableNote list={specialList} />}
             {specialList && noSession && <SpecialListNoSessionNote list={specialList} />}
             {servedEmpty && specialList && <SpecialListEmptyNote list={specialList} />}

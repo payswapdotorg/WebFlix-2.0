@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useApi } from "@/hooks/use-api";
 import { useWebFlixSession } from "@/hooks/use-webflix-session";
 import { ReportDialog } from "@/components/watch/report-dialog";
+import { hashtagHref } from "@/lib/watch/chapters";
 import { ShortsPlayerSlot } from "./shorts-player-slot";
 import { ShortsEngagementRail } from "./shorts-engagement-rail";
 import { ShortsCommentsSheet } from "./shorts-comments-sheet";
@@ -399,7 +400,7 @@ export function ShortsFeed() {
 
                       {display?.title ? (
                         <p className="mt-2 line-clamp-2 text-sm font-medium text-white/90">
-                          {display.title}
+                          <ShortsTitle title={display.title} />
                         </p>
                       ) : failedMeta ? (
                         <p className="mt-2 text-sm text-white/60">
@@ -539,5 +540,37 @@ export function ShortsFeed() {
         />
       )}
     </div>
+  );
+}
+
+/**
+ * REA-1 G17 — the shorts title with hashtag tokens routed to youtube.com's
+ * DEDICATED /hashtag/<tag> browse surface (measured live 2026-10-17 —
+ * shorts titles carry #token links that resolve there). The same token
+ * family as the watch description (parseHashtags' regex); plain text stays
+ * plain. Minimal + additive: only the title render changes.
+ */
+const HASHTAG_TOKEN_RE = /(#[\p{L}\p{N}_-]+)/gu;
+
+function ShortsTitle({ title }: { title: string }) {
+  const parts = title.split(HASHTAG_TOKEN_RE);
+  if (parts.length <= 1) return <>{title}</>;
+  return (
+    <>
+      {parts.map((part, i) =>
+        i % 2 === 1 && part.startsWith("#") ? (
+          <Link
+            key={`${part}-${i}`}
+            href={hashtagHref(part)}
+            data-testid="shorts-hashtag"
+            className="font-semibold text-white hover:underline"
+          >
+            {part}
+          </Link>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
   );
 }
