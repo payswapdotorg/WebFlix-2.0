@@ -40,6 +40,7 @@ model User {
   videoSignals   VideoSignal[]
   liveChat       LiveChatMessage[]
   ownedChannels  Channel[]    @relation("ChannelOwner")
+  clips          Clip[]
 }
 
 model Channel {
@@ -346,4 +347,28 @@ model VideoSignal {
   createdAt DateTime @default(now())
 
   @@unique([videoId, userId])
+}
+
+// P23-A — WebFlix-local clips (the Clip tab's create). The clip's [start,
+// end) window rides the source video id (a YouTube id on the watch surface);
+// the row records the creator for the clip page's attribution panel
+// (youtube.com's clipAttributionRenderer: clip title, clip author, created).
+// NOTE (honest scope, measured 2026-10-17): youtube.com's own web client has
+// REMOVED the clip-create seam (the web_watch_remove_clip_create_panel flag;
+// no /youtubei/v1/clip endpoint in the current web bundle), so a WebFlix clip
+// is a WebFlix-local share window — it never claims a YouTube-side clip
+// object. Remote YouTube clip ids (Ug… postIds) resolve through the read
+// family (src/lib/youtube/clips.ts), never this table.
+model Clip {
+  id        String   @id @default(cuid())
+  // the SOURCE video id as the watch surface knows it (a YouTube video id)
+  videoId   String
+  title     String
+  startSec  Int
+  endSec    Int
+  creatorId String
+  creator   User     @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([videoId])
 }

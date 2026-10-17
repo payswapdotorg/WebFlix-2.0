@@ -180,6 +180,11 @@ export function NativeFallbackPlayer({
 
   // the SAME imperative-handle contract as YoutubePlayer — the miniplayer,
   // keyboard shortcuts and queue engine keep working on the native player
+  // P23-A: getStats joins the contract — the native <video> element CAN
+  // honestly supply the real signals (time, duration, volume, muted, the
+  // buffered ranges → loadedFraction), so the Stats-for-nerds overlay
+  // stays live on the fallback lane too. Fields the element lacks (the
+  // embed's videoData/quality ladder) degrade to null → the overlay's "–".
   useImperativeHandle(
     handleRef,
     () => ({
@@ -200,6 +205,38 @@ export function NativeFallbackPlayer({
         videoRef.current && Number.isFinite(videoRef.current.duration)
           ? videoRef.current.duration
           : 0,
+      getStats: () => {
+        const v = videoRef.current;
+        if (!v) return null;
+        let loadedFraction: number | null = null;
+        try {
+          if (v.buffered.length > 0 && Number.isFinite(v.duration) && v.duration > 0) {
+            loadedFraction = Math.min(1, v.buffered.end(v.buffered.length - 1) / v.duration);
+          }
+        } catch {
+          loadedFraction = null;
+        }
+        return {
+          videoId: null,
+          title: null,
+          author: null,
+          state: v.paused
+            ? v.ended
+              ? "ended"
+              : "paused"
+            : v.readyState < 3
+              ? "buffering"
+              : "playing",
+          currentTimeSec: Number.isFinite(v.currentTime) ? v.currentTime : 0,
+          durationSec: Number.isFinite(v.duration) ? v.duration : 0,
+          loadedFraction,
+          playbackQuality: null,
+          availableQualityLevels: null,
+          playbackRate: Number.isFinite(v.playbackRate) ? v.playbackRate : null,
+          volume: Math.round(v.volume * 100),
+          muted: v.muted,
+        };
+      },
     }),
     []
   );
