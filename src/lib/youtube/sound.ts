@@ -26,6 +26,9 @@
 import { innertubeBrowse } from "./innertube";
 import { cached, TTL } from "./cache";
 import { mapShortsLockup, type ShortDTO } from "./shorts";
+// the client-safe URL codec (pure functions — the rail/page import it
+// directly; the server re-export below keeps one canonical import path)
+export { soundTokenToKeyLink, normalizeSoundKeyParam } from "./sound-key";
 
 export type SoundPageDTO = {
   /** The sound's title (pageHeaderViewModel.title — measured). */
@@ -43,22 +46,15 @@ export type SoundPageDTO = {
 };
 
 /**
- * Normalize a /sound/<key> route param back to the browse token.
+ * The /sound/<key> URL codec lives in sound-key.ts (client-safe pure
+ * functions — the rail + page import it directly; this module re-exports
+ * both above for the server's one canonical import path).
  *
- * The token contains literal '%3D' sequences (protobuf base64), so the link
- * side encodeURIComponent's the RAW token and Next.js decodes route params
- * EXACTLY ONCE — the param arrives as the raw token already. A second decode
- * here would mangle it ("Q%3D%3D" → "Q=="); the identity is the correct,
- * measured behavior. Malformed keys pass through and fail honestly upstream.
+ * NEXT 16 MEASURED (dev-server verified 2026-10-17): PAGE route params
+ * arrive UNDECODED (the token's literal '%3D' rides as '%253D'), while API
+ * ROUTE handler params decode exactly once — normalizeSoundKeyParam
+ * collapses both arrival shapes back to the raw token.
  */
-export function soundKeyToToken(key: string): string {
-  return key;
-}
-
-/** The /sound/<key> link for a sound token (the disc's href). */
-export function soundTokenToKeyLink(token: string): string {
-  return `/sound/${encodeURIComponent(token)}`;
-}
 
 /**
  * Walk one browse continuation response for the reload commands' shorts

@@ -120,4 +120,19 @@ describe("GET /api/sound/[key] — the audio-pivot read (measured shape)", () =>
     // page 2 → the seed is 48 loaded + this page's 15
     expect(data.totalLoaded).toBe(48 + 15);
   });
+
+  test("a link-form key (the NEXT-16 page-param shape) collapses to the raw token", async () => {
+    // page params arrive UNDECODED (measured): the token's literal %3D rides
+    // as %253D — the normalizer decodes it once before the browse read
+    const linkForm = encodeURIComponent(TOKEN);
+    const res = await soundRoute(
+      new Request(`http://localhost/api/sound/${linkForm}`),
+      { params: Promise.resolve({ key: linkForm }) },
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.title).toBe(
+      "Chill Lofi Coffee Vibes | Relaxing Lofi Hip Hop Beats to Study/Work to",
+    );
+  });
 });

@@ -23,13 +23,18 @@ import { Disc3, Loader2 } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+// the client-safe codec (pure functions — never the server innertube chain)
+import { normalizeSoundKeyParam } from "@/lib/youtube/sound-key";
 import type { SoundPageDTO } from "@/lib/youtube/sound";
 
 export function SoundPageView({ soundKey }: { soundKey: string }) {
-  // soundKey arrives as the RAW token (route params decode exactly once);
-  // re-encode for the API fetch — its own route param decodes once again.
+  // NEXT 16 MEASURED: page params arrive UNDECODED — normalizeSoundKeyParam
+  // collapses the link form (…%253D) back to the raw token (…%3D), passing
+  // an already-raw key through; the fetch then encodes the RAW token once
+  // (the API route's own param decodes exactly once — dev-server verified).
+  const rawToken = normalizeSoundKeyParam(soundKey);
   const { data, loading, error } = useApi<SoundPageDTO>(
-    `/api/sound/${encodeURIComponent(soundKey)}`,
+    `/api/sound/${encodeURIComponent(rawToken)}`,
   );
   const [pages, setPages] = useState<SoundPageDTO[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);

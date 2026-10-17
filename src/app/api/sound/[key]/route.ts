@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { rateLimit } from "@/lib/youtube/livechat";
-import { getSoundPage, soundKeyToToken } from "@/lib/youtube/sound";
+import { getSoundPage, normalizeSoundKeyParam } from "@/lib/youtube/sound";
 
 /**
  * WFX2-P23-C (G5) — the sound page read: /api/sound/[key]?page=N
@@ -30,7 +30,9 @@ export async function GET(
   }
 
   const { key } = await params;
-  const token = soundKeyToToken(key);
+  // the route handler's params decode once (measured); the normalizer
+  // passes the raw token through and collapses any link-form stragglers
+  const token = normalizeSoundKeyParam(key);
   // deep-linked later pages: the running total seeds from the page param
   // (48/page — youtube.com's own richGrid page size); the client owns the
   // true count of what it loaded (it passes nothing here on in-app paging).

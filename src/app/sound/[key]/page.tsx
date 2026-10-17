@@ -1,5 +1,5 @@
 import { SoundPageView } from "./view";
-import { getSoundPage, soundKeyToToken } from "@/lib/youtube/sound";
+import { getSoundPage, normalizeSoundKeyParam } from "@/lib/youtube/sound";
 
 /**
  * WFX2-P23-C (G5) — the sound page route: /sound/<key>.
@@ -12,6 +12,9 @@ import { getSoundPage, soundKeyToToken } from "@/lib/youtube/sound";
  * WEB payloads ship no shorter sound id; measured, see
  * evidence/wfx2p23c/DISCOVERY.md).
  *
+ * NEXT 16 MEASURED: page route params arrive UNDECODED — normalizeSoundKeyParam
+ * collapses the link form back to the raw token (dev-server verified).
+ *
  * The resolve here is the same cached read the view's API call rides, so the
  * double read costs one cache hit; a failed read degrades the title honestly.
  */
@@ -21,7 +24,9 @@ export async function generateMetadata({
   params: Promise<{ key: string }>;
 }) {
   const { key } = await params;
-  const page = await getSoundPage(soundKeyToToken(key)).catch(() => null);
+  const page = await getSoundPage(normalizeSoundKeyParam(key)).catch(
+    () => null,
+  );
   if (page?.title) return { title: `${page.title} - WebFlix` };
   return { title: "Sound - WebFlix" };
 }

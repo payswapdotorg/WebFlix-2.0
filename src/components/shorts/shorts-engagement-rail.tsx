@@ -30,7 +30,7 @@ import { toastActionError } from "@/lib/watch/connection-client";
 import { signInHref } from "@/lib/auth/client";
 import type { LikeResultDto, LikeValue } from "@/lib/watch/types";
 import type { ShortDTO } from "@/lib/youtube/shorts";
-import { soundTokenToKeyLink } from "@/lib/youtube/sound";
+import { soundTokenToKeyLink } from "@/lib/youtube/sound-key";
 
 /**
  * P15-SHORTS — YouTube-parity shorts engagement rail.

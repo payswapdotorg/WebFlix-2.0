@@ -20,7 +20,7 @@ import {
 import {
   mapSoundCard,
   mapSoundPageResponse,
-  soundKeyToToken,
+  normalizeSoundKeyParam,
   soundTokenToKeyLink,
 } from "@/lib/youtube/sound";
 
@@ -142,20 +142,31 @@ describe("mapSoundPageResponse — the sound grid (measured shape)", () => {
 });
 
 describe("the /sound/<key> codec (the token carries literal %3D)", () => {
-  test("soundTokenToKeyLink percent-encodes; soundKeyToToken is the identity", () => {
+  test("soundTokenToKeyLink percent-encodes; the raw token passes the normalizer", () => {
     const token = "abc%3D%3Dtail";
     const link = soundTokenToKeyLink(token);
     expect(link).toBe(`/sound/abc%253D%253Dtail`);
-    // the route param decodes exactly once → the raw token back; a second
-    // decode here would mangle it ("Q==" corruption) — identity is correct
-    expect(soundKeyToToken(token)).toBe(token);
-    expect(soundKeyToToken(decodeURIComponent("abc%253D%253Dtail"))).toBe(token);
+    // a RAW token carries no escaped-percent form — it passes through as-is
+    expect(normalizeSoundKeyParam(token)).toBe(token);
+  });
+
+  test("the NEXT-16 forms both resolve to the raw token (measured)", () => {
+    // PAGE params arrive UNDECODED (the link form) — decoded once here
+    expect(normalizeSoundKeyParam("abc%253D%253Dtail")).toBe("abc%3D%3Dtail");
+    // API ROUTE params decode exactly once — the raw token passes through
+    expect(normalizeSoundKeyParam("abc%3D%3Dtail")).toBe("abc%3D%3Dtail");
+    // a broken escape never throws
+    expect(normalizeSoundKeyParam("abc%2")).toBe("abc%2");
   });
 
   test("the real measured token round-trips through the link form", () => {
     const link = soundTokenToKeyLink(TOKEN_1);
     expect(link.startsWith("/sound/")).toBe(true);
-    // what the route would receive after ITS single decode:
-    expect(decodeURIComponent(link.slice("/sound/".length))).toBe(TOKEN_1);
+    // what the page receives (UNDECODED, measured) → the raw token
+    expect(normalizeSoundKeyParam(link.slice("/sound/".length))).toBe(TOKEN_1);
+    // what the API route receives (decoded once) → the raw token
+    expect(
+      normalizeSoundKeyParam(decodeURIComponent(link.slice("/sound/".length))),
+    ).toBe(TOKEN_1);
   });
 });
