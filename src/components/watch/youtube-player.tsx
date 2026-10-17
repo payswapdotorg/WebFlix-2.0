@@ -73,6 +73,37 @@ export interface YoutubePlayerHandle {
   seekTo: (sec: number) => void;
   getCurrentTime: () => number;
   getDuration: () => number;
+  /** P23-A — the REAL IFrame API signals the Stats-for-nerds overlay reads
+   * (getVideoData / getPlaybackQuality / getAvailableQualityLevels /
+   * getVideoLoadedFraction / getPlaybackRate / getVolume / state). Every
+   * call is individually guarded — an embed that lacks a method yields a
+   * null field, never a fabricated number. */
+  getStats: () => YoutubePlayerStats | null;
+}
+
+/** P23-A — the honest stats snapshot (null fields = the embed cannot
+ * supply that signal; the overlay shows "–" for them). */
+export interface YoutubePlayerStats {
+  /** getVideoData().video_id (null when the API didn't serve it) */
+  videoId: string | null;
+  /** getVideoData().title */
+  title: string | null;
+  /** getVideoData().author */
+  author: string | null;
+  state: YoutubePlayerState;
+  currentTimeSec: number;
+  durationSec: number;
+  /** getVideoLoadedFraction() (0..1) — the buffer-health input */
+  loadedFraction: number | null;
+  /** getPlaybackQuality() ("medium" | "hd720" | …) */
+  playbackQuality: string | null;
+  /** getAvailableQualityLevels() */
+  availableQualityLevels: string[] | null;
+  /** getPlaybackRate() */
+  playbackRate: number | null;
+  /** getVolume() (0..100) */
+  volume: number | null;
+  muted: boolean | null;
 }
 
 interface YTPlayerInstance {
@@ -87,6 +118,14 @@ interface YTPlayerInstance {
   getPlayerState(): number;
   loadVideoById(options: { videoId: string; startSeconds?: number }): void;
   destroy(): void;
+  /* P23-A — the stats subset the IFrame API exposes (each individually
+   * optional at runtime; the handle guards every call). */
+  getVideoData?(): { video_id?: string; title?: string; author?: string };
+  getPlaybackQuality?(): string;
+  getAvailableQualityLevels?(): string[];
+  getVideoLoadedFraction?(): number;
+  getPlaybackRate?(): number;
+  getVolume?(): number;
 }
 
 interface YTNamespace {
@@ -644,6 +683,47 @@ export function YoutubePlayer({
       },
       getCurrentTime: () => safeNum(playerRef.current?.getCurrentTime() ?? 0),
       getDuration: () => safeNum(playerRef.current?.getDuration() ?? 0),
+      getStats: () => {
+        const p = playerRef.current;
+        if (!p) return null;
+        // every call guarded: a missing method (old embed builds) or a
+        // thrown cross-origin read degrades that field to null — the
+        // overlay's "–" — never a fabricated value.
+        const tryCall = <T,>(fn: () => T): T | null => {
+          try {
+            return fn();
+          } catch {
+            return null;
+          }
+        };
+        const data = tryCall(() => p.getVideoData?.()) ?? null;
+        const quality = tryCall(() => p.getPlaybackQuality?.()) ?? null;
+        const levels = tryCall(() => p.getAvailableQualityLevels?.()) ?? null;
+        const fraction = tryCall(() => p.getVideoLoadedFraction?.()) ?? null;
+        const rate = tryCall(() => p.getPlaybackRate?.()) ?? null;
+        const volume = tryCall(() => p.getVolume?.()) ?? null;
+        const muted = tryCall(() => p.isMuted()) ?? null;
+        let state: number;
+        try {
+          state = p.getPlayerState();
+        } catch {
+          return null;
+        }
+        return {
+          videoId: data?.video_id ?? null,
+          title: data?.title ?? null,
+          author: data?.author ?? null,
+          state: STATE_NAMES[state] ?? "unstarted",
+          currentTimeSec: safeNum(tryCall(() => p.getCurrentTime()) ?? 0),
+          durationSec: safeNum(tryCall(() => p.getDuration()) ?? 0),
+          loadedFraction: fraction,
+          playbackQuality: quality,
+          availableQualityLevels: Array.isArray(levels) ? levels : null,
+          playbackRate: rate,
+          volume,
+          muted,
+        };
+      },
     }),
     []
   );

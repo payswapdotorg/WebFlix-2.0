@@ -75,6 +75,11 @@ import { DescriptionBox } from "./description-box";
 import { TranscriptPanel } from "./transcript-panel";
 import { CommentsSection } from "./comments-section";
 import { RelatedRail } from "./related-rail";
+/* P23-A — G2: the Stats-for-nerds overlay + the player context menu (the
+ * measured youtube.com entry rungs) */
+import { StatsForNerds } from "./stats-for-nerds";
+import { PlayerContextMenu, type PlayerContextMenuState } from "./player-context-menu";
+import { Activity } from "lucide-react";
 import dynamic from "next/dynamic";
 
 const LiveChatPanel = dynamic(
@@ -120,6 +125,16 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
   // the embed beneath takes over (fresh mount per video via key, so this
   // never leaks across videos).
   const [premiereStarted, setPremiereStarted] = useState(false);
+
+  // P23-A (G2) — the Stats-for-nerds overlay + the player context menu:
+  // the overlay mounts over the player area (both containers — theater and
+  // default); the context menu opens wherever the page owns the pixels.
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [ctxMenu, setCtxMenu] = useState<PlayerContextMenuState | null>(null);
+  const onPlayerContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setCtxMenu({ x: e.clientX, y: e.clientY });
+  }, []);
 
   // WFX2-C-S: the watch-next countdown machine (advance on "fired").
   const [countdown, dispatch] = useReducer(countdownReducer, initialCountdown);
@@ -477,9 +492,13 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
       {theater ? (
         <div className="bg-black">
           <div className="mx-auto max-w-[1754px]">
-            <div className="relative aspect-video w-full overflow-hidden bg-black">
+            <div
+              className="relative aspect-video w-full overflow-hidden bg-black"
+              onContextMenu={onPlayerContextMenu}
+            >
               <div ref={setSlotEl} className="absolute inset-0" />
               {countdownOverlay}
+              {statsOpen && <StatsForNerds onClose={() => setStatsOpen(false)} />}
               {premiereStartsAt && (
                 <PremiereStage
                   videoId={videoId}
@@ -519,9 +538,13 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
 
                   {/* aspect keeper: holds the layout slot while the player
                       shrinks into the miniplayer */}
-                  <div className="relative z-10 aspect-video w-full overflow-hidden bg-black sm:rounded-xl">
+                  <div
+                    className="relative z-10 aspect-video w-full overflow-hidden bg-black sm:rounded-xl"
+                    onContextMenu={onPlayerContextMenu}
+                  >
                     {/* the persistent player's inline slot (host wrapper) */}
                     <div ref={setSlotEl} className="absolute inset-0" />
+                    {statsOpen && <StatsForNerds onClose={() => setStatsOpen(false)} />}
                     {docked && (
                       <button
                         type="button"
@@ -565,6 +588,22 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
                 )}
               </h1>
               <div className="flex shrink-0 items-center gap-3">
+                {/* P23-A (G2) — the Stats-for-nerds rung. youtube.com's own
+                    entry is the player's right-click menu rung; over the
+                    live cross-origin iframe that menu belongs to YouTube
+                    and never reaches the page (measured) — this control-row
+                    rung is the always-available page-side entry. */}
+                <button
+                  type="button"
+                  onClick={() => setStatsOpen((o) => !o)}
+                  aria-pressed={statsOpen}
+                  aria-label="Stats for nerds"
+                  title="Stats for nerds"
+                  data-testid="stats-toggle"
+                  className="flex size-9 items-center justify-center rounded-full bg-secondary text-secondary-foreground transition hover:bg-secondary/70 sm:size-10"
+                >
+                  <Activity className="size-4" aria-hidden="true" />
+                </button>
                 <button
                   type="button"
                   onClick={() => setTheater((t) => !t)}
@@ -744,6 +783,16 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
       </div>
 
       {/* dialogs (conditional mount → fresh state per open) */}
+      {/* P23-A (G2) — the player's context menu (fixed-position, dismissed
+          on outside click / Escape inside the menu component itself) */}
+      {ctxMenu && (
+        <PlayerContextMenu
+          state={ctxMenu}
+          onClose={() => setCtxMenu(null)}
+          onStatsForNerds={() => setStatsOpen(true)}
+          videoId={videoId}
+        />
+      )}
       {shareOpen && (
         <ShareDialog
           open
@@ -751,6 +800,10 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
           videoId={videoId}
           title={video.title}
           currentTime={currentTime}
+          durationSec={video.durationSec ?? 0}
+          viewer={viewer ? { name: viewer.name, avatarUrl: viewer.avatarUrl } : null}
+          guest={guest}
+          signInPath={`/watch/${videoId}`}
         />
       )}
       {saveOpen && (

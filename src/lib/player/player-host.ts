@@ -36,7 +36,11 @@
  * except pure appendChild moves from ref callbacks, which are safe).
  */
 import { create, type StoreApi, type UseBoundStore } from "zustand";
-import { readProgress, type YoutubePlayerHandle } from "@/components/watch/youtube-player";
+import {
+  readProgress,
+  type YoutubePlayerHandle,
+  type YoutubePlayerStats,
+} from "@/components/watch/youtube-player";
 
 export type PlayerHostVideo = {
   videoId: string;
@@ -359,6 +363,12 @@ class PlayerHostManager {
 
   getPosition(): number {
     return this.handleRef.current?.getCurrentTime() ?? this.lastPositionSec;
+  }
+
+  /** P23-A — the honest stats snapshot (the Stats-for-nerds overlay's
+   * source; null when the player handle isn't live yet). */
+  getStats(): YoutubePlayerStats | null {
+    return this.handleRef.current?.getStats?.() ?? null;
   }
 
   onProgress(cb: ProgressListener): () => void {
