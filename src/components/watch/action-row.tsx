@@ -11,6 +11,10 @@
  *
  * WFX2-P4-QT: Add to queue joins the row — the WL-backed queue append
  * (wired by watch-page: guest gate + the real watch-later write first).
+ *
+ * P23-B (G4): the Ask AI entry — Sparkles PillButton that swaps the related
+ * rail for the Ask panel (public like youtube.com's AI surfaces; the panel
+ * itself degrades honestly when the LLM seam is not env-keyed).
  */
 import { useState } from "react";
 import {
@@ -20,6 +24,7 @@ import {
   ListPlus,
   MoreVertical,
   Share2,
+  Sparkles,
   ThumbsDown,
   ThumbsUp,
   FileText,
@@ -55,7 +60,9 @@ export function ActionRow({
   onToggleTranscript,
   onReport,
   onAddToQueue,
+  onToggleAsk,
   queued = false,
+  askOpen = false,
 }: {
   videoId: string;
   likes: number;
@@ -77,8 +84,12 @@ export function ActionRow({
   /** WFX2-P4-QT: the WL-backed queue append (the guest gate + honest states
    * live in the watch-page wiring). */
   onAddToQueue: () => void;
+  /** P23-B (G4): swap the related rail for the Ask panel (and back). */
+  onToggleAsk?: () => void;
   /** the video is already in the session queue → the pressed affordance */
   queued?: boolean;
+  /** the Ask panel is open → the pressed affordance on the Ask AI entry */
+  askOpen?: boolean;
 }) {
   const [state, setState] = useState({ likes, dislikes, yourLike });
   const [synced, setSynced] = useState({ likes, dislikes, yourLike });
@@ -235,6 +246,23 @@ export function ActionRow({
         pressed={queued}
       />
 
+      {/* P23-B (G4) — Ask AI: opens the Ask panel in place of the related
+          rail (public — the AI surfaces are not account-gated on youtube.com) */}
+      {onToggleAsk && (
+        <PillButton
+          label="Ask AI"
+          ariaLabel="Ask AI about this video"
+          icon={
+            <Sparkles
+              className={cn("size-5", askOpen && "fill-current text-primary")}
+              aria-hidden="true"
+            />
+          }
+          onClick={onToggleAsk}
+          pressed={askOpen}
+        />
+      )}
+
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
@@ -279,17 +307,21 @@ export function PillButton({
   icon,
   onClick,
   pressed,
+  ariaLabel,
 }: {
   label: string;
   icon: React.ReactNode;
   onClick: () => void;
   pressed?: boolean;
+  /** accessible name when the visible label hides on small screens */
+  ariaLabel?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={pressed}
+      aria-label={ariaLabel}
       className="flex h-9 items-center gap-2 rounded-full bg-secondary px-4 text-sm font-medium transition hover:bg-secondary/70 active:scale-[0.97] sm:h-10"
     >
       {icon}

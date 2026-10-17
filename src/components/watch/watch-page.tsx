@@ -75,6 +75,10 @@ import { DescriptionBox } from "./description-box";
 import { TranscriptPanel } from "./transcript-panel";
 import { CommentsSection } from "./comments-section";
 import { RelatedRail } from "./related-rail";
+/* P23-B (G4) — the AI surfaces: the Ask panel (replaces the related rail
+ * while open) + the AI summary block (chapters-aware key moments) */
+import { AskPanel } from "./ask-panel";
+import { AiSummary } from "./ai-summary";
 /* P23-A — G2: the Stats-for-nerds overlay + the player context menu (the
  * measured youtube.com entry rungs) */
 import { StatsForNerds } from "./stats-for-nerds";
@@ -111,6 +115,8 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
   const [autoplay, setAutoplay] = useState(true);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [transcriptQuery, setTranscriptQuery] = useState("");
+  // P23-B (G4): the Ask panel replaces the related rail while open
+  const [askOpen, setAskOpen] = useState(false);
   const [cues, setCues] = useState<TranscriptCueDto[]>([]);
   const [cuesLoaded, setCuesLoaded] = useState(false);
   const [nextVideo, setNextVideo] = useState<RelatedVideoDto | null>(null);
@@ -711,6 +717,8 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
                 onAddToQueue={() => {
                   void onAddToQueue();
                 }}
+                onToggleAsk={() => setAskOpen((o) => !o)}
+                askOpen={askOpen}
                 queued={queued}
               />
             </div>
@@ -718,6 +726,10 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
             {/* WFX2-P4-QT: the queue list panel (mounted while the session
                 queue exists — remove-from-queue is the real WL remove) */}
             {queueItems.length > 0 && <QueuePanel currentVideoId={videoId} />}
+
+            {/* P23-B (G4) — the AI summary block (self-hides when the LLM
+                seam is not env-keyed — the honest absence) */}
+            <AiSummary videoId={videoId} onSeek={seek} />
 
             {/* description */}
             <DescriptionBox
@@ -769,7 +781,8 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
           </div>
         </div>
 
-        {/* related rail */}
+        {/* related rail — P23-B (G4): while the Ask panel is open it takes
+            the rail's place; closing the panel restores the rail */}
         <aside aria-label="Related videos" className={theater ? "min-w-0" : "px-3 sm:px-0"}>
           {detail && !theater && (
             <LiveChatPanel
@@ -778,7 +791,17 @@ export function WatchPage({ videoId, startAt }: { videoId: string; startAt: numb
               premiereStartsAt={premiereStartsAt}
             />
           )}
-          <RelatedRail videoId={videoId} onFirstPage={setNextVideo} />
+          {askOpen ? (
+            <AskPanel
+              videoId={videoId}
+              title={video.title}
+              chapters={chapters}
+              onSeek={seek}
+              onClose={() => setAskOpen(false)}
+            />
+          ) : (
+            <RelatedRail videoId={videoId} onFirstPage={setNextVideo} />
+          )}
         </aside>
       </div>
 

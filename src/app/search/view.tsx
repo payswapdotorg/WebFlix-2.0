@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useApi } from "@/hooks/use-api";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FilterPanel, AppliedFilterChips } from "@/components/search/filter-panel";
+import { SearchAskCard } from "@/components/search/ask-answer-card";
 import { SearchVideoCard } from "@/components/search/search-video-card";
 import { useHoverPreview } from "@/components/video/video-hover-preview";
 import { ChannelResultCard } from "@/components/search/channel-result-card";
@@ -18,6 +19,7 @@ import {
   type SearchFilterState,
 } from "@/lib/youtube/search-filters";
 import { cn } from "@/lib/utils";
+import { isConversationalQuery } from "@/lib/ai/heuristic";
 import type { SearchPageDTO, VideoDTO } from "@/lib/types";
 
 /**
@@ -284,6 +286,16 @@ function SearchContent() {
           <div className="px-4 py-3 sm:px-6">
             <AppliedFilterChips state={state} onChange={onFiltersChange} />
           </div>
+
+          {/* P23-B (G3) — the AI answer card, ABOVE the results grid. Fires
+              only for conversational queries (the heuristic); stays hidden
+              entirely when the LLM seam is not env-keyed or there is nothing
+              to ground on — the honest absence, never a fake answer. */}
+          {isConversationalQuery(q) && (
+            <div className="px-4 pb-1 pt-3 sm:px-6">
+              <SearchAskCard query={q} filters={state} />
+            </div>
+          )}
 
           {loading && (
             <div className="space-y-4 px-4 py-2 sm:px-6" aria-busy="true" data-testid="search-skeleton">
