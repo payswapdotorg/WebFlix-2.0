@@ -353,3 +353,24 @@ re-runs gates → merges.
   reshape) were measured and verified this run (evidence/wfx2p23c/).
 - The LIVE-overlay flag fix (asObj-on-string) closed a UX-PARITY-1-era dead
   flag found during the lane — lane-scoped, station-reviewed.
+
+## 2026-10-17 — REA-1 + REA-2 MERGED (the fourth and fifth REA-era merges: the feed-family + player-family lanes)
+
+| Lane | Branch | Scope | Claimed | Binding | Status |
+|---|---|---|---|---|---|
+| REA-1 | wfx2/rea-feed-family @ 9504c8b | G16 deterministic seeded Shuffle (playlist page → /watch/<head>?list=&shuffle=<seed>; the watch queue API on the measured next {videoId, playlistId, params:wAEB} seam; the queue panel above the related rail, N/M counter, autoplay playlist-first) + G17 /hashtag/[tag] browse (FEhashtag + byte-measured params protobuf field-93; ISR shell + grid + sentinel scroll; description/shorts re-routing) + G19 the mix family (search mix cards start-radio links + MIX badge; /playlist/RD unviewable verdict + Start radio; isMixListId) | 2026-10-17 worker (chat 555c854a) | branch fully pushed 16:27Z (the chat turn froze mid-report — the batch tail banked; the branch is the truth) | **VERIFIED 1706/0** (station re-run: 696+577+127+108+126+34+38 = base 1639 + 67, lint 0e/1 pre-existing, tsc clean; PAT clean; seeded-shuffle contract + hashtag ISR shell spot-checked) → merged 770ab48 |
+| REA-2 | wfx2/rea-player-family @ 12bd3e1 | G20 live polls DISPLAY from MEASURED payloads (two real action shapes; byte-exact DTOs; the poll card with bars/percents/your-vote; replace-on-collision refresh; live-ticking 2,578→2,604 votes verified against the real upstream; ZERO vote buttons — the vote write seam unmeasurable, the honest disclosure) + G18 the honest-absence ledger (the measured IFrame-API surface + creator payload wall; no prediction payload found across four hunts — an invented shape would be a fabrication) | 2026-10-17 worker (chat 246add04) | branch fully pushed 16:29Z (the chat turn froze mid-report — the batch tail banked) | **VERIFIED 1659/0** (station re-run: 640+566+147+108+126+34+38 = base 1639 + 20, lint 0e/1 pre-existing, tsc clean; PAT clean; poll-card honesty + mapper shapes spot-checked) → merged 759e5dc |
+
+- Both lanes' chat turns FROZE mid-report (the swallowed-turn pattern: updated_at
+  stale ~4.5h, batch chars frozen at 1.1M/937K, no report ever landing in the
+  tree) — but both branches were FULLY DELIVERED on origin including their final
+  WORKLOG commits. Doctrine applied: the branch push is the truth, not the chat
+  tree. The batch-store tails (the workers' report drafts, near-complete with
+  Known-limits sections) banked at download/harvest/rea-batch-tail-*.txt.
+- UNION-MERGE resolution: package.json test registrations unioned on both merges
+  (P23-C's sound/trending families + REA-1's shuffle/hashtag/feed-family +
+  REA-2's livechat-poll pair — a token-concat corruption in the mechanical
+  resolution was caught by the union battery count 1773≠1785 and fixed by hand;
+  the final line registers all 9 liveshorts files) and WORKLOG.md append-unioned.
+- Post-merge union gates: 1785 pass / 0 fail (755+577+147+108+126+34+38),
+  lint 0 errors / 1 pre-existing warning, tsc clean.
