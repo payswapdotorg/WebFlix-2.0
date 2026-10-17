@@ -1,0 +1,296 @@
+{
+ "_note": "SYNTHETIC-BUT-SHAPED-FROM-REAL reel_watch_sequence (P23-C G5). Entry shapes copied byte-for-byte from evidence/wfx2p23c/reel_sequence_web_sound.json (entry 0: original sound) and reel_sequence_web_sound_p2.json (entry 0: named sound; entries 3+: bare). Tokens abbreviated for the fixture; the real captures ride evidence/.",
+ "responseContext": {},
+ "entries": [
+  {
+   "command": {
+    "reelWatchEndpoint": {
+     "videoId": "H3ONg7SPSWU",
+     "params": "FIXTUREPARAMS1",
+     "overlay": {
+      "reelPlayerOverlayRenderer": {
+       "style": "REEL_PLAYER_OVERLAY_STYLE_SHORTS"
+      }
+     },
+     "unserializedPrefetchData": {
+      "reelItemWatchResponse": {
+       "status": "REEL_ITEM_WATCH_STATUS_SUCCEEDED",
+       "overlay": {
+        "reelPlayerOverlayRenderer": {
+         "style": "REEL_PLAYER_OVERLAY_STYLE_SHORTS",
+         "playerOverlay": {
+          "reelPlayerOverlayViewModel": {
+           "actionBar": {
+            "reelActionBarViewModel": {
+             "buttonViewModels": [
+              {
+               "likeButtonViewModel": {
+                "likeButtonViewModel": {
+                 "likeStatusIfLiked": "LIKE_BUTTON_STATUS_LIKED"
+                }
+               }
+              },
+              {
+               "buttonViewModel": {
+                "iconName": "SHORTS_COMMENT",
+                "title": "30",
+                "accessibilityText": "View 30 comments",
+                "accessibilityId": "id.reel_comment_button"
+               }
+              },
+              {
+               "buttonViewModel": {
+                "iconName": "SHORTS_SHARE",
+                "title": "Share",
+                "accessibilityId": "id.reel_share_button"
+               }
+              },
+              {
+               "buttonViewModel": {
+                "iconName": "REMIX_FILLED",
+                "title": "Remix",
+                "accessibilityId": "id.reel_remix_button",
+                "state": "BUTTON_VIEW_MODEL_STATE_DISABLED",
+                "onTap": {
+                 "innertubeCommand": {
+                  "addToToastAction": {
+                   "item": {
+                    "notificationTextRenderer": {
+                     "successResponseText": {
+                      "runs": [
+                       {
+                        "text": "Feature not available for this video"
+                       }
+                      ]
+                     }
+                    }
+                   }
+                  }
+                 }
+                }
+               }
+              },
+              {
+               "pivotButtonViewModel": {
+                "thumbnail": {
+                 "sources": [
+                  {
+                   "url": "https://yt3.ggpht.com/sound48.jpg",
+                   "width": 48,
+                   "height": 48
+                  },
+                  {
+                   "url": "https://yt3.ggpht.com/sound88.jpg",
+                   "width": 88,
+                   "height": 88
+                  },
+                  {
+                   "url": "https://yt3.ggpht.com/sound176.jpg",
+                   "width": 176,
+                   "height": 176
+                  }
+                 ]
+                },
+                "onClickCommand": {
+                 "innertubeCommand": {
+                  "showEngagementPanelEndpoint": {
+                   "identifier": {
+                    "surface": "ENGAGEMENT_PANEL_SURFACE_SHORTS",
+                    "tag": "engagement-panel-shorts-audio-pivot"
+                   }
+                  }
+                 }
+                },
+                "contentDescription": "See more videos using this sound",
+                "soundAttributionTitle": {
+                 "content": "Original Sound",
+                 "commandRuns": [
+                  {
+                   "startIndex": 0,
+                   "length": 14,
+                   "onTap": {
+                    "innertubeCommand": {
+                     "showEngagementPanelEndpoint": {
+                      "identifier": {
+                       "surface": "ENGAGEMENT_PANEL_SURFACE_SHORTS",
+                       "tag": "engagement-panel-shorts-audio-pivot"
+                      }
+                     }
+                    }
+                   }
+                  }
+                 ]
+                },
+                "waveformAnimationStyle": "WAVEFORM_ANIMATION_STYLE_DEFAULT",
+                "backgroundAnimationStyle": "BACKGROUND_ANIMATION_STYLE_DEFAULT"
+               }
+              }
+             ]
+            }
+           }
+          }
+         }
+        }
+       },
+       "engagementPanels": [
+        {
+         "engagementPanelSectionListRenderer": {
+          "identifier": {
+           "surface": "ENGAGEMENT_PANEL_SURFACE_SHORTS",
+           "tag": "shorts-comments-panel"
+          },
+          "content": {}
+         }
+        },
+        {
+         "engagementPanelSectionListRenderer": {
+          "identifier": {
+           "surface": "ENGAGEMENT_PANEL_SURFACE_SHORTS",
+           "tag": "engagement-panel-shorts-audio-pivot"
+          },
+          "content": {
+           "richGridRenderer": {
+            "contents": [
+             {
+              "continuationItemRenderer": {
+               "continuationEndpoint": {
+                "clickTrackingParams": "x",
+                "commandMetadata": {
+                 "webCommandMetadata": {
+                  "sendPost": true,
+                  "apiUrl": "/youtubei/v1/browse"
+                 }
+                },
+                "continuationCommand": {
+                 "token": "4qmFsgKIARISRkVzZnZfYXVkaW9fcGl2b3QaVENBRHlCVG9LTmhJbkNndElNMDlPWnpkVFVGTlhWUklMU0ROUFRtYzNVMUJUVjFVYUMwZ3pUMDVuTjFOUVUxZFZHZw",
+                 "request": "CONTINUATION_REQUEST_TYPE_BROWSE"
+                }
+               }
+              }
+             }
+            ],
+            "header": {
+             "pageHeaderViewModel": {
+              "title": {
+               "dynamicTextViewModel": {
+                "text": {
+                 "content": "Chill Lofi Coffee Vibes | Relaxing Lofi Hip Hop Beats to Study/Work to"
+                }
+               }
+              }
+             }
+            }
+           }
+          }
+         }
+        }
+       ]
+      }
+     }
+    }
+   },
+   "trackingParams": "x"
+  },
+  {
+   "command": {
+    "reelWatchEndpoint": {
+     "videoId": "XM0bAYc0z40",
+     "params": "FIXTUREPARAMS2",
+     "overlay": {
+      "reelPlayerOverlayRenderer": {
+       "style": "REEL_PLAYER_OVERLAY_STYLE_LIVE"
+      }
+     },
+     "unserializedPrefetchData": {
+      "reelItemWatchResponse": {
+       "status": "REEL_ITEM_WATCH_STATUS_SUCCEEDED",
+       "overlay": {
+        "reelPlayerOverlayRenderer": {
+         "style": "REEL_PLAYER_OVERLAY_STYLE_LIVE",
+         "playerOverlay": {
+          "reelPlayerOverlayViewModel": {
+           "actionBar": {
+            "reelActionBarViewModel": {
+             "buttonViewModels": [
+              {
+               "likeButtonViewModel": {}
+              },
+              {
+               "buttonViewModel": {
+                "iconName": "SHORTS_COMMENT",
+                "title": "12"
+               }
+              },
+              {
+               "buttonViewModel": {
+                "iconName": "SHORTS_SHARE",
+                "title": "Share"
+               }
+              },
+              {
+               "buttonViewModel": {
+                "iconName": "REMIX_FILLED",
+                "title": "Remix",
+                "state": "BUTTON_VIEW_MODEL_STATE_DISABLED"
+               }
+              },
+              {
+               "pivotButtonViewModel": {
+                "thumbnail": {
+                 "sources": [
+                  {
+                   "url": "https://yt3.ggpht.com/live48.jpg",
+                   "width": 48
+                  }
+                 ]
+                },
+                "soundAttributionTitle": {
+                 "content": "Live original audio"
+                }
+               }
+              }
+             ]
+            }
+           }
+          }
+         }
+        }
+       },
+       "engagementPanels": [
+        {
+         "engagementPanelSectionListRenderer": {
+          "identifier": {
+           "surface": "ENGAGEMENT_PANEL_SURFACE_SHORTS",
+           "tag": "engagement-panel-shorts-audio-pivot"
+          },
+          "content": {}
+         }
+        }
+       ]
+      }
+     }
+    }
+   },
+   "trackingParams": "y"
+  },
+  {
+   "command": {
+    "reelWatchEndpoint": {
+     "videoId": "sim3CJnbn2c",
+     "params": "FIXTUREPARAMS3",
+     "overlay": {
+      "reelPlayerOverlayRenderer": {
+       "style": "REEL_PLAYER_OVERLAY_STYLE_SHORTS"
+      }
+     }
+    }
+   },
+   "trackingParams": "z"
+  }
+ ],
+ "continuationEndpoint": {
+  "continuationCommand": {
+   "token": "NEXT_SEQUENCE_TOKEN_FIXTURE"
+  }
+ }
+}

@@ -111,10 +111,18 @@ export class InnertubeError extends Error {
 export interface InnertubeOptions {
   /** Override session cookies (undefined → env session; null → force public). */
   cookies?: string | null;
+  /** Timeout per attempt (default 10s). */
   timeoutMs?: number;
   /** Extra retries beyond the built-in single retry (default 0). */
   extraRetries?: number;
   signal?: AbortSignal;
+  /**
+   * P23-C (G7): the region (gl) override — the parameter youtube.com's own
+   * reads carry (context.client.gl). Measured 2026-10-17: the search read
+   * reshapes per gl (US/GB/JP — evidence/wfx2p23c/search_gl_*.json). A
+   * body that ships its own `context` still wins (the spread order below).
+   */
+  gl?: string;
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -142,7 +150,12 @@ export async function innertube<T = Record<string, any>>(
   opts: InnertubeOptions = {}
 ): Promise<T> {
   const url = `${INNERTUBE_BASE}/${endpoint}?key=${encodeURIComponent(INNERTUBE_API_KEY)}&prettyPrint=false`;
-  const payload = JSON.stringify({ ...innerTubeContext(), ...body });
+  // P23-C (G7): the region override rides the default context (a body
+  // context still wins — the reel-sequence family builds its own).
+  const context = opts.gl
+    ? { context: { client: { ...WEB_CLIENT, gl: opts.gl } } }
+    : innerTubeContext();
+  const payload = JSON.stringify({ ...context, ...body });
   const headers = innerTubeHeaders(opts.cookies);
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const attempts = 1 + 1 + (opts.extraRetries ?? 0); // initial + single retry (+ extras)

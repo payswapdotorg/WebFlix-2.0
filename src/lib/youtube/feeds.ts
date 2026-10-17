@@ -604,19 +604,21 @@ export async function getSearchVideoPage(
   query: string,
   filters: { sort?: string; uploadDate?: string; duration?: string; type?: string },
   cursor: string | undefined,
-  limit: number
+  limit: number,
+  /** P23-C (G7): the region (gl) — the trending fallback's region-shaped read. */
+  gl?: string
 ): Promise<VideoPage> {
   const fetchPage = async (): Promise<VideoPage> => {
     const params = cursor ? undefined : buildSearchParam(parseSearchFilters(filters)) || undefined;
     const body: Record<string, unknown> = cursor
       ? { continuation: cursor }
       : { query, ...(params ? { params } : {}) };
-    const response = await innertubeSearch(body);
+    const response = await innertubeSearch(body, gl ? { gl } : undefined);
     return { videos: mapVideos(response, { dedupe: true, limit }), nextCursor: searchContinuationToken(response) };
   };
   if (cursor) return fetchPage();
   return cached(
-    `yt:searchpage:${query.toLowerCase()}:${JSON.stringify(filters)}:${limit}`,
+    `yt:searchpage:${query.toLowerCase()}:${JSON.stringify(filters)}:${limit}:${gl ?? ""}`,
     TTL.SEARCH_MS,
     fetchPage,
   );

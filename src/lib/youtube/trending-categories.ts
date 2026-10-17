@@ -21,6 +21,7 @@ import { fetchYtInitialData } from "./ssr";
 import { cached, TTL } from "./cache";
 import { mapVideos, walkTree, runsText } from "./mappers";
 import { getSearchVideoPage } from "./feeds";
+import { normalizeTrendingRegion } from "./trending-regions";
 import type { VideoDTO } from "@/lib/types";
 
 export interface TrendingCategory {
@@ -101,16 +102,29 @@ export interface TrendingPage {
   videos: VideoDTO[];
   /** "trending" = the SSR category page grid · "search" = the popular-this-week fallback */
   source: "trending" | "search";
+  /** P23-C (G7): the region this page was read in (null = the egress default). */
+  region: string | null;
 }
 
 /**
- * The trending page payload for a category. SSR category page first; when it
- * yields no videos (public mode — the What-to-Watch nudge), real search-backed
- * popular-this-week videos fill the rail.
+ * The trending page payload for a category + region. SSR category page first
+ * (the region rides the ?gl= query — measured 2026-10-17: youtube.com's SSR
+ * pages honor ?gl=<REGION>; the returned payload carries the requested
+ * "gl" — evidence/wfx2p23c/ssr_trending_gl_{US,GB}.html); when it yields no
+ * videos (public mode — the What-to-Watch nudge), real search-backed
+ * popular-this-week videos fill the rail, region-shaped (context.client.gl —
+ * measured: US/GB/JP reshape the ranked set).
  */
-export async function getTrendingPage(category: string): Promise<TrendingPage> {
+export async function getTrendingPage(
+  category: string,
+  region: string | null = null,
+): Promise<TrendingPage> {
   const normalized = normalizeTrendingCategory(category);
-  const path = trendingCategoryPath(normalized);
+  const gl = normalizeTrendingRegion(region);
+  const base = trendingCategoryPath(normalized);
+  // the region rides the SSR page's own ?gl= param (hl pinned — the read
+  // family's own language, matching every other SSR read in this app)
+  const path = gl ? `${base}?gl=${gl}&hl=en` : base;
   let response: Record<string, any> | null = null;
   try {
     response = await cached(`yt:trending:${path}`, TTL.FEED_MS, () =>
@@ -121,15 +135,17 @@ export async function getTrendingPage(category: string): Promise<TrendingPage> {
   }
   const videos = response ? mapVideos(response, { dedupe: true, limit: 48 }) : [];
   if (videos.length > 0) {
-    return { category: normalized, videos, source: "trending" };
+    return { category: normalized, videos, source: "trending", region: gl };
   }
-  // public-mode fallback: real popular-this-week videos per category
+  // public-mode fallback: real popular-this-week videos per category,
+  // region-shaped (the gl parameter youtube.com's own reads carry)
   const term = CATEGORY_SEARCH_TERMS[normalized] ?? normalized.toLowerCase();
   const page = await getSearchVideoPage(
     term,
     { sort: "views", uploadDate: "week", type: "video" },
     undefined,
-    48
+    48,
+    gl ?? undefined,
   );
-  return { category: normalized, videos: page.videos, source: "search" };
+  return { category: normalized, videos: page.videos, source: "search", region: gl };
 }

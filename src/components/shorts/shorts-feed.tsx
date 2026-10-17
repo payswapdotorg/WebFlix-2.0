@@ -309,6 +309,13 @@ export function ShortsFeed() {
                   // live flag: the hydrated verdict wins, the sequence's
                   // LIVE-overlay flag rides until hydration lands
                   isLive: hydrated.isLive ?? item.isLive,
+                  // P23-C (G5): the sound disc data rides the SEQUENCE item
+                  // (the next{} hydration carries no sound metadata —
+                  // measured; evidence/wfx2p23c). The sequence's own sound
+                  // fields stay authoritative for the disc.
+                  soundId: item.soundId,
+                  soundTitle: item.soundTitle,
+                  soundImageUrl: item.soundImageUrl,
                 }
               : item.title
                 ? item
@@ -429,6 +436,7 @@ export function ShortsFeed() {
                     meta={display}
                     metaLoading={!hydrated && !failedMeta}
                     guest={guest}
+                    playing={index === activeIndex}
                     onOpenComments={() => setCommentsFor(item.id)}
                     onShare={() => void shareShort(item.id)}
                     onReport={() => setReportFor(item.id)}

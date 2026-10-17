@@ -535,6 +535,8 @@ export type TrendingPageDTO = {
   videos: VideoDTO[];
   /** "trending" = the SSR category page grid · "search" = the popular-this-week fallback (public mode) */
   source?: "trending" | "search";
+  /** P23-C (G7): the region the feed was read in (null/absent = the egress default). */
+  region?: string | null;
 };
 
 /** The public playlist page (/playlist/[id] — browse VL…). */
