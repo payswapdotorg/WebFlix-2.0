@@ -316,3 +316,23 @@ re-runs gates → merges.
 - Base was main @ b595f43 (the ledger's re-dispatch base was 523cbd5; the
   branch carried its own packet commit); merge --no-ff; production
   auto-deploy via Vercel.
+
+## 2026-10-17 — P23-B MERGED (the re-run wave: sandbox re-provision recovery)
+
+| Lane | Branch | Scope | Claimed | Binding | Status |
+|---|---|---|---|---|---|
+| P23-B | wfx2/p23-ask-ai @ ecf770f | G3 Ask-search (conversational heuristic + grounded answer card: type-out reveal, [n] citations, sources row, collapse, honest errors) + G4 watch Ask (Sparkles entry, panel swap w/ suggested prompts + conversation + exact-chapter seek chips, chapters-aware Key moments) on the env-keyed z-ai-web-dev-sdk seam (server-only, no-key → disabled, 502 honest, Upstash caching, per-IP limits) | 2026-10-17 re-run worker (chat b415e05b) | delivered 15:14Z | **VERIFIED 1639/0** (station re-run 2026-10-17: 640+566+127+108+126+34+38, lint 0e/1 pre-existing, tsc clean; PAT redaction + seam spot-checks) → merged |
+
+- The FIRST run completed ~10:29Z but its push died 401 (transient — the same
+  PAT pushed P23-A at 10:14Z and the station's merge at 13:45Z); before the
+  station could relay it, the sandbox RE-PROVISIONED at 13:31Z and destroyed
+  the tree (forensics: stock template, no clone, no bundle, no SHA). Station
+  choice (b): re-run end-to-end from the NEW base d1fcea8 with the worker's
+  carried-over design context + a re-supplied PAT. The re-run landed the
+  branch at 15:14Z (46 min) and its completion report server-confirmed the
+  same hour — the queue_watch retired itself cleanly on the marker gate.
+- The never-commit law held twice (packet PAT redacted; token scrubbed from
+  git config — the worker's own report).
+- youtube.com's AI surfaces are experiment/sign-in-gated: measured at the
+  served-string-table level only (ASK_BUTTON_LABEL etc.) — the honest
+  measurement law applied.
