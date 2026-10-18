@@ -374,3 +374,23 @@ re-runs gates → merges.
   the final line registers all 9 liveshorts files) and WORKLOG.md append-unioned.
 - Post-merge union gates: 1785 pass / 0 fail (755+577+147+108+126+34+38),
   lint 0 errors / 1 pre-existing warning, tsc clean.
+
+## 2026-10-18 — P26-HPV MERGED (the sixth wfx2-era merge: the hover preview plays the video — an operator-filed bug lane)
+
+| Lane | Branch | Scope | Claimed | Binding | Status |
+|---|---|---|---|---|---|
+| P26-HPV | wfx2/p26-hpv @ 29baed9 | The operator's 2026-10-18 report (verbatim: "the preview feature should play the video normally from within the box once you hover over it … others are just showing slideshows of pictures from the video — that is not how youtube.com does it") → the native lane: embed death arms a muted-autoplaying native `<video>` through pickPreviewStreamFormat (nearest-360p) → /api/stream (the watch page's own PlayerFallback mechanism) instead of the permanent storyboard degrade; parsePlayback surfaces adaptiveFormats video-only entries (hasAudio:false preview fuel); pickStreamFormat (watch) guards to muxed-only; the P22-A chrome drives both lanes via one ops adapter; NATIVE_NO_PLAY_MS zombie guard | 2026-10-18 ring-down lane (the replay pipeline is captcha-walled — Task 29's ruling; dispatched through the station's local worker channel; the worker's context window expired mid-report, the station completed the review) | branch committed 29baed9 (worker implementation + station review) | **VERIFIED 1802/0** (station-run: 755+594+147+108+126+34+38 = base 1785 + 17, lint 0e/1 pre-existing, tsc clean; PAT/secret scan clean; the diff reviewed seam-by-seam) → merged 53a54f1 |
+
+- Ring-down protocol (logged honestly): the replay worker ring died in the
+  2026-10-17 re-image and every fresh platform dispatch is captcha-gated
+  (enable_captcha=true — one human slider solve would reopen it). The lane
+  dispatched through the station's local worker channel instead; the
+  station ran the full review battery itself (the gates above) before the
+  merge. The r-drive-3 parity-sweep order stays banked at
+  download/recovery/rea3-r3-dispatch-prompt.txt for whenever the wall lifts.
+- The honest floor is UNCHANGED (walled payloads keep the storyboard /
+  ken-burns / blocked card exactly as before) — what changed is COVERAGE:
+  every video the server-side player chain can hand a plain-url stream now
+  PLAYS on hover, matching youtube.com's own home-grid previews.
+- Post-merge union gates: 1802 pass / 0 fail, lint 0 errors / 1 pre-existing
+  warning, tsc clean.
