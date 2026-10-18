@@ -810,3 +810,179 @@ describe("the own-channel affordances (P14-YOU)", () => {
     expect(labels).not.toContain("Manage videos");
   });
 });
+
+/* ------------------------------------------------------------------ */
+/* REA-3B (F6) — the Shows + Store tabs (youtube.com's own tab family, */
+/* live-measured 2026-10-18 on @mkbhd) + the guest Subscribe law       */
+/* ------------------------------------------------------------------ */
+
+describe("REA-3B (F6) — the Shows + Store tabs", () => {
+  const SHOWS = [
+    {
+      playlistId: "PLBsP89CPrMeNIuvr9j3_EQaMwaNJ6rhuQ",
+      title: "Retro Tech S2",
+      thumbnailUrl: "https://example.com/show.jpg",
+      byline: "Marques Brownlee",
+    },
+    {
+      playlistId: "PLshow2",
+      title: "Dope Tech",
+      thumbnailUrl: null,
+      byline: null,
+    },
+  ];
+  const STORE = [
+    {
+      title: "Just dropped",
+      products: [
+        {
+          title: "Overlay Deskpad",
+          thumbnailUrl: "https://example.com/deskpad.jpg",
+          price: "HK$227.60",
+          priceReplacementText: "Out of stock",
+          merchantName: "MKBHD",
+          fromMerchantText: "From MKBHD",
+          productUrl: "https://mkbhd.com/products/overlay-deskpad",
+        },
+        {
+          // no productUrl → the card renders UNLINKED (never a guessed target)
+          title: "MKBHD Tee",
+          thumbnailUrl: null,
+          price: "HK$150",
+          priceReplacementText: null,
+          merchantName: "MKBHD",
+          fromMerchantText: "From MKBHD",
+          productUrl: null,
+        },
+      ],
+    },
+  ];
+
+  async function clickToTab(label: string) {
+    await act(async () => {
+      const btn = qAll('[role="tab"]').find((b) => b.textContent === label);
+      (btn as HTMLElement).click();
+    });
+    await sleep(40);
+  }
+
+  test("the tab strip carries Shows + Store in youtube.com's own order when the channel's own tab list does", async () => {
+    fetchHandler = () =>
+      jsonResponse(pageDto({ tabs: ["home", "videos", "live", "shows", "playlists", "store", "about"] }));
+    await renderPage();
+    const labels = qAll('[role="tab"]').map((b) => b.textContent);
+    // the strip's own order (ALL_TABS — the measured youtube.com order)
+    expect(labels.indexOf("Shows")).toBeGreaterThan(labels.indexOf("Live"));
+    expect(labels.indexOf("Shows")).toBeLessThan(labels.indexOf("Playlists"));
+    expect(labels.indexOf("Store")).toBeGreaterThan(labels.indexOf("Playlists"));
+  });
+
+  test("honest absence: a channel whose own tab list carries neither → NO Shows/Store tabs, no tab fetches", async () => {
+    fetchHandler = () => jsonResponse(pageDto({ tabs: ["home", "videos", "about"] }));
+    await renderPage();
+    const labels = qAll('[role="tab"]').map((b) => b.textContent);
+    expect(labels).not.toContain("Shows");
+    expect(labels).not.toContain("Store");
+    expect(fetchLog.some((u) => u.includes("/tab?tab=shows"))).toBe(false);
+    expect(fetchLog.some((u) => u.includes("/tab?tab=store"))).toBe(false);
+  });
+
+  test("the Shows tab: the lazy fetch fires, show cards link the show's OWN playlist, byline renders", async () => {
+    fetchHandler = (u) => {
+      if (u.includes("/tab?tab=shows")) return jsonResponse({ tab: "shows", shows: SHOWS });
+      return jsonResponse(pageDto({ tabs: ["home", "videos", "shows", "about"] }));
+    };
+    await renderPage();
+    await clickToTab("Shows");
+    expect(fetchLog.some((u) => u.includes("/tab?tab=shows"))).toBe(true);
+    // every card links the show's own playlist target
+    const links = qAll("a").filter((a) => (a.getAttribute("href") ?? "").startsWith("/playlist/"));
+    expect(links.map((a) => a.getAttribute("href"))).toEqual([
+      "/playlist/PLBsP89CPrMeNIuvr9j3_EQaMwaNJ6rhuQ",
+      "/playlist/PLshow2",
+    ]);
+    expect(host!.textContent).toContain("Retro Tech S2");
+    expect(host!.textContent).toContain("Marques Brownlee");
+  });
+
+  test("the Shows tab's honest empty state (a channel with the tab but no show rows)", async () => {
+    fetchHandler = (u) => {
+      if (u.includes("/tab?tab=shows")) return jsonResponse({ tab: "shows", shows: [] });
+      return jsonResponse(pageDto({ tabs: ["home", "videos", "shows", "about"] }));
+    };
+    await renderPage();
+    await clickToTab("Shows");
+    expect(host!.textContent).toContain("No shows from this channel yet.");
+  });
+
+  test("the Store tab: titled shelves render, cards carry the card's own price/replacement/from lines, external merchant links open new-tab; a card without a URL renders unlinked", async () => {
+    fetchHandler = (u) => {
+      if (u.includes("/tab?tab=store")) return jsonResponse({ tab: "store", store: STORE });
+      return jsonResponse(pageDto({ tabs: ["home", "videos", "store", "about"] }));
+    };
+    await renderPage();
+    await clickToTab("Store");
+    expect(fetchLog.some((u) => u.includes("/tab?tab=store"))).toBe(true);
+    expect(host!.textContent).toContain("Just dropped");
+    expect(host!.textContent).toContain("Overlay Deskpad");
+    // the replacement line wins over the price (the card's own "Out of stock")
+    expect(host!.textContent).toContain("Out of stock");
+    expect(host!.textContent).toContain("From MKBHD");
+    // the linked card: the REAL external merchant URL, new tab, rel noreferrer
+    const external = qAll("a").filter((a) => (a.getAttribute("href") ?? "").startsWith("https://"));
+    expect(external.map((a) => a.getAttribute("href"))).toEqual([
+      "https://mkbhd.com/products/overlay-deskpad",
+    ]);
+    expect(external[0].getAttribute("target")).toBe("_blank");
+    expect(external[0].getAttribute("rel")).toBe("noreferrer");
+    // the unlinked card (productUrl null) never fabricates a target
+    expect(qAll("a").some((a) => (a.getAttribute("href") ?? "").includes("MKBHD Tee"))).toBe(false);
+    expect(host!.textContent).toContain("MKBHD Tee");
+  });
+
+  test("the Store tab's honest empty state (a channel with the tab but no product shelves)", async () => {
+    fetchHandler = (u) => {
+      if (u.includes("/tab?tab=store")) return jsonResponse({ tab: "store", store: [] });
+      return jsonResponse(pageDto({ tabs: ["home", "videos", "store", "about"] }));
+    };
+    await renderPage();
+    await clickToTab("Store");
+    expect(host!.textContent).toContain("No store products from this channel right now.");
+  });
+});
+
+describe("REA-3B (F6) — the home tab's first shelf (youtube.com's own 'Videos' shelf)", () => {
+  test("the home tab leads with the 'Videos' shelf heading (the measured first-shelf title, the Shorts-section presentation)", async () => {
+    fetchHandler = () => jsonResponse(pageDto({ tabs: ["home", "videos", "about"] }));
+    await renderPage();
+    const headings = qAll("h2").map((h) => h.textContent);
+    expect(headings).toContain("Videos");
+    // the shelf's own aria label matches the heading
+    expect(qAll('section[aria-label="Videos"]').length).toBe(1);
+  });
+});
+
+describe("REA-3B (F6) — the guest Subscribe click (the WFX2-P2-AU law, the watch page's precedent)", () => {
+  test("a guest click routes to /signin with the redirect back — NEVER a subscription write", async () => {
+    // give the happy-dom window a real base URL (about:blank cannot resolve
+    // the relative assign — a navigation no-op in happy-dom, not in the app)
+    win.location.href = "http://localhost/channel/@mind_warehouse";
+    fetchHandler = () => jsonResponse(pageDto({}));
+    await renderPage();
+    const subscribe = Array.from(win.document.querySelectorAll("button")).find(
+      (b) => (b.textContent ?? "").trim() === "Subscribe"
+    );
+    expect(subscribe).toBeDefined();
+    await act(async () => {
+      subscribe!.click();
+    });
+    await sleep(20);
+    // the sign-in href carries the surface that prompted it (pathname-derived)
+    expect(win.location.href).toBe(
+      "http://localhost/signin?redirect=%2Fchannel%2F%40mind_warehouse"
+    );
+    // no subscription write fired (guests never hit the write route)
+    expect(fetchLog.some((u) => u.includes("/api/subscribe"))).toBe(false);
+    expect(toasts).toHaveLength(0);
+  });
+});

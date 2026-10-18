@@ -189,8 +189,10 @@ export type ChannelTabId =
   | "videos"
   | "shorts"
   | "live"
+  | "shows"
   | "playlists"
   | "community"
+  | "store"
   | "membership"
   | "about";
 
@@ -235,6 +237,48 @@ export type ChannelPlaylistDTO = {
   videoCount: number;
   videoCountText: string | null;
   thumbnailUrl: string | null;
+};
+
+/**
+ * REA-3B (F6) — one show row (the Shows tab's gridShowRenderer, live-measured
+ * 2026-10-18 on @mkbhd): title, the show-custom thumbnail, and the show's
+ * own playlist target (navigationEndpoint.browseEndpoint.browseId "VL<PL…>"
+ * → WebFlix's real playlist page). The byline is the channel itself.
+ */
+export type ChannelShowDTO = {
+  /** the show's playlist id (the VL… browseId minus the VL prefix) */
+  playlistId: string;
+  title: string;
+  thumbnailUrl: string | null;
+  /** the byline runs' text (the channel name) */
+  byline: string | null;
+};
+
+/**
+ * REA-3B (F6) — one store product card (the Store tab's
+ * verticalProductCardRenderer, live-measured 2026-10-18 on @mkbhd: "Overlay
+ * Deskpad", HK$227.60, "Out of stock", "From MKBHD"). Every field is the
+ * card's own; the product link is the real external merchant URL the card's
+ * commandExecutorCommand carries (never fabricated, null when absent).
+ */
+export type ChannelStoreProductDTO = {
+  title: string;
+  thumbnailUrl: string | null;
+  /** the card's own price text, e.g. "HK$227.60" — null when it carries none */
+  price: string | null;
+  /** e.g. "Out of stock" — the card's own replacement line, null when absent */
+  priceReplacementText: string | null;
+  merchantName: string | null;
+  /** e.g. "From MKBHD" */
+  fromMerchantText: string | null;
+  /** the real external merchant URL (the commandExecutorCommand target) */
+  productUrl: string | null;
+};
+
+/** REA-3B (F6) — one Store tab shelf ("Just dropped", "Featured", …). */
+export type ChannelStoreShelfDTO = {
+  title: string | null;
+  products: ChannelStoreProductDTO[];
 };
 
 /** One community-post poll choice (backstageAttachment.pollRenderer.choices[]). */
@@ -320,6 +364,10 @@ export type ChannelTabDTO = {
   videos?: VideoDTO[];
   shorts?: VideoDTO[];
   playlists?: ChannelPlaylistDTO[];
+  /** REA-3B (F6): the Shows tab's rows (gridShowRenderer). */
+  shows?: ChannelShowDTO[];
+  /** REA-3B (F6): the Store tab's shelves (shelfRenderer + product cards). */
+  store?: ChannelStoreShelfDTO[];
   posts?: CommunityPostDTO[];
   about?: ChannelAboutDTO;
   /** memberships (Join) info when the tab surface carries it */

@@ -11,14 +11,16 @@ const TAB_IDS: ChannelTabId[] = [
   "videos",
   "shorts",
   "live",
+  "shows",
   "playlists",
   "community",
+  "store",
   "membership",
   "about",
 ];
 
 /**
- * GET /api/channel/[handle]/tab?tab=home|videos|shorts|live|playlists|community|membership|about
+ * GET /api/channel/[handle]/tab?tab=home|videos|shorts|live|shows|playlists|community|store|membership|about
  * — the per-tab channel data (WFX2-B-S deep parity), lazy-loaded per tab
  * switch. Real tab data via browse {browseId, params: the channel's own tab
  * param}; Community = the Posts tab; About = the engagement-panel

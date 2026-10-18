@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useApi, postJson } from "@/hooks/use-api";
+import { useWebFlixSession } from "@/hooks/use-webflix-session";
+import { signInHref } from "@/lib/auth/client";
 import { VideoCard } from "@/components/video/video-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -84,8 +86,13 @@ const ALL_TABS: { id: ChannelTabId; label: string }[] = [
   { id: "videos", label: "Videos" },
   { id: "shorts", label: "Shorts" },
   { id: "live", label: "Live" },
+  /* REA-3B (F6) — Shows + Store join the strip in youtube.com's own order
+     (live-measured 2026-10-18 on @mkbhd: Home/Videos/Shorts/Live/Shows/
+     Playlists/Posts/Store); availability stays the response's own tab list. */
+  { id: "shows", label: "Shows" },
   { id: "playlists", label: "Playlists" },
   { id: "community", label: "Community" },
+  { id: "store", label: "Store" },
   { id: "membership", label: "Membership" },
   { id: "about", label: "About" },
 ];
@@ -156,6 +163,12 @@ export default function ChannelPage() {
       : null
   );
   const [subscribing, setSubscribing] = useState(false);
+  // REA-3B (F6) — the guest session probe: youtube.com's logged-out
+  // Subscribe opens the "Want to subscribe to this channel?" sign-in ask;
+  // WebFlix's own equivalent is the watch page's WFX2-P2-AU law (the guest
+  // click routes to /signin with the redirect back — never a write that
+  // honestly 401s into a raw "unauthenticated" toast).
+  const session = useWebFlixSession();
   const [tab, setTab] = useState<ChannelTabId>(composeDeepLink ? "community" : "home");
   const [joinOpen, setJoinOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -236,6 +249,13 @@ export default function ChannelPage() {
 
   async function toggleSubscribe() {
     if (!data) return;
+    // REA-3B (F6) — the WFX2-P2-AU law, the watch page's SubscribeButton
+    // precedent: guests never fire a subscription write; the click routes
+    // to the sign-in prompt with the redirect back to this channel page.
+    if (session.status === "unauthenticated") {
+      window.location.assign(signInHref(window.location.pathname));
+      return;
+    }
     setSubscribing(true);
     try {
       const res = await postJson<{ subscribed: boolean }>("/api/subscribe", {
@@ -516,6 +536,22 @@ export default function ChannelPage() {
                     tabData={tabData}
                     tabLoading={tabLoading}
                     render={(t) => <PlaylistsTab playlists={t.playlists ?? []} />}
+                  />
+                )}
+                {tab === "shows" && (
+                  <LazyTab
+                    tab="shows"
+                    tabData={tabData}
+                    tabLoading={tabLoading}
+                    render={(t) => <ShowsTab shows={t.shows ?? []} />}
+                  />
+                )}
+                {tab === "store" && (
+                  <LazyTab
+                    tab="store"
+                    tabData={tabData}
+                    tabLoading={tabLoading}
+                    render={(t) => <StoreTab shelves={t.store ?? []} />}
                   />
                 )}
                 {tab === "community" && (
@@ -836,8 +872,13 @@ export function SortChipBar({
 function HomeTab({ data }: { data: ChannelPageDTO }) {
   return (
     <div className="space-y-8">
-      <section aria-label="Featured videos">
-        <VideosTab videos={data.videos} emptyNote="This channel hasn't uploaded any videos yet." compactHeading />
+      {/* REA-3B (F6) — youtube.com's own home-tab first shelf is titled
+          "Videos" (live-measured 2026-10-18 on @mkbhd — the Latest-videos
+          shelf, before the themed shelves); the heading mirrors the Shorts
+          section's own presentation. */}
+      <section aria-label="Videos">
+        <h2 className="mb-3 text-base font-semibold">Videos</h2>
+        <VideosTab videos={data.videos} emptyNote="This channel hasn't uploaded any videos yet." />
       </section>
       {data.shorts.length > 0 && (
         <section aria-label="Shorts">
@@ -852,11 +893,9 @@ function HomeTab({ data }: { data: ChannelPageDTO }) {
 function VideosTab({
   videos,
   emptyNote,
-  compactHeading,
 }: {
   videos: ChannelPageDTO["videos"];
   emptyNote: string;
-  compactHeading?: boolean;
 }) {
   if (videos.length === 0) {
     return <p className="py-10 text-center text-sm text-muted-foreground">{emptyNote}</p>;
@@ -938,6 +977,118 @@ function PlaylistsTab({ playlists }: { playlists: NonNullable<ChannelTabDTO["pla
             <p className="-mt-1 text-xs text-muted-foreground">{pl.videoCountText}</p>
           )}
         </Link>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * REA-3B (F6) — the Shows tab: youtube.com's own shape (live-measured
+ * 2026-10-18 on @mkbhd) — a 16:9 show-card grid, each card linking the
+ * show's own playlist (the VL… browseId target → WebFlix's real playlist
+ * page), title + byline under the thumbnail.
+ */
+function ShowsTab({ shows }: { shows: NonNullable<ChannelTabDTO["shows"]> }) {
+  if (shows.length === 0) {
+    return (
+      <p className="py-10 text-center text-sm text-muted-foreground">
+        No shows from this channel yet.
+      </p>
+    );
+  }
+  return (
+    <div className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+      {shows.map((show) => (
+        <Link
+          key={show.playlistId}
+          href={`/playlist/${show.playlistId}`}
+          className="group flex flex-col gap-2"
+          aria-label={`Open show ${show.title}`}
+        >
+          <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-secondary">
+            {show.thumbnailUrl ? (
+              <img
+                src={show.thumbnailUrl}
+                alt=""
+                loading="lazy"
+                className="absolute inset-0 h-full w-full object-cover transition group-hover:scale-[1.02]"
+              />
+            ) : null}
+          </div>
+          <p className="line-clamp-2 text-sm font-medium leading-snug">{show.title}</p>
+          {show.byline && <p className="-mt-1 text-xs text-muted-foreground">{show.byline}</p>}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * REA-3B (F6) — the Store tab: youtube.com's own shape (live-measured
+ * 2026-10-18 on @mkbhd) — titled shelves ("Just dropped", "Featured"), each
+ * carrying vertical product cards (thumbnail, title, price or the card's own
+ * replacement line e.g. "Out of stock", "From <merchant>"). A card links the
+ * REAL external merchant URL the card's own command carries (opens in a new
+ * tab — youtube.com's own open-in-new behavior); a card without a URL
+ * renders unlinked (never a guessed target, never a dead link).
+ */
+function StoreTab({ shelves }: { shelves: NonNullable<ChannelTabDTO["store"]> }) {
+  if (shelves.length === 0) {
+    return (
+      <p className="py-10 text-center text-sm text-muted-foreground">
+        No store products from this channel right now.
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-8">
+      {shelves.map((shelf, i) => (
+        <section key={shelf.title ?? i} aria-label={shelf.title ?? "Store shelf"}>
+          {shelf.title && <h3 className="pb-3 text-base font-medium">{shelf.title}</h3>}
+          <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
+            {shelf.products.map((product, j) => {
+              const card = (
+                <>
+                  <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-secondary">
+                    {product.thumbnailUrl ? (
+                      <img
+                        src={product.thumbnailUrl}
+                        alt=""
+                        loading="lazy"
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                    ) : null}
+                  </div>
+                  <p className="line-clamp-2 text-sm font-medium leading-snug">{product.title}</p>
+                  <p className="-mt-1 text-sm text-muted-foreground">
+                    {product.priceReplacementText ?? product.price ?? ""}
+                  </p>
+                  {product.fromMerchantText && (
+                    <p className="-mt-1 text-xs text-muted-foreground">
+                      {product.fromMerchantText}
+                    </p>
+                  )}
+                </>
+              );
+              return product.productUrl ? (
+                <a
+                  key={`${product.title}-${j}`}
+                  href={product.productUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="group flex flex-col gap-2"
+                  aria-label={`Open ${product.title} on the merchant site (external)`}
+                >
+                  {card}
+                </a>
+              ) : (
+                <div key={`${product.title}-${j}`} className="flex flex-col gap-2">
+                  {card}
+                </div>
+              );
+            })}
+          </div>
+        </section>
       ))}
     </div>
   );
