@@ -575,3 +575,68 @@ describe("P18 — the unchanged seams (regression guards)", () => {
     expect(toasts.filter((t) => t.includes("All notifications marked as read"))).toHaveLength(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// REA-3B (F7) — the signed-in loginRequired states (the
+// HistoryUnavailableNote law, the F5/subscriptions precedent): the viewer
+// passed the WebFlix gate, so the missing YT session is operator-side —
+// NEVER a "Sign in …" re-ask (the guest ask belongs to the gate).
+// ---------------------------------------------------------------------------
+
+const LOGIN_REQUIRED_NO_SESSION = {
+  ...EMPTY_CENTER,
+  loginRequired: true,
+  session: false,
+};
+const LOGIN_REQUIRED_CONNECTED = {
+  ...EMPTY_CENTER,
+  loginRequired: true,
+  session: true,
+};
+
+describe("REA-3B (F7) — the center's loginRequired state speaks the unavailable-note law", () => {
+  test("no YT session yet → 'unavailable right now' + the operator-session explanation (role=status, NEVER a sign-in ask)", async () => {
+    centerData = LOGIN_REQUIRED_NO_SESSION;
+    await render(createElement(NotificationsCenterPage));
+    const text = host!.textContent ?? "";
+    expect(text).toContain("Notifications are unavailable right now");
+    expect(text).toContain("No YouTube session is connected to this deployment yet");
+    expect(text).toContain("your WebFlix sign-in is fine");
+    // the law: no re-ask to the already-signed-in viewer
+    expect(text).not.toMatch(/[Ss]ign in to/);
+    expect(all('[role="status"]').length).toBe(1);
+    // no prefs UI on an unavailable feed (nothing to configure — honest)
+    expect(all('[data-testid="channel-prefs-gear"]').length).toBe(0);
+    expect(all('[data-testid="mark-all-read"]').length).toBe(0);
+  });
+
+  test("session connected but not served → the connected-but-unavailable copy (honest divergence)", async () => {
+    centerData = LOGIN_REQUIRED_CONNECTED;
+    await render(createElement(NotificationsCenterPage));
+    const text = host!.textContent ?? "";
+    expect(text).toContain("Notifications are unavailable right now");
+    expect(text).toContain("The YouTube session is connected but didn't serve your notifications");
+    expect(text).not.toMatch(/[Ss]ign in to/);
+  });
+});
+
+describe("REA-3B (F7) — the bell panel's loginRequired state (the compact note, not a re-ask)", () => {
+  test("signed-in + loginRequired → the panel says unavailable (operator-side), never 'sign in'", async () => {
+    centerData = LOGIN_REQUIRED_NO_SESSION;
+    const { NotificationsBell } = await import("@/components/app/notifications-bell");
+    await render(createElement(NotificationsBell));
+    const trigger = all('button[aria-label^="Notifications"]')[0];
+    expect(trigger).toBeDefined();
+    await act(async () => {
+      trigger.dispatchEvent(
+        new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0 })
+      );
+    });
+    await act(async () => {});
+    await sleep(40);
+    const panelText = win.document.body.textContent ?? "";
+    expect(panelText).toContain("Notifications are unavailable right now");
+    expect(panelText).toContain("isn't connected to this deployment yet");
+    expect(panelText).not.toMatch(/[Ss]ign in to/);
+  });
+});

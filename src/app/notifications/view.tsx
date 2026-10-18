@@ -183,12 +183,7 @@ function NotificationsCenter() {
           </div>
         )}
 
-        {!error && data?.loginRequired && (
-          <p className="px-4 py-6 text-center text-sm text-muted-foreground">
-            Notifications are personal — sign in (configure the YouTube session) to read
-            them. Empty is also valid when the account has none.
-          </p>
-        )}
+        {!error && data?.loginRequired && <NotificationsUnavailableNote session={data.session} />}
 
         {empty && data && !data.loginRequired && (
           <div data-testid="notifications-empty-promo" className="flex flex-col items-center px-4 py-16 text-center sm:px-6">
@@ -259,6 +254,29 @@ function NotificationsCenter() {
 
       <ChannelPrefsSheet open={prefsOpen} onOpenChange={setPrefsOpen} items={items} />
     </main>
+  );
+}
+
+/**
+ * The honest no-session state (REA-3B F7 — the HistoryUnavailableNote law,
+ * the F5/subscriptions precedent): NEVER a "Sign in to …" ask — the viewer
+ * already passed the WebFlix gate (the PersonalSurfaceGate around this view);
+ * what's missing is the deployment's YouTube session, which no WebFlix
+ * sign-in can fix. youtube.com never asks a signed-in viewer to sign in
+ * again — the guest ask belongs to the gate, which renders it exactly.
+ */
+function NotificationsUnavailableNote({ session }: { session: boolean }) {
+  return (
+    <div className="px-4 py-16 text-center sm:px-6" role="status">
+      <p className="text-lg font-medium">Notifications are unavailable right now</p>
+      <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+        Notifications are personal to the YouTube account this WebFlix deployment rides
+        (single-tenant live mode).{" "}
+        {session
+          ? "The YouTube session is connected but didn't serve your notifications — open them on youtube.com to check."
+          : "No YouTube session is connected to this deployment yet — your WebFlix sign-in is fine; the operator session (YT_COOKIES) needs to be connected."}
+      </p>
+    </div>
   );
 }
 
