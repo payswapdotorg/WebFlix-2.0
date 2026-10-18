@@ -214,6 +214,24 @@ const playbackWithNativeStream = (id: string) => ({
   durationSec: 213,
   source: "player",
 });
+/**
+ * P26-HPV2 — the walled-class DTO (the REAL 2026-10-18 capture shape for
+ * kJQP7kiw5Fk's class from the sandbox egress: source watch-page, ZERO
+ * streamFormats — the ciphered itag18 + the ABR-track adaptiveFormats are
+ * honestly filtered — storyboards + duration survive). This is the exact
+ * payload the widened client chain + the watch-page rung produce for the
+ * Vevo/music class today: the storyboard lane is the honest floor.
+ */
+const playbackWalledClassWatch = (id: string) => ({
+  streamFormats: [],
+  storyboards: [
+    { ...storyboardLevel(id), level: 1, frameWidth: 80, frameHeight: 45, cols: 10, rows: 10, sheetCount: 2 },
+    storyboardLevel(id),
+  ],
+  durationSec: 213,
+  source: "watch-page",
+});
+
 /** (Re)install the stub — afterEach restores the REAL fetch, so every test
  *  must re-install it or fetchPlayback falls through to the network. */
 const installFetchStub = () => {
@@ -237,6 +255,12 @@ const stubbedFetch: typeof fetch = (async (url: string | URL | Request) => {
   }
   if (id.startsWith("NATIVE")) {
     return new Response(JSON.stringify(playbackWithNativeStream(id)), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  if (id.startsWith("VEVO")) {
+    return new Response(JSON.stringify(playbackWalledClassWatch(id)), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
@@ -1097,6 +1121,32 @@ describe("P26-HPV — the native lane: embed death plays the real video (the ope
     expect(previewVideoEl()).toBeNull(); // no formats → the native lane never arms
     expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
     expect(q('[data-testid="storyboard-frame"]')).not.toBeNull();
+  });
+
+  test("P26-HPV2 — the walled Vevo class's REAL 2026-10-18 DTO (watch-page, cipher-filtered) → the storyboard floor, never a broken native lane", async () => {
+    // the exact payload shape the widened chain + watch-page rung serve for
+    // kJQP7kiw5Fk's class from the sandbox egress: storyboards + duration
+    // survive, ZERO streamFormats (the ciphered formats honestly dropped —
+    // no decipher exists in the current player world). The native lane never
+    // arms on an empty surface — the storyboard companion is the honest floor.
+    const vevoVideo = {
+      id: "VEVO0000001",
+      title: "Walled Vevo class",
+      thumbnailUrl: "https://i.ytimg.com/vi/VEVO0000001/hqdefault.jpg",
+    };
+    const { card, anchor } = await renderApp(vevoVideo);
+    await show(vevoVideo, card, anchor);
+    await act(async () => {
+      await sleep(30);
+    });
+    const player = livePlayer()!;
+    await act(async () => {
+      playerEvents(player).onError?.(); // embed death on the walled class
+    });
+    expect(previewVideoEl()).toBeNull(); // no plain formats → no native lane
+    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
+    expect(q('[data-testid="storyboard-frame"]')).not.toBeNull(); // the companion animates
+    expect(q('[data-testid="hover-preview-mute"]')).toBeNull(); // no chrome without a video
   });
 
   test("NATIVE_NO_PLAY_MS zombie guard: a never-playing, never-erroring video goes dead after the window → storyboard", async () => {

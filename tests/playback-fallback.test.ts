@@ -68,7 +68,9 @@ import {
   extractPlayerResponseFromHtml,
   getPlayback,
   parsePlayback,
+  parseSignatureCipher,
   parseStoryboardSpec,
+  playerClientChain,
   playerClientContext,
   PLAYER_CLIENT_ENV,
 } from "@/lib/youtube/streams";
@@ -84,6 +86,8 @@ const FIXTURE_DIR = "tests/fixtures/yt";
 const load = (name: string): any => JSON.parse(readFileSync(`${FIXTURE_DIR}/${name}.json`, "utf8"));
 
 const playerFixture = load("player_storyboard_dQw4");
+/** P26-HPV2 — the 2026-10-18 real watch-page capture (the walled-class shape). */
+const watchpage2026Fixture = load("player_watchpage_dQw4_20261018");
 
 // ---------------------------------------------------------------------------
 // Parsers
@@ -373,6 +377,149 @@ describe("P26-HPV — the pickers (the watch guard + the preview's nearest-360p)
 });
 
 // ---------------------------------------------------------------------------
+// P26-HPV2 — the widened client chain + the cipher surface (Task 33)
+// ---------------------------------------------------------------------------
+
+describe("P26-HPV2 — parsePlayback: the 2026-10-18 real watch-page capture (the walled-class shape)", () => {
+  test("storyboards parse; the ciphered itag18 + the ABR-track adaptiveFormats are honestly dropped", () => {
+    const dto = parsePlayback("watch-page", watchpage2026Fixture);
+    expect(dto.source).toBe("watch-page");
+    // the honest filter: signatureCipher'd itag18 (s/sp/url, no plain url) AND
+    // the 3 ABR-track descriptors (NEITHER url NOR signatureCipher — useless
+    // entries the parser must tolerate, never surface) → empty streamFormats
+    expect(dto.streamFormats).toEqual([]);
+    expect(dto.storyboards.map((l) => l.level)).toEqual([1, 2, 3]); // the "default" L0 skipped
+    expect(dto.durationSec).toBe(213);
+    expect(dto.storyboards[1].frameWidth).toBe(160); // L2 160x90 — the spec family is stable
+  });
+
+  test("the 2026-10-18 capture's cipher is PARSEABLE (parseSignatureCipher) but never deciphered — no surface", () => {
+    // the cipher parsing exists for inspection (the lane's bounded research
+    // surface); the decipher itself is not implementable in the current
+    // player world (the honest Part 2 stop), so the parsed triple NEVER
+    // rides streamFormats — the honest degrade above is the whole story
+    const cipher = watchpage2026Fixture.streamingData.formats[0].signatureCipher;
+    const parts = parseSignatureCipher(cipher)!;
+    expect(parts).not.toBeNull();
+    expect(parts.s.length).toBe(108); // the real scramble length (2026-10-18 capture)
+    expect(parts.sp).toBe("sig");
+    expect(parts.url).toContain("googlevideo.com/videoplayback"); // IP-bound, egress-bound
+    // and the pairing: the SAME response parsed through parsePlayback keeps
+    // the format out of the surface — parsing ≠ deciphering ≠ surfacing
+    expect(parsePlayback("watch-page", watchpage2026Fixture).streamFormats).toEqual([]);
+  });
+});
+
+describe("P26-HPV2 — parseSignatureCipher (the s/sp/url triple, pure + tolerant)", () => {
+  test("parses the REAL captured cipher (order-insensitive params, URL-decoded values)", () => {
+    const parts = parseSignatureCipher(
+      "s=y%3D%3DWEZZ814ULVVggRJJMf&sp=sig&url=https%3A%2F%2Frr4.googlevideo.com%2Fvideoplayback%3Fexpire%3D1792"
+    )!;
+    expect(parts.s).toBe("y==WEZZ814ULVVggRJJMf"); // %3D decoded
+    expect(parts.sp).toBe("sig");
+    expect(parts.url).toBe("https://rr4.googlevideo.com/videoplayback?expire=1792");
+  });
+
+  test("sp defaults to sig when absent; param order does not matter", () => {
+    const parts = parseSignatureCipher(
+      "url=https%3A%2F%2Frr1.googlevideo.com%2Fvideoplayback&s=abc"
+    )!;
+    expect(parts.sp).toBe("sig");
+    expect(parts.s).toBe("abc");
+  });
+
+  test("tolerant shapes: null / empty / missing s / missing url / garbage → null, never a throw", () => {
+    expect(parseSignatureCipher(null)).toBeNull();
+    expect(parseSignatureCipher(undefined)).toBeNull();
+    expect(parseSignatureCipher("")).toBeNull();
+    expect(parseSignatureCipher(12345)).toBeNull();
+    expect(parseSignatureCipher("sp=sig&url=https%3A%2F%2Fx.example.com%2Fv")).toBeNull(); // no s
+    expect(parseSignatureCipher("s=abc&sp=sig")).toBeNull(); // no url
+    expect(parseSignatureCipher("not-a-query-string")).toBeNull();
+  });
+});
+
+describe("P26-HPV2 — the widened rung-1 client chain (six lottery tickets)", () => {
+  test("the chain order: configured client first, then the native family, then the web/embedded family", () => {
+    expect(playerClientChain().map((c) => c.clientName)).toEqual([
+      "WEB", // INNER_TUBE_PLAYER_CLIENT default
+      "IOS",
+      "ANDROID",
+      "MWEB",
+      "WEB_EMBEDDED_PLAYER",
+      "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
+    ]);
+  });
+
+  test("the ANDROID rung's context carries the real device shape (androidSdkVersion + the app UA)", () => {
+    const android = playerClientChain().find((c) => c.clientName === "ANDROID")!;
+    expect(android).toMatchObject({
+      clientName: "ANDROID",
+      clientVersion: "20.10.38",
+      androidSdkVersion: 30,
+      osName: "Android",
+      osVersion: "11",
+    });
+    expect(android.userAgent).toContain("com.google.android.youtube/20.10.38");
+  });
+
+  test("the embed-player family's thirdParty context (embedUrl rides OUTSIDE the client object)", () => {
+    const embedded = playerClientChain().filter((c) => c.thirdPartyEmbedUrl);
+    expect(embedded.map((c) => c.clientName)).toEqual(["WEB_EMBEDDED_PLAYER", "TVHTML5_SIMPLY_EMBEDDED_PLAYER"]);
+    for (const c of embedded) expect(c.thirdPartyEmbedUrl).toBe("https://www.youtube.com");
+    expect(embedded[1].clientVersion).toBe("2.0"); // TVHTML5_SIMPLY_EMBEDDED_PLAYER v2.0
+  });
+
+  test("every walled rung costs one FAST request: the full chain fires exactly six player calls, NO STS anywhere", async () => {
+    const { impl, recorded } = chainUpstream(WALLED_PLAYER, null);
+    setUpstream(impl);
+    const dto = await getPlayback("WALLED77777");
+    expect(dto).toEqual({ streamFormats: [], storyboards: [], durationSec: null, source: "" });
+    const playerCalls = recorded.filter((r) => r.url.includes("/youtubei/v1/player"));
+    expect(playerCalls.map((r) => r.body.context.client.clientName)).toEqual([
+      "WEB",
+      "IOS",
+      "ANDROID",
+      "MWEB",
+      "WEB_EMBEDDED_PLAYER",
+      "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
+    ]);
+    // the measured STS verdict is pinned: NO player call carries
+    // playbackContext.contentPlaybackContext.signatureTimestamp — wiring it
+    // would let a storyboards-only WEB answer capture the loop before the
+    // IOS/ANDROID plain-format rungs (the measured regression; see the lane ledger)
+    for (const call of playerCalls) {
+      expect(call.body.playbackContext).toBeUndefined();
+    }
+    // the two embedded rungs sent their thirdParty context at the CONTEXT level
+    const tvSimply = playerCalls.find((r) => r.body.context.client.clientName === "TVHTML5_SIMPLY_EMBEDDED_PLAYER")!;
+    expect(tvSimply.body.context.thirdParty).toEqual({ embedUrl: "https://www.youtube.com" });
+    expect(tvSimply.body.context.client.thirdPartyEmbedUrl).toBeUndefined();
+    const webEmbedded = playerCalls.find((r) => r.body.context.client.clientName === "WEB_EMBEDDED_PLAYER")!;
+    expect(webEmbedded.body.context.thirdParty).toEqual({ embedUrl: "https://www.youtube.com" });
+    // the ANDROID rung sent its device shape
+    const android = playerCalls.find((r) => r.body.context.client.clientName === "ANDROID")!;
+    expect(android.body.context.client).toMatchObject({ androidSdkVersion: 30, osName: "Android" });
+    expect(android.body.context.thirdParty).toBeUndefined();
+  });
+
+  test("the widened chain's new winning cell: WEB + IOS walled → ANDROID answers plain formats (no watch fetch)", async () => {
+    const { impl, recorded } = perClientUpstream(
+      { WEB: WALLED_PLAYER, IOS: WALLED_PLAYER, ANDROID: OK_PLAYER_WITH_FORMATS },
+      watchHtmlFor(playerFixture),
+    );
+    setUpstream(impl);
+    const dto = await getPlayback("dQw4w9WgXcQ");
+    expect(dto.source).toBe("player");
+    expect(dto.streamFormats.map((f) => f.itag)).toEqual([18]);
+    expect(dto.storyboards).toHaveLength(3);
+    const playerCalls = recorded.filter((r) => r.url.includes("/youtubei/v1/player"));
+    expect(playerCalls.map((r) => r.body.context.client.clientName)).toEqual(["WEB", "IOS", "ANDROID"]);
+    expect(recorded.some((r) => r.url.includes("youtube.com/watch"))).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // The chain (setUpstream seam) + routes
 // ---------------------------------------------------------------------------
 
@@ -554,13 +701,21 @@ describe("getPlayback — the chain (player endpoint → watch page → honest e
     expect(recorded.some((r) => r.url.includes("youtube.com/watch"))).toBe(false);
   });
 
-  test("INNER_TUBE_PLAYER_CLIENT=IOS dedupes the chain (a single player request)", async () => {
+  test("INNER_TUBE_PLAYER_CLIENT=IOS dedupes the chain (the IOS rung never repeats; the widened tail still runs)", async () => {
     process.env[PLAYER_CLIENT_ENV] = "IOS";
     const { impl, recorded } = chainUpstream(WALLED_PLAYER, null);
     setUpstream(impl);
     const dto = await getPlayback("WALLED99999");
     expect(dto).toEqual({ streamFormats: [], storyboards: [], durationSec: null, source: "" });
-    expect(recorded.filter((r) => r.url.includes("/youtubei/v1/player"))).toHaveLength(1);
+    // the deduped widened chain: IOS first (configured), then the rest
+    const playerCalls = recorded.filter((r) => r.url.includes("/youtubei/v1/player"));
+    expect(playerCalls.map((r) => r.body.context.client.clientName)).toEqual([
+      "IOS",
+      "ANDROID",
+      "MWEB",
+      "WEB_EMBEDDED_PLAYER",
+      "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
+    ]);
   });
 
   test("WFX2-4A rung 3 — rungs 1-2 walled, the broker's page-context watch read serves (source: broker-watch)", async () => {
