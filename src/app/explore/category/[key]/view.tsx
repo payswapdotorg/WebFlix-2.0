@@ -22,7 +22,7 @@ import {
 import { useApi } from "@/hooks/use-api";
 import { VideoCard } from "@/components/video/video-card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { HOME_CHIPS, categoryDestination } from "@/lib/categories";
+import { CATEGORY_CHIPS, categoryDestination } from "@/lib/categories";
 import { cn } from "@/lib/utils";
 import type { ExploreCategoryPageDTO, VideoDTO } from "@/lib/types";
 
@@ -144,12 +144,15 @@ export default function ExploreCategoryPage({ category }: { category: string }) 
         </p>
       )}
 
-      {/* the chip row — All + the 14 categories, URL-synced (Link navigation) */}
+      {/* the chip row — All + the 14 categories, URL-synced (Link navigation).
+          REA-3: this browse surface keeps the CATEGORY ladder; the dynamic
+          chip family (Recently uploaded / live-scoped Live) is the HOME
+          feed's own row. */}
       <nav
         aria-label="Explore categories"
         className="flex gap-2 overflow-x-auto px-4 pb-4 sm:px-6 no-scrollbar"
       >
-        {HOME_CHIPS.map((chip) => {
+        {CATEGORY_CHIPS.map((chip) => {
           const active = chip === category;
           return (
             <Link

@@ -25,16 +25,55 @@ export const CATEGORIES = Object.keys(CATEGORY_ICONS);
 
 export const ALL_CHIP = "All";
 
-/** Chips row: All + the 14 categories (WebFlix order). */
-export const HOME_CHIPS: string[] = [ALL_CHIP, ...CATEGORIES];
+/**
+ * REA-3 — youtube.com's home chip ladder, measured logged-in 2026-10-17
+ * (the station pack): the DYNAMIC chip family rides directly after "All"
+ * ("New to you", "Mixes", "Recently uploaded", "Live"), then the category
+ * chips. WebFlix ships the honest subset of that family:
+ *   - "Mixes" and "Live" (already real chip modes — Live is live-scoped, see
+ *     feeds.ts getHomeFeed);
+ *   - "Recently uploaded" — the compose seed queries searched with the
+ *     EXISTING date sort (real recently-uploaded-first results);
+ *   - "New to you" is HONESTLY ABSENT: it needs per-user personalization
+ *     (videos from channels you haven't seen), and no such seam exists —
+ *     never a fake chip (the REA-3 parity-debt ledger records it).
+ */
+export const RECENTLY_UPLOADED_CHIP = "Recently uploaded";
+
+/** The dynamic block (the honest subset of youtube.com's measured family). */
+export const HOME_DYNAMIC_CHIPS: readonly string[] = [
+  "Mixes",
+  RECENTLY_UPLOADED_CHIP,
+  "Live",
+];
+
+/** The category block — Live/Mixes deduped (they ride the dynamic block). */
+export const HOME_CATEGORY_CHIPS: readonly string[] = CATEGORIES.filter(
+  (c) => !HOME_DYNAMIC_CHIPS.includes(c)
+);
+
+/** Chips row: All + the dynamic family + the categories (youtube.com order). */
+export const HOME_CHIPS: string[] = [
+  ALL_CHIP,
+  ...HOME_DYNAMIC_CHIPS,
+  ...HOME_CATEGORY_CHIPS,
+];
+
+/** The category browse ladder (the explore/category chip row) — All + 14. */
+export const CATEGORY_CHIPS: string[] = [ALL_CHIP, ...CATEGORIES];
+
+/** The chip family whose URL state the home feed understands. */
+export function isHomeChip(value: string | null | undefined): value is string {
+  return !!value && (value === ALL_CHIP || HOME_CHIPS.includes(value));
+}
 
 export function isCategory(value: string | null | undefined): value is string {
   return !!value && (value === ALL_CHIP || CATEGORIES.includes(value));
 }
 
-/** Normalize any query param into a valid chip value (default: "All"). */
+/** Normalize any query param into a valid home-chip value (default: "All"). */
 export function normalizeCategory(value: string | null | undefined): string {
-  return isCategory(value) ? value : ALL_CHIP;
+  return isHomeChip(value) ? value : ALL_CHIP;
 }
 
 /**
