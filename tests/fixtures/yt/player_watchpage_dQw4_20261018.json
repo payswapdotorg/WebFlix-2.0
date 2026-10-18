@@ -1,0 +1,77 @@
+{
+  "_note": "Real capture (sandbox egress, 2026-10-18): the watch page HTML ytInitialPlayerResponse for dQw4w9WgXcQ, trimmed to playback-chain-relevant fields. The 2026-10-18 shape: the progressive itag18 arrives signatureCipher-only (s/sp/url, no plain url); adaptiveFormats carry ABR track descriptors with NEITHER url NOR signatureCipher (useless entries the parser must tolerate); serverAbrStreamingUrl rides alongside (the modern SABR playback path, gated by attestation); playabilityStatus.contextParams carries the 12-char attestation challenge. The s is per-response (a fresh scramble every fetch). No decipher exists in implementable form for this cipher — see the P26-HPV2 lane ledger; formats stay honestly filtered.",
+  "playabilityStatus": {
+    "status": "OK",
+    "contextParams": "Q0FFU0FnZ0I="
+  },
+  "videoDetails": {
+    "videoId": "dQw4w9WgXcQ",
+    "title": "Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)",
+    "lengthSeconds": "213",
+    "isLiveContent": false
+  },
+  "streamingData": {
+    "expiresInSeconds": "21540",
+    "formats": [
+      {
+        "itag": 18,
+        "mimeType": "video/mp4; codecs=\"avc1.42001E, mp4a.40.2\"",
+        "bitrate": 444226,
+        "width": 640,
+        "height": 360,
+        "lastModified": "1766960953317159",
+        "quality": "medium",
+        "fps": 25,
+        "qualityLabel": "360p",
+        "projectionType": "RECTANGULAR",
+        "audioQuality": "AUDIO_QUALITY_LOW",
+        "approxDurationMs": "213089",
+        "audioSampleRate": "44100",
+        "audioChannels": 2,
+        "signatureCipher": "s=%3D%3DgrZm4HZqi4HI1Zx0oPbXPK6EmCZaYoI1c6Rfg_FVASqAiAzFWIY0WMFiQGd1dSNp34APCqMDLeKh39KkXuBKJ209LAhIQRwYJ2s0E00EYY&sp=sig&url=https://rr4---sn-oji3bc-5n.googlevideo.com/videoplayback%3Fexpire%3D179236…(trimmed)",
+        "qualityOrdinal": "QUALITY_ORDINAL_360P"
+      }
+    ],
+    "adaptiveFormats": [
+      {
+        "itag": 313,
+        "mimeType": "video/webm; codecs=\"vp9\"",
+        "bitrate": 18076636,
+        "width": 3840,
+        "height": 2160,
+        "fps": 25,
+        "qualityLabel": "2160p",
+        "approxDurationMs": "213040"
+      },
+      {
+        "itag": 401,
+        "mimeType": "video/mp4; codecs=\"av01.0.12M.08\"",
+        "bitrate": 17400774,
+        "width": 3840,
+        "height": 2160,
+        "fps": 25,
+        "qualityLabel": "2160p",
+        "approxDurationMs": "213040"
+      },
+      {
+        "itag": 271,
+        "mimeType": "video/webm; codecs=\"vp9\"",
+        "bitrate": 8978328,
+        "width": 2560,
+        "height": 1440,
+        "fps": 25,
+        "qualityLabel": "1440p",
+        "approxDurationMs": "213040"
+      }
+    ],
+    "serverAbrStreamingUrl": "https://rr4---sn-oji3bc-5n.googlevideo.com/videoplayback?expire=1792361015&ei=1-3UaoqAGLCU1d8Pw4jBmA0&ip=8.212.10.159&id…(trimmed)"
+  },
+  "storyboards": {
+    "playerStoryboardSpecRenderer": {
+      "spec": "https://i.ytimg.com/sb/dQw4w9WgXcQ/storyboard3_L$L/$N.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgjXxPfBBg==|48#27#100#10#10#0#default#rs$AOn4CLDgtWGAnaqZZSEHsiFathAqjUlfLQ|80#45#108#10#10#2000#M$M#rs$AOn4CLBf8GkpJjLT0oNOXNqGg2XsF5MCMg|160#90#108#5#5#2000#M$M#rs$AOn4CLClA1jTU48sHENDTij_c2ZcE493TQ|320#180#108#3#3#2000#M$M#rs$AOn4CLCHZGerbRu0IiBb-AIyubx5_-E4oQ",
+      "recommendedLevel": 3,
+      "fineScrubbingRecommendedLevel": 2,
+      "highResolutionRecommendedLevel": 3
+    }
+  }
+}
