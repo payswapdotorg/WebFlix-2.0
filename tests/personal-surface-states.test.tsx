@@ -12,7 +12,9 @@
  *     (session configured, read not served) and `loginRequired` (no
  *     session) are two different states and the page says which one it is;
  *   - the reorder ⋯ menu is never offered for the special lists (the route
- *     honestly 400s — YouTube's own lists);
+ *     honestly 400s — YouTube's own lists); REA-3 F3 replaced that with
+ *     youtube.com's own per-row Action menu (remove-from-list through the
+ *     existing write seams + Save to playlist + Share — never reorder);
  *   - the sidebar You section = youtube.com's guide order (Your channel,
  *     History, Playlists, Your videos, Watch later, Liked videos, Downloads)
  *     with "Your channel" honestly hidden when the seam unresolved;
@@ -93,6 +95,7 @@ mock.module("next/navigation", () => ({
   usePathname: () => "/",
   useParams: () => routeParams,
   useRouter: () => ({ push: () => {}, replace: () => {}, refresh: () => {} }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 const toasts: string[] = [];
@@ -121,6 +124,7 @@ const PlaylistPage = (await import("@/app/playlist/[id]/page")).default;
 const { PlaylistDetailsDialog } = await import("@/app/playlists/view");
 const DownloadsView = (await import("@/app/downloads/view")).default;
 const { SidebarNav, SidebarRail } = await import("@/components/app/sidebar");
+const { Topbar } = await import("@/components/app/topbar");
 
 // ---- fixtures (the REAL payload shapes) ----
 
@@ -309,7 +313,7 @@ describe("PlaylistPage — the special lists (WL) on the playlist page route", (
     expect(q("[data-testid='playlist-special-no-session']")).toBeNull();
   });
 
-  test("served with videos → the grid + Play all + the You owner row; the reorder ⋯ menu is NEVER offered", async () => {
+  test("served with videos → the grid + Play all + Shuffle + the You owner row; the ⋯ Action menu exists but NEVER reorders", async () => {
     routeParams = { id: "WL" };
     const videos = [makeVideo("v1", "Saved one"), makeVideo("v2", "Saved two"), makeVideo("v3", "Saved three")];
     fetchHandler = (url) => {
@@ -327,9 +331,15 @@ describe("PlaylistPage — the special lists (WL) on the playlist page route", (
     // /watch?v=<first>&list=<id> — the watch page's queue follows the list);
     // updated from the pre-G16 bare /watch/v1 assertion by the lane contract.
     expect(playAll!.getAttribute("href")).toBe("/watch/v1?list=WL");
-    // the special lists cannot be reordered — no ⋯ affordance anywhere
-    expect(all("[aria-label^='Actions for']")).toHaveLength(0);
+    // the special lists cannot be reordered — but REA-3 F3: youtube.com's
+    // own per-row Action menu IS offered (remove-from-list / save / share);
+    // "Move up"/"Move down" never ride it (the reorder route honestly 400s)
+    expect(all("[aria-label^='Actions for']")).toHaveLength(3);
     expect(win.document.body.textContent ?? "").not.toContain("Move up");
+    expect(win.document.body.textContent ?? "").not.toContain("Move down");
+    // REA-1 G16 reaches the WL special list specifically (the REA-3 work
+    // order's verification ask): Shuffle rides the header card beside Play all
+    expect(q("[data-testid='playlist-shuffle']")).not.toBeNull();
   });
 
   test("LL variant: the unavailable note names the liked list; the title falls back honestly", async () => {
@@ -571,5 +581,321 @@ describe("SidebarNav + SidebarRail — the You section at youtube.com's guide pa
     expect(watchLater?.getAttribute("href")).toBe("/playlist/WL");
     const downloads = all("nav a").find((a) => (a.textContent ?? "").trim() === "Downloads");
     expect(downloads?.getAttribute("href")).toBe("/downloads");
+  });
+
+  // REA-3 — the station pack's guide ladder (measured logged-in
+  // youtube.com 2026-10-17): Home, Shorts, Subscriptions, You, History, …
+  test("the guide ladder at the pack's order: Home, Shorts, Subscriptions, You(→ /you) — Trending never rides the main rung", async () => {
+    serveMe(null);
+    await render(<SidebarNav onNavigate={() => {}} />);
+    await act(async () => {});
+    const links = all("nav a");
+    const labels = links.map((a) => (a.textContent ?? "").trim());
+    // the main rung: exactly Home, Shorts, Subscriptions (the pack's ladder;
+    // Trending moved to the Explore section — youtube.com's own placement)
+    expect(labels.slice(0, 4)).toEqual(["Home", "Shorts", "Subscriptions", "You"]);
+    const youRow = links.find((a) => (a.textContent ?? "").trim() === "You");
+    expect(youRow?.getAttribute("href")).toBe("/you");
+    // the You family follows directly (the pack: You, History, Playlists, …)
+    const youIdx = labels.indexOf("You");
+    expect(labels.slice(youIdx + 1, youIdx + 4)).toEqual(["History", "Playlists", "Your videos"]);
+    // Trending rides the Explore section only, exactly once in the guide
+    const trending = links.filter((a) => (a.textContent ?? "").trim() === "Trending");
+    expect(trending).toHaveLength(1);
+    expect(trending[0].getAttribute("href")).toBe("/trending");
+    const exploreIdx = labels.indexOf("Explore");
+    expect(exploreIdx).toBeGreaterThan(-1);
+    expect(labels.indexOf("Trending")).toBe(exploreIdx - 1); // the section's first rung
+    expect(labels.indexOf("Trending")).toBeGreaterThan(labels.indexOf("Subscriptions"));
+  });
+
+  test("the collapsed rail mirrors the You family (You + Your videos included) and drops the topbar-only extras", async () => {
+    serveMe(null);
+    await render(<SidebarRail />);
+    await act(async () => {});
+    const links = all("nav a");
+    const labels = links.map((a) => (a.textContent ?? "").trim());
+    expect(labels.slice(0, 4)).toEqual(["Home", "Shorts", "Subscriptions", "You"]);
+    const youRow = links.find((a) => (a.textContent ?? "").trim() === "You");
+    expect(youRow?.getAttribute("href")).toBe("/you");
+    expect(labels).toContain("Your videos");
+    const yourVideos = links.find((a) => (a.textContent ?? "").trim() === "Your videos");
+    expect(yourVideos?.getAttribute("href")).toBe("/studio");
+    expect(labels).not.toContain("Trending"); // the rail keeps the main+You family only
+  });
+});
+
+describe("Topbar — youtube.com's topbar family (REA-3, station pack 2026-10-17)", () => {
+  test("the right rail is Create + Notifications + Account (no Trending flame — that lives in the guide's Explore section)", async () => {
+    fetchHandler = (url) => {
+      if (url.includes("/api/me")) {
+        return Response.json({ user: null, ownedChannel: null, subscriptions: [] });
+      }
+      return Response.json({}, { status: 200 });
+    };
+    await render(<Topbar />);
+    await act(async () => {});
+    // youtube.com's measured family: Search, voice, Create, Notifications, Account
+    expect(q('button[aria-label="Search"]')).not.toBeNull();
+    expect(q('button[aria-label="Search with your voice"]')).not.toBeNull();
+    expect(q('button[aria-label="Create"]')).not.toBeNull();
+    expect(all('button[aria-label^="Notifications"]').length).toBeGreaterThan(0);
+    expect(all('button[aria-label="Your account"], a[aria-label="Your account"]').length).toBeGreaterThan(0);
+    // the Trending flame NEVER rode youtube.com's topbar
+    expect(all('a[aria-label="Trending"]').length).toBe(0);
+    expect(all('button[title="Trending"]').length).toBe(0);
+    expect(win.document.body.textContent ?? "").not.toContain("Trending");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// REA-3 F2 — the history page at youtube.com's parity (station pack,
+// logged-in 2026-10-17): the TAB family + the watched-shorts shelves.
+// ---------------------------------------------------------------------------
+
+const HistoryView = (await import("@/app/history/view")).default;
+
+function serveHistory(groups: { label: string; items: ReturnType<typeof makeVideo>[] }[]) {
+  fetchHandler = (url) => {
+    if (url.includes("/api/history")) {
+      return Response.json({
+        groups,
+        nextCursor: null,
+        loginRequired: false,
+        watchHistoryPaused: false,
+        searchHistoryPaused: null,
+        total: groups.reduce((n, g) => n + g.items.length, 0),
+        session: true,
+      });
+    }
+    return Response.json({}, { status: 200 });
+  };
+}
+
+describe("HistoryView — REA-3 F2: the tab family + the watched-shorts shelves", () => {
+  const groups = () => [
+    {
+      label: "Today",
+      items: [
+        makeVideo("v1", "Long-form video one"),
+        { ...makeVideo("s1", "Watched short one"), isShort: true },
+        { ...makeVideo("s2", "Watched short two"), isShort: true },
+      ],
+    },
+    { label: "Yesterday", items: [makeVideo("v2", "Long-form video two")] },
+  ];
+
+  test("the tab strip renders the honest subset (All / Shorts / Videos; Music/Podcasts never guessed)", async () => {
+    serveHistory(groups());
+    await render(<HistoryView />);
+    await act(async () => {});
+    const tabs = all('[data-testid="history-tabs"] [role="tab"]');
+    expect(tabs.map((t) => t.textContent?.trim())).toEqual(["All", "Shorts", "Videos"]);
+    expect(tabs[0].getAttribute("aria-selected")).toBe("true");
+    // youtube.com's Music/Podcasts need a server-side genre seam — honestly absent
+    expect(win.document.body.textContent ?? "").not.toContain("Podcasts");
+  });
+
+  test("All (default): day groups render rows + the inline shorts shelf (9:16 tiles, /watch links)", async () => {
+    serveHistory(groups());
+    await render(<HistoryView />);
+    await act(async () => {});
+    // the day's rows render
+    expect(all('a[aria-label="Watch Long-form video one"]').length).toBeGreaterThan(0);
+    // the shorts shelf renders within the day (the group starts with a row → shelf after)
+    const shelf = q('[data-testid="history-shorts-shelf"]');
+    expect(shelf).not.toBeNull();
+    const tileLinks = shelf ? Array.from(shelf.querySelectorAll("a")) : [];
+    expect(tileLinks.map((a) => a.getAttribute("href"))).toEqual(["/watch/s1", "/watch/s2"]);
+    // per-tile ⋯ remove affordance (the same Action-menu family as rows)
+    expect(shelf!.querySelectorAll('button[aria-label^="Actions for"]').length).toBe(2);
+  });
+
+  test("Shorts tab: only the shorts render (shelf tiles, no long-form rows)", async () => {
+    serveHistory(groups());
+    await render(<HistoryView />);
+    await act(async () => {});
+    const shortsTab = all('[data-testid="history-tabs"] [role="tab"]').find(
+      (t) => t.textContent?.trim() === "Shorts",
+    )!;
+    await act(async () => {
+      shortsTab.click();
+    });
+    expect(all('a[aria-label="Watch Long-form video one"]').length).toBe(0);
+    expect(all('a[aria-label="Watch Long-form video two"]').length).toBe(0);
+    const shelf = q('[data-testid="history-shorts-shelf"]');
+    expect(shelf).not.toBeNull();
+    expect(shelf!.querySelectorAll("a").length).toBe(2);
+    // the "Yesterday" group (no shorts) collapses away honestly
+    expect(win.document.body.textContent ?? "").not.toContain("Yesterday");
+  });
+
+  test("Videos tab: only long-form rows render; the honest per-tab empty when a tab has nothing", async () => {
+    serveHistory(groups());
+    await render(<HistoryView />);
+    await act(async () => {});
+    const videosTab = all('[data-testid="history-tabs"] [role="tab"]').find(
+      (t) => t.textContent?.trim() === "Videos",
+    )!;
+    await act(async () => {
+      videosTab.click();
+    });
+    expect(all('a[aria-label="Watch Long-form video one"]').length).toBeGreaterThan(0);
+    expect(q('[data-testid="history-shorts-shelf"]')).toBeNull();
+    // now a history with NO shorts → the Shorts tab's honest empty
+    serveHistory([{ label: "Today", items: [makeVideo("v1", "Long-form video one")] }]);
+    await render(<HistoryView />);
+    await act(async () => {});
+    const shortsTab = all('[data-testid="history-tabs"] [role="tab"]').find(
+      (t) => t.textContent?.trim() === "Shorts",
+    )!;
+    await act(async () => {
+      shortsTab.click();
+    });
+    expect(win.document.body.textContent ?? "").toContain("No Shorts in your watch history");
+    expect(q('[data-testid="history-shorts-shelf"]')).toBeNull();
+  });
+
+  test("the search box stays scoped to the active tab (youtube.com searches within the tab)", async () => {
+    serveHistory(groups());
+    await render(<HistoryView />);
+    await act(async () => {});
+    const shortsTab = all('[data-testid="history-tabs"] [role="tab"]').find(
+      (t) => t.textContent?.trim() === "Shorts",
+    )!;
+    await act(async () => {
+      shortsTab.click();
+    });
+    const input = q('input[aria-label="Search watch history"]') as HTMLInputElement;
+    // the house typeInto idiom (help-center): focusin → native set → keyup —
+    // React's value tracker + change plugin pick the committed value up
+    await act(async () => {
+      input.dispatchEvent(new Event("focusin", { bubbles: true }));
+    });
+    const desc = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), "value");
+    desc?.set?.call(input, "short two");
+    await act(async () => {
+      input.dispatchEvent(new Event("keyup", { bubbles: true }));
+    });
+    const shelf = q('[data-testid="history-shorts-shelf"]');
+    expect(shelf).not.toBeNull();
+    expect(shelf!.querySelectorAll("a").length).toBe(1);
+    expect(shelf!.querySelector('a[href="/watch/s2"]')).not.toBeNull();
+    expect(shelf!.querySelector('a[href="/watch/s1"]')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// REA-3 F3 — youtube.com's per-row Action menu on its own special lists
+// (the station pack, measured logged-in 2026-10-17: "WATCH LATER (playlist
+// WL): header actions 'Play all' AND 'Shuffle'; per-row Action menu").
+// The remove rides the EXISTING write seams — the WL toggle (add:false) and
+// the remove-rating like write (action:"none"); optimistic removal with an
+// honest revert, never a fake success.
+// ---------------------------------------------------------------------------
+
+describe("REA-3 F3 — the special-list row Action menu (remove / save / share)", () => {
+  function serveSpecial(id: "WL" | "LL") {
+    const videos = [makeVideo("v1", "Saved one"), makeVideo("v2", "Saved two"), makeVideo("v3", "Saved three")];
+    fetchHandler = (url) => {
+      if (url.includes(`/api/playlist/${id}`)) return Response.json(makeSpecialPage(id, videos));
+      return Response.json({}, { status: 200 });
+    };
+  }
+
+  async function openFirstRowMenu() {
+    const kebab = all("[aria-label^='Actions for']")[0];
+    await act(async () => {
+      kebab.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0 }));
+    });
+    await act(async () => {});
+  }
+
+  test("WL rows carry the ⋯ menu with youtube.com's own items — never reorder", async () => {
+    routeParams = { id: "WL" };
+    serveSpecial("WL");
+    await render(<PlaylistPage />);
+    await act(async () => {});
+    expect(all("[aria-label^='Actions for']")).toHaveLength(3);
+    await openFirstRowMenu();
+    const body = win.document.body.textContent ?? "";
+    expect(body).toContain("Remove from Watch later");
+    expect(body).toContain("Save to playlist");
+    expect(body).toContain("Share");
+    expect(body).not.toContain("Move up");
+    expect(body).not.toContain("Move down");
+  });
+
+  test("Remove from Watch later → the existing WL write seam (add:false), optimistic row removal + the live count", async () => {
+    routeParams = { id: "WL" };
+    serveSpecial("WL");
+    await render(<PlaylistPage />);
+    await act(async () => {});
+    expect(q("[data-testid='playlist-meta']")?.textContent).toContain("3 videos");
+    await openFirstRowMenu();
+    const remove = docAll("[data-testid='playlist-row-remove']")[0];
+    expect(remove).toBeDefined();
+    await act(async () => {
+      remove.click();
+    });
+    await act(async () => {});
+    await act(async () => {});
+    // the write rode the EXISTING seam — the same route the video-card save
+    // uses, with the honest remove direction (add:false)
+    const post = fetchLog.find((f) => f.url.includes("/api/playlists/watch-later"));
+    expect(post).toBeDefined();
+    expect(post!.method).toBe("POST");
+    expect(post!.body).toEqual({ videoId: "v1", add: false });
+    // the row left optimistically; the header count follows the live list
+    expect(host!.textContent ?? "").not.toContain("Saved one");
+    expect(q("[data-testid='playlist-meta']")?.textContent).toContain("2 videos");
+    expect(toasts.some((t) => t === "success:Removed from Watch later")).toBe(true);
+  });
+
+  test("a failed remove reverts honestly (never a silent fake success)", async () => {
+    routeParams = { id: "WL" };
+    const videos = [makeVideo("v1", "Saved one")];
+    fetchHandler = (url) => {
+      if (url.includes("/api/playlist/WL")) return Response.json(makeSpecialPage("WL", videos));
+      if (url.includes("/api/playlists/watch-later")) return Response.json({}, { status: 502 });
+      return Response.json({}, { status: 200 });
+    };
+    await render(<PlaylistPage />);
+    await act(async () => {});
+    await openFirstRowMenu();
+    const remove = docAll("[data-testid='playlist-row-remove']")[0];
+    await act(async () => {
+      remove.click();
+    });
+    await act(async () => {});
+    await act(async () => {});
+    // the row is back (the honest revert) with the error toast — no success
+    expect(host!.textContent ?? "").toContain("Saved one");
+    expect(q("[data-testid='playlist-meta']")?.textContent).toContain("1 video");
+    expect(toasts.some((t) => t.startsWith("error:"))).toBe(true);
+    expect(toasts.some((t) => t === "success:Removed from Watch later")).toBe(false);
+  });
+
+  test("LL rows: Remove from Liked videos rides the existing remove-rating like write", async () => {
+    routeParams = { id: "LL" };
+    serveSpecial("LL");
+    await render(<PlaylistPage />);
+    await act(async () => {});
+    await openFirstRowMenu();
+    const body = win.document.body.textContent ?? "";
+    expect(body).toContain("Remove from Liked videos");
+    expect(body).not.toContain("Remove from Watch later");
+    const remove = docAll("[data-testid='playlist-row-remove']")[0];
+    await act(async () => {
+      remove.click();
+    });
+    await act(async () => {});
+    await act(async () => {});
+    const post = fetchLog.find((f) => f.url.includes("/api/videos/v1/like"));
+    expect(post).toBeDefined();
+    expect(post!.method).toBe("POST");
+    expect(post!.body).toEqual({ action: "none" });
+    expect(host!.textContent ?? "").not.toContain("Saved one");
+    expect(toasts.some((t) => t === "success:Removed from Liked videos")).toBe(true);
   });
 });

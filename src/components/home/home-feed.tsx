@@ -8,7 +8,7 @@ import { ContinueWatchingRail, VideoRail } from "./video-rail";
 import { ShortsShelf } from "./shorts-shelf";
 import { RecommendedGrid, useRecommendedInfiniteScroll } from "./recommended-grid";
 import { Skeleton } from "@/components/ui/skeleton";
-import { normalizeCategory } from "@/lib/categories";
+import { normalizeCategory, HOME_DYNAMIC_CHIPS } from "@/lib/categories";
 import type { HomeFeedDTO } from "@/lib/types";
 
 /**
@@ -136,6 +136,19 @@ function CategoryEmptyState({ category }: { category: string }) {
         <p className="text-lg font-medium">No feed yet</p>
         <p className="mt-1 text-sm text-muted-foreground">
           YouTube&apos;s home feed needs a session — search for anything in the meantime.
+        </p>
+      </div>
+    );
+  }
+  // REA-3 — the dynamic chips (Mixes / Recently uploaded / Live) are feed
+  // modes, not upload categories: the honest empty line names the filter,
+  // never the "upload the first …" category copy.
+  if (HOME_DYNAMIC_CHIPS.includes(category)) {
+    return (
+      <div className="px-4 py-16 text-center sm:px-6">
+        <p className="text-lg font-medium">Nothing in {category} right now</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          This filter feeds from YouTube&apos;s live results — check the other chips.
         </p>
       </div>
     );

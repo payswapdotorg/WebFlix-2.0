@@ -90,6 +90,32 @@ describe("history mapping (REAL capture: ssr_history.json)", () => {
     expect(watchedProgressAgoText(section.contents[0])).toBeNull();
   });
 
+  // REA-3 F2 — the watched-shorts shelves (youtube.com's own history carries
+  // shorts in labeled day sections; the REAL capture: a "Jan 12, 2021"
+  // section whose contents are one reelShelfRenderer with 3 shorts).
+  test("REA-3: the real capture's watched-shorts shelf maps into its day group (isShort, honest watchedSec 0)", () => {
+    const group = feed.groups.find((g) => g.label === "Jan 12, 2021");
+    expect(group).toBeDefined();
+    const shorts = group!.items.filter((i) => i.isShort);
+    expect(shorts.map((s) => s.id)).toEqual(["odyGoFdSkyo", "wIXIpZOnpAQ", "94wE3ozMTow"]);
+    // real titles from the capture's accessibilityText family
+    expect(shorts[0].title).toContain("Live bodypaint");
+    expect(shorts[0].viewsText).toBe("7 million views"); // no double-"views" (the REA-3 a11y fix)
+    expect(shorts[0].views).toBe(7_000_000);
+    // shorts carry NO partial-progress overlay — watchedSec stays 0 (honest)
+    expect(shorts.every((s) => s.watchedSec === 0)).toBe(true);
+    // the group keeps its long-form rows too (the same-label section's videos)
+    expect(group!.items.some((i) => !i.isShort)).toBe(true);
+    // the feed total carries the shorts (149 long-form + 3 shorts)
+    expect(feed.items.filter((i) => i.isShort)).toHaveLength(3);
+    expect(feed.total).toBe(152);
+  });
+
+  test("REA-3: the shorts' watchedAt rides the day label (the same derivation as rows)", () => {
+    const short = feed.items.find((i) => i.id === "odyGoFdSkyo")!;
+    expect(short.watchedAt).toBe("2021-01-12T00:00:00.000Z");
+  });
+
   test("public-mode capture (REAL: ssr_history_public.json) is login-required", () => {
     const publicPage = load("ssr_history_public");
     expect(historyLoginRequired(publicPage)).toBe(true);

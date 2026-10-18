@@ -37,6 +37,7 @@ import {
   runsText,
   mapLockupViewModel,
   mapVideoRenderer,
+  mapShortsLockupViewModel,
   mapVideos,
   relativeAgeToDate,
 } from "./mappers";
@@ -127,6 +128,13 @@ export function watchedProgressAgoText(item: unknown): string | null {
   return null;
 }
 
+/** REA-3 — the shared watchedAt derivation (day label → ISO, honest now-fallback). */
+function dayLabelToDate(dayLabel: string | null): string {
+  return dayLabel
+    ? (historyDayLabelToDate(dayLabel) ?? new Date().toISOString())
+    : new Date().toISOString();
+}
+
 /** Map one history response (first page or continuation) into the DTO. */
 export function mapHistoryPage(response: unknown): HistoryFeed {
   const loginRequired = historyLoginRequired(response);
@@ -154,22 +162,40 @@ export function mapHistoryPage(response: unknown): HistoryFeed {
   const items: ContinueVideoDTO[] = [];
   let nextCursor: string | null = null;
 
-  const push = (raw: any, dayLabel: string | null) => {
+  const push = (raw: any, dayLabel: string | null): ContinueVideoDTO[] => {
     if (raw?.continuationItemRenderer) {
       const token =
         raw.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token;
       if (typeof token === "string" && token) nextCursor = token;
-      return null;
+      return [];
+    }
+    // REA-3 F2 — the watched-shorts shelf (reelShelfRenderer): youtube.com's
+    // own history carries watched shorts in labeled day sections (the REAL
+    // capture: a "Jan 12, 2021" section whose contents are one Shorts shelf).
+    // Map every shortsLockupViewModel honestly — isShort rides the DTO so the
+    // page's Shorts/Videos tabs filter real data; shorts carry NO
+    // partial-progress overlay (measured), so watchedSec stays 0 — exactly
+    // youtube.com's own shelf presentation (no progress bar on shorts).
+    if (raw?.reelShelfRenderer) {
+      const shorts: ContinueVideoDTO[] = [];
+      for (const entry of raw.reelShelfRenderer.items ?? []) {
+        const short = mapShortsLockupViewModel(entry?.shortsLockupViewModel ?? null);
+        if (!short || seen.has(short.id)) continue;
+        seen.add(short.id);
+        shorts.push({ ...short, watchedSec: 0, watchedAt: dayLabelToDate(dayLabel) });
+      }
+      items.push(...shorts);
+      return shorts;
     }
     const dto = historyItemToContinue(raw);
-    if (!dto || seen.has(dto.id)) return null;
+    if (!dto || seen.has(dto.id)) return [];
     seen.add(dto.id);
     const watchedAt = dayLabel
       ? (historyDayLabelToDate(dayLabel) ?? new Date().toISOString())
       : dto.watchedAt;
     const item: ContinueVideoDTO = { ...dto, watchedAt };
     items.push(item);
-    return item;
+    return [item];
   };
 
   for (const section of sections) {
@@ -177,8 +203,7 @@ export function mapHistoryPage(response: unknown): HistoryFeed {
     const dayLabel = runsText(section?.header?.itemSectionHeaderRenderer?.title) || null;
     const sectionItems: ContinueVideoDTO[] = [];
     for (const raw of section?.contents ?? []) {
-      const item = push(raw, dayLabel);
-      if (item) sectionItems.push(item);
+      sectionItems.push(...push(raw, dayLabel));
     }
     if (dayLabel && sectionItems.length > 0) {
       const existing = groups.find((g) => g.label === dayLabel);
@@ -190,8 +215,7 @@ export function mapHistoryPage(response: unknown): HistoryFeed {
   // continuation-page items (no day headers) → the flat "Earlier" bucket
   const appendedItems: ContinueVideoDTO[] = [];
   for (const raw of appended) {
-    const item = push(raw, null);
-    if (item) appendedItems.push(item);
+    appendedItems.push(...push(raw, null));
   }
   if (appendedItems.length > 0) {
     const existing = groups.find((g) => g.label === "Earlier");

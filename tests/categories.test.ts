@@ -4,6 +4,10 @@ import {
   ALL_CHIP,
   CATEGORIES,
   HOME_CHIPS,
+  HOME_DYNAMIC_CHIPS,
+  HOME_CATEGORY_CHIPS,
+  CATEGORY_CHIPS,
+  RECENTLY_UPLOADED_CHIP,
   normalizeCategory,
   filterVideosByCategory,
 } from "@/lib/categories";
@@ -40,31 +44,40 @@ function fakeVideo(overrides: Partial<VideoDTO>): VideoDTO {
   };
 }
 
-describe("home chips (All + the 14 WebFlix categories)", () => {
-  test("chips row = All + 14 categories, WebFlix order", () => {
-    expect(HOME_CHIPS).toEqual([
-      "All",
-      "Music",
-      "Gaming",
-      "Live",
-      "News",
-      "Sports",
-      "Coding",
-      "Tech",
-      "Education",
-      "Travel",
-      "Cooking",
-      "Fitness",
-      "Comedy",
-      "Mixes",
-      "Podcasts",
-    ]);
-    expect(HOME_CHIPS).toHaveLength(15);
+describe("home chips — REA-3: youtube.com's measured ladder (station pack, logged-in 2026-10-17)", () => {
+  test("the dynamic family rides directly after All, then the category chips", () => {
+    // youtube.com: All, [New to you — honestly absent, no personalization
+    // seam], Mixes, Recently uploaded, Live, then the category chips.
+    expect(HOME_CHIPS.slice(0, 4)).toEqual(["All", "Mixes", RECENTLY_UPLOADED_CHIP, "Live"]);
     expect(HOME_CHIPS[0]).toBe(ALL_CHIP);
+    // the category block follows, with Live/Mixes deduped (they ride the
+    // dynamic block — one chip per label, exactly youtube.com's row)
+    expect(HOME_CHIPS.slice(4)).toEqual([...HOME_CATEGORY_CHIPS]);
+    expect(HOME_CATEGORY_CHIPS).toHaveLength(12);
+    expect(HOME_CATEGORY_CHIPS).not.toContain("Live");
+    expect(HOME_CATEGORY_CHIPS).not.toContain("Mixes");
+    expect(HOME_CHIPS).toHaveLength(16);
+  });
+
+  test("\"New to you\" is honestly absent — no fabricated personalization chip", () => {
+    expect(HOME_CHIPS).not.toContain("New to you");
+    expect(HOME_DYNAMIC_CHIPS).toEqual(["Mixes", RECENTLY_UPLOADED_CHIP, "Live"]);
+  });
+
+  test("the explore/category browse ladder stays All + the 14 categories", () => {
+    expect(CATEGORY_CHIPS).toEqual([ALL_CHIP, ...CATEGORIES]);
+    expect(CATEGORY_CHIPS).toHaveLength(15);
   });
 
   test("category count matches the reference sidebar", () => {
     expect(CATEGORIES).toHaveLength(14);
+  });
+
+  test("normalizeCategory accepts the dynamic chips (the home filter family)", () => {
+    expect(normalizeCategory(RECENTLY_UPLOADED_CHIP)).toBe(RECENTLY_UPLOADED_CHIP);
+    expect(normalizeCategory("Live")).toBe("Live");
+    expect(normalizeCategory("Mixes")).toBe("Mixes");
+    expect(normalizeCategory("NotAChip")).toBe("All");
   });
 });
 

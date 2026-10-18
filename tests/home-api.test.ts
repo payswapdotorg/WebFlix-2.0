@@ -11,6 +11,8 @@ import { readFileSync } from "node:fs";
 import { setUpstream } from "@/lib/youtube/innertube";
 import { clearCache } from "@/lib/youtube/cache";
 import { decodeCursor } from "@/lib/youtube/cursors";
+import { buildSearchParam } from "@/lib/youtube/filters";
+import { LIVE_QUERIES } from "@/lib/youtube/live-surface";
 import { GET as getHome } from "@/app/api/home/route";
 import { GET as listVideosRoute } from "@/app/api/videos/route";
 import type { HomeFeedDTO, VideoPageDTO } from "@/lib/types";
@@ -50,7 +52,11 @@ describe("GET /api/home — shape (every rail present + typed, live mapping)", (
 
     expect(Array.isArray(feed.chips)).toBe(true);
     expect(feed.chips[0]).toBe("All");
-    expect(feed.chips).toHaveLength(15);
+    // REA-3 — youtube.com's measured ladder: the dynamic family (Mixes /
+    // Recently uploaded / Live — "New to you" honestly absent) rides directly
+    // after All, then the 12 category chips (Live/Mixes deduped).
+    expect(feed.chips.slice(0, 4)).toEqual(["All", "Mixes", "Recently uploaded", "Live"]);
+    expect(feed.chips).toHaveLength(16);
 
     expect(feed.hero === null || typeof feed.hero.id === "string").toBe(true);
     expect(Array.isArray(feed.trending)).toBe(true);
@@ -127,6 +133,71 @@ describe("GET /api/home — shape (every rail present + typed, live mapping)", (
       expect(typeof v.channel.handle).toBe("string");
       expect(typeof v.channel.name).toBe("string");
     }
+  });
+});
+
+describe("GET /api/home — REA-3: the dynamic chip family (youtube.com's measured ladder)", () => {
+  test("Recently uploaded: the compose seed queries re-searched with the EXISTING date sort — never the label as a query", async () => {
+    const feed = (await (await getHome(
+      new Request("http://localhost/api/home?category=Recently%20uploaded")
+    )).json()) as HomeFeedDTO;
+    expect(feed.source).toBe("search-compose");
+    expect(feed.hero).toBeNull(); // the flat-grid UI contract, same as category mode
+    expect(feed.recommendedCursor).toBeNull(); // no chain — the honest end
+    expect(feed.chips[2]).toBe("Recently uploaded");
+    // the upstream searches: the home compose queries with sort=date +
+    // type=video (the A-B verified encoding) — the chip's real semantics
+    const searches = recorded.filter((r) => r.url.includes("/youtubei/v1/search"));
+    expect(searches.length).toBeGreaterThanOrEqual(3);
+    const expectedParams = buildSearchParam({ sort: "date", type: "video" });
+    for (const q of ["most viewed youtube videos", "trending music", "popular gaming"]) {
+      const call = searches.find((r) => r.body?.query === q);
+      expect(call).toBeDefined();
+      expect(call?.body?.params).toBe(expectedParams);
+    }
+    // NEVER the label-as-query text search (the pre-REA-3 category behavior)
+    expect(searches.find((r) => r.body?.query === "Recently uploaded")).toBeUndefined();
+  });
+
+  test("Live: live-scoped searches (the /api/live seam) — never the label as a query, only isLive rows", async () => {
+    const feed = (await (await getHome(
+      new Request("http://localhost/api/home?category=Live")
+    )).json()) as HomeFeedDTO;
+    expect(feed.source).toBe("search-compose");
+    expect(feed.hero).toBeNull();
+    expect(feed.recommendedCursor).toBeNull();
+    // the live-scoped query set fired with the Features→Live filter param
+    const searches = recorded.filter((r) => r.url.includes("/youtubei/v1/search"));
+    const liveParams = buildSearchParam({ live: true });
+    for (const q of LIVE_QUERIES) {
+      const call = searches.find((r) => r.body?.query === q);
+      expect(call).toBeDefined();
+      expect(call?.body?.params).toBe(liveParams);
+    }
+    // the grid carries only live rows (the fixture's non-live lofi results
+    // filter to the honest empty — the isLive belt-and-braces filter)
+    for (const v of feed.recommended) {
+      expect(v.isLive).toBe(true);
+    }
+    expect(searches.find((r) => r.body?.query === "Live")).toBeUndefined();
+  });
+
+  test("the dynamic chips carry over to /api/videos pages: first page serves the mode's grid, a stray cursor answers the honest empty", async () => {
+    const res = await listVideosRoute(
+      new Request("http://localhost/api/videos?category=Recently%20uploaded&limit=12")
+    );
+    expect(res.status).toBe(200);
+    const page = (await res.json()) as VideoPageDTO;
+    expect(page.nextCursor).toBeNull();
+    // a stray cursor under a dynamic chip (the sentinel can't arm — the home
+    // feed's null cursor) still answers honestly, never a label-search
+    const res2 = await listVideosRoute(
+      new Request("http://localhost/api/videos?category=Live&cursor=tok-1")
+    );
+    expect(res2.status).toBe(200);
+    const page2 = (await res2.json()) as VideoPageDTO;
+    expect(page2.videos).toEqual([]);
+    expect(page2.nextCursor).toBeNull();
   });
 });
 

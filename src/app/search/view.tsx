@@ -33,8 +33,15 @@ import type { SearchPageDTO, VideoDTO } from "@/lib/types";
  * TOPBAR's (youtube.com has no second form on the results page — the query
  * lives in the topbar input, prefilled from ?q=).
  *
- * Quick-chip bar (the live 2026 row): All / Videos / Shorts / Recently
- * uploaded / Live — each wired to the existing filter params.
+ * Quick-chip bar (the station pack's logged-in 2026-10-17 row): All /
+ * Live / Recently uploaded / Shorts / Unwatched / Videos — each wired to
+ * the existing filter params. REA-3 F4: "Unwatched" is HONESTLY ABSENT —
+ * youtube.com's chip rides the new continuation-token filter family (its
+ * row state measured on the public search page this run: the chips carry
+ * opaque search continuation tokens, not the classic sp params the filter
+ * panel uses); no sp param for an unwatched exclusion exists in any
+ * measured surface — wiring one would be an invented shape (the REA-2
+ * prediction precedent). Parity-debt ledger.
  * WFX2-P6-IS: the results scroll infinitely — the first page rides useApi,
  * every further page rides the opaque ?cursor= with list-shaped skeletons.
  */
@@ -169,7 +176,9 @@ function SearchContent() {
     pushState(q, next);
   }
 
-  // --- the quick-chip row (live 2026): each chip = one filter edit ----------
+  // --- the quick-chip row (the station pack's logged-in 2026-10-17 order:
+  // All / Live / Recently uploaded / Shorts / Unwatched / Videos — the
+  // Unwatched chip honestly absent, no dead control) ----------------------
   const chips: { label: string; active: boolean; next: SearchFilterState }[] = [
     {
       label: "All",
@@ -177,14 +186,9 @@ function SearchContent() {
       next: { ...state, type: undefined, uploadDate: undefined, live: undefined },
     },
     {
-      label: "Videos",
-      active: state.type === "video",
-      next: { ...state, type: "video", uploadDate: undefined, live: undefined },
-    },
-    {
-      label: "Shorts",
-      active: state.type === "shorts",
-      next: { ...state, type: "shorts", uploadDate: undefined, live: undefined },
+      label: "Live",
+      active: state.live === true,
+      next: { ...state, type: undefined, uploadDate: undefined, live: true },
     },
     {
       label: "Recently uploaded",
@@ -192,9 +196,14 @@ function SearchContent() {
       next: { ...state, type: undefined, uploadDate: "week", live: undefined },
     },
     {
-      label: "Live",
-      active: state.live === true,
-      next: { ...state, type: undefined, uploadDate: undefined, live: true },
+      label: "Shorts",
+      active: state.type === "shorts",
+      next: { ...state, type: "shorts", uploadDate: undefined, live: undefined },
+    },
+    {
+      label: "Videos",
+      active: state.type === "video",
+      next: { ...state, type: "video", uploadDate: undefined, live: undefined },
     },
   ];
 

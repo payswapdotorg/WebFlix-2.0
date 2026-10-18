@@ -39,7 +39,8 @@ import { searchContinuationToken } from "./search";
 import { getShortsSeed, type ShortDTO, type ShortsFeedDTO } from "./shorts";
 import { buildSearchParam, parseSearchFilters } from "./filters";
 import type { ContinueVideoDTO, HomeFeedDTO, HomeFeedSource, VideoDTO } from "@/lib/types";
-import { HOME_CHIPS } from "@/lib/categories";
+import { HOME_CHIPS, RECENTLY_UPLOADED_CHIP } from "@/lib/categories";
+import { getLiveSurface } from "./live-surface";
 
 // ---------------------------------------------------------------------------
 // home feed
@@ -119,6 +120,23 @@ function fetchHomeBrowseResponse(): Promise<unknown> {
 
 export async function getHomeFeed(rawCategory: string | null): Promise<HomeFeedDTO> {
   const category = HOME_CHIPS.includes(rawCategory ?? "") ? (rawCategory as string) : "All";
+
+  // REA-3 — the dynamic chip family (youtube.com's measured home ladder,
+  // 2026-10-17): "Recently uploaded" and live-scoped "Live" are feed
+  // modes of their own, NOT label-as-query text searches.
+  if (category === RECENTLY_UPLOADED_CHIP || category === "Live") {
+    return {
+      hero: null,
+      trending: [],
+      continueWatching: [],
+      becauseYouWatched: null,
+      shorts: [],
+      recommended: await dynamicChipVideos(category, 24),
+      recommendedCursor: null, // these grids carry no chain yet — the honest end
+      chips: HOME_CHIPS,
+      source: "search-compose",
+    };
+  }
 
   if (category !== "All") {
     // category mode: search-backed flat grid (architecture parity map: chips → search)
@@ -207,6 +225,56 @@ function feedContinuationToken(response: unknown): string | null {
     if (typeof token === "string" && token) return token;
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// REA-3 — the dynamic home chips (youtube.com's measured ladder, 2026-10-17)
+// ---------------------------------------------------------------------------
+
+/**
+ * REA-3 — the "Recently uploaded" / live-scoped "Live" home chip grids.
+ * youtube.com's own chips are FEED modes (its Recently uploaded = a feed of
+ * recently-uploaded videos; its Live = live content), so WebFlix maps them to
+ * the closest honest EXISTING seams — never a label-as-query text search:
+ *  - "Recently uploaded": the home compose seed queries re-searched with the
+ *    EXISTING sort=date filter (WFX2-A-B's verified protobuf encoding) — every
+ *    row is a real search result served upload-date-first; per-query pages
+ *    ride their own yt:searchpage:… keys (no new uncached upstream path);
+ *    one failed query is tolerated, all-failed throws the honest upstream
+ *    error (the rung-3 compose law).
+ *  - "Live": the Live surface's live-scoped query set (the /api/live seam —
+ *    LIVE_QUERIES searched with the Features→Live filter), watching-now only.
+ * "New to you" is honestly absent from the ladder — it needs per-user
+ * personalization no existing seam provides (the REA-3 parity-debt ledger).
+ */
+async function dynamicChipVideos(category: string, limit = 24): Promise<VideoDTO[]> {
+  if (category === RECENTLY_UPLOADED_CHIP) {
+    const pages = await Promise.all(
+      HOME_COMPOSE_QUERIES.map((query) =>
+        getSearchVideoPage(query, { type: "video", sort: "date" }, undefined, COMPOSE_PAGE_LIMIT).catch(
+          () => null,
+        ),
+      ),
+    );
+    const okPages = pages.filter((page): page is VideoPage => page !== null);
+    if (okPages.length === 0) {
+      throw new Error("recently-uploaded compose: every search query failed (search is down)");
+    }
+    const seen = new Set<string>();
+    const merged: VideoDTO[] = [];
+    for (const page of okPages) {
+      for (const video of page.videos) {
+        if (seen.has(video.id)) continue;
+        seen.add(video.id);
+        merged.push(video);
+      }
+    }
+    return merged.slice(0, limit);
+  }
+  // "Live" — the live-scoped watching-now grid (per-query failures tolerated
+  // by the seam itself; a walled read degrades to the honest empty grid)
+  const surface = await getLiveSurface(limit, 0);
+  return surface.watchingNow;
 }
 
 // ---------------------------------------------------------------------------
@@ -659,6 +727,13 @@ export async function listLiveVideos(opts: {
     return getSearchVideoPage(query, { type: "video" }, opts.cursor ?? undefined, limit);
   }
   const category = HOME_CHIPS.includes(opts.category ?? "") ? (opts.category as string) : "All";
+  // REA-3 — the dynamic chips are feed modes, not label-as-query searches;
+  // their grids carry no continuation chain (the home feed's null cursor is
+  // the honest end), so a stray cursor under one answers the honest empty.
+  if (category === RECENTLY_UPLOADED_CHIP || category === "Live") {
+    if (opts.cursor) return { videos: [], nextCursor: null };
+    return { videos: await dynamicChipVideos(category, limit), nextCursor: null };
+  }
   if (category !== "All") {
     return getSearchVideoPage(category, { type: "video" }, opts.cursor ?? undefined, limit);
   }
