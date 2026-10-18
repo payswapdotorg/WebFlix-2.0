@@ -8,13 +8,15 @@
  * iframe embeds at all).
  *
  * This module owns the server-side player-response chain:
- *  1. the innertube `player` endpoint, tried over a CLIENT CHAIN: the
- *     configured `INNER_TUBE_PLAYER_CLIENT` (default WEB) first, then IOS
- *     (a native-app client whose wall behavior differs from the web ones).
- *     The sandbox IP gets LOGIN_REQUIRED/ERROR for every client probed;
- *     Vercel egress is untested at build time (the lead verifies post-deploy
- *     and sets the env accordingly) — the chain makes rung 1 resilient
- *     without multiplying requests when the first client answers usable.
+ *  1. the innertube `player` endpoint, tried over a CLIENT CHAIN (P26-HPV2:
+ *     widened to six rungs — see playerClientChain). The wall is a
+ *     PER-(video, client, egress) lottery, not a flat wall: measured
+ *     2026-10-18 from the sandbox egress, dQw4w9WgXcQ answers OK with 27–30
+ *     PLAIN-URL formats to IOS / ANDROID (and ANDROID_VR) while
+ *     jNQXAC9IVRw + kJQP7kiw5Fk answer LOGIN_REQUIRED to every client
+ *     probed (the walled class this lane hunts). Walled answers cost one
+ *     FAST request each (<300ms measured), so extra rungs are cheap lottery
+ *     tickets; the first usable answer still wins and stops the loop.
  *  2. the watch page's embedded `ytInitialPlayerResponse` (SSR fetch) — a
  *     different path that reliably carries storyboards + duration even when
  *     the `player` endpoint is walled (live-verified from the sandbox:
@@ -29,8 +31,32 @@
  *
  * Everything is parsed into the PlaybackDto contract and cached. Walled
  * responses resolve FAST (a LOGIN_REQUIRED answer is <1s), so the chain's
- * latency budget is small. No deciphering is attempted (out of scope): a
- * format is surfaced only when it carries a PLAIN `url`.
+ * latency budget is small.
+ *
+ * P26-HPV2 (rung 2, Task 33) — the decipher verdict, honestly ledgered (the
+ * two-incarnation run: the 2nd incarnation re-measured every cell 2026-10-18
+ * 16:30–17:20Z from this egress; all numbers below are ITS fresh probes):
+ * the classic signature decipher (split→[reverse|splice|swap]→join) is GONE
+ * from the CURRENT player world — measured across the served 0229cd64 build
+ * family (player_es6 + player_ias en_US base.js: every split("")/reverse()/
+ * splice() site is a generic utility — 8/13 split("") sites, 2/3 reverse()
+ * sites, 35 splice() sites, ZERO "decipher" mentions, ZERO "&sig=" append
+ * sites, the String.prototype patches are Closure polyfills; the ONLY
+ * functional signatureCipher read BLANKS the field in an offline path), no
+ * separate decipher script exists on the page (the watch page references
+ * exactly ONE player script). The LEGACY builds are still served (b12cc44b +
+ * 20dfca59 → HTTP 200; 0f963df1 + 4fe6b5d4 → 404) and DO carry the classic
+ * decipher — extracted verbatim and live-tested against TODAY's cipher: the
+ * b12-decoded and 20d-decoded s both answer the range probe with HTTP 403
+ * (the live-verification law applied; the current scramble algorithm matches
+ * NEITHER legacy op sequence). The modern web player plays through SABR
+ * (streamingData.serverAbrStreamingUrl rides every OK answer) gated by
+ * attestation (playabilityStatus.contextParams — the BotGuard/PO-token
+ * challenge; the player JS carries playerAttestationRenderer botguardData/
+ * challenge + the po_token machinery — the cipher's real client path now).
+ * parseSignatureCipher surfaces the s/sp/url TRIPLE for inspection, but a
+ * parsed cipher is NEVER deciphered here and NEVER surfaces in
+ * streamFormats — only PLAIN-URL formats do.
  *
  * Storyboard spec format (live-verified on dQw4w9WgXcQ, 2026-10-04 —
  * see tests/fixtures/yt/player_storyboard_dQw4.json):
@@ -54,9 +80,12 @@ const DEFAULT_PLAYER_CLIENT = "WEB";
 
 /**
  * A `player` client context. The web-family clients carry only the identity
- * pair; native-app clients (IOS) add the device fields YouTube's own apps
- * send (the userAgent here rides in the context payload — client identity —
- * while the HTTP transport keeps the browser UA; see innertube.ts).
+ * pair; native-app clients (IOS, ANDROID) add the device fields YouTube's
+ * own apps send (the userAgent here rides in the context payload — client
+ * identity — while the HTTP transport keeps the browser UA; see innertube.ts).
+ * P26-HPV2 additions: `androidSdkVersion` (ANDROID's device field) and
+ * `thirdPartyEmbedUrl` (the embed-player family's thirdParty context — sent
+ * as context.thirdParty.embedUrl, NOT inside the client object).
  */
 export interface PlayerClientContext {
   clientName: string;
@@ -66,19 +95,35 @@ export interface PlayerClientContext {
   osName?: string;
   osVersion?: string;
   userAgent?: string;
+  androidSdkVersion?: number;
+  thirdPartyEmbedUrl?: string;
 }
 
 /** Client contexts known to matter for `player` (unknown names pass through). */
 const PLAYER_CLIENTS: Record<string, PlayerClientContext> = {
   WEB: { clientName: "WEB", clientVersion: "2.20260925.08.00" },
   MWEB: { clientName: "MWEB", clientVersion: "2.20260925.08.00" },
-  WEB_EMBEDDED_PLAYER: { clientName: "WEB_EMBEDDED_PLAYER", clientVersion: "2.20260925.08.00" },
+  WEB_EMBEDDED_PLAYER: {
+    clientName: "WEB_EMBEDDED_PLAYER",
+    clientVersion: "1.20260925.01.00",
+    thirdPartyEmbedUrl: "https://www.youtube.com",
+  },
   WEB_REMIX: { clientName: "WEB_REMIX", clientVersion: "0.1" },
+  // P26-HPV2 — the historical embed-player shape (v2.0 + the thirdParty
+  // embedUrl context). Measured 2026-10-18 from the sandbox egress it
+  // answers ERROR "YouTube is no longer supported in this application or
+  // device" for every probe video — the weakest ticket, ordered last.
+  TVHTML5_SIMPLY_EMBEDDED_PLAYER: {
+    clientName: "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
+    clientVersion: "2.0",
+    thirdPartyEmbedUrl: "https://www.youtube.com",
+  },
   // native app context (realistic iPhone 16 Pro Max / iOS 18.3.2 shape).
   // P22-C: 19.29.1 is DEAD upstream — the player endpoint answers HTTP 400
   // "Precondition check failed" for it (live-probed 2026-10-10), silently
   // killing rung 1's second client. 20.10.4 answers normally (LOGIN_REQUIRED
-  // from walled egresses, OK from healthy ones — the chain's lottery ticket).
+  // from walled egresses, OK with 27 plain-url formats from the sandbox
+  // egress for dQw4w9WgXcQ on 2026-10-18 — the chain's strongest ticket).
   IOS: {
     clientName: "IOS",
     clientVersion: "20.10.4",
@@ -87,6 +132,19 @@ const PLAYER_CLIENTS: Record<string, PlayerClientContext> = {
     osName: "iPhone",
     osVersion: "18.3.2.22D82",
     userAgent: "com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)",
+  },
+  // P26-HPV2 — the ANDROID native-app ticket (the order's context shape:
+  // 20.10.38, androidSdkVersion 30, Android 11). Measured 2026-10-18 from
+  // the sandbox egress: OK with 30 PLAIN-URL formats + storyboards for
+  // dQw4w9WgXcQ (a second winning native cell alongside IOS) — and it stays
+  // a cheap ticket for the per-video lottery on other egresses.
+  ANDROID: {
+    clientName: "ANDROID",
+    clientVersion: "20.10.38",
+    androidSdkVersion: 30,
+    osName: "Android",
+    osVersion: "11",
+    userAgent: "com.google.android.youtube/20.10.38 (Linux; U; Android 11) gzip",
   },
 };
 
@@ -98,12 +156,41 @@ export function playerClientContext(): PlayerClientContext {
 }
 
 /**
- * The rung-1 client chain: the configured client first, then IOS (the
- * native-app lottery ticket against the egress wall). Deduped — configuring
- * INNER_TUBE_PLAYER_CLIENT=IOS yields a single-request rung.
+ * The rung-1 client chain (P26-HPV2 — widened from [configured, IOS] to six
+ * rungs): the configured client first, then the NATIVE-APP family (the
+ * plain-URL lottery winners — IOS and ANDROID both answered OK with plain
+ * formats for dQw4w9WgXcQ from the sandbox egress on 2026-10-18), then the
+ * web/embedded family (MWEB, WEB_EMBEDDED_PLAYER, TVHTML5_SIMPLY_EMBEDDED
+ * PLAYER — cheap tickets: walled answers cost one FAST request each).
+ * Deduped — configuring INNER_TUBE_PLAYER_CLIENT to any chained client
+ * removes that rung's duplicate.
+ *
+ * STS is deliberately NOT passed (playbackContext.contentPlaybackContext.
+ * signatureTimestamp; the served build's own value is 20739 — measured in
+ * the base.js, no longer embedded in the page HTML). Measured 2026-10-18
+ * (twice, both incarnations): WEB/MWEB + the page's visitorData + STS=20739
+ * FLIP their cells from UNPLAYABLE to OK — but the flipped answers carry
+ * ZERO plain formats (exactly 1 signatureCipher'd itag18 + 26 ABR-track
+ * descriptors with NEITHER url NOR signatureCipher + storyboards + SABR +
+ * the attestation challenge in playabilityStatus.contextParams). Wiring STS
+ * would let the storyboards-only WEB answer CAPTURE the first-usable-wins
+ * loop before the IOS/ANDROID rungs — a measured REGRESSION for the native
+ * lane (the healthy class would degrade from native video to storyboard).
+ * The walled classes don't flip at all (LOGIN_REQUIRED with or without STS
+ * — measured on jNQXAC9IVRw + kJQP7kiw5Fk). The page's own re-call does NOT
+ * exchange the cipher for plain urls either (the same probe: zero plain
+ * formats in every STS-flipped answer). Honest verdict: STS stays out; the
+ * measurements are the lane's ledger.
  */
 export function playerClientChain(): PlayerClientContext[] {
-  const chain = [playerClientContext(), PLAYER_CLIENTS.IOS];
+  const chain = [
+    playerClientContext(),
+    PLAYER_CLIENTS.IOS,
+    PLAYER_CLIENTS.ANDROID,
+    PLAYER_CLIENTS.MWEB,
+    PLAYER_CLIENTS.WEB_EMBEDDED_PLAYER,
+    PLAYER_CLIENTS.TVHTML5_SIMPLY_EMBEDDED_PLAYER,
+  ];
   const seen = new Set<string>();
   return chain.filter((c) => {
     if (seen.has(c.clientName)) return false;
@@ -203,6 +290,45 @@ export function parsePlayback(
 }
 
 /**
+ * P26-HPV2 — a parsed signatureCipher entry: the s/sp/url triple. Pure and
+ * tolerant (null on any malformed shape, never a throw).
+ *
+ * Parsing is NOT deciphering. The decipher itself does not exist in
+ * implementable form in the current player world (the honest Part 2 stop —
+ * see the module header): the classic split→ops→join family is absent from
+ * every served player build, and the modern web player plays through SABR
+ * gated by attestation. A parsed cipher is therefore surfaced for
+ * INSPECTION ONLY (fixture-tested shape) — a deciphered URL would still
+ * have to pass the live-verification law (a server-side range probe
+ * returning 200/206) before it could EVER ride streamFormats, and no
+ * deciphered URL is ever surfaced by this module.
+ */
+export interface SignatureCipherParts {
+  /** The scrambled signature (URL-decoded). */
+  s: string;
+  /** The signature parameter name the deciphered value appends as (default "sig"). */
+  sp: string;
+  /** The IP-bound googlevideo stream URL (URL-decoded). */
+  url: string;
+}
+
+/** Parse a format's `signatureCipher` string (s / sp / url, order-insensitive). */
+export function parseSignatureCipher(signatureCipher: unknown): SignatureCipherParts | null {
+  if (typeof signatureCipher !== "string" || signatureCipher.length === 0) return null;
+  let params: URLSearchParams;
+  try {
+    params = new URLSearchParams(signatureCipher);
+  } catch {
+    return null;
+  }
+  const s = params.get("s");
+  const sp = params.get("sp");
+  const url = params.get("url");
+  if (s === null || s.length === 0 || url === null || url.length === 0) return null;
+  return { s, sp: sp && sp.length > 0 ? sp : "sig", url };
+}
+
+/**
  * The storyboard spec → animatable levels (M$M levels only; the "default"
  * single-sheet level has no sequence to animate). Pure + tolerant.
  */
@@ -249,18 +375,26 @@ export function parseStoryboardSpec(spec: unknown): StoryboardLevelDto[] {
 /* ------------------------------------------------------------------ */
 
 /**
- * Rung 1 — the innertube `player` CLIENT CHAIN: the configured client
- * (INNER_TUBE_PLAYER_CLIENT, default WEB) first, then IOS. The FIRST
- * response that parses into a USABLE payload (streamFormats or storyboards)
- * wins and the loop stops — a healthy primary client still costs exactly
- * one request. Null when every client is walled/empty.
+ * Rung 1 — the innertube `player` CLIENT CHAIN (P26-HPV2: six rungs — the
+ * configured client, then IOS, ANDROID, MWEB, WEB_EMBEDDED_PLAYER,
+ * TVHTML5_SIMPLY_EMBEDDED_PLAYER). The FIRST response that parses into a
+ * USABLE payload (streamFormats or storyboards) wins and the loop stops —
+ * a healthy primary client still costs exactly one request; each walled
+ * rung costs one FAST request. Null when every client is walled/empty.
+ *
+ * The embed-player family's thirdParty context rides as
+ * context.thirdParty.embedUrl (sibling of context.client — the historical
+ * embed-player shape), never inside the client object itself.
  */
 async function fetchInnertubePlayer(videoId: string): Promise<PlaybackDto | null> {
   for (const client of playerClientChain()) {
+    const { thirdPartyEmbedUrl, ...clientFields } = client;
+    const context: Record<string, unknown> = { client: { ...clientFields, hl: "en", gl: "US" } };
+    if (thirdPartyEmbedUrl) context.thirdParty = { embedUrl: thirdPartyEmbedUrl };
     let response: unknown;
     try {
       response = await innertube("player", {
-        context: { client: { ...client, hl: "en", gl: "US" } },
+        context,
         videoId,
         contentCheckOk: true,
         racyCheckOk: true,
