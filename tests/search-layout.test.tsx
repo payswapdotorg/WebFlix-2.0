@@ -177,23 +177,32 @@ describe("P13-SEARCH — the vertical-list layout parity", () => {
     expect(all("article a[aria-label^='Open playlist']").length).toBe(1);
   });
 
-  test("the quick-chip row renders the live 2026 labels and edits the URL state", async () => {
+  test("the quick-chip row renders the station pack's order (REA-3 F4) and edits the URL state", async () => {
     viewData = RESULTS_PAGE;
     await render(createElement(SearchPage));
     const chips = texts('[data-testid="search-quick-chips"] button');
-    expect(chips).toEqual(["All", "Videos", "Shorts", "Recently uploaded", "Live"]);
+    // the station pack's logged-in 2026-10-17 order; "Unwatched" honestly
+    // absent (its filter rides youtube.com's continuation-token family —
+    // no classic sp param exists; never a dead control)
+    expect(chips).toEqual(["All", "Live", "Recently uploaded", "Shorts", "Videos"]);
     // clicking "Shorts" → ?type=shorts search
-    const shortsChip = all('[data-testid="search-quick-chips"] button')[2];
+    const shortsChip = all('[data-testid="search-quick-chips"] button')[3];
     await act(async () => {
       shortsChip.click();
     });
     expect(routerPushes).toContain("/search?q=lofi&type=shorts");
     // clicking "Live" → live=1
-    const liveChip = all('[data-testid="search-quick-chips"] button')[4];
+    const liveChip = all('[data-testid="search-quick-chips"] button')[1];
     await act(async () => {
       liveChip.click();
     });
     expect(routerPushes).toContain("/search?q=lofi&live=1");
+    // clicking "Recently uploaded" → the week bucket
+    const recentChip = all('[data-testid="search-quick-chips"] button')[2];
+    await act(async () => {
+      recentChip.click();
+    });
+    expect(routerPushes).toContain("/search?q=lofi&date=week");
   });
 
   test("no second search form on the results page (the topbar owns the query)", async () => {
