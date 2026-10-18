@@ -93,6 +93,7 @@ mock.module("next/navigation", () => ({
   usePathname: () => "/",
   useParams: () => routeParams,
   useRouter: () => ({ push: () => {}, replace: () => {}, refresh: () => {} }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 const toasts: string[] = [];
@@ -121,6 +122,7 @@ const PlaylistPage = (await import("@/app/playlist/[id]/page")).default;
 const { PlaylistDetailsDialog } = await import("@/app/playlists/view");
 const DownloadsView = (await import("@/app/downloads/view")).default;
 const { SidebarNav, SidebarRail } = await import("@/components/app/sidebar");
+const { Topbar } = await import("@/components/app/topbar");
 
 // ---- fixtures (the REAL payload shapes) ----
 
@@ -571,5 +573,69 @@ describe("SidebarNav + SidebarRail — the You section at youtube.com's guide pa
     expect(watchLater?.getAttribute("href")).toBe("/playlist/WL");
     const downloads = all("nav a").find((a) => (a.textContent ?? "").trim() === "Downloads");
     expect(downloads?.getAttribute("href")).toBe("/downloads");
+  });
+
+  // REA-3 — the station pack's guide ladder (measured logged-in
+  // youtube.com 2026-10-17): Home, Shorts, Subscriptions, You, History, …
+  test("the guide ladder at the pack's order: Home, Shorts, Subscriptions, You(→ /you) — Trending never rides the main rung", async () => {
+    serveMe(null);
+    await render(<SidebarNav onNavigate={() => {}} />);
+    await act(async () => {});
+    const links = all("nav a");
+    const labels = links.map((a) => (a.textContent ?? "").trim());
+    // the main rung: exactly Home, Shorts, Subscriptions (the pack's ladder;
+    // Trending moved to the Explore section — youtube.com's own placement)
+    expect(labels.slice(0, 4)).toEqual(["Home", "Shorts", "Subscriptions", "You"]);
+    const youRow = links.find((a) => (a.textContent ?? "").trim() === "You");
+    expect(youRow?.getAttribute("href")).toBe("/you");
+    // the You family follows directly (the pack: You, History, Playlists, …)
+    const youIdx = labels.indexOf("You");
+    expect(labels.slice(youIdx + 1, youIdx + 4)).toEqual(["History", "Playlists", "Your videos"]);
+    // Trending rides the Explore section only, exactly once in the guide
+    const trending = links.filter((a) => (a.textContent ?? "").trim() === "Trending");
+    expect(trending).toHaveLength(1);
+    expect(trending[0].getAttribute("href")).toBe("/trending");
+    const exploreIdx = labels.indexOf("Explore");
+    expect(exploreIdx).toBeGreaterThan(-1);
+    expect(labels.indexOf("Trending")).toBe(exploreIdx - 1); // the section's first rung
+    expect(labels.indexOf("Trending")).toBeGreaterThan(labels.indexOf("Subscriptions"));
+  });
+
+  test("the collapsed rail mirrors the You family (You + Your videos included) and drops the topbar-only extras", async () => {
+    serveMe(null);
+    await render(<SidebarRail />);
+    await act(async () => {});
+    const links = all("nav a");
+    const labels = links.map((a) => (a.textContent ?? "").trim());
+    expect(labels.slice(0, 4)).toEqual(["Home", "Shorts", "Subscriptions", "You"]);
+    const youRow = links.find((a) => (a.textContent ?? "").trim() === "You");
+    expect(youRow?.getAttribute("href")).toBe("/you");
+    expect(labels).toContain("Your videos");
+    const yourVideos = links.find((a) => (a.textContent ?? "").trim() === "Your videos");
+    expect(yourVideos?.getAttribute("href")).toBe("/studio");
+    expect(labels).not.toContain("Trending"); // the rail keeps the main+You family only
+  });
+});
+
+describe("Topbar — youtube.com's topbar family (REA-3, station pack 2026-10-17)", () => {
+  test("the right rail is Create + Notifications + Account (no Trending flame — that lives in the guide's Explore section)", async () => {
+    fetchHandler = (url) => {
+      if (url.includes("/api/me")) {
+        return Response.json({ user: null, ownedChannel: null, subscriptions: [] });
+      }
+      return Response.json({}, { status: 200 });
+    };
+    await render(<Topbar />);
+    await act(async () => {});
+    // youtube.com's measured family: Search, voice, Create, Notifications, Account
+    expect(q('button[aria-label="Search"]')).not.toBeNull();
+    expect(q('button[aria-label="Search with your voice"]')).not.toBeNull();
+    expect(q('button[aria-label="Create"]')).not.toBeNull();
+    expect(all('button[aria-label^="Notifications"]').length).toBeGreaterThan(0);
+    expect(all('button[aria-label="Your account"], a[aria-label="Your account"]').length).toBeGreaterThan(0);
+    // the Trending flame NEVER rode youtube.com's topbar
+    expect(all('a[aria-label="Trending"]').length).toBe(0);
+    expect(all('button[title="Trending"]').length).toBe(0);
+    expect(win.document.body.textContent ?? "").not.toContain("Trending");
   });
 });

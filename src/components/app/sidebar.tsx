@@ -52,7 +52,6 @@ type NavItem = {
 const MAIN_NAV: NavItem[] = [
   { href: "/", label: "Home", icon: Home },
   { href: "/shorts", label: "Shorts", icon: SquarePlay },
-  { href: "/trending", label: "Trending", icon: Flame },
   { href: "/subscriptions", label: "Subscriptions", icon: Layers },
 ];
 
@@ -60,6 +59,11 @@ const MAIN_NAV: NavItem[] = [
  * P22-B — the You section, measured against youtube.com's guide (the
  * operator's signed-in view; the signed-out guide carries only
  * Home/Shorts/Subscriptions/You/History — measured live 2026-10-11).
+ * REA-3 (station pack, logged-in 2026-10-17): the guide ladder reads
+ * Home, Shorts, Subscriptions, You, History, … — the "You" row rides the
+ * ladder itself (it links WebFlix's real /you hub), Trending moved DOWN
+ * into the Explore section (youtube.com's own placement — it never rides
+ * between Shorts and Subscriptions).
  * youtube.com's You section carries, in order: Your channel, History,
  * Playlists, Your videos, Watch later, Liked videos, Downloads.
  * Mapping to WebFlix's real surfaces:
@@ -73,6 +77,8 @@ const MAIN_NAV: NavItem[] = [
  * studio row in its guide — creator tools live in the account menu and the
  * /you hub's More-from-WebFlix rail on both youtube.com and WebFlix).
  */
+const YOU_ROW: NavItem = { href: "/you", label: "You", icon: UserRound };
+
 const YOU_NAV: NavItem[] = [
   { href: "/history", label: "History", icon: History },
   { href: "/playlists", label: "Playlists", icon: ListVideo },
@@ -182,7 +188,7 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
       ))}
 
       <Divider />
-      <SectionHeader>You</SectionHeader>
+      <NavRow item={YOU_ROW} active={isActive("/you")} onNavigate={onNavigate} />
       {yourChannel && (
         <NavRow
           item={{
@@ -232,6 +238,13 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 
       <Divider />
       <SectionHeader>Explore</SectionHeader>
+      {/* REA-3 — Trending rides the Explore section's first rung, youtube.com's
+          own guide placement (never between Shorts and Subscriptions). */}
+      <NavRow
+        item={{ href: "/trending", label: "Trending", icon: Flame }}
+        active={isActive("/trending")}
+        onNavigate={onNavigate}
+      />
       <Link
         href="/explore"
         onClick={onNavigate}
@@ -282,11 +295,15 @@ export function SidebarRail() {
   const yourChannel = me?.ownedChannel ?? null;
   const railItems: NavItem[] = [
     ...MAIN_NAV,
+    // REA-3 — the rail mirrors the expanded guide's You family: the You row
+    // (/you hub) + the full You-section set incl. Your videos (/studio).
+    YOU_ROW,
     ...(yourChannel
       ? [{ href: `/channel/${yourChannel.handle}`, label: "Your channel", icon: UserRound }]
       : []),
     { href: "/history", label: "History", icon: History },
     { href: "/playlists", label: "Playlists", icon: ListVideo },
+    { href: "/studio", label: "Your videos", icon: MonitorPlay },
     { href: "/playlist/WL", label: "Watch later", icon: Clock },
     { href: "/liked", label: "Liked", icon: ThumbsUp },
     { href: "/downloads", label: "Downloads", icon: Download },

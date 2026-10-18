@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Flame, Menu, Mic, Search } from "lucide-react";
+import { Menu, Mic, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -147,15 +147,13 @@ export function Topbar() {
         <Search className="size-5" />
       </Button>
 
-      {/* right: actions — youtube.com order: CREATE, then the rest (the
-          P6-UP pill replaces the old "Upload video" text-link + mobile icon) */}
+      {/* right: actions — youtube.com's topbar family (station pack,
+          logged-in 2026-10-17): Create, Notifications, Account — the
+          Trending flame never rode youtube.com's topbar (Trending lives in
+          the guide's Explore section, REA-3); the ThemeToggle is WebFlix's
+          own extra. */}
       <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
         <CreateMenu />
-        <Button asChild variant="ghost" size="icon" className="rounded-full" title="Trending">
-          <Link href="/trending" aria-label="Trending">
-            <Flame className="size-5" />
-          </Link>
-        </Button>
         <NotificationsBell />
         <ThemeToggle />
         <AccountMenu />
