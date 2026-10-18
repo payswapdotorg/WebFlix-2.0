@@ -394,3 +394,13 @@ re-runs gates → merges.
   PLAYS on hover, matching youtube.com's own home-grid previews.
 - Post-merge union gates: 1802 pass / 0 fail, lint 0 errors / 1 pre-existing
   warning, tsc clean.
+
+## 2026-10-18 — REA-3 (F1–F4) MERGED (the seventh wfx2-era merge: the parity-sweep — the operator's "make sure the matched features are implemented as on youtube.com")
+
+| Lane | Branch | Scope | Claimed | Binding | Status |
+|---|---|---|---|---|---|
+| REA-3 | wfx2/rea3-parity-sweep @ fdc6f2e | The parity-sweep families F1–F4 (the operator's directive 2026-10-17): F1 app shell + home chips (guide ladder, topbar, the dynamic chip family) / F2 history (tabs + shorts shelves + controls rail) / F3 WL+LL+playlists (the per-row Action menu on EXISTING write seams; the WL Shuffle pin) / F4 search chip order — bounded fixes only, existing seams only; F5–F8 reserved for the follow-up lane | 2026-10-18 ring-down lane (the station's local worker channel; two incarnations — the first died after F1/F2, pushed at every milestone; the second verified its state and completed F3/F4 + records) | the station's logged-in evidence pack (measured 2026-10-17) as the ring-down binding baseline + public-page dev-time probes | **VERIFIED 1822/0** (station-run: 763+594+147+108+138+34+38 = base 1802 + 20 new in the EXISTING suites, lint 0e/1 pre-existing, tsc clean; PAT scan clean; the F3 write seams read seam-by-seam) → merged 93bd891 |
+
+- The parity-debt ledger (six structural findings: New-to-you chip, history Music/Podcasts tabs, search Unwatched chip, row-menu Download, the /liked guide href, chip-order session variance) is recorded in the REA-3-PARITY-SWEEP WORKLOG entry — the next wave's authorship basis.
+- F5–F8 (subscriptions feed, channel pages, notifications/account menus, explore/trending) remain the follow-up sweep lane's scope.
+- Post-merge union gates: 1822 pass / 0 fail, lint 0 errors / 1 pre-existing warning, tsc clean.
