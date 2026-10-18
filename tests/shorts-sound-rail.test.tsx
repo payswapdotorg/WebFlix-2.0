@@ -61,22 +61,39 @@ Object.defineProperty(globalThis, "localStorage", {
 
 // ---- stubs: sonner + fetch (the rail's write seams) ----
 const toasts: string[] = [];
+// P24-SEND (G12): the toast ACTION capture — the feedback-toast UNDO
+// affordance (label + onClick) is part of the family's contract.
+const toastCalls: { text: string; action?: { label: string; onClick: () => void } }[] = [];
 mock.module("sonner", () => ({
-  toast: Object.assign((msg: string) => toasts.push(String(msg)), {
-    success: (m: string) => toasts.push(`success:${m}`),
-    error: (m: string) => toasts.push(`error:${m}`),
-    info: (m: string) => toasts.push(`info:${m}`),
-  }),
+  toast: Object.assign(
+    (msg: string, opts?: { action?: { label: string; onClick: () => void } }) => {
+      toasts.push(String(msg));
+      toastCalls.push({ text: String(msg), action: opts?.action });
+    },
+    {
+      success: (m: string) => toasts.push(`success:${m}`),
+      error: (m: string) => toasts.push(`error:${m}`),
+      info: (m: string) => toasts.push(`info:${m}`),
+    },
+  ),
 }));
 
 const posts: { url: string; body: unknown }[] = [];
+// P24-SEND (G12): the stub is programmable per-test (the honest undo
+// failure needs a 502); the default stays the original always-200 shape.
+let fetchStatus = 200;
+let fetchBody: unknown = { added: true, yourLike: "like", likes: 5 };
+let fetchError: string | null = null;
 globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
   const u = String(url instanceof Request ? url.url : url);
   posts.push({ url: u, body: init?.body ? JSON.parse(String(init.body)) : null });
-  return new Response(JSON.stringify({ added: true, yourLike: "like", likes: 5 }), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
+  return new Response(
+    JSON.stringify(fetchError ? { error: fetchError } : fetchBody),
+    {
+      status: fetchError ? 502 : fetchStatus,
+      headers: { "Content-Type": "application/json" },
+    },
+  );
 }) as unknown as typeof fetch;
 
 const { ShortsEngagementRail } = await import(
@@ -99,12 +116,17 @@ afterEach(() => {
   host?.remove();
   host = null;
   toasts.length = 0;
+  toastCalls.length = 0;
   posts.length = 0;
+  fetchStatus = 200;
+  fetchBody = { added: true, yourLike: "like", likes: 5 };
+  fetchError = null;
 });
 
 async function renderRail(opts: {
   meta: Record<string, unknown> | null;
   playing?: boolean;
+  guest?: boolean;
 }) {
   host = win.document.createElement("div");
   win.document.body.appendChild(host);
@@ -115,7 +137,7 @@ async function renderRail(opts: {
         videoId="H3ONg7SPSWU"
         meta={opts.meta as never}
         metaLoading={false}
-        guest={true}
+        guest={opts.guest ?? true}
         playing={opts.playing ?? true}
         onOpenComments={() => {}}
         onShare={() => {}}
@@ -226,5 +248,116 @@ describe("Remix (P23-C G6 — youtube.com's own disabled honest form)", () => {
     await renderRail({ meta: META_NO_SOUND });
     const remix = qa("button").find((b) => b.getAttribute("aria-label") === "Remix");
     expect(remix).toBeTruthy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P24-SEND (G12) — the shorts ⋯ menu's "Don't recommend channel" + the
+// feedback-toast UNDO family. The item LEFT the honest-absence list (the
+// seam is real now — the broker's home-feed kebab drive, the not-
+// interested sibling); youtube.com's own menu adjacency (the repo's real
+// ssr_trending.json capture): "Not interested" then "Don't recommend
+// channel". The toast family: "Video removed · Undo" / "We won't
+// recommend this channel anymore · Undo" — the undo click drives the
+// broker's feedback-undo while youtube.com's toast window is live.
+// ---------------------------------------------------------------------------
+
+describe("the ⋯ menu — Don't recommend channel + the undo family (P24-SEND G12)", () => {
+  const docItems = () =>
+    Array.from(
+      win.document.querySelectorAll("[role='menuitem']") as unknown as HTMLElement[],
+    ).map((el) => (el.textContent ?? "").trim());
+
+  async function openMenu() {
+    const more = qa("button").find((b) => b.getAttribute("aria-label") === "More actions");
+    expect(more).toBeTruthy();
+    await act(async () => {
+      more!.dispatchEvent(
+        new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+    await act(async () => {});
+  }
+
+  const findItem = (label: string) =>
+    Array.from(
+      win.document.querySelectorAll("[role='menuitem']") as unknown as HTMLElement[],
+    ).find((el) => (el.textContent ?? "").trim() === label)!;
+
+  test("the ⋯ menu carries 'Don't recommend channel' AFTER 'Not interested' (the measured adjacency; the seam landed)", async () => {
+    await renderRail({ meta: META_NO_SOUND, guest: false });
+    await openMenu();
+    const items = docItems();
+    expect(items).toContain("Not interested");
+    expect(items).toContain("Don't recommend channel");
+    expect(items.indexOf("Don't recommend channel")).toBe(items.indexOf("Not interested") + 1);
+  });
+
+  test("Don't recommend channel → the real write + the UNDO toast affordance", async () => {
+    await renderRail({ meta: META_NO_SOUND, guest: false });
+    await openMenu();
+    await act(async () => {
+      findItem("Don't recommend channel").click();
+    });
+    await act(async () => {});
+    await act(async () => {});
+    expect(posts).toContainEqual({
+      url: "/api/dont-recommend-channel",
+      body: { videoId: "H3ONg7SPSWU" },
+    });
+    const t = toastCalls.find((x) => x.text === "We won't recommend this channel anymore");
+    expect(t).toBeDefined();
+    expect(t?.action?.label).toBe("Undo");
+    // the undo click drives the undo route (youtube.com's own toast button)
+    await act(async () => {
+      t!.action!.onClick();
+    });
+    await act(async () => {});
+    await act(async () => {});
+    expect(posts).toContainEqual({ url: "/api/dont-recommend-channel/undo", body: null });
+    expect(toasts).toContain("success:Recommendations restored");
+  });
+
+  test("Not interested carries the UNDO family too (the shared seam)", async () => {
+    await renderRail({ meta: META_NO_SOUND, guest: false });
+    await openMenu();
+    await act(async () => {
+      findItem("Not interested").click();
+    });
+    await act(async () => {});
+    await act(async () => {});
+    expect(posts).toContainEqual({
+      url: "/api/videos/H3ONg7SPSWU/not-interested",
+      body: null,
+    });
+    const t = toastCalls.find((x) => x.text === "Video removed");
+    expect(t?.action?.label).toBe("Undo");
+    await act(async () => {
+      t!.action!.onClick();
+    });
+    await act(async () => {});
+    await act(async () => {});
+    expect(posts).toContainEqual({ url: "/api/not-interested/undo", body: null });
+    expect(toasts).toContain("success:Recommendations restored");
+  });
+
+  test("an expired undo window → the honest error toast, never a fake restoration", async () => {
+    await renderRail({ meta: META_NO_SOUND, guest: false });
+    await openMenu();
+    await act(async () => {
+      findItem("Don't recommend channel").click();
+    });
+    await act(async () => {});
+    // the NEXT undo call answers the drive's honest expired-window error
+    fetchError = "undo-toast-not-found";
+    const t = toastCalls.find((x) => x.text === "We won't recommend this channel anymore");
+    expect(t).toBeDefined();
+    await act(async () => {
+      t!.action!.onClick();
+    });
+    await act(async () => {});
+    await act(async () => {});
+    expect(toasts.some((s) => s.startsWith("error:undo-toast-not-found"))).toBe(true);
+    expect(toasts).not.toContain("success:Recommendations restored");
   });
 });

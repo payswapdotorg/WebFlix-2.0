@@ -89,6 +89,9 @@ mock.module("@/lib/youtube-direct", () => ({
 import { POST as postLike } from "@/app/api/videos/[id]/like/route";
 import { POST as postSubscribe } from "@/app/api/subscribe/route";
 import { POST as postWatchLater } from "@/app/api/playlists/watch-later/route";
+import { POST as postDontRecommendChannel } from "@/app/api/dont-recommend-channel/route";
+import { POST as postDontRecommendChannelUndo } from "@/app/api/dont-recommend-channel/undo/route";
+import { POST as postNotInterestedUndo } from "@/app/api/not-interested/undo/route";
 import { mintSessionCookie } from "./helpers";
 
 const OFFLINE_MSG = "action backend offline — the lead's broker must be running";
@@ -295,5 +298,122 @@ describe("POST /api/playlists/watch-later (broker watch-later)", () => {
     brokerResponse = new MockBrokerError("offline", OFFLINE_MSG, 502);
     const res = await postWatchLater(req({ videoId: "dQw4w9WgXcQ" }));
     expect(res.status).toBe(502);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P24-SEND (G12) — the feed-feedback family's route contracts: the channel
+// variant of not-interested + the shared undo (youtube.com's own feedback
+// toast Undo button, clicked on the operator tab while its window is live).
+// The proxy shapes mirror proxyNotInterested exactly (the precedent).
+// ---------------------------------------------------------------------------
+
+describe("POST /api/dont-recommend-channel (broker — the not-interested sibling)", () => {
+  test("ok path: broker kind dont-recommend-channel; the {hidden:true} contract the card kebab consumes", async () => {
+    const res = await postDontRecommendChannel(req({ videoId: "dQw4w9WgXcQ" }));
+    expect(res.status).toBe(200);
+    expect(brokerCalls).toEqual([
+      { kind: "dont-recommend-channel", target: { videoId: "dQw4w9WgXcQ" }, payload: undefined },
+    ]);
+    const body = (await res.json()) as {
+      ok: boolean;
+      effect: string;
+      dontRecommendChannel: boolean;
+      hidden: boolean;
+      path: string;
+    };
+    expect(body.ok).toBe(true);
+    expect(body.effect).toBe("dont-recommend-channel");
+    expect(body.dontRecommendChannel).toBe(true);
+    expect(body.hidden).toBe(true);
+    expect(body.path).toBe("ui");
+  });
+
+  test("the drive's honest note rides the response (the undo-window detail)", async () => {
+    brokerResponse = {
+      ok: true,
+      verified: true,
+      path: "ui",
+      detail: { note: "youtube.com shows the undo toast while the window is open" },
+    };
+    const res = await postDontRecommendChannel(req({ videoId: "abc123" }));
+    const body = (await res.json()) as { note?: string };
+    expect(body.note).toBe("youtube.com shows the undo toast while the window is open");
+  });
+
+  test("broker down → 502 with the honest offline message", async () => {
+    brokerResponse = new MockBrokerError("offline", OFFLINE_MSG, 502);
+    const res = await postDontRecommendChannel(req({ videoId: "dQw4w9WgXcQ" }));
+    expect(res.status).toBe(502);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe(OFFLINE_MSG);
+  });
+
+  test("honest drive failure (menu item not found) → 502 with the broker's own error", async () => {
+    brokerResponse = new MockBrokerError(
+      "action-failed",
+      "dont-recommend-channel-menu-item-not-found",
+      502
+    );
+    const res = await postDontRecommendChannel(req({ videoId: "dQw4w9WgXcQ" }));
+    expect(res.status).toBe(502);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("dont-recommend-channel-menu-item-not-found");
+  });
+
+  test("missing videoId → 400; non-JSON body → 400", async () => {
+    const res = await postDontRecommendChannel(req({}));
+    expect(res.status).toBe(400);
+    const res2 = await postDontRecommendChannel(
+      new Request("http://localhost/api/dont-recommend-channel", {
+        method: "POST",
+        headers: { "Content-Type": "text/plain", cookie: AUTH_COOKIE },
+        body: "not json",
+      }) as unknown as NextRequest
+    );
+    expect(res2.status).toBe(400);
+  });
+});
+
+describe("POST /api/dont-recommend-channel/undo + /api/not-interested/undo (the shared feedback-undo)", () => {
+  test("the dont-recommend-channel undo rides the shared kind; the {restored:true} contract", async () => {
+    const res = await postDontRecommendChannelUndo(req({}));
+    expect(res.status).toBe(200);
+    expect(brokerCalls).toEqual([{ kind: "feedback-undo", target: {}, payload: undefined }]);
+    const body = (await res.json()) as {
+      ok: boolean;
+      effect: string;
+      restored: boolean;
+      path: string;
+    };
+    expect(body.ok).toBe(true);
+    expect(body.effect).toBe("feedback-undo");
+    expect(body.restored).toBe(true);
+    expect(body.path).toBe("ui");
+  });
+
+  test("the not-interested undo is the SAME shared seam (youtube.com's one toast, one Undo button)", async () => {
+    const res = await postNotInterestedUndo(req({}));
+    expect(res.status).toBe(200);
+    expect(brokerCalls).toEqual([{ kind: "feedback-undo", target: {}, payload: undefined }]);
+    const body = (await res.json()) as { effect: string; restored: boolean };
+    expect(body.effect).toBe("feedback-undo");
+    expect(body.restored).toBe(true);
+  });
+
+  test("an expired undo window → 502 with the drive's honest error, never a fake restoration", async () => {
+    brokerResponse = new MockBrokerError("action-failed", "undo-toast-not-found", 502);
+    const res = await postDontRecommendChannelUndo(req({}));
+    expect(res.status).toBe(502);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("undo-toast-not-found");
+  });
+
+  test("broker down → 502 honest (both undo routes)", async () => {
+    brokerResponse = new MockBrokerError("offline", OFFLINE_MSG, 502);
+    const res = await postDontRecommendChannelUndo(req({}));
+    expect(res.status).toBe(502);
+    const res2 = await postNotInterestedUndo(req({}));
+    expect(res2.status).toBe(502);
   });
 });

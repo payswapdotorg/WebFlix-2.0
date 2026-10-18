@@ -580,6 +580,71 @@ export async function proxyNotInterested(videoId: string): Promise<NotInterested
 }
 
 /* ------------------------------------------------------------------ */
+/* P24-SEND (G12) — the feed-feedback family: don't-recommend-channel  */
+/* + the shared undo (youtube.com's own toast Undo button)             */
+/* ------------------------------------------------------------------ */
+
+export interface DontRecommendChannelResult {
+  ok: true;
+  effect: string;
+  dontRecommendChannel: true;
+  hidden: true;
+  path?: string;
+  note?: string;
+}
+
+/**
+ * Don't recommend channel (broker — the feed card's own ⋯ menu item, the
+ * not-interested drive's sibling). The channel the card carries is the one
+ * youtube.com stops recommending; the write's own undo window opens with
+ * youtube.com's toast (see proxyFeedbackUndo).
+ */
+export async function proxyDontRecommendChannel(
+  videoId: string
+): Promise<DontRecommendChannelResult> {
+  const r = await brokerAction("dont-recommend-channel", { videoId });
+  if (!ok(r)) throw fail(r);
+  const note = typeof r.detail?.["note"] === "string" ? r.detail.note : undefined;
+  return {
+    ok: true,
+    effect: "dont-recommend-channel",
+    dontRecommendChannel: true,
+    hidden: true,
+    path: r.path,
+    ...(note ? { note } : {}),
+  };
+}
+
+export interface FeedbackUndoResult {
+  ok: true;
+  effect: string;
+  restored: true;
+  path?: string;
+  note?: string;
+}
+
+/**
+ * Feedback undo (broker — clicks the VISIBLE Undo button on youtube.com's
+ * feedback toast). Shared by the not-interested and dont-recommend-channel
+ * families: youtube.com shows one toast with one Undo button for either
+ * action, and the window is short — an expired window surfaces as the
+ * honest 502 from the drive ('undo-toast-not-found'), never a fake
+ * restoration.
+ */
+export async function proxyFeedbackUndo(): Promise<FeedbackUndoResult> {
+  const r = await brokerAction("feedback-undo", {});
+  if (!ok(r)) throw fail(r);
+  const note = typeof r.detail?.["note"] === "string" ? r.detail.note : undefined;
+  return {
+    ok: true,
+    effect: "feedback-undo",
+    restored: true,
+    path: r.path,
+    ...(note ? { note } : {}),
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* WFX2-B-S comment writes (broker ⋮-menu DOM paths)                   */
 /* ------------------------------------------------------------------ */
 

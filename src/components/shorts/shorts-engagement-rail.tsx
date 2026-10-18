@@ -14,6 +14,7 @@ import {
   Share2,
   ThumbsDown,
   ThumbsUp,
+  UserX,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -61,12 +62,21 @@ import { soundTokenToKeyLink } from "@/lib/youtube/sound-key";
  * - More (⋯) — the app's real actions: Report (the watch report dialog,
  *   read-only reuse), Save to Watch later (the broker's WL write of
  *   YouTube's own Watch later playlist, pressed state when saved), Copy
- *   link (the share handler), Not interested.
+ *   link (the share handler), Not interested, Don't recommend channel
+ *   (P24-SEND G12 — the seam landed: the broker's home-feed kebab drive,
+ *   the not-interested sibling) + the feedback-toast UNDO affordance on
+ *   both feedback writes (youtube.com's own family: the toast carries an
+ *   Undo button while its window is live; the drive clicks youtube.com's
+ *   own toast button — an expired window surfaces the honest failure,
+ *   never a fake restoration).
  *
  * HONEST ABSENCE (youtube.com ships these; this app has NO real seam —
  * never a fake affordance, per the create-menu precedent):
- * - Captions / Playback speed / Don't recommend channel in the ⋯ menu — the
- *   embed runs controls=0 and cannot honor them; no seams exist.
+ * - Captions / Playback speed in the ⋯ menu — the embed runs controls=0
+ *   and cannot honor them; no seams exist. (P24-SEND G12 note: "Don't
+ *   recommend channel" LEFT this list — its write seam is real now; the
+ *   login-scoped menu family rides the operator tab like Not
+ *   interested, per the station's measured evidence pack.)
  *
  * P23-C (G5, 2026-10-17) — the SOUND DISC (real, measured live — see
  * evidence/wfx2p23c/DISCOVERY.md): youtube.com's rail carries the pivot
@@ -310,7 +320,22 @@ export function ShortsEngagementRail({
     }
   };
 
-  // ---- Not interested — the real feed action (video stays visible) ---------
+  // ---- Not interested — the real feed action (video stays visible) -----
+  // P24-SEND (G12): youtube.com's own family — the feedback toast carries
+  // the UNDO affordance while its window is live (the drive clicks
+  // youtube.com's own toast button); the video itself stays on the slide.
+  const undoFeedback = async (undoUrl: string) => {
+    try {
+      await post(undoUrl);
+      toast.success("Recommendations restored");
+    } catch (e) {
+      toastActionError(
+        e,
+        "Undo is no longer available — YouTube's undo window has closed",
+      );
+    }
+  };
+
   const notInterested = async () => {
     if (guest) {
       gate();
@@ -318,7 +343,35 @@ export function ShortsEngagementRail({
     }
     try {
       await post(`/api/videos/${videoId}/not-interested`);
-      toast.success("We won't recommend this video to you");
+      toast("Video removed", {
+        action: {
+          label: "Undo",
+          onClick: () => void undoFeedback("/api/not-interested/undo"),
+        },
+      });
+    } catch (e) {
+      toastActionError(e, "Failed");
+    }
+  };
+
+  // ---- Don't recommend channel (P24-SEND G12 — the seam landed) ---------
+  // The not-interested sibling: the channel this short carries is the one
+  // youtube.com stops recommending (the broker's home-feed kebab drive by
+  // text anchor — the station's measured evidence: the item is login-scoped
+  // on youtube.com, so the write rides the logged-in operator tab).
+  const dontRecommendChannel = async () => {
+    if (guest) {
+      gate();
+      return;
+    }
+    try {
+      await post("/api/dont-recommend-channel", { videoId });
+      toast("We won't recommend this channel anymore", {
+        action: {
+          label: "Undo",
+          onClick: () => void undoFeedback("/api/dont-recommend-channel/undo"),
+        },
+      });
     } catch (e) {
       toastActionError(e, "Failed");
     }
@@ -441,6 +494,13 @@ export function ShortsEngagementRail({
           >
             <Ban className="size-4" aria-hidden="true" />
             Not interested
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => void dontRecommendChannel()}
+            className="cursor-pointer gap-3 py-3 text-sm"
+          >
+            <UserX className="size-4" aria-hidden="true" />
+            Don&apos;t recommend channel
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

@@ -649,6 +649,72 @@ return {ok:false,verified:false,error:'card-still-present',path:'ui'};
 `);
 }
 
+/**
+ * P24-SEND (G12) — don't-recommend-channel, the not-interested precedent's
+ * exact pattern: find the video's card on the home feed, open the kebab,
+ * click the "Don't recommend channel" item BY TEXT ANCHOR (English-locale
+ * operator tab — the same anchor family every executor drive uses), verify
+ * the card removal or the undo toast. The honest failure dumps the observed
+ * menu items so a different label surfaces as evidence, never as an
+ * invented success. Measured basis: logged-out egress shows NO
+ * personalization menu items anywhere (home walled+empty, search/watch/
+ * shorts/live menus carry only Add-to-queue/Share/Download/Report families)
+ * — the item is login-scoped; this drive runs in the logged-in operator tab
+ * where the not-interested precedent already proved the kebab-menu family.
+ */
+function dontRecommendChannelScript(videoId: string): string {
+  return script(`
+const card=await until(()=>{
+  const nodes=qa("ytd-rich-item-renderer, ytd-grid-video-renderer, ytd-compact-video-renderer, ytd-video-renderer, ytd-rich-grid-row");
+  return nodes.find(n=>{
+    const a=n.querySelector("a#thumbnail, a#video-title, a[href*='v=']");
+    return a&&(a.href||'').includes('v=' + ${j(videoId)});
+  });
+},10000);
+if(!card) return {ok:false,error:'video-not-in-feed',path:'ui',dom:${domState()},note:'dont-recommend-channel applies to videos surfaced in the feed; open youtube.com home and retry'};
+card.dispatchEvent(new MouseEvent('mouseover',{bubbles:true}));
+card.dispatchEvent(new MouseEvent('mousemove',{bubbles:true}));
+await S(500);
+const kebab=card.querySelector("ytd-menu-renderer yt-icon-button#button button, ytd-menu-renderer button, button[aria-label*='Actions'], button[aria-label*='actions'], button[aria-label*='more'], button[aria-label*='More']");
+if(!kebab) return {ok:false,error:'kebab-not-found',path:'ui'};
+kebab.click();
+const item=await until(()=>qa("ytd-menu-service-item-renderer, yt-list-item-view-model, [role='menuitem'], tp-yt-paper-item").find(el=>/don'?t recommend (this )?channel/i.test(textOf(el))),6000);
+if(!item) return {ok:false,error:'dont-recommend-channel-menu-item-not-found',path:'ui',dom:{menu:qa("ytd-menu-service-item-renderer, yt-list-item-view-model, [role='menuitem']").map(textOf).filter(Boolean).slice(0,12)}};
+item.click();
+const gone=await until(()=>!document.contains(card),8000);
+const undoToast=q("yt-notification-action-renderer, #toast");
+if(gone||undoToast) return {ok:true,verified:!!gone,path:'ui',detail:{note:undoToast?'youtube.com shows the undo toast while the window is open — the feedback-undo kind can click it':undefined}};
+return {ok:false,verified:false,error:'card-still-present',path:'ui'};
+`);
+}
+
+/**
+ * P24-SEND (G12) — feedback-undo: click the VISIBLE Undo button on
+ * youtube.com's feedback toast (the notification that follows Not
+ * interested / Don't recommend channel). requiredUrl is NULL on purpose:
+ * the toast is ephemeral and lives wherever the feedback action ran — a
+ * navigation would kill it; the drive searches whatever youtube.com page
+ * the tab stands on and fails honestly when no undo button is visible
+ * (the window closed, or the tab left youtube.com).
+ */
+function feedbackUndoScript(): string {
+  return script(`
+const toastSel="yt-notification-action-renderer, ytd-notification-action-renderer, yt-snackbar-renderer, ytd-snackbar-renderer, tp-yt-paper-toast, #toast, [role='alert']";
+const visible=(el)=>{try{const r=el.getBoundingClientRect();return r.width>0&&r.height>0}catch(e){return el.offsetParent!==null}};
+const toasts=()=>qa(toastSel).filter(visible);
+const toast=await until(()=>toasts()[0]||null,6000);
+if(!toast) return {ok:false,error:'undo-toast-not-found',path:'ui',dom:${domState()},note:'youtube.com shows the feedback toast with its Undo button for a short window after Not interested / Don\\u2019t recommend channel — the window has closed (or the action produced no toast)'};
+const undoBtns=()=>qa("button, yt-button-renderer, ytd-button-renderer, tp-yt-paper-button, a",toast).filter(el=>/^undo\\s*$/i.test(textOf(el)||''));
+const undoBtn=await until(()=>undoBtns()[0]||null,4000);
+if(!undoBtn) return {ok:false,error:'undo-button-not-found',path:'ui',dom:${domState()},toast:textOf(toast).slice(0,160)};
+undoBtn.click();
+await S(800);
+const dismissed=await until(()=>!visible(toast)||!document.contains(toast),6000);
+if(dismissed) return {ok:true,verified:true,path:'ui',detail:{restored:true,note:'the undo button was clicked — youtube.com restores the recommendation signal'}};
+return {ok:false,verified:false,error:'undo-toast-still-present',path:'ui',dom:${domState()},toast:textOf(toast).slice(0,160)};
+`);
+}
+
 /* ------------------------------------------------------------------ */
 /* WFX2-B-B personal surfaces (additive kinds)                         */
 /* ------------------------------------------------------------------ */
@@ -1160,7 +1226,13 @@ export function requiredUrl(req: BrokerActionRequest): string | null {
     case "bell":
       return target.channelId ? `https://www.youtube.com/channel/${target.channelId}` : null;
     case "not-interested":
+    // P24-SEND (G12): the feed-card drive family — home feed
+    case "dont-recommend-channel":
       return "https://www.youtube.com/";
+    // P24-SEND (G12): the undo toast lives wherever the feedback action ran
+    // — NULL on purpose (a navigation would kill the ephemeral toast)
+    case "feedback-undo":
+      return null;
     // WFX2-B-B personal surfaces — additive
     case "history-remove":
     case "history-clear-all":
@@ -1306,6 +1378,11 @@ export function buildScript(
     }
     case "not-interested":
       return { script: notInterestedScript(target.videoId!), timeoutMs: 30000 };
+    // P24-SEND (G12) — the feed-feedback family's additive kinds
+    case "dont-recommend-channel":
+      return { script: dontRecommendChannelScript(target.videoId!), timeoutMs: 30000 };
+    case "feedback-undo":
+      return { script: feedbackUndoScript(), timeoutMs: 30000 };
     // WFX2-B-B personal surfaces — additive
     case "history-remove":
       return { script: historyRemoveScript(target.videoId!), timeoutMs: 30000 };
