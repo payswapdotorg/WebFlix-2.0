@@ -200,7 +200,10 @@ describe("GET /api/home — shelves → rails", () => {
     expect(res.status).toBe(200);
     const feed = (await res.json()) as any;
     expect(feed.chips[0]).toBe("All");
-    expect(feed.chips).toHaveLength(15);
+    // REA-3 — youtube.com's measured ladder: All + the dynamic family
+    // (Mixes / Recently uploaded / Live — "New to you" honestly absent)
+    // + the 12 deduped category chips = 16.
+    expect(feed.chips).toHaveLength(16);
     expect(feed.source).toBe("search-compose"); // never claims browse when composed
     expect(feed.hero?.id).toBeTypeOf("string");
     expect(feed.trending).toEqual([]);

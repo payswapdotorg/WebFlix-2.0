@@ -91,7 +91,7 @@ mock.module("@/lib/queue/queue-actions", () => ({
 
 const { default: CategoryPage } = await import("@/app/explore/category/[key]/view");
 const { default: ExploreHub } = await import("@/app/explore/view");
-const { HOME_CHIPS } = await import("@/lib/categories");
+const { CATEGORY_CHIPS } = await import("@/lib/categories");
 
 // ---- the fetch stub (loadMore rides raw fetch, not useApi) ----
 type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
@@ -195,20 +195,24 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("the category page — the chip row (All + the 14, URL-synced)", () => {
-  test("renders HOME_CHIPS in order with the right destinations", async () => {
+  test("renders CATEGORY_CHIPS in order with the right destinations", async () => {
     viewData = publicPage();
     await render(createElement(CategoryPage, { category: "Music" }));
 
+    // REA-3 — the explore/category browse surface keeps the CATEGORY ladder
+    // (All + the 14 categories incl. Live/Mixes); the dynamic chip family
+    // (Recently uploaded / live-scoped Live) is the HOME feed's own row.
     const chips = all('[data-testid="category-chip"]');
-    expect(chips.map((c) => c.textContent)).toEqual(HOME_CHIPS); // All + 14
+    expect(chips.map((c) => c.textContent)).toEqual(CATEGORY_CHIPS); // All + 14
     expect(chips).toHaveLength(15);
 
     const chipHrefs = hrefs('[data-testid="category-chip"]');
     expect(chipHrefs[0]).toBe("/explore"); // All → the explore hub
-    expect(chipHrefs[HOME_CHIPS.indexOf("Music")]).toBe("/explore/category/Music");
-    expect(chipHrefs[HOME_CHIPS.indexOf("Gaming")]).toBe("/explore/category/Gaming");
-    expect(chipHrefs[HOME_CHIPS.indexOf("Podcasts")]).toBe("/explore/category/Podcasts");
-    expect(chipHrefs[HOME_CHIPS.indexOf("Live")]).toBe("/explore/live"); // Live keeps its own surface
+    expect(chipHrefs[CATEGORY_CHIPS.indexOf("Music")]).toBe("/explore/category/Music");
+    expect(chipHrefs[CATEGORY_CHIPS.indexOf("Gaming")]).toBe("/explore/category/Gaming");
+    expect(chipHrefs[CATEGORY_CHIPS.indexOf("Podcasts")]).toBe("/explore/category/Podcasts");
+    expect(chipHrefs[CATEGORY_CHIPS.indexOf("Mixes")]).toBe("/explore/category/Mixes");
+    expect(chipHrefs[CATEGORY_CHIPS.indexOf("Live")]).toBe("/explore/live"); // Live keeps its own surface
   });
 
   test("the URL's category is the active chip (aria-current, never client state)", async () => {
@@ -314,9 +318,11 @@ describe("the explore hub — every card lands on a real-data destination", () =
   test("Live keeps /explore/live; the 13 browse categories → their own pages", async () => {
     await render(createElement(ExploreHub));
 
+    // REA-3 — the hub's cards are the 14 CATEGORIES (the browse ladder);
+    // the home-only dynamic chips (Recently uploaded) are not cards here.
     const cardLinks = all("a").filter((a) => a.getAttribute("href")?.startsWith("/explore"));
     expect(cardLinks.map((a) => a.getAttribute("href"))).toContain("/explore/live");
-    for (const category of HOME_CHIPS.filter((c) => c !== "All" && c !== "Live")) {
+    for (const category of CATEGORY_CHIPS.filter((c) => c !== "All" && c !== "Live")) {
       expect(cardLinks.map((a) => a.getAttribute("href"))).toContain(
         `/explore/category/${category}`
       );
