@@ -46,6 +46,7 @@ import {
   VideoHoverPreviewLayer,
   EMBED_NO_READY_MS,
   EMBED_PLAYING_MS,
+  NATIVE_NO_PLAY_MS,
 } from "@/components/video/video-hover-preview";
 
 // ---- happy-dom as the global DOM (set before any component runs) ----
@@ -170,6 +171,49 @@ const playbackWalled = {
   durationSec: null,
   source: "",
 };
+/**
+ * P26-HPV — a playback payload whose streamFormats carry video-only adaptive
+ * entries (the NATIVE lane's fuel — exactly what parsePlayback now surfaces
+ * for embed-disabled videos). The 360p entry (itag 134) must win the preview
+ * pick over the 1080p one (itag 137): pickPreviewStreamFormat's
+ * nearest-360p law.
+ */
+const playbackWithNativeStream = (id: string) => ({
+  streamFormats: [
+    {
+      itag: 137,
+      url: `https://rr5.googlevideo.com/videoplayback?itag=137&id=${id}`,
+      mimeType: 'video/mp4; codecs="avc1.640028"',
+      qualityLabel: "1080p",
+      width: 1920,
+      height: 1080,
+      fps: 30,
+      bitrate: 2500000,
+      contentLength: null,
+      approxDurationMs: "213089",
+      hasAudio: false,
+    },
+    {
+      itag: 134,
+      url: `https://rr5.googlevideo.com/videoplayback?itag=134&id=${id}`,
+      mimeType: 'video/mp4; codecs="avc1.4d401e"',
+      qualityLabel: "360p",
+      width: 640,
+      height: 360,
+      fps: 30,
+      bitrate: 600000,
+      contentLength: null,
+      approxDurationMs: "213089",
+      hasAudio: false,
+    },
+  ],
+  storyboards: [
+    { ...storyboardLevel(id), level: 1, frameWidth: 80, frameHeight: 45, cols: 10, rows: 10, sheetCount: 2 },
+    storyboardLevel(id),
+  ],
+  durationSec: 213,
+  source: "player",
+});
 /** (Re)install the stub — afterEach restores the REAL fetch, so every test
  *  must re-install it or fetchPlayback falls through to the network. */
 const installFetchStub = () => {
@@ -190,6 +234,12 @@ const stubbedFetch: typeof fetch = (async (url: string | URL | Request) => {
   }
   if (id.startsWith("FAIL")) {
     return new Response("nope", { status: 500 });
+  }
+  if (id.startsWith("NATIVE")) {
+    return new Response(JSON.stringify(playbackWithNativeStream(id)), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
   }
   return new Response(JSON.stringify(playbackWithStoryboard(id)), {
     status: 200,
@@ -894,5 +944,195 @@ describe("P22-A — riding the controls keeps the preview (the layer is a fixed 
     });
     expect(previewStore().snapshot.video).toBeNull(); // hidden — a real exit
     expect(q('[data-testid="hover-preview"]')).toBeNull();
+  });
+});
+
+// ---- P26-HPV: the native lane — embed death plays the real video ----------
+
+describe("P26-HPV — the native lane: embed death plays the real video (the operator's fix)", () => {
+  const nativeVideoA = {
+    id: "NATIVE00001",
+    title: "Native lane A",
+    thumbnailUrl: "https://i.ytimg.com/vi/NATIVE00001/hqdefault.jpg",
+  };
+  /** the format the preview picker must choose (nearest-360p beats 1080p) */
+  const nativeFmtUrl = "https://rr5.googlevideo.com/videoplayback?itag=134&id=NATIVE00001";
+
+  const previewVideoEl = () =>
+    q('[data-testid="hover-preview-video"]') as unknown as HTMLVideoElement | null;
+
+  /** Show in embed mode, then kill the embed at once (onError 101/150 — the wall). */
+  async function embedToNative(video = nativeVideoA) {
+    const { card, anchor } = await renderApp(video);
+    await show(video, card, anchor);
+    await act(async () => {
+      await sleep(30); // the player + the playback fetch settle
+    });
+    const player = livePlayer()!;
+    await act(async () => {
+      playerEvents(player).onError?.();
+    });
+    return { card, anchor };
+  }
+
+  test("embed onError → the native lane boots: the real stream through /api/stream, muted, playsInline, NO controls", async () => {
+    await embedToNative();
+    const video = previewVideoEl();
+    expect(video).not.toBeNull();
+    expect(video!.getAttribute("src")).toBe(`/api/stream?url=${encodeURIComponent(nativeFmtUrl)}`);
+    expect(video!.muted).toBe(true);
+    expect(video!.hasAttribute("playsinline")).toBe(true);
+    expect(video!.hasAttribute("autoplay")).toBe(true);
+    expect(video!.hasAttribute("controls")).toBe(false); // OUR chrome drives it
+    expect(video!.getAttribute("aria-hidden")).toBe("true"); // the layer carries the aria
+    // the nearest-360p format won — NOT the 1080p one (the tiny preview box)
+    expect(video!.getAttribute("src")).not.toContain("itag=137");
+    // the embed lane is gone; its player destroyed (never two players)
+    expect(q('[data-testid="hover-preview-embed"]')).toBeNull();
+    expect(MockYTPlayer.destroyed).toHaveLength(1);
+  });
+
+  test("while the native video buffers (no events fired): phase storyboard + the video opacity-0 (the companion law)", async () => {
+    await embedToNative();
+    const video = previewVideoEl()!;
+    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
+    expect(video.className).toContain("opacity-0");
+    expect(video.className).not.toContain("opacity-100");
+    // the frames animate underneath; no chrome yet (nothing proved playback)
+    expect(q('[data-testid="storyboard-frame"]')).not.toBeNull();
+    expect(q('[data-testid="hover-preview-mute"]')).toBeNull();
+    expect(q('[data-testid="hover-preview-seek"]')).toBeNull();
+  });
+
+  test("playing → the native phase: the chrome present + the video visible (the frames stay as companion)", async () => {
+    await embedToNative();
+    const video = previewVideoEl()!;
+    await act(() => {
+      video.dispatchEvent(new win.Event("playing") as unknown as Event);
+    });
+    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("native");
+    expect(video.className).toContain("opacity-100");
+    // youtube.com's preview chrome — the pill, the mute toggle, the timeline
+    expect(q('[data-testid="hover-preview-mute"]')).not.toBeNull();
+    expect(q('[data-testid="hover-preview-seek"]')).not.toBeNull();
+    expect(q("[data-preview-phase]")!.textContent).toContain("Preview");
+    // the storyboard frames stay mounted UNDER the playing video (crossfade base)
+    expect(q('[data-testid="storyboard-frame"]')).not.toBeNull();
+  });
+
+  test("the chrome drives the element: mute toggle flips video.muted; a scrub sets currentTime; a timeupdate advances the fill", async () => {
+    await embedToNative();
+    const video = previewVideoEl()!;
+    await act(() => {
+      video.dispatchEvent(new win.Event("playing") as unknown as Event);
+    });
+    // happy-dom leaves duration a getter-only NaN — supply what the media
+    // stack would have (the scrub needs a real duration to seek against)
+    Object.defineProperty(video, "duration", { value: 213, configurable: true });
+    // the mute toggle rides the element (the ops adapter's native lane)
+    const mute = q('[data-testid="hover-preview-mute"]')!;
+    expect(video.muted).toBe(true);
+    await act(() => {
+      mute.dispatchEvent(new win.MouseEvent("click", { bubbles: true }) as unknown as Event);
+    });
+    expect(video.muted).toBe(false);
+    expect(q('[data-testid="hover-preview-mute"]')!.getAttribute("aria-label")).toBe("Mute preview");
+    // a pointer scrub on the seek bar seeks the element itself
+    const seek = q('[data-testid="hover-preview-seek"]')!;
+    stubRect(seek, { left: 0, top: 0, width: 200, height: 16 });
+    await act(() => {
+      seek.dispatchEvent(
+        new win.PointerEvent("pointerdown", { bubbles: true, clientX: 100, pointerId: 1 }) as unknown as Event
+      );
+    });
+    expect(video.currentTime).toBeCloseTo(106.5, 1); // 0.5 × 213
+    const fill = q('[data-testid="hover-preview-seek-fill"]') as HTMLElement;
+    expect(parseFloat(fill.style.width)).toBeCloseTo(50, 0); // the bar follows the pointer at once
+    await act(() => {
+      seek.dispatchEvent(
+        new win.PointerEvent("pointerup", { bubbles: true, pointerId: 1 }) as unknown as Event
+      );
+    });
+    // a timeupdate moves the fill through the same progress state the poll feeds
+    video.currentTime = 60;
+    await act(() => {
+      video.dispatchEvent(new win.Event("timeupdate") as unknown as Event);
+    });
+    expect(parseFloat(fill.style.width)).toBeCloseTo((60 / 213) * 100, 1);
+  });
+
+  test("native onError → phase returns to storyboard (the honest floor) with the video gone", async () => {
+    await embedToNative();
+    const video = previewVideoEl()!;
+    await act(() => {
+      video.dispatchEvent(new win.Event("playing") as unknown as Event);
+    });
+    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("native");
+    await act(() => {
+      video.dispatchEvent(new win.Event("error") as unknown as Event);
+    });
+    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
+    expect(previewVideoEl()).toBeNull(); // the dead lane unmounts its video
+    expect(q('[data-testid="storyboard-frame"]')).not.toBeNull();
+    expect(q('[data-testid="hover-preview-mute"]')).toBeNull(); // chrome gone with the lane
+  });
+
+  test("embed death + NO streamFormats (walled payload) → storyboard-only — the pre-fix floor preserved", async () => {
+    // a plain storyboard payload (no formats): the fix raised the ladder
+    // ABOVE the floor, it did not move the floor itself
+    const slideVideo = {
+      id: "SLIDES00001",
+      title: "Storyboard only",
+      thumbnailUrl: "https://i.ytimg.com/vi/SLIDES00001/hqdefault.jpg",
+    };
+    const { card, anchor } = await renderApp(slideVideo);
+    await show(slideVideo, card, anchor);
+    await act(async () => {
+      await sleep(30);
+    });
+    const player = livePlayer()!;
+    await act(async () => {
+      playerEvents(player).onError?.();
+    });
+    expect(previewVideoEl()).toBeNull(); // no formats → the native lane never arms
+    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
+    expect(q('[data-testid="storyboard-frame"]')).not.toBeNull();
+  });
+
+  test("NATIVE_NO_PLAY_MS zombie guard: a never-playing, never-erroring video goes dead after the window → storyboard", async () => {
+    await embedToNative();
+    expect(previewVideoEl()).not.toBeNull();
+    // no events fired, readyState stays 0 (< 2) — a hanging proxy fetch must
+    // not keep a dead lane armed (the real-clock proof, EMBED_*_MS pattern)
+    await act(async () => {
+      await sleep(NATIVE_NO_PLAY_MS + 400);
+    });
+    expect(previewVideoEl()).toBeNull(); // the zombie was disarmed
+    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
+    expect(q('[data-testid="storyboard-frame"]')).not.toBeNull();
+  }, 15_000);
+
+  test("reduced motion (storyboard lane): no video element ever renders — the device policy is unchanged", async () => {
+    const real = (win as unknown as Record<string, unknown>).matchMedia;
+    setMatchMedia((query) => query.includes("prefers-reduced-motion"));
+    const nativeVideoB = {
+      id: "NATIVE00002",
+      title: "Native lane B",
+      thumbnailUrl: "https://i.ytimg.com/vi/NATIVE00002/hqdefault.jpg",
+    };
+    const { card, anchor } = await renderApp(nativeVideoB);
+    stubRect(anchor, { left: 10, top: 20, width: 300, height: 169 });
+    await enter(card);
+    await act(async () => {
+      await sleep(850); // past the dwell — the storyboard lane shows
+    });
+    await act(async () => {
+      await sleep(30); // the fetch settles (formats ARE available for this id)
+    });
+    expect(previewStore().snapshot.mode).toBe("storyboard");
+    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
+    expect(previewVideoEl()).toBeNull(); // never a <video> on the frames-only lane
+    expect(q("video")).toBeNull();
+    (win as unknown as Record<string, unknown>).matchMedia = real;
   });
 });

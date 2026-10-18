@@ -128,6 +128,15 @@ function formatRank(f: StreamFormatDto): number {
  * (no streamingData / no storyboards / status != OK → empty arrays, no throw).
  * Only formats with a PLAIN `url` are surfaced (signatureCipher-only formats
  * need JS deciphering — out of scope, honestly skipped).
+ *
+ * P26-HPV — the stream surface is WIDENED: `streamingData.adaptiveFormats` is
+ * read too, and its video-only entries are surfaced with `hasAudio: false` as
+ * PREVIEW-ONLY fuel (the hover preview's native lane plays a muted <video>
+ * through /api/stream — it needs no audio track; the operator's report: some
+ * previews played the video, others showed "slideshows of pictures" — those
+ * were embed-disabled videos degrading to the storyboard). The watch page's
+ * pickStreamFormat (player-fallback.tsx) still requires muxed, so a
+ * video-only stream can never drive the watch swap.
  */
 export function parsePlayback(
   source: PlaybackDto["source"],
@@ -143,18 +152,26 @@ export function parsePlayback(
   const lengthSec = Number(pr?.videoDetails?.lengthSeconds);
   const durationSec = Number.isFinite(lengthSec) && lengthSec > 0 ? lengthSec : null;
 
-  // ---- progressive formats with a plain URL ----
-  const formats: StreamFormatDto[] = [];
-  const rawFormats: any[] = pr?.streamingData?.formats ?? [];
-  for (const f of rawFormats) {
+  // ---- formats with a plain URL ----
+  // Two rungs share one reader:
+  //  - `streamingData.formats` (progressive): MUXED required — the watch
+  //    page's <video> swap needs audio, so video-only entries are skipped
+  //    (unchanged law);
+  //  - `streamingData.adaptiveFormats` (P26-HPV): hasAudio is COMPUTED the
+  //    exact same way and surfaced honestly — video-only entries become
+  //    hasAudio:false preview fuel, rare-but-real muxed-looking adaptive
+  //    entries (an audio codec / audioQuality present) stay hasAudio:true.
+  const muxed: StreamFormatDto[] = [];
+  const videoOnly: StreamFormatDto[] = [];
+  const readFormat = (f: any, allowVideoOnly: boolean): void => {
     const url: unknown = f?.url;
-    if (typeof url !== "string" || url.length === 0) continue; // signatureCipher — skip
+    if (typeof url !== "string" || url.length === 0) return; // signatureCipher — skip
     const mime: string = typeof f?.mimeType === "string" ? f.mimeType : "";
-    if (!mime.startsWith("video/")) continue; // adaptive audio-only etc.
+    if (!mime.startsWith("video/")) return; // audio-only entries skipped
     const hasAudio =
       typeof f?.audioQuality === "string" || /mp4a|opus|ac-3|ec-3/.test(mime);
-    if (!hasAudio) continue; // video-only (adaptive) — a <video> swap needs muxed
-    formats.push({
+    if (!hasAudio && !allowVideoOnly) return; // video-only in the progressive rung — a watch swap needs muxed
+    (hasAudio ? muxed : videoOnly).push({
       itag: Number(f?.itag) || 0,
       url,
       mimeType: mime,
@@ -165,10 +182,17 @@ export function parsePlayback(
       bitrate: Number.isFinite(Number(f?.bitrate)) ? Number(f.bitrate) : null,
       contentLength: typeof f?.contentLength === "string" ? f.contentLength : null,
       approxDurationMs: typeof f?.approxDurationMs === "string" ? f.approxDurationMs : null,
-      hasAudio: true,
+      hasAudio,
     });
-  }
-  formats.sort((a, b) => formatRank(b) - formatRank(a));
+  };
+  for (const f of (pr?.streamingData?.formats ?? []) as any[]) readFormat(f, false);
+  for (const f of (pr?.streamingData?.adaptiveFormats ?? []) as any[]) readFormat(f, true);
+  // Deterministic order: muxed first (the existing formatRank), then the
+  // video-only entries by height DESC — the pickers decide usage anyway
+  // (watch: muxed only; preview: nearest-360p).
+  muxed.sort((a, b) => formatRank(b) - formatRank(a));
+  videoOnly.sort((a, b) => (b.height ?? 0) - (a.height ?? 0));
+  const formats: StreamFormatDto[] = [...muxed, ...videoOnly];
 
   return {
     streamFormats: formats,

@@ -38,12 +38,22 @@ import {
 } from "@/components/watch/youtube-player";
 import type { PlaybackDto, StreamFormatDto } from "@/lib/watch/types";
 
-/** Best progressive format: itag 22 (720p) > 18 (360p) > rest by height. */
+/**
+ * Best progressive format: itag 22 (720p) > 18 (360p) > rest by height.
+ *
+ * P26-HPV regression guard: filters to MUXED (f.hasAudio) BEFORE ranking —
+ * parsePlayback now also surfaces video-only adaptive entries (hasAudio
+ * false, preview-only fuel for the hover preview's native lane) and the
+ * WATCH page needs audio, so a video-only stream must never drive the watch
+ * swap even when it is the tallest. Empty after the filter → null (the
+ * unchanged contract — the blocked card shows instead).
+ */
 export function pickStreamFormat(formats: StreamFormatDto[]): StreamFormatDto | null {
-  if (formats.length === 0) return null;
+  const usable = formats.filter((f) => f.hasAudio);
+  if (usable.length === 0) return null;
   const rank = (f: StreamFormatDto): number =>
     f.itag === 22 ? 2_000_000 : f.itag === 18 ? 1_000_000 : (f.height ?? 0) * 1_000;
-  return formats.reduce((best, f) => (rank(f) > rank(best) ? f : best));
+  return usable.reduce((best, f) => (rank(f) > rank(best) ? f : best));
 }
 
 /* ------------------------------------------------------------------ */

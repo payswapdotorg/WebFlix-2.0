@@ -74,8 +74,11 @@ import {
 } from "@/lib/youtube/streams";
 import { setUpstream } from "@/lib/youtube/innertube";
 import { cachePeek, clearCache } from "@/lib/youtube/cache";
+import { pickPreviewStreamFormat } from "@/lib/watch/playback-client";
+import { pickStreamFormat } from "@/components/player/player-fallback";
 import { GET as playbackRoute } from "@/app/api/videos/[id]/playback/route";
 import { GET as streamRoute } from "@/app/api/stream/route";
+import type { StreamFormatDto } from "@/lib/watch/types";
 
 const FIXTURE_DIR = "tests/fixtures/yt";
 const load = (name: string): any => JSON.parse(readFileSync(`${FIXTURE_DIR}/${name}.json`, "utf8"));
@@ -201,6 +204,171 @@ describe("parsePlayback — formats + storyboards + duration", () => {
     expect(extractPlayerResponseFromHtml("<html>no player response here</html>")).toBeNull();
     // malformed JSON inside the marker → null, never a throw
     expect(extractPlayerResponseFromHtml("var ytInitialPlayerResponse = {broken;;};</script>")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P26-HPV — adaptiveFormats (the hover preview's native-lane fuel) + pickers
+// ---------------------------------------------------------------------------
+
+/** A StreamFormatDto builder (defaults = a 360p video-only adaptive entry). */
+const fmt = (
+  over: Partial<StreamFormatDto> & Pick<StreamFormatDto, "itag" | "url">
+): StreamFormatDto => ({
+  mimeType: 'video/mp4; codecs="avc1.4d401e"',
+  qualityLabel: null,
+  width: 640,
+  height: 360,
+  fps: 30,
+  bitrate: 600_000,
+  contentLength: null,
+  approxDurationMs: null,
+  hasAudio: false,
+  ...over,
+});
+
+describe("P26-HPV — parsePlayback: adaptiveFormats widen the stream surface (preview-only fuel)", () => {
+  const adaptiveResponse = (adaptiveFormats: unknown[], formats: unknown[] = []) => ({
+    playabilityStatus: { status: "OK" },
+    videoDetails: { lengthSeconds: "213" },
+    streamingData: { formats, adaptiveFormats },
+  });
+
+  test("a video-only adaptive entry with a plain URL is surfaced (hasAudio:false, real dimensions) after the muxed rung", () => {
+    const dto = parsePlayback("player", adaptiveResponse(
+      [
+        // video-only 360p adaptive — the hover preview's native-lane fuel
+        {
+          itag: 134,
+          mimeType: 'video/mp4; codecs="avc1.4d401e"',
+          url: "https://rr5.googlevideo.com/videoplayback?itag=134",
+          qualityLabel: "360p",
+          width: 640,
+          height: 360,
+          fps: 30,
+          bitrate: 600000,
+          approxDurationMs: "213089",
+        },
+        // video-only 1080p adaptive — taller, still preview fuel
+        {
+          itag: 137,
+          mimeType: 'video/mp4; codecs="avc1.640028"',
+          url: "https://rr5.googlevideo.com/videoplayback?itag=137",
+          qualityLabel: "1080p",
+          width: 1920,
+          height: 1080,
+          fps: 30,
+          bitrate: 2500000,
+        },
+      ],
+      [
+        {
+          itag: 18,
+          mimeType: 'video/mp4; codecs="avc1.42001E, mp4a.40.2"',
+          url: "https://rr5.googlevideo.com/videoplayback?itag=18",
+          qualityLabel: "360p",
+          width: 640,
+          height: 360,
+          audioQuality: "AUDIO_QUALITY_LOW",
+        },
+      ]
+    ));
+    // deterministic order: muxed first (formatRank), then video-only by height DESC
+    expect(dto.streamFormats.map((f) => f.itag)).toEqual([18, 137, 134]);
+    const f134 = dto.streamFormats.find((f) => f.itag === 134)!;
+    expect(f134.hasAudio).toBe(false); // the honest preview-only marker
+    expect(f134.height).toBe(360);
+    expect(f134.width).toBe(640);
+    expect(f134.url).toBe("https://rr5.googlevideo.com/videoplayback?itag=134");
+    expect(f134.mimeType).toBe('video/mp4; codecs="avc1.4d401e"');
+    // the raw approxDurationMs passthrough (the field rides the DTO as-is)
+    expect(String(f134.approxDurationMs)).toBe("213089");
+  });
+
+  test("audio-only adaptive entries are skipped (a hover preview needs pictures)", () => {
+    const dto = parsePlayback("player", adaptiveResponse([
+      {
+        itag: 140,
+        mimeType: 'audio/mp4; codecs="mp4a.40.2"',
+        url: "https://rr5.googlevideo.com/videoplayback?itag=140",
+        audioQuality: "AUDIO_QUALITY_MEDIUM",
+        bitrate: 130000,
+      },
+    ]));
+    expect(dto.streamFormats).toEqual([]);
+  });
+
+  test("signatureCipher-only adaptive entries are skipped (the standing no-deciphering law)", () => {
+    const dto = parsePlayback("player", adaptiveResponse([
+      {
+        itag: 137,
+        mimeType: 'video/mp4; codecs="avc1.640028"',
+        signatureCipher: "s=abc&sp=sig&url=https%3A%2F%2Frr5.googlevideo.com%2Fvideoplayback",
+        width: 1920,
+        height: 1080,
+      },
+    ]));
+    expect(dto.streamFormats).toEqual([]);
+  });
+
+  test("a muxed-looking adaptive entry (an audio codec present) keeps hasAudio:true", () => {
+    const dto = parsePlayback("player", adaptiveResponse([
+      {
+        itag: 18,
+        mimeType: 'video/mp4; codecs="avc1.42001E, mp4a.40.2"',
+        url: "https://rr5.googlevideo.com/videoplayback?itag=18",
+        qualityLabel: "360p",
+        width: 640,
+        height: 360,
+        audioQuality: "AUDIO_QUALITY_LOW",
+      },
+    ]));
+    expect(dto.streamFormats).toHaveLength(1);
+    expect(dto.streamFormats[0].hasAudio).toBe(true);
+  });
+});
+
+describe("P26-HPV — the pickers (the watch guard + the preview's nearest-360p)", () => {
+  test("pickStreamFormat (the WATCH picker) NEVER returns a hasAudio:false entry, even when it is the tallest", () => {
+    const formats = [
+      fmt({ itag: 18, url: "https://rr5.googlevideo.com/videoplayback?itag=18", hasAudio: true, qualityLabel: "360p" }),
+      fmt({ itag: 137, url: "https://rr5.googlevideo.com/videoplayback?itag=137", hasAudio: false, height: 1080, qualityLabel: "1080p" }),
+    ];
+    expect(pickStreamFormat(formats)?.itag).toBe(18); // muxed 360p beats video-only 1080p
+    // a video-only-only surface yields null — the blocked card's contract
+    expect(pickStreamFormat([formats[1]])).toBeNull();
+  });
+
+  test("pickPreviewStreamFormat: nearest-360p wins over 720p/1080p", () => {
+    const picked = pickPreviewStreamFormat([
+      fmt({ itag: 137, url: "u137", height: 1080, hasAudio: false, bitrate: 2_500_000 }),
+      fmt({ itag: 136, url: "u136", height: 720, hasAudio: true, bitrate: 1_200_000 }),
+      fmt({ itag: 134, url: "u134", height: 360, hasAudio: false, bitrate: 600_000 }),
+    ]);
+    expect(picked?.itag).toBe(134);
+  });
+
+  test("pickPreviewStreamFormat: muxed wins an exact height tie (+500)", () => {
+    const picked = pickPreviewStreamFormat([
+      fmt({ itag: 134, url: "u134", height: 360, hasAudio: false, bitrate: 600_000 }),
+      fmt({ itag: 18, url: "u18", height: 360, hasAudio: true, bitrate: 600_000 }),
+    ]);
+    expect(picked?.itag).toBe(18);
+  });
+
+  test("pickPreviewStreamFormat: empty input → null (the storyboard floor)", () => {
+    expect(pickPreviewStreamFormat([])).toBeNull();
+  });
+
+  test("pickPreviewStreamFormat: no-height entries rank last", () => {
+    const picked = pickPreviewStreamFormat([
+      fmt({ itag: 999, url: "u999", height: null, hasAudio: false, bitrate: null }),
+      fmt({ itag: 242, url: "u242", height: 240, hasAudio: false, bitrate: 300_000 }),
+      fmt({ itag: 135, url: "u135", height: 480, hasAudio: false, bitrate: 800_000 }),
+    ]);
+    // 240p and 480p tie at distance 120 — the cheaper stream wins the tie;
+    // the no-height entry (distance 360) ranks behind both
+    expect(picked?.itag).toBe(242);
   });
 });
 
