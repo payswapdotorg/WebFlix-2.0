@@ -10,8 +10,13 @@
  *    link) appears ONLY when the operator's real channel handle resolves;
  *    a null channel and a guest's 401 both degrade to its honest absence —
  *    never a dead link;
- *  - Upload video deep-links /upload (the studio wizard) and Go live
- *    deep-links the real live rail route /explore/live.
+ *  - Upload video deep-links /upload (the studio wizard); Go live routes
+ *    EXTERNALLY to youtube.com's own live surface (P24-SEND G10: the
+ *    Live Control Room is the creator's stream-setup surface — WebFlix
+ *    has no ingestion surface, so the rung takes the Join-sheet
+ *    honest-degradation form: external href, _blank + noopener/noreferrer,
+ *    the honest reason in the tooltip + aria-label; the app's live BROWSE
+ *    page keeps its honest home at /explore/live from the Explore hub).
  *
  * NOTE on import order (the upload-wizard note applies here too): the
  * happy-dom globals MUST exist BEFORE the component's module graph is
@@ -20,6 +25,7 @@
  * noop would silently keep the dropdown's portal content unmounted.
  */
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { Window } from "happy-dom";
 
 /* ---- happy-dom globals (set BEFORE the component imports — see NOTE) ---- */
@@ -176,7 +182,7 @@ describe("the + CREATE pill", () => {
     expect(fetchLog.some((u) => u.includes("/api/studio?enrich=0"))).toBe(true);
   });
 
-  test("open: Upload video → /upload and Go live → /explore/live; NO New post while no channel resolves", async () => {
+  test("open: Upload video → /upload; Go live → youtube.com's own live surface, EXTERNAL (the G10 honest form); NO New post while no channel resolves", async () => {
     installFetch(() => new Response(JSON.stringify(studioBody(null)), { status: 200 }));
     await renderMenu();
     await openMenu();
@@ -190,16 +196,32 @@ describe("the + CREATE pill", () => {
     expect(upload.getAttribute("href")).toBe("/upload");
     expect(upload.textContent).toContain("Upload video");
 
+    // P24-SEND (G10): the Go live rung stays in the menu (youtube.com's own
+    // rung family) but routes EXTERNALLY to the measured real URL — the
+    // Live Control Room is a creator surface WebFlix has no seam for;
+    // _blank + noopener/noreferrer + the honest tooltip carry the reason.
     const live = win.document.querySelector(
       '[data-testid="create-go-live"]'
     ) as unknown as HTMLAnchorElement;
     expect(live).not.toBeNull();
-    expect(live.getAttribute("href")).toBe("/explore/live");
+    expect(live.getAttribute("href")).toBe("https://www.youtube.com/live");
+    expect(live.getAttribute("target")).toBe("_blank");
+    expect(live.getAttribute("rel")).toBe("noopener noreferrer");
     expect(live.textContent).toContain("Go live");
+    expect(live.getAttribute("title")).toContain("Live Control Room");
+    expect(live.getAttribute("aria-label")).toContain("no streaming setup");
 
     // the honest absence: no own channel resolved → no New post deep link
     expect(win.document.querySelector('[data-testid="create-new-post"]')).toBeNull();
     expect(win.document.body.textContent).not.toContain("New post");
+  });
+
+  test("P24-SEND (G10): the live BROWSE page keeps its honest home — the Explore hub still links /explore/live (source-scan)", () => {
+    const source = readFileSync("src/app/explore/view.tsx", "utf8");
+    expect(source).toContain('href="/explore/live"');
+    // and the rung itself no longer shadows the browse route
+    const menuSource = readFileSync("src/components/app/create-menu.tsx", "utf8");
+    expect(menuSource).not.toContain('href="/explore/live"');
   });
 
   test("the operator channel resolving surfaces the New post composer deep link", async () => {
