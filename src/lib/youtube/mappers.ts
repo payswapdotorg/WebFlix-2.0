@@ -544,7 +544,12 @@ export function mapShortsLockupViewModel(s: any): VideoDTO | null {
       if (/ views$/i.test(text)) dto.viewsText = text;
     }
   }
-  if (viewsA11y && !dto.viewsText) dto.viewsText = `${viewsA11y} views`;
+  if (viewsA11y && !dto.viewsText) {
+    // REA-3 — the a11y fallback already reads "…N views - play Short" on the
+    // history shorts shelf (measured: the real capture's accessibilityText);
+    // never append a second "views".
+    dto.viewsText = /views$/i.test(viewsA11y) ? viewsA11y : `${viewsA11y} views`;
+  }
   dto.views = viewsFromTexts(dto.viewsText, viewsA11y);
   dto.durationSec = null;
   return dto;

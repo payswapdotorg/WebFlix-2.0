@@ -639,3 +639,140 @@ describe("Topbar — youtube.com's topbar family (REA-3, station pack 2026-10-17
     expect(win.document.body.textContent ?? "").not.toContain("Trending");
   });
 });
+
+// ---------------------------------------------------------------------------
+// REA-3 F2 — the history page at youtube.com's parity (station pack,
+// logged-in 2026-10-17): the TAB family + the watched-shorts shelves.
+// ---------------------------------------------------------------------------
+
+const HistoryView = (await import("@/app/history/view")).default;
+
+function serveHistory(groups: { label: string; items: ReturnType<typeof makeVideo>[] }[]) {
+  fetchHandler = (url) => {
+    if (url.includes("/api/history")) {
+      return Response.json({
+        groups,
+        nextCursor: null,
+        loginRequired: false,
+        watchHistoryPaused: false,
+        searchHistoryPaused: null,
+        total: groups.reduce((n, g) => n + g.items.length, 0),
+        session: true,
+      });
+    }
+    return Response.json({}, { status: 200 });
+  };
+}
+
+describe("HistoryView — REA-3 F2: the tab family + the watched-shorts shelves", () => {
+  const groups = () => [
+    {
+      label: "Today",
+      items: [
+        makeVideo("v1", "Long-form video one"),
+        { ...makeVideo("s1", "Watched short one"), isShort: true },
+        { ...makeVideo("s2", "Watched short two"), isShort: true },
+      ],
+    },
+    { label: "Yesterday", items: [makeVideo("v2", "Long-form video two")] },
+  ];
+
+  test("the tab strip renders the honest subset (All / Shorts / Videos; Music/Podcasts never guessed)", async () => {
+    serveHistory(groups());
+    await render(<HistoryView />);
+    await act(async () => {});
+    const tabs = all('[data-testid="history-tabs"] [role="tab"]');
+    expect(tabs.map((t) => t.textContent?.trim())).toEqual(["All", "Shorts", "Videos"]);
+    expect(tabs[0].getAttribute("aria-selected")).toBe("true");
+    // youtube.com's Music/Podcasts need a server-side genre seam — honestly absent
+    expect(win.document.body.textContent ?? "").not.toContain("Podcasts");
+  });
+
+  test("All (default): day groups render rows + the inline shorts shelf (9:16 tiles, /watch links)", async () => {
+    serveHistory(groups());
+    await render(<HistoryView />);
+    await act(async () => {});
+    // the day's rows render
+    expect(all('a[aria-label="Watch Long-form video one"]').length).toBeGreaterThan(0);
+    // the shorts shelf renders within the day (the group starts with a row → shelf after)
+    const shelf = q('[data-testid="history-shorts-shelf"]');
+    expect(shelf).not.toBeNull();
+    const tileLinks = shelf ? Array.from(shelf.querySelectorAll("a")) : [];
+    expect(tileLinks.map((a) => a.getAttribute("href"))).toEqual(["/watch/s1", "/watch/s2"]);
+    // per-tile ⋯ remove affordance (the same Action-menu family as rows)
+    expect(shelf!.querySelectorAll('button[aria-label^="Actions for"]').length).toBe(2);
+  });
+
+  test("Shorts tab: only the shorts render (shelf tiles, no long-form rows)", async () => {
+    serveHistory(groups());
+    await render(<HistoryView />);
+    await act(async () => {});
+    const shortsTab = all('[data-testid="history-tabs"] [role="tab"]').find(
+      (t) => t.textContent?.trim() === "Shorts",
+    )!;
+    await act(async () => {
+      shortsTab.click();
+    });
+    expect(all('a[aria-label="Watch Long-form video one"]').length).toBe(0);
+    expect(all('a[aria-label="Watch Long-form video two"]').length).toBe(0);
+    const shelf = q('[data-testid="history-shorts-shelf"]');
+    expect(shelf).not.toBeNull();
+    expect(shelf!.querySelectorAll("a").length).toBe(2);
+    // the "Yesterday" group (no shorts) collapses away honestly
+    expect(win.document.body.textContent ?? "").not.toContain("Yesterday");
+  });
+
+  test("Videos tab: only long-form rows render; the honest per-tab empty when a tab has nothing", async () => {
+    serveHistory(groups());
+    await render(<HistoryView />);
+    await act(async () => {});
+    const videosTab = all('[data-testid="history-tabs"] [role="tab"]').find(
+      (t) => t.textContent?.trim() === "Videos",
+    )!;
+    await act(async () => {
+      videosTab.click();
+    });
+    expect(all('a[aria-label="Watch Long-form video one"]').length).toBeGreaterThan(0);
+    expect(q('[data-testid="history-shorts-shelf"]')).toBeNull();
+    // now a history with NO shorts → the Shorts tab's honest empty
+    serveHistory([{ label: "Today", items: [makeVideo("v1", "Long-form video one")] }]);
+    await render(<HistoryView />);
+    await act(async () => {});
+    const shortsTab = all('[data-testid="history-tabs"] [role="tab"]').find(
+      (t) => t.textContent?.trim() === "Shorts",
+    )!;
+    await act(async () => {
+      shortsTab.click();
+    });
+    expect(win.document.body.textContent ?? "").toContain("No Shorts in your watch history");
+    expect(q('[data-testid="history-shorts-shelf"]')).toBeNull();
+  });
+
+  test("the search box stays scoped to the active tab (youtube.com searches within the tab)", async () => {
+    serveHistory(groups());
+    await render(<HistoryView />);
+    await act(async () => {});
+    const shortsTab = all('[data-testid="history-tabs"] [role="tab"]').find(
+      (t) => t.textContent?.trim() === "Shorts",
+    )!;
+    await act(async () => {
+      shortsTab.click();
+    });
+    const input = q('input[aria-label="Search watch history"]') as HTMLInputElement;
+    // the house typeInto idiom (help-center): focusin → native set → keyup —
+    // React's value tracker + change plugin pick the committed value up
+    await act(async () => {
+      input.dispatchEvent(new Event("focusin", { bubbles: true }));
+    });
+    const desc = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), "value");
+    desc?.set?.call(input, "short two");
+    await act(async () => {
+      input.dispatchEvent(new Event("keyup", { bubbles: true }));
+    });
+    const shelf = q('[data-testid="history-shorts-shelf"]');
+    expect(shelf).not.toBeNull();
+    expect(shelf!.querySelectorAll("a").length).toBe(1);
+    expect(shelf!.querySelector('a[href="/watch/s2"]')).not.toBeNull();
+    expect(shelf!.querySelector('a[href="/watch/s1"]')).toBeNull();
+  });
+});

@@ -8,6 +8,7 @@ import {
   Pause,
   Play,
   Search,
+  SquarePlay,
   Trash2,
   X,
 } from "lucide-react";
@@ -16,6 +17,7 @@ import { useApi } from "@/hooks/use-api";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,6 +37,24 @@ type HistoryPayload = {
   total: number;
   session: boolean;
 };
+
+/**
+ * REA-3 F2 — youtube.com's history TAB family (station pack, logged-in
+ * 2026-10-17: "tabs All / Music / PODCASTS / Shorts / Videos"). WebFlix
+ * ships the honest subset the real history payload can filter:
+ *   - All / Shorts / Videos — the isShort signal is REAL (the mapper maps
+ *     the page's own watched-shorts shelves, reelShelfRenderer);
+ *   - Music / Podcasts are HONESTLY ABSENT: youtube.com classifies history
+ *     rows server-side; the history payload carries no genre seam, and no
+ *     existing WebFlix seam can filter your history by music/podcasts — a
+ *     tab that guesses would fabricate (the REA-3 parity-debt ledger).
+ */
+type HistoryTab = "all" | "shorts" | "videos";
+const HISTORY_TABS: { id: HistoryTab; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "shorts", label: "Shorts" },
+  { id: "videos", label: "Videos" },
+];
 
 /**
  * The honest no-session state (P22-B): NEVER a "Sign in to …" ask — the
@@ -91,6 +111,7 @@ function HistoryContent() {
     loading: false,
   });
   const [query, setQuery] = useState("");
+  const [tab, setTab] = useState<HistoryTab>("all");
 
   const total = data?.total ?? 0;
   const paused = data?.watchHistoryPaused ?? null;
@@ -99,19 +120,30 @@ function HistoryContent() {
     [data?.groups, extraGroups],
   );
 
-  /** The search filter (youtube.com's "Search watch history") — client-side. */
+  /** The tab filter (youtube.com's type tabs) rides the REAL isShort signal. */
+  const tabMatches = useMemo(
+    () => (item: ContinueVideoDTO) =>
+      tab === "all" ? true : tab === "shorts" ? item.isShort : !item.isShort,
+    [tab],
+  );
+
+  /** The search filter (youtube.com's "Search watch history") — client-side,
+ * scoped to the active tab (youtube.com searches within the tab). */
   const filteredGroups = useMemo(() => {
+    const scoped = allGroups
+      .map((g) => ({ ...g, items: g.items.filter(tabMatches) }))
+      .filter((g) => g.items.length > 0);
     const q = query.trim().toLowerCase();
-    if (!q) return allGroups;
+    if (!q) return scoped;
     const hits: ContinueVideoDTO[] = [];
-    for (const g of allGroups) {
+    for (const g of scoped) {
       for (const item of g.items) {
         const hay = `${item.title} ${item.channel?.name ?? ""}`.toLowerCase();
         if (hay.includes(q)) hits.push(item);
       }
     }
     return hits.length > 0 ? [{ label: "Search results", items: hits }] : [];
-  }, [allGroups, query]);
+  }, [allGroups, query, tabMatches]);
 
   async function clearHistory() {
     setClearing(true);
@@ -232,8 +264,39 @@ function HistoryContent() {
       )}
 
       <div className="grid gap-6 px-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_240px] xl:grid-cols-[minmax(0,1fr)_300px]">
-        {/* ---------------- main column: search + the row list ---------------- */}
+        {/* ---------------- main column: tabs + search + the row list ---------------- */}
         <div className="min-w-0">
+          {/* REA-3 F2 — youtube.com's history tab family (the honest subset:
+              All / Shorts / Videos on the REAL isShort signal; Music/Podcasts
+              need a server-side genre seam youtube.com owns — parity-debt). */}
+          {total > 0 && (
+            <div
+              role="tablist"
+              aria-label="History type"
+              className="no-scrollbar mb-4 flex gap-2 overflow-x-auto"
+              data-testid="history-tabs"
+            >
+              {HISTORY_TABS.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === t.id}
+                  data-testid={`history-tab-${t.id}`}
+                  onClick={() => setTab(t.id)}
+                  className={cn(
+                    "shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium leading-none transition-colors",
+                    tab === t.id
+                      ? "bg-foreground text-background"
+                      : "bg-secondary text-foreground/90 hover:bg-accent",
+                  )}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* "Search watch history" — youtube.com's own box over the list */}
           {total > 0 && (
             <div className="relative mb-4 max-w-[540px]">
@@ -292,22 +355,60 @@ function HistoryContent() {
             </div>
           )}
 
-          {filteredGroups.map((group) => (
-            <section key={group.label} aria-label={`${group.label} history`} className="mb-2">
-              <h2 className="pb-2 pt-4 text-base font-medium text-foreground">
-                {group.label}
-              </h2>
-              <div className="space-y-1">
-                {group.items.map((item: ContinueVideoDTO) => (
-                  <HistoryRow
-                    key={item.id}
-                    item={item}
-                    onRemove={() => removeFromHistory(item.id)}
+          {/* REA-3 — the honest per-tab empty (history exists, the tab's
+              subset doesn't — never a fabricated row to fill it) */}
+          {data && !data.loginRequired && total > 0 && filteredGroups.length === 0 && !query.trim() && !loading && (
+            <div className="py-16 text-center" role="status">
+              <p className="text-lg font-medium">
+                {tab === "shorts" ? "No Shorts in your watch history" : "No videos in your watch history"}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {tab === "shorts"
+                  ? "Shorts you watch on YouTube land here — watch a few from the Shorts feed."
+                  : "Long-form videos you watch land here — watch something from the home feed."}
+              </p>
+            </div>
+          )}
+
+          {filteredGroups.map((group) => {
+            // REA-3 F2 — a day group splits into the ROWS (long-form lockups)
+            // and its watched-shorts shelf (9:16 tiles, youtube.com's own
+            // history composition); the shelf rides at its watch position
+            // (first when the group's own order starts with a short).
+            const rows = group.items.filter((i) => !i.isShort);
+            const shorts = group.items.filter((i) => i.isShort);
+            const shortsFirst = group.items[0]?.isShort === true;
+            return (
+              <section key={group.label} aria-label={`${group.label} history`} className="mb-2">
+                <h2 className="pb-2 pt-4 text-base font-medium text-foreground">
+                  {group.label}
+                </h2>
+                {shortsFirst && shorts.length > 0 && (
+                  <HistoryShortsShelf
+                    shorts={shorts}
+                    onRemove={removeFromHistory}
                   />
-                ))}
-              </div>
-            </section>
-          ))}
+                )}
+                {rows.length > 0 && (
+                  <div className="space-y-1">
+                    {rows.map((item: ContinueVideoDTO) => (
+                      <HistoryRow
+                        key={item.id}
+                        item={item}
+                        onRemove={() => removeFromHistory(item.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+                {!shortsFirst && shorts.length > 0 && (
+                  <HistoryShortsShelf
+                    shorts={shorts}
+                    onRemove={removeFromHistory}
+                  />
+                )}
+              </section>
+            );
+          })}
 
           {query.trim() &&
             filteredGroups.length === 0 &&
@@ -477,6 +578,92 @@ function HistoryRow({ item, onRemove }: { item: ContinueVideoDTO; onRemove: () =
           ) : null}
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * REA-3 F2 — a day group's watched SHORTS, in youtube.com's own history
+ * presentation: a horizontal shelf of compact 9:16 tiles (never squashed
+ * into the 16:9 row lockup), each tile opening the video's watch page and
+ * carrying the same per-row ⋯ remove affordance. Shorts carry no
+ * watched-progress bar (youtube.com's own shelf shows none — the mapper
+ * records watchedSec 0, honestly).
+ */
+function HistoryShortsShelf({
+  shorts,
+  onRemove,
+}: {
+  shorts: ContinueVideoDTO[];
+  onRemove: (videoId: string) => void;
+}) {
+  return (
+    <div className="mb-3" aria-label="Shorts watched this day">
+      <p className="mb-2 flex items-center gap-2 text-sm font-medium text-foreground">
+        <SquarePlay className="size-4 text-yt-red" aria-hidden="true" /> Shorts
+      </p>
+      <div className="no-scrollbar flex gap-3 overflow-x-auto pb-1" data-testid="history-shorts-shelf">
+        {shorts.map((short) => (
+          <HistoryShortTile key={short.id} short={short} onRemove={() => onRemove(short.id)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function HistoryShortTile({
+  short,
+  onRemove,
+}: {
+  short: ContinueVideoDTO;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="group/tile relative w-[128px] shrink-0 sm:w-[160px]">
+      <Link
+        href={`/watch/${short.id}`}
+        aria-label={`Watch ${short.title}`}
+        className="block overflow-hidden rounded-xl bg-secondary"
+      >
+        <div className="relative aspect-[9/16] w-full">
+          {short.thumbnailUrl ? (
+            <img
+              src={short.thumbnailUrl}
+              alt=""
+              loading="lazy"
+              className="absolute inset-0 h-full w-full object-cover transition-transform duration-200 group-hover/tile:scale-105"
+            />
+          ) : null}
+        </div>
+      </Link>
+      <div className="absolute right-1 top-1 z-10">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7 rounded-full bg-black/60 text-white opacity-0 transition-opacity focus-visible:opacity-100 group-hover/tile:opacity-100 aria-expanded:opacity-100"
+              aria-label={`Actions for ${short.title}`}
+            >
+              <MoreVertical className="size-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={onRemove}
+              className="text-destructive focus:text-destructive"
+            >
+              <Trash2 className="mr-2 size-4" /> Remove from watch history
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      <p className="mt-1.5 line-clamp-2 text-xs font-medium leading-snug text-foreground">
+        {short.title}
+      </p>
+      {short.viewsText ? (
+        <p className="mt-0.5 text-[11px] text-muted-foreground">{short.viewsText}</p>
+      ) : null}
     </div>
   );
 }
