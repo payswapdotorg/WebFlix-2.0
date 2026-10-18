@@ -536,10 +536,25 @@ function VisibilityStep(props: {
           );
         })}
       </div>
-      <p className="text-xs text-muted-foreground">
+      {/* P24-SEND (G11) — the premiere honest-absent disclosure. youtube.com's
+          Visibility step ALSO schedules premieres (the date/time picker + the
+          premiere toggle in the studio dialog); those studio scheduling
+          controls were NEVER measured from this egress — the invented-shape
+          law forbids guessing a drive, and a local date-picker that cannot
+          schedule anything would be a fake affordance. The publish drive
+          sets public/unlisted/private; the premiere schedule is set on
+          YouTube (the studio's own controls) after publishing. Parity-debt:
+          a logged-in studio capture of the Visibility step's scheduling
+          controls is the seam a future lane needs. */}
+      <p
+        role="note"
+        data-testid="visibility-premiere-note"
+        className="text-xs text-muted-foreground"
+      >
         Visibility is applied when the video is published through the connected YouTube
-        session — the same three levels YouTube&apos;s upload dialog uses. Scheduling is
-        managed on YouTube.
+        session — the same three levels YouTube&apos;s upload dialog uses. Premieres are
+        scheduled on YouTube: set the premiere date and time in YouTube Studio after
+        publishing.
       </p>
     </section>
   );
