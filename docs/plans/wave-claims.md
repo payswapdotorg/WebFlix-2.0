@@ -404,3 +404,13 @@ re-runs gates → merges.
 - The parity-debt ledger (six structural findings: New-to-you chip, history Music/Podcasts tabs, search Unwatched chip, row-menu Download, the /liked guide href, chip-order session variance) is recorded in the REA-3-PARITY-SWEEP WORKLOG entry — the next wave's authorship basis.
 - F5–F8 (subscriptions feed, channel pages, notifications/account menus, explore/trending) remain the follow-up sweep lane's scope.
 - Post-merge union gates: 1822 pass / 0 fail, lint 0 errors / 1 pre-existing warning, tsc clean.
+
+## 2026-10-18 (evening) — REA-3B (F5–F8) MERGED (the ninth wfx2-era merge: the parity-sweep follow-up — the REA-3 reserved families)
+
+| Lane | Branch | Scope | Claimed | Binding | Status |
+|---|---|---|---|---|---|
+| REA-3B | wfx2/rea3b-sweep @ b91252c | The parity-sweep follow-up families F5–F8 (the REA-3 reserved scope): F5 subscriptions feed (the signed-in loginRequired state speaks the HistoryUnavailableNote law — never a sign-in re-ask) / F6 channel pages (Shows + Store join the tab family from the response's own tab list; the 2026 verified badge; the home 'Videos' shelf title; the guest Subscribe → /signin law) / F7 notifications + bell (the same unavailable-note law) / F8 explore+trending (the full fresh measurement record — the FEwhat_to_watch flattening from the un-logged-in egress, the app's honest search-backed rails) | 2026-10-18 ring-down lane (the station's local worker channel; THREE incarnations — the first two delivered the lane across a context death, the third arrived on a replayed dispatch and re-verified everything end-to-end instead of redoing) | the station's fresh public captures (2026-10-18: @mkbhd channel tabs incl. Shows/Store params + pageHeaderViewModel metadataRows; /feed/trending + /feed/explore both FEwhat_to_watch) + the REA-3 pack carryover (logged-in 2026-10-17) + worker public-page dev-time probes | **VERIFIED 1860/0** (station-run on the branch AND the post-merge union: 787+605+147+108+138+34+41 = base 1833 + 27 new in the EXISTING suites, lint 0e/1 pre-existing, tsc clean, PAT scan clean) → merged 417deeb |
+
+- The parity-debt ledger additions (the REA-3B record in WORKLOG.md): the channel themed-shelf family (home-tab shelves beyond the first "Videos" shelf), the guide's Music/Kids rows, the URL-driven channel tab seam (youtube.com tabs are URL-path-driven; WebFlix tabs are client-state + localStorage — pre-existing at base), the egress-scoped trending measurement note.
+- Post-merge union gates: 1860 pass / 0 fail, lint 0 errors / 1 pre-existing warning, tsc clean.
+- The next lanes behind it: P24 (monetize-send) + P25 (podcasts/Shorts-AI) per the wave plan; the hover-preview rung 3 (SABR/attestation) stays the honest-blocked ledger item.
