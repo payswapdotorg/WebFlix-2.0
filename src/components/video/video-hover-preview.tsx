@@ -1,16 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { PlayCircle, Volume2, VolumeX } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { loadYouTubeIframeApi } from "@/components/watch/youtube-player";
 import { formatDuration } from "@/lib/format";
 import {
   fetchPlayback,
+  pickPreviewStreamFormat,
   pickStoryboardLevel,
   storyboardSheetUrl,
 } from "@/lib/watch/playback-client";
-import type { StoryboardLevelDto } from "@/lib/watch/types";
+import type { StoryboardLevelDto, StreamFormatDto } from "@/lib/watch/types";
 
 /**
  * YouTube-style hover preview (WFX2-P6-HP → P12-UX Task 4 → P22-A: the mini
@@ -51,6 +52,29 @@ import type { StoryboardLevelDto } from "@/lib/watch/types";
  * preview: the card's mouseleave ignores exits whose relatedTarget is
  * inside this layer, and the controls' mouseleave ignores exits onto the
  * hovered card (the store carries the card element for exactly that).
+ *
+ * P26-HPV — the NATIVE lane (the operator's report, 2026-10-18: "the
+ * preview feature should play the video normally from within the box …
+ * others are just showing slideshows of pictures from the video — that is
+ * not how youtube.com does it"). Embed-disabled videos (onError 101/150 —
+ * extremely common on real content) used to fall PERMANENTLY to the
+ * storyboard; youtube.com plays its own streams so no embed wall exists
+ * for it. The fix: embed death now arms a native `<video muted autoPlay
+ * playsInline>` (no controls — OUR chrome drives it) fed by
+ * pickPreviewStreamFormat → /api/stream?url=<enc> (the server-side
+ * googlevideo proxy — the SAME mechanism the watch page's PlayerFallback
+ * uses). The honest ladder, full order:
+ *
+ *   1. the EMBED lane (embed allowed + healthy under the P22-A gate);
+ *   2. the NATIVE lane (embed dead + a playable stream format — muted
+ *      autoplay through the proxy; NATIVE_NO_PLAY_MS zombie guard);
+ *   3. the STORYBOARD frames — the loading companion under BOTH playing
+ *      lanes (the crossfade base) and the honest floor when a lane dies;
+ *   4. ken-burns — LAST resort (no storyboard either).
+ * The P22-A chrome (Preview pill, mute toggle, scrubbable timeline) drives
+ * BOTH playing lanes through one lane-agnostic ops adapter (previewOps).
+ * Reduced-motion keeps frames-only (the documented device policy — no
+ * playing video on that lane).
  *
  * Device policy (youtube.com parity):
  *  - touch / coarse pointers: NO preview at all (hover doesn't exist);
@@ -216,6 +240,25 @@ export const EMBED_NO_READY_MS = 5000;
 export const EMBED_PLAYING_MS = 4000;
 
 /**
+ * P26-HPV — how long the NATIVE lane's <video> gets to prove it is booting
+ * (playing/canplay fired, or readyState >= 2 = current data in hand). A
+ * hanging /api/stream proxy fetch keeps the element in readyState 0
+ * forever; after this window such a zombie is declared dead and the lane
+ * falls to the storyboard (the honest floor) — a dead lane must never stay
+ * armed. A playing video stops this clock for good (like the embed gate,
+ * sustained playback is the proof).
+ */
+export const NATIVE_NO_PLAY_MS = 8000;
+
+/**
+ * P26-HPV — the delayed belt-and-braces play nudge's window (the
+ * NativeFallbackPlayer's AUTOPLAY_FALLBACK_MS precedent: well inside the
+ * 8s health gate, invisible under the storyboard companion). Private: the
+ * tests prove the health gate through NATIVE_NO_PLAY_MS, not the nudge.
+ */
+const NATIVE_PLAY_NUDGE_MS = 1500;
+
+/**
  * The hover mode for the current device — null means NO preview at all
  * (touch). Reduced-motion users get the storyboard lane only.
  */
@@ -332,7 +375,7 @@ const EMPTY_SNAPSHOT: PreviewSnapshot = {
  */
 const PARKED_STYLE = { left: -10000, top: -10000, width: 320, height: 180 };
 
-type Phase = "loading" | "embed" | "storyboard" | "degraded";
+type Phase = "loading" | "embed" | "native" | "storyboard" | "degraded";
 
 /**
  * The minimal embed surface the preview player + its controls need (the
@@ -348,6 +391,21 @@ type PreviewEmbedPlayer = {
   getCurrentTime(): number;
   getDuration(): number;
   playVideo(): void;
+};
+
+/**
+ * P26-HPV — the lane-agnostic player surface the P22-A chrome drives. The
+ * "embed" phase maps it onto the YT embedRef methods; the "native" phase
+ * maps it onto the <video> element's own properties. The control code
+ * (toggleMute, seekToFraction, keyboard seek, the 4Hz progress poll) stays
+ * written ONCE against this shape — it never learns which lane is live.
+ */
+type PreviewPlayerOps = {
+  isMuted(): boolean;
+  setMuted(m: boolean): void;
+  seekTo(sec: number): void;
+  time(): number;
+  duration(): number;
 };
 
 function safeNum(n: number | undefined | null): number {
@@ -369,8 +427,14 @@ export function VideoHoverPreviewLayer() {
     duration: 0,
   });
   const [scrubFrac, setScrubFrac] = useState<number | null>(null);
+  // P26-HPV — the native lane's state: the fetched stream formats (one
+  // playback fetch serves BOTH lanes) + the lane's own health flags.
+  const [formats, setFormats] = useState<StreamFormatDto[]>([]);
+  const [nativeAlive, setNativeAlive] = useState(false);
+  const [nativeDead, setNativeDead] = useState(false);
   const embedMountRef = useRef<HTMLDivElement>(null);
   const embedRef = useRef<PreviewEmbedPlayer | null>(null);
+  const nativeVideoRef = useRef<HTMLVideoElement | null>(null);
   const draggingRef = useRef(false);
 
   const shownId = video?.id ?? null;
@@ -391,6 +455,9 @@ export function VideoHoverPreviewLayer() {
     setMuted(true);
     setProgress({ time: 0, duration: 0 });
     setScrubFrac(null);
+    setFormats([]);
+    setNativeAlive(false);
+    setNativeDead(false);
   }
 
   // Hide when the page scrolls (the anchor rect would go stale).
@@ -404,13 +471,16 @@ export function VideoHoverPreviewLayer() {
   // Per shown video: fetch the storyboard (client-cached by fetchPlayback —
   // one request per video per session). The storyboard is the PRIMARY lane
   // in storyboard mode (reduced motion) and the FALLBACK data for the embed
-  // lane — one fetch serves both.
+  // lane — one fetch serves both. P26-HPV: the SAME fetch now also feeds the
+  // NATIVE lane (playback.streamFormats — the embed-death fallback's fuel;
+  // the watch page's PlayerFallback reads the same endpoint).
   useEffect(() => {
     if (shownId === null) return;
     let alive = true;
     void fetchPlayback(shownId).then((playback) => {
       if (!alive) return;
       setLevel(playback ? pickStoryboardLevel(playback.storyboards) : null);
+      setFormats(playback?.streamFormats ?? []);
       setFetchDone(true);
     });
     return () => {
@@ -568,6 +638,20 @@ export function VideoHoverPreviewLayer() {
     };
   }, [shownId, mode]);
 
+  // P26-HPV — the NATIVE lane's stream: a pure pick (nearest-360p — the
+  // preview box renders at thumbnail size) from the SAME playback fetch that
+  // feeds the storyboard lane; the URL is proxied through the server-side
+  // googlevideo proxy exactly like the watch page's PlayerFallback swap.
+  const nativeFmt = useMemo(() => pickPreviewStreamFormat(formats), [formats]);
+  const nativeSrc = useMemo(
+    () => (nativeFmt ? `/api/stream?url=${encodeURIComponent(nativeFmt.url)}` : null),
+    [nativeFmt]
+  );
+  // The native lane arms only on EMBED DEATH (the operator's bug: the
+  // embed-disabled videos degrading to a slideshow) — the embed lane itself
+  // is untouched, and reduced-motion (mode "storyboard") never plays video.
+  const nativeLane = mode === "embed" && embedDead && !!nativeFmt && !nativeDead;
+
   // The effective phase — the 2026-10-16 operator pass (hover speed):
   // while the embed boots (embedLane, not yet alive) the STORYBOARD now
   // animates immediately whenever its data is in hand (prefetched at card
@@ -576,17 +660,72 @@ export function VideoHoverPreviewLayer() {
   // over the moving frames when the embed reports playback. The spinner+
   // ken-burns "loading" chrome only shows when there is genuinely no
   // storyboard data yet (fetch still in flight).
+  //
+  // P26-HPV — the native rung sits BETWEEN embed and storyboard: embed death
+  // with a playable stream boots the native <video> (the storyboard stays
+  // the companion while it buffers — the same crossfade law); native death
+  // (onError / the NATIVE_NO_PLAY_MS zombie guard) falls to the storyboard,
+  // and a walled payload (no streamFormats) never leaves the pre-fix floor.
   const phase: Phase = embedLane
     ? embedAlive
       ? "embed"
       : level
         ? "storyboard"
         : "loading"
-    : level
-      ? "storyboard"
-      : fetchDone
-        ? "degraded"
-        : "loading";
+    : nativeLane
+      ? nativeAlive
+        ? "native"
+        : level
+          ? "storyboard"
+          : "loading"
+      : level
+        ? "storyboard"
+        : fetchDone
+          ? "degraded"
+          : "loading";
+
+  // P26-HPV — belt-and-braces play (the NativeFallbackPlayer precedent): a
+  // declarative <video muted autoPlay> can still arrive paused in odd
+  // runtimes, so one delayed nudge re-asks for playback — guarded twice:
+  //  - `paused` — autoplay already took (the common case), nothing to brace;
+  //  - `readyState >= 2` — the element has current data in hand but is not
+  //    playing. A still-empty buffer (readyState < 2) is the HEALTH GATE's
+  //    business, not the nudge's: kicking play() at an empty buffer only
+  //    re-issues the load the autoPlay attribute already started, and in
+  //    runtimes without a media stack (the test DOM) the nudge stays inert.
+  // Keyed on the lane + the src: once per stream, never per render.
+  useEffect(() => {
+    if (!nativeLane || !nativeSrc) return;
+    const v = nativeVideoRef.current;
+    if (!v) return;
+    const t = setTimeout(() => {
+      if (!v.paused) return; // autoplay took
+      if (v.readyState < 2) return; // nothing playable in hand yet
+      v.muted = true; // muted autoplay is the policy every browser allows
+      try {
+        const p = v.play();
+        if (p && typeof p.catch === "function") p.catch(() => {});
+      } catch {
+        /* runtime without media playback — the health gate decides */
+      }
+    }, NATIVE_PLAY_NUDGE_MS);
+    return () => clearTimeout(t);
+  }, [nativeLane, nativeSrc]);
+
+  // P26-HPV — the native health gate (the zombie guard): if neither
+  // `playing` nor `canplay` fired by NATIVE_NO_PLAY_MS AND readyState < 2,
+  // the lane is dead — a hanging proxy fetch must not keep a dead lane
+  // armed — and the storyboard takes over (the honest floor). A playing
+  // video stops this clock for good (the effect disarms on nativeAlive).
+  useEffect(() => {
+    if (!nativeLane || nativeAlive) return;
+    const timer = setTimeout(() => {
+      const v = nativeVideoRef.current;
+      if (!v) return; // unmounted mid-window — nothing to guard
+      if (v.readyState < 2) setNativeDead(true);
+    }, NATIVE_NO_PLAY_MS);
+    return () => clearTimeout(timer);
+  }, [nativeLane, nativeAlive]);
 
   // The animation clock: advance the frame cursor while shown + storyboard.
   useEffect(() => {
@@ -598,37 +737,103 @@ export function VideoHoverPreviewLayer() {
     return () => clearInterval(timer);
   }, [phase, level, shownId]);
 
-  // P22-A — the timeline's heartbeat: poll the live player ~4Hz while the
-  // embed owns the card (the watch player's progress loop, preview-sized).
-  useEffect(() => {
-    if (phase !== "embed" || shownId === null) return;
-    const poll = setInterval(() => {
+  // P26-HPV — the ops adapter: the ONE lane-agnostic surface the P22-A
+  // chrome drives. The "embed" phase maps it onto the YT embedRef methods,
+  // the "native" phase onto the <video> element's own properties; null when
+  // no playing lane owns the card. Stable per phase (refs only move inside
+  // effects), so the poll below can depend on it.
+  const previewOps = useCallback((): PreviewPlayerOps | null => {
+    if (phase === "embed") {
       const p = embedRef.current;
-      if (!p) return;
-      try {
-        const next = { time: safeNum(p.getCurrentTime()), duration: safeNum(p.getDuration()) };
-        setProgress(next);
-        setMuted(() => {
+      if (!p) return null;
+      return {
+        isMuted: () => {
           try {
             return p.isMuted();
           } catch {
             return true;
           }
-        });
+        },
+        setMuted: (m) => {
+          try {
+            if (m) p.mute();
+            else p.unMute();
+          } catch {
+            /* player gone */
+          }
+        },
+        seekTo: (sec) => {
+          try {
+            p.seekTo(sec, true);
+          } catch {
+            /* player gone */
+          }
+        },
+        time: () => {
+          try {
+            return safeNum(p.getCurrentTime());
+          } catch {
+            return 0;
+          }
+        },
+        duration: () => {
+          try {
+            return safeNum(p.getDuration());
+          } catch {
+            return 0;
+          }
+        },
+      };
+    }
+    if (phase === "native") {
+      const v = nativeVideoRef.current;
+      if (!v) return null;
+      return {
+        isMuted: () => v.muted,
+        setMuted: (m) => {
+          v.muted = m;
+        },
+        seekTo: (sec) => {
+          v.currentTime = sec;
+        },
+        time: () => safeNum(v.currentTime),
+        duration: () => safeNum(v.duration),
+      };
+    }
+    return null;
+  }, [phase]);
+
+  // P22-A — the timeline's heartbeat: poll the live player ~4Hz while a
+  // PLAYING lane owns the card (the watch player's progress loop,
+  // preview-sized). P26-HPV: keys on "embed" OR "native" and routes through
+  // the lane-agnostic ops adapter — the poll never learns which lane is live
+  // (the native <video> also self-reports via onTimeUpdate; the poll is the
+  // belt-and-braces that keeps the embed lane moving).
+  useEffect(() => {
+    if ((phase !== "embed" && phase !== "native") || shownId === null) return;
+    const poll = setInterval(() => {
+      const ops = previewOps();
+      if (!ops) return;
+      try {
+        setProgress({ time: ops.time(), duration: ops.duration() });
+        setMuted(ops.isMuted());
       } catch {
         /* player gone — the phase change will stop the poll */
       }
     }, 250);
     return () => clearInterval(poll);
-  }, [phase, shownId]);
+  }, [phase, shownId, previewOps]);
 
   const visible = !!video && !!rect;
 
   // storyboard geometry for the current frame (sheet/col/row) — also kept
-  // mounted during the "embed" phase so the video crossfades in OVER the
-  // animating frames (no thumbnail flash mid-fade)
+  // mounted during the "embed" AND "native" phases so the video crossfades
+  // in OVER the animating frames (no thumbnail flash mid-fade — the same
+  // companion law for both playing lanes)
   const geom = (() => {
-    if (!level || (phase !== "storyboard" && phase !== "embed")) return null;
+    if (!level || (phase !== "storyboard" && phase !== "embed" && phase !== "native")) {
+      return null;
+    }
     const perSheet = level.cols * level.rows;
     const clamped = Math.min(frame, Math.max(0, level.frameCount - 1));
     const sheet = Math.floor(clamped / perSheet);
@@ -653,34 +858,23 @@ export function VideoHoverPreviewLayer() {
     store.hide();
   };
   const toggleMute = () => {
-    const p = embedRef.current;
-    if (!p) return;
-    try {
-      if (p.isMuted()) {
-        p.unMute();
-        setMuted(false);
-      } else {
-        p.mute();
-        setMuted(true);
-      }
-    } catch {
-      /* player gone */
-    }
+    // P26-HPV — routed through the ops adapter: the same button drives the
+    // YT embed (mute/unMute) and the native <video> (the muted property).
+    const ops = previewOps();
+    if (!ops) return;
+    const next = !ops.isMuted();
+    ops.setMuted(next);
+    setMuted(next);
   };
 
   const seekToFraction = (frac: number) => {
     const clamped = Math.min(1, Math.max(0, frac));
     setScrubFrac(clamped); // the bar follows the pointer immediately
-    const p = embedRef.current;
-    if (!p) return;
-    const dur = safeNum(p.getDuration());
-    if (dur > 0) {
-      try {
-        p.seekTo(clamped * dur, true);
-      } catch {
-        /* player gone */
-      }
-    }
+    // P26-HPV — routed through the ops adapter (YT seekTo / currentTime).
+    const ops = previewOps();
+    if (!ops) return;
+    const dur = ops.duration();
+    if (dur > 0) ops.seekTo(clamped * dur);
   };
 
   const fracFromPointer = (e: React.PointerEvent<HTMLElement>) => {
@@ -736,6 +930,41 @@ export function VideoHoverPreviewLayer() {
               )}
             />
           )}
+          {/* P26-HPV — the NATIVE lane: embed death swaps in a declarative
+              muted-autoplaying <video> fed by the server-side googlevideo
+              proxy (React renders a plain video element fine — only the YT
+              embed needs its imperative host). NO controls: our own P22-A
+              chrome drives it through the ops adapter; aria-hidden because
+              the LAYER carries the preview's aria (a muted decorative
+              video needs no second announcement). The storyboard frames
+              stay mounted underneath as the crossfade companion while it
+              boots — the same law the embed lane follows. */}
+          {nativeLane && nativeFmt ? (
+            <video
+              ref={nativeVideoRef}
+              data-testid="hover-preview-video"
+              src={nativeSrc ?? undefined}
+              muted
+              autoPlay
+              playsInline
+              preload="auto"
+              aria-hidden="true"
+              className={cn(
+                "absolute inset-0 h-full w-full bg-black object-contain transition-opacity duration-300",
+                phase === "native" ? "opacity-100" : "opacity-0"
+              )}
+              onPlaying={() => setNativeAlive(true)}
+              onCanPlay={() => setNativeAlive(true)}
+              onTimeUpdate={() => {
+                // self-reported progress (the native lane's own heartbeat —
+                // the 4Hz poll below is the belt-and-braces)
+                const v = nativeVideoRef.current;
+                if (!v) return;
+                setProgress({ time: safeNum(v.currentTime), duration: safeNum(v.duration) });
+              }}
+              onError={() => setNativeDead(true)}
+            />
+          ) : null}
           {phase === "loading" ? (
             <div
               aria-hidden="true"
@@ -757,7 +986,7 @@ export function VideoHoverPreviewLayer() {
               }}
             />
           ) : null}
-          {phase === "embed" ? (
+          {phase === "embed" || phase === "native" ? (
             <>
               {/* the pill — youtube.com's own "Preview" label, decorative */}
               <span
@@ -825,8 +1054,10 @@ export function VideoHoverPreviewLayer() {
                   }
                 }}
                 onKeyDown={(e) => {
-                  const p = embedRef.current;
-                  const dur = p ? safeNum(p.getDuration()) : 0;
+                  // P26-HPV — routed through the ops adapter (YT seekTo /
+                  // currentTime): the same keys step both playing lanes.
+                  const ops = previewOps();
+                  const dur = ops ? ops.duration() : 0;
                   if (dur <= 0) return;
                   const step = e.key === "Home" || e.key === "End" ? 0 : 5;
                   let next: number | null = null;
@@ -837,11 +1068,7 @@ export function VideoHoverPreviewLayer() {
                   if (next === null) return;
                   e.preventDefault();
                   next = Math.min(dur, Math.max(0, next));
-                  try {
-                    p?.seekTo(next, true);
-                  } catch {
-                    /* player gone */
-                  }
+                  ops?.seekTo(next);
                   setProgress((prev) => ({ ...prev, time: next }));
                 }}
                 onMouseLeave={onControlsLeave}

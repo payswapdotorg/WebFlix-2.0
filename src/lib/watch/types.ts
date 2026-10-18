@@ -67,9 +67,11 @@ export interface VideoDetailDto {
 // ---- Task 2-c: playback fallback DTOs (the embed-wall chain) ----
 
 /**
- * A server-usable progressive stream format (muxed audio+video, itag 18/22
- * preferred). Only formats with a PLAIN `url` (no signatureCipher) are
- * surfaced — deciphering is out of scope, honestly empty otherwise.
+ * A server-usable stream format with a PLAIN `url` (no signatureCipher) —
+ * deciphering is out of scope, honestly empty otherwise. Muxed entries
+ * (progressive + rare muxed-looking adaptive) power the watch page's
+ * /api/stream swap; P26-HPV also surfaces video-only adaptive entries
+ * (hasAudio:false) as preview-only fuel for the hover preview's native lane.
  * The URL points at googlevideo.com and is played through /api/stream
  * (same-origin proxy with Range passthrough).
  */
@@ -85,7 +87,7 @@ export interface StreamFormatDto {
   bitrate: number | null;
   contentLength: string | null;
   approxDurationMs: number | null;
-  /** muxed audio track present (progressive formats only) */
+  /** muxed audio track present — false = video-only adaptive entry (preview-only fuel, P26-HPV) */
   hasAudio: boolean;
 }
 
