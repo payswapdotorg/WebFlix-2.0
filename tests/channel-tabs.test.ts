@@ -45,6 +45,12 @@ import {
   tabParamFromResponse,
   mapChannelSortChips,
   mapMembershipTiers,
+  mapChannelShows,
+  mapShowRenderer,
+  mapChannelStore,
+  mapStoreProduct,
+  productCardUrl,
+  CHANNEL_TAB_PARAMS,
 } from "@/lib/youtube/channel-tabs";
 import { channelJoinable, channelTabsFromResponse } from "@/lib/youtube/mappers";
 
@@ -63,6 +69,10 @@ function fixtureUpstream() {
   const posts = load("channel_posts_rickastley");
   const about = load("channel_about_rickastley");
   const shorts = load("channel_shorts_rickastley");
+  // REA-3B (F6) — the sanitized real mkbhd Shows/Store tab captures
+  // (2026-10-18, tracking/feedback noise stripped; every structural field kept)
+  const shows = load("channel_shows_mkbhd_20261018");
+  const store = load("channel_store_mkbhd_20261018");
 
   const htmlFor = (data: unknown) =>
     `<!doctype html><html><head></head><body><script>var ytInitialData = ${JSON.stringify(
@@ -84,6 +94,9 @@ function fixtureUpstream() {
       if (params.includes("EglwbGF5bGlzdH")) return json(playlists);
       if (params.includes("EgVwb3N0c")) return json(posts);
       if (params.includes("EgZzaG9ydH")) return json(shorts);
+      // REA-3B (F6) — the Shows/Store tab params (the measured family forms)
+      if (params.includes("EgVzaG93c")) return json(shows);
+      if (params.includes("EgVzdG9yZ")) return json(store);
       // videos tab + channel home
       if (params.includes("EgZ2aWRlb3M") || params === "") return json(channel);
       return json(channel);
@@ -981,5 +994,203 @@ describe("WFX2-P7-CH — the shared memberships-panel walk (one helper, both sur
     expect(data.tab).toBe("membership");
     expect(data.walled).toBe(true);
     expect(data.membership).toBeUndefined(); // never a fabricated surface on the wall
+  });
+});
+
+// ---------------------------------------------------------------------------
+// REA-3B (F6) — the Shows tab (gridShowRenderer) + the Store tab
+// (verticalProductCardRenderer shelves), live-measured 2026-10-18 on @mkbhd
+// (the sanitized real captures; the mkbhd tab list carries Shows/Store
+// between Live→Playlists and Posts→Store — youtube.com's own order, the
+// response's own tab list the source of truth, the Membership-tab precedent).
+// ---------------------------------------------------------------------------
+
+describe("REA-3B (F6) — the Shows/Store tab mappers (mkbhd captures)", () => {
+  test("channelTabsFromResponse: Shows + Store surface in YouTube's own order (the response's own tab list)", () => {
+    const shows = load("channel_shows_mkbhd_20261018");
+    const tabs = channelTabsFromResponse(shows);
+    expect(tabs).toEqual([
+      "home",
+      "videos",
+      "shorts",
+      "live",
+      "shows",
+      "playlists",
+      "community",
+      "store",
+      "about",
+    ]);
+  });
+
+  test("tabParamFromResponse: the Shows/Store tabs' own params resolve through the same title mapping (lockstep with the tab list)", () => {
+    const shows = load("channel_shows_mkbhd_20261018");
+    expect(tabParamFromResponse(shows, "shows")).toBe("EgVzaG93c_IGBAoCYgA%3D");
+    expect(tabParamFromResponse(shows, "store")).toBe("EgVzdG9yZfIGBAoCGgA%3D");
+    // the rickastley capture carries neither tab → null (honest)
+    const rick = load("channel_rickastley");
+    expect(tabParamFromResponse(rick, "shows")).toBeNull();
+    expect(tabParamFromResponse(rick, "store")).toBeNull();
+  });
+
+  test("CHANNEL_TAB_PARAMS: the Shows/Store fallback forms (the live-measured 2026-10-18 family)", () => {
+    expect(CHANNEL_TAB_PARAMS.shows).toBe("EgVzaG93c_IGBAoCYgA%3D");
+    expect(CHANNEL_TAB_PARAMS.store).toBe("EgVzdG9yZfIGBAoCGgA%3D");
+  });
+
+  test("mapChannelShows: gridShowRenderer rows map (VL→playlist id, title, byline, thumbnail) in document order", () => {
+    const shows = load("channel_shows_mkbhd_20261018");
+    const items = mapChannelShows(shows);
+    expect(items.length).toBe(8);
+    expect(items[0]).toMatchObject({
+      playlistId: "PLBsP89CPrMeNIuvr9j3_EQaMwaNJ6rhuQ",
+      title: "Retro Tech S2",
+      byline: "Marques Brownlee",
+    });
+    expect(items[0].thumbnailUrl).toMatch(/^https:\/\//);
+    // every row carries a real playlist target (the VL… browseId, prefix stripped)
+    for (const s of items) expect(s.playlistId).toMatch(/^PL/);
+  });
+
+  test("mapShowRenderer: null without a title or without the VL playlist target (never a guessed row)", () => {
+    expect(mapShowRenderer({})).toBeNull();
+    expect(mapShowRenderer({ title: { simpleText: "x" } })).toBeNull(); // no VL browseId
+    expect(
+      mapShowRenderer({
+        title: { simpleText: "x" },
+        navigationEndpoint: { browseEndpoint: { browseId: "UCnot-a-playlist" } },
+      })
+    ).toBeNull();
+  });
+
+  test("mapChannelStore: the shelves map in document order with their product cards (title, price, replacement line, merchant, from-text)", () => {
+    const store = load("channel_store_mkbhd_20261018");
+    const shelves = mapChannelStore(store);
+    expect(shelves.map((s: any) => s.title)).toEqual(["Just dropped", "Featured"]);
+    expect(shelves.reduce((n: number, s: any) => n + s.products.length, 0)).toBe(9);
+    const first = shelves[0].products[0];
+    expect(first).toMatchObject({
+      title: "Overlay Deskpad",
+      price: "HK$227.60",
+      priceReplacementText: "Out of stock",
+      merchantName: "MKBHD",
+      fromMerchantText: "From MKBHD",
+    });
+    // the REAL external merchant URL the card's own command chain carries
+    expect(first.productUrl).toMatch(/^https:\/\/mkbhd\.com\//);
+    // every card's productUrl is a real http(s) target (never a guessed one)
+    for (const shelf of shelves) {
+      for (const p of shelf.products) expect(p.productUrl).toMatch(/^https?:\/\//);
+    }
+  });
+
+  test("productCardUrl: the FIRST http(s) url in the command chain wins; none → null", () => {
+    expect(
+      productCardUrl({
+        navigationEndpoint: {
+          commandExecutorCommand: {
+            commands: [
+              { commandMetadata: { webCommandMetadata: { url: null } } },
+              { commandMetadata: { webCommandMetadata: { url: "https://merchant.example/p" } } },
+            ],
+          },
+        },
+      })
+    ).toBe("https://merchant.example/p");
+    expect(productCardUrl({})).toBeNull();
+    expect(
+      productCardUrl({
+        navigationEndpoint: {
+          commandExecutorCommand: {
+            commands: [{ commandMetadata: { webCommandMetadata: { url: "/relative-only" } } }],
+          },
+        },
+      })
+    ).toBeNull();
+  });
+
+  test("mapStoreProduct: null without a title; absent fields stay honest nulls", () => {
+    expect(mapStoreProduct({ price: "x" })).toBeNull();
+    const bare = mapStoreProduct({ title: "Bare product" });
+    expect(bare).toMatchObject({
+      title: "Bare product",
+      thumbnailUrl: null,
+      price: null,
+      priceReplacementText: null,
+      merchantName: null,
+      fromMerchantText: null,
+      productUrl: null,
+    });
+  });
+
+  test("mapChannelStore: a shelf without product cards is skipped (never an empty fabricated shelf)", () => {
+    const response = {
+      contents: {
+        sectionListRenderer: {
+          contents: [
+            { shelfRenderer: { title: { simpleText: "Empty shelf" }, content: {} } },
+            {
+              shelfRenderer: {
+                title: { simpleText: "Has cards" },
+                content: {
+                  horizontalListRenderer: {
+                    items: [{ verticalProductCardRenderer: { title: "P1" } }],
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    };
+    const shelves = mapChannelStore(response);
+    expect(shelves.length).toBe(1);
+    expect(shelves[0].title).toBe("Has cards");
+    expect(shelves[0].products.map((p: any) => p.title)).toEqual(["P1"]);
+  });
+});
+
+describe("REA-3B (F6) — GET /api/channel/[handle]/tab — the Shows/Store tab reads", () => {
+  test("tab=shows: browse with the Shows tab params; the show rows serve (the honest-empty fallback channel)", async () => {
+    const res = await tabRoute(
+      new Request("http://localhost/api/channel/@RickAstleyYT/tab?tab=shows"),
+      tabCtx("@RickAstleyYT")
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.tab).toBe("shows");
+    // the fallback family form carried the mkbhd-shaped fixture (8 shows)
+    expect(data.shows.length).toBe(8);
+    expect(data.shows[0].playlistId).toBe("PLBsP89CPrMeNIuvr9j3_EQaMwaNJ6rhuQ");
+    expect(data.shows[0].title).toBe("Retro Tech S2");
+    const browse = upstream.recorded.find(
+      (r) => r.url.includes("/youtubei/v1/browse") && typeof r.body?.params === "string"
+    );
+    expect(browse).toBeDefined();
+    expect(browse!.body.params).toBe("EgVzaG93c_IGBAoCYgA%3D");
+  });
+
+  test("tab=store: browse with the Store tab params; the shelves serve", async () => {
+    const res = await tabRoute(
+      new Request("http://localhost/api/channel/@RickAstleyYT/tab?tab=store"),
+      tabCtx("@RickAstleyYT")
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.tab).toBe("store");
+    expect(data.store.map((s: any) => s.title)).toEqual(["Just dropped", "Featured"]);
+    expect(data.store[0].products[0].title).toBe("Overlay Deskpad");
+    const browse = upstream.recorded.find(
+      (r) => r.url.includes("/youtubei/v1/browse") && typeof r.body?.params === "string"
+    );
+    expect(browse).toBeDefined();
+    expect(browse!.body.params).toBe("EgVzdG9yZfIGBAoCGgA%3D");
+  });
+
+  test("a Shows response without show rows maps to [] (the tab's honest empty state)", () => {
+    // the rickastley channel fixture itself carries no gridShowRenderer
+    const items = mapChannelShows(load("channel_rickastley"));
+    expect(items).toEqual([]);
+    const shelves = mapChannelStore(load("channel_rickastley"));
+    expect(shelves).toEqual([]);
   });
 });

@@ -1,0 +1,3318 @@
+{
+ "responseContext": {
+  "visitorData": "CgtjRGRwLWZkZHQycyjqptTWBjIKCgJISxIEGgAgWg%3D%3D",
+  "serviceTrackingParams": [
+   {
+    "service": "GFEEDBACK",
+    "params": [
+     {
+      "key": "browse_id",
+      "value": "UCBJycsmduvYEL83R_U4JriQ"
+     },
+     {
+      "key": "browse_id_prefix",
+      "value": ""
+     },
+     {
+      "key": "route",
+      "value": "channel.shows"
+     },
+     {
+      "key": "is_owner",
+      "value": "false"
+     },
+     {
+      "key": "is_alc_surface",
+      "value": "false"
+     },
+     {
+      "key": "logged_in",
+      "value": "0"
+     },
+     {
+      "key": "visitor_data",
+      "value": "CgtjRGRwLWZkZHQycyjqptTWBjIKCgJISxIEGgAgWg%3D%3D"
+     }
+    ]
+   },
+   {
+    "service": "GOOGLE_HELP",
+    "params": [
+     {
+      "key": "browse_id",
+      "value": "UCBJycsmduvYEL83R_U4JriQ"
+     },
+     {
+      "key": "browse_id_prefix",
+      "value": ""
+     }
+    ]
+   },
+   {
+    "service": "CSI",
+    "params": [
+     {
+      "key": "c",
+      "value": "WEB"
+     },
+     {
+      "key": "cver",
+      "value": "2.20260925.08.00"
+     },
+     {
+      "key": "yt_li",
+      "value": "0"
+     },
+     {
+      "key": "GetChannelPage_rid",
+      "value": "0xd264ad50374480db"
+     }
+    ]
+   },
+   {
+    "service": "GUIDED_HELP",
+    "params": [
+     {
+      "key": "logged_in",
+      "value": "0"
+     }
+    ]
+   },
+   {
+    "service": "ECATCHER",
+    "params": [
+     {
+      "key": "client.version",
+      "value": "2.20260925"
+     },
+     {
+      "key": "client.name",
+      "value": "WEB"
+     }
+    ]
+   }
+  ],
+  "maxAgeSeconds": 300,
+  "mainAppWebResponseContext": {
+   "loggedOut": true,
+   "trackingParam": "k5_fmPxhoXZRGES4WIETUWuMMFS31Eb6nFeIP0fiWejHQeroojRPG0Pk-wRMkusEmIBwOcCw59TLtslLKPQGSS"
+  },
+  "responseId": "IhMIjMaQvJzElwMVoPlMAh0DTBUq",
+  "webResponseContextExtensionData": {
+   "webResponseContextPreloadData": {
+    "preloadMessageNames": [
+     "pageHeaderRenderer",
+     "pageHeaderViewModel",
+     "imageBannerViewModel",
+     "dynamicTextViewModel",
+     "decoratedAvatarViewModel",
+     "avatarViewModel",
+     "contentMetadataViewModel",
+     "flexibleActionsViewModel",
+     "buttonViewModel",
+     "modalWithTitleAndButtonRenderer",
+     "buttonRenderer",
+     "descriptionPreviewViewModel",
+     "engagementPanelSectionListRenderer",
+     "engagementPanelTitleHeaderRenderer",
+     "sectionListRenderer",
+     "itemSectionRenderer",
+     "continuationItemRenderer",
+     "attributionViewModel",
+     "channelMetadataRenderer",
+     "twoColumnBrowseResultsRenderer",
+     "tabRenderer",
+     "richGridRenderer",
+     "richItemRenderer",
+     "gridShowRenderer",
+     "showCustomThumbnailRenderer",
+     "thumbnailOverlayBottomPanelRenderer",
+     "expandableTabRenderer",
+     "desktopTopbarRenderer",
+     "topbarLogoRenderer",
+     "fusionSearchboxRenderer",
+     "dialogViewModel",
+     "dialogHeaderViewModel",
+     "panelFooterViewModel",
+     "basicContentViewModel",
+     "topbarMenuButtonRenderer",
+     "multiPageMenuRenderer",
+     "hotkeyDialogRenderer",
+     "hotkeyDialogSectionRenderer",
+     "hotkeyDialogSectionOptionRenderer",
+     "voiceSearchDialogRenderer",
+     "microformatDataRenderer"
+    ]
+   },
+   "hasDecorated": true
+  }
+ },
+ "contents": {
+  "twoColumnBrowseResultsRenderer": {
+   "tabs": [
+    {
+     "tabRenderer": {
+      "endpoint": {
+       "commandMetadata": {
+        "webCommandMetadata": {
+         "url": "/@mkbhd/featured",
+         "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+         "rootVe": 3611,
+         "apiUrl": "/youtubei/v1/browse"
+        }
+       },
+       "browseEndpoint": {
+        "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+        "params": "EghmZWF0dXJlZPIGBAoCMgA%3D",
+        "canonicalBaseUrl": "/@mkbhd"
+       }
+      },
+      "title": "Home"
+     }
+    },
+    {
+     "tabRenderer": {
+      "endpoint": {
+       "commandMetadata": {
+        "webCommandMetadata": {
+         "url": "/@mkbhd/videos",
+         "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+         "rootVe": 3611,
+         "apiUrl": "/youtubei/v1/browse"
+        }
+       },
+       "browseEndpoint": {
+        "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+        "params": "EgZ2aWRlb3PyBgQKAjoA",
+        "canonicalBaseUrl": "/@mkbhd"
+       }
+      },
+      "title": "Videos"
+     }
+    },
+    {
+     "tabRenderer": {
+      "endpoint": {
+       "commandMetadata": {
+        "webCommandMetadata": {
+         "url": "/@mkbhd/shorts",
+         "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+         "rootVe": 3611,
+         "apiUrl": "/youtubei/v1/browse"
+        }
+       },
+       "browseEndpoint": {
+        "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+        "params": "EgZzaG9ydHPyBgUKA5oBAA%3D%3D",
+        "canonicalBaseUrl": "/@mkbhd"
+       }
+      },
+      "title": "Shorts"
+     }
+    },
+    {
+     "tabRenderer": {
+      "endpoint": {
+       "commandMetadata": {
+        "webCommandMetadata": {
+         "url": "/@mkbhd/streams",
+         "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+         "rootVe": 3611,
+         "apiUrl": "/youtubei/v1/browse"
+        }
+       },
+       "browseEndpoint": {
+        "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+        "params": "EgdzdHJlYW1z8gYECgJ6AA%3D%3D",
+        "canonicalBaseUrl": "/@mkbhd"
+       }
+      },
+      "title": "Live"
+     }
+    },
+    {
+     "tabRenderer": {
+      "endpoint": {
+       "commandMetadata": {
+        "webCommandMetadata": {
+         "url": "/@mkbhd/shows",
+         "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+         "rootVe": 3611,
+         "apiUrl": "/youtubei/v1/browse"
+        }
+       },
+       "browseEndpoint": {
+        "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+        "params": "EgVzaG93c_IGBAoCYgA%3D",
+        "canonicalBaseUrl": "/@mkbhd"
+       }
+      },
+      "title": "Shows",
+      "selected": true,
+      "content": {
+       "richGridRenderer": {
+        "contents": [
+         {
+          "richItemRenderer": {
+           "content": {
+            "gridShowRenderer": {
+             "title": {
+              "simpleText": "Retro Tech S2"
+             },
+             "thumbnailRenderer": {
+              "showCustomThumbnailRenderer": {
+               "thumbnail": {
+                "thumbnails": [
+                 {
+                  "url": "https://i.ytimg.com/vi/ifI_fwg55k8/hqdefault.jpg?sqp=-oaymwEXCOADEI4CSFryq4qpAwkIARUAAIhCGAE=&rs=AOn4CLB60CMX6sapZh-Ie9FtxWJza9a9QA",
+                  "width": 480,
+                  "height": 270
+                 }
+                ]
+               }
+              }
+             },
+             "navigationEndpoint": {
+              "commandMetadata": {
+               "webCommandMetadata": {
+                "url": "/show/VLPLBsP89CPrMeNIuvr9j3_EQaMwaNJ6rhuQ?sbp=QAE%253D",
+                "webPageType": "WEB_PAGE_TYPE_PLAYLIST",
+                "rootVe": 5754,
+                "apiUrl": "/youtubei/v1/browse"
+               }
+              },
+              "browseEndpoint": {
+               "browseId": "VLPLBsP89CPrMeNIuvr9j3_EQaMwaNJ6rhuQ",
+               "params": "kgYCQAE%3D",
+               "pageAnimation": {
+                "preloadPageConfig": {
+                 "ghostState": "GHOST_STATE_EPISODIC_SHOW_PAGE"
+                }
+               }
+              }
+             },
+             "shortBylineText": {
+              "runs": [
+               {
+                "text": "Marques Brownlee",
+                "navigationEndpoint": {
+                 "commandMetadata": {
+                  "webCommandMetadata": {
+                   "url": "/@mkbhd",
+                   "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                   "rootVe": 3611,
+                   "apiUrl": "/youtubei/v1/browse"
+                  }
+                 },
+                 "browseEndpoint": {
+                  "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+                  "canonicalBaseUrl": "/@mkbhd"
+                 }
+                }
+               }
+              ]
+             },
+             "longBylineText": {
+              "runs": [
+               {
+                "text": "Marques Brownlee",
+                "navigationEndpoint": {
+                 "commandMetadata": {
+                  "webCommandMetadata": {
+                   "url": "/@mkbhd",
+                   "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                   "rootVe": 3611,
+                   "apiUrl": "/youtubei/v1/browse"
+                  }
+                 },
+                 "browseEndpoint": {
+                  "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+                  "canonicalBaseUrl": "/@mkbhd"
+                 }
+                }
+               }
+              ]
+             },
+             "thumbnailOverlays": [
+              {
+               "thumbnailOverlayBottomPanelRenderer": {
+                "text": {
+                 "runs": [
+                  {
+                   "text": "5"
+                  },
+                  {
+                   "text": " episodes"
+                  }
+                 ]
+                }
+               }
+              }
+             ]
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "gridShowRenderer": {
+             "title": {
+              "simpleText": "Retro Tech"
+             },
+             "thumbnailRenderer": {
+              "showCustomThumbnailRenderer": {
+               "thumbnail": {
+                "thumbnails": [
+                 {
+                  "url": "https://i.ytimg.com/vi/kMtN9KJHn5Y/hqdefault.jpg?sqp=-oaymwEXCOADEI4CSFryq4qpAwkIARUAAIhCGAE=&rs=AOn4CLC0TNdLeMkXHV1ZDh1TcFSCFIhhgw",
+                  "width": 480,
+                  "height": 270
+                 }
+                ]
+               }
+              }
+             },
+             "navigationEndpoint": {
+              "commandMetadata": {
+               "webCommandMetadata": {
+                "url": "/show/VLPLBsP89CPrMeO7uztAu6YxSB10cRMpjgiY?sbp=QAE%253D",
+                "webPageType": "WEB_PAGE_TYPE_PLAYLIST",
+                "rootVe": 5754,
+                "apiUrl": "/youtubei/v1/browse"
+               }
+              },
+              "browseEndpoint": {
+               "browseId": "VLPLBsP89CPrMeO7uztAu6YxSB10cRMpjgiY",
+               "params": "kgYCQAE%3D",
+               "pageAnimation": {
+                "preloadPageConfig": {
+                 "ghostState": "GHOST_STATE_EPISODIC_SHOW_PAGE"
+                }
+               }
+              }
+             },
+             "shortBylineText": {
+              "runs": [
+               {
+                "text": "Marques Brownlee",
+                "navigationEndpoint": {
+                 "commandMetadata": {
+                  "webCommandMetadata": {
+                   "url": "/@mkbhd",
+                   "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                   "rootVe": 3611,
+                   "apiUrl": "/youtubei/v1/browse"
+                  }
+                 },
+                 "browseEndpoint": {
+                  "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+                  "canonicalBaseUrl": "/@mkbhd"
+                 }
+                }
+               }
+              ]
+             },
+             "longBylineText": {
+              "runs": [
+               {
+                "text": "Marques Brownlee",
+                "navigationEndpoint": {
+                 "commandMetadata": {
+                  "webCommandMetadata": {
+                   "url": "/@mkbhd",
+                   "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                   "rootVe": 3611,
+                   "apiUrl": "/youtubei/v1/browse"
+                  }
+                 },
+                 "browseEndpoint": {
+                  "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+                  "canonicalBaseUrl": "/@mkbhd"
+                 }
+                }
+               }
+              ]
+             },
+             "thumbnailOverlays": [
+              {
+               "thumbnailOverlayBottomPanelRenderer": {
+                "text": {
+                 "runs": [
+                  {
+                   "text": "11"
+                  },
+                  {
+                   "text": " episodes"
+                  }
+                 ]
+                }
+               }
+              }
+             ]
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "gridShowRenderer": {
+             "title": {
+              "simpleText": "MKBHD Interviews!"
+             },
+             "thumbnailRenderer": {
+              "showCustomThumbnailRenderer": {
+               "thumbnail": {
+                "thumbnails": [
+                 {
+                  "url": "https://i.ytimg.com/vi/7jaMJGtAV9M/hqdefault.jpg?sqp=-oaymwEXCOADEI4CSFryq4qpAwkIARUAAIhCGAE=&rs=AOn4CLA_txWin1quE-7v40AM4_6KPpVIDw",
+                  "width": 480,
+                  "height": 270
+                 }
+                ]
+               }
+              }
+             },
+             "navigationEndpoint": {
+              "commandMetadata": {
+               "webCommandMetadata": {
+                "url": "/show/VLPLBsP89CPrMePNK7yIxcyRdiIFentQVHra?sbp=QAE%253D",
+                "webPageType": "WEB_PAGE_TYPE_PLAYLIST",
+                "rootVe": 5754,
+                "apiUrl": "/youtubei/v1/browse"
+               }
+              },
+              "browseEndpoint": {
+               "browseId": "VLPLBsP89CPrMePNK7yIxcyRdiIFentQVHra",
+               "params": "kgYCQAE%3D",
+               "pageAnimation": {
+                "preloadPageConfig": {
+                 "ghostState": "GHOST_STATE_EPISODIC_SHOW_PAGE"
+                }
+               }
+              }
+             },
+             "shortBylineText": {
+              "runs": [
+               {
+                "text": "Marques Brownlee",
+                "navigationEndpoint": {
+                 "commandMetadata": {
+                  "webCommandMetadata": {
+                   "url": "/@mkbhd",
+                   "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                   "rootVe": 3611,
+                   "apiUrl": "/youtubei/v1/browse"
+                  }
+                 },
+                 "browseEndpoint": {
+                  "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+                  "canonicalBaseUrl": "/@mkbhd"
+                 }
+                }
+               }
+              ]
+             },
+             "longBylineText": {
+              "runs": [
+               {
+                "text": "Marques Brownlee",
+                "navigationEndpoint": {
+                 "commandMetadata": {
+                  "webCommandMetadata": {
+                   "url": "/@mkbhd",
+                   "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                   "rootVe": 3611,
+                   "apiUrl": "/youtubei/v1/browse"
+                  }
+                 },
+                 "browseEndpoint": {
+                  "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+                  "canonicalBaseUrl": "/@mkbhd"
+                 }
+                }
+               }
+              ]
+             },
+             "thumbnailOverlays": [
+              {
+               "thumbnailOverlayBottomPanelRenderer": {
+                "text": {
+                 "runs": [
+                  {
+                   "text": "13"
+                  },
+                  {
+                   "text": " episodes"
+                  }
+                 ]
+                }
+               }
+              }
+             ]
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "gridShowRenderer": {
+             "title": {
+              "simpleText": "Auto Focus"
+             },
+             "thumbnailRenderer": {
+              "showCustomThumbnailRenderer": {
+               "thumbnail": {
+                "thumbnails": [
+                 {
+                  "url": "https://i.ytimg.com/vi/9O5PhuW927w/hqdefault.jpg?sqp=-oaymwEXCOADEI4CSFryq4qpAwkIARUAAIhCGAE=&rs=AOn4CLDt7TmbqZA9_LaAPocVCtbnFEPfWA",
+                  "width": 480,
+                  "height": 270
+                 }
+                ]
+               }
+              }
+             },
+             "navigationEndpoint": {
+              "commandMetadata": {
+               "webCommandMetadata": {
+                "url": "/show/VLPLBsP89CPrMeOpKhXiKyXg8AjiConuTXvI?sbp=QAE%253D",
+                "webPageType": "WEB_PAGE_TYPE_PLAYLIST",
+                "rootVe": 5754,
+                "apiUrl": "/youtubei/v1/browse"
+               }
+              },
+              "browseEndpoint": {
+               "browseId": "VLPLBsP89CPrMeOpKhXiKyXg8AjiConuTXvI",
+               "params": "kgYCQAE%3D",
+               "pageAnimation": {
+                "preloadPageConfig": {
+                 "ghostState": "GHOST_STATE_EPISODIC_SHOW_PAGE"
+                }
+               }
+              }
+             },
+             "shortBylineText": {
+              "runs": [
+               {
+                "text": "Marques Brownlee",
+                "navigationEndpoint": {
+                 "commandMetadata": {
+                  "webCommandMetadata": {
+                   "url": "/@mkbhd",
+                   "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                   "rootVe": 3611,
+                   "apiUrl": "/youtubei/v1/browse"
+                  }
+                 },
+                 "browseEndpoint": {
+                  "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+                  "canonicalBaseUrl": "/@mkbhd"
+                 }
+                }
+               }
+              ]
+             },
+             "longBylineText": {
+              "runs": [
+               {
+                "text": "Marques Brownlee",
+                "navigationEndpoint": {
+                 "commandMetadata": {
+                  "webCommandMetadata": {
+                   "url": "/@mkbhd",
+                   "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                   "rootVe": 3611,
+                   "apiUrl": "/youtubei/v1/browse"
+                  }
+                 },
+                 "browseEndpoint": {
+                  "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+                  "canonicalBaseUrl": "/@mkbhd"
+                 }
+                }
+               }
+              ]
+             },
+             "thumbnailOverlays": [
+              {
+               "thumbnailOverlayBottomPanelRenderer": {
+                "text": {
+                 "runs": [
+                  {
+                   "text": "16"
+                  },
+                  {
+                   "text": " episodes"
+                  }
+                 ]
+                }
+               }
+              }
+             ]
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "gridShowRenderer": {
+             "title": {
+              "simpleText": "Dope Tech!"
+             },
+             "thumbnailRenderer": {
+              "showCustomThumbnailRenderer": {
+               "thumbnail": {
+                "thumbnails": [
+                 {
+                  "url": "https://i.ytimg.com/vi/cqybfPNbWBA/hqdefault.jpg?sqp=-oaymwEXCOADEI4CSFryq4qpAwkIARUAAIhCGAE=&rs=AOn4CLAYkff5FPgvreCQhFHPEX3xu7PxBA",
+                  "width": 480,
+                  "height": 270
+                 }
+                ]
+               }
+              }
+             },
+             "navigationEndpoint": {
+              "commandMetadata": {
+               "webCommandMetadata": {
+                "url": "/show/VLPLBsP89CPrMePWBCMIp0naluIz67UwRX9B?sbp=QAE%253D",
+                "webPageType": "WEB_PAGE_TYPE_PLAYLIST",
+                "rootVe": 5754,
+                "apiUrl": "/youtubei/v1/browse"
+               }
+              },
+              "browseEndpoint": {
+               "browseId": "VLPLBsP89CPrMePWBCMIp0naluIz67UwRX9B",
+               "params": "kgYCQAE%3D",
+               "pageAnimation": {
+                "preloadPageConfig": {
+                 "ghostState": "GHOST_STATE_EPISODIC_SHOW_PAGE"
+                }
+               }
+              }
+             },
+             "shortBylineText": {
+              "runs": [
+               {
+                "text": "Marques Brownlee",
+                "navigationEndpoint": {
+                 "commandMetadata": {
+                  "webCommandMetadata": {
+                   "url": "/@mkbhd",
+                   "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                   "rootVe": 3611,
+                   "apiUrl": "/youtubei/v1/browse"
+                  }
+                 },
+                 "browseEndpoint": {
+                  "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+                  "canonicalBaseUrl": "/@mkbhd"
+                 }
+                }
+               }
+              ]
+             },
+             "longBylineText": {
+              "runs": [
+               {
+                "text": "Marques Brownlee",
+                "navigationEndpoint": {
+                 "commandMetadata": {
+                  "webCommandMetadata": {
+                   "url": "/@mkbhd",
+                   "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                   "rootVe": 3611,
+                   "apiUrl": "/youtubei/v1/browse"
+                  }
+                 },
+                 "browseEndpoint": {
+                  "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+                  "canonicalBaseUrl": "/@mkbhd"
+                 }
+                }
+               }
+              ]
+             },
+             "thumbnailOverlays": [
+              {
+               "thumbnailOverlayBottomPanelRenderer": {
+                "text": {
+                 "runs": [
+                  {
+                   "text": "38"
+                  },
+                  {
+                   "text": " episodes"
+                  }
+                 ]
+                }
+               }
+              }
+             ]
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "gridShowRenderer": {
+             "title": {
+              "simpleText": "First Impressions!"
+             },
+             "thumbnailRenderer": {
+              "showCustomThumbnailRenderer": {
+               "thumbnail": {
+                "thumbnails": [
+                 {
+                  "url": "https://i.ytimg.com/vi/scwlR0QHGOk/hqdefault.jpg?sqp=-oaymwEXCOADEI4CSFryq4qpAwkIARUAAIhCGAE=&rs=AOn4CLABjrwTbGHt2FuPi7naQ2D7zg1yeQ",
+                  "width": 480,
+                  "height": 270
+                 }
+                ]
+               }
+              }
+             },
+             "navigationEndpoint": {
+              "commandMetadata": {
+               "webCommandMetadata": {
+                "url": "/show/VLPLBsP89CPrMeM2MmF4suOeT0vsic9nEC2Y?sbp=QAE%253D",
+                "webPageType": "WEB_PAGE_TYPE_PLAYLIST",
+                "rootVe": 5754,
+                "apiUrl": "/youtubei/v1/browse"
+               }
+              },
+              "browseEndpoint": {
+               "browseId": "VLPLBsP89CPrMeM2MmF4suOeT0vsic9nEC2Y",
+               "params": "kgYCQAE%3D",
+               "pageAnimation": {
+                "preloadPageConfig": {
+                 "ghostState": "GHOST_STATE_EPISODIC_SHOW_PAGE"
+                }
+               }
+              }
+             },
+             "shortBylineText": {
+              "runs": [
+               {
+                "text": "Marques Brownlee",
+                "navigationEndpoint": {
+                 "commandMetadata": {
+                  "webCommandMetadata": {
+                   "url": "/@mkbhd",
+                   "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                   "rootVe": 3611,
+                   "apiUrl": "/youtubei/v1/browse"
+                  }
+                 },
+                 "browseEndpoint": {
+                  "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+                  "canonicalBaseUrl": "/@mkbhd"
+                 }
+                }
+               }
+              ]
+             },
+             "longBylineText": {
+              "runs": [
+               {
+                "text": "Marques Brownlee",
+                "navigationEndpoint": {
+                 "commandMetadata": {
+                  "webCommandMetadata": {
+                   "url": "/@mkbhd",
+                   "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                   "rootVe": 3611,
+                   "apiUrl": "/youtubei/v1/browse"
+                  }
+                 },
+                 "browseEndpoint": {
+                  "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+                  "canonicalBaseUrl": "/@mkbhd"
+                 }
+                }
+               }
+              ]
+             },
+             "thumbnailOverlays": [
+              {
+               "thumbnailOverlayBottomPanelRenderer": {
+                "text": {
+                 "runs": [
+                  {
+                   "text": "159"
+                  },
+                  {
+                   "text": " episodes"
+                  }
+                 ]
+                }
+               }
+              }
+             ]
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "gridShowRenderer": {
+             "title": {
+              "simpleText": "Reviews!"
+             },
+             "thumbnailRenderer": {
+              "showCustomThumbnailRenderer": {
+               "thumbnail": {
+                "thumbnails": [
+                 {
+                  "url": "https://i.ytimg.com/vi/_0G4OG39XjI/hqdefault.jpg?sqp=-oaymwEXCOADEI4CSFryq4qpAwkIARUAAIhCGAE=&rs=AOn4CLDVJCj90_88LFloE8hF6rXlC-Rngg",
+                  "width": 480,
+                  "height": 270
+                 }
+                ]
+               }
+              }
+             },
+             "navigationEndpoint": {
+              "commandMetadata": {
+               "webCommandMetadata": {
+                "url": "/show/VLPLBsP89CPrMeNm71T5gYC6jebm9vPbLBiP?sbp=QAE%253D",
+                "webPageType": "WEB_PAGE_TYPE_PLAYLIST",
+                "rootVe": 5754,
+                "apiUrl": "/youtubei/v1/browse"
+               }
+              },
+              "browseEndpoint": {
+               "browseId": "VLPLBsP89CPrMeNm71T5gYC6jebm9vPbLBiP",
+               "params": "kgYCQAE%3D",
+               "pageAnimation": {
+                "preloadPageConfig": {
+                 "ghostState": "GHOST_STATE_EPISODIC_SHOW_PAGE"
+                }
+               }
+              }
+             },
+             "shortBylineText": {
+              "runs": [
+               {
+                "text": "Marques Brownlee",
+                "navigationEndpoint": {
+                 "commandMetadata": {
+                  "webCommandMetadata": {
+                   "url": "/@mkbhd",
+                   "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                   "rootVe": 3611,
+                   "apiUrl": "/youtubei/v1/browse"
+                  }
+                 },
+                 "browseEndpoint": {
+                  "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+                  "canonicalBaseUrl": "/@mkbhd"
+                 }
+                }
+               }
+              ]
+             },
+             "longBylineText": {
+              "runs": [
+               {
+                "text": "Marques Brownlee",
+                "navigationEndpoint": {
+                 "commandMetadata": {
+                  "webCommandMetadata": {
+                   "url": "/@mkbhd",
+                   "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                   "rootVe": 3611,
+                   "apiUrl": "/youtubei/v1/browse"
+                  }
+                 },
+                 "browseEndpoint": {
+                  "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+                  "canonicalBaseUrl": "/@mkbhd"
+                 }
+                }
+               }
+              ]
+             },
+             "thumbnailOverlays": [
+              {
+               "thumbnailOverlayBottomPanelRenderer": {
+                "text": {
+                 "runs": [
+                  {
+                   "text": "328"
+                  },
+                  {
+                   "text": " episodes"
+                  }
+                 ]
+                }
+               }
+              }
+             ]
+            }
+           }
+          }
+         },
+         {
+          "richItemRenderer": {
+           "content": {
+            "gridShowRenderer": {
+             "title": {
+              "simpleText": "Explained!"
+             },
+             "thumbnailRenderer": {
+              "showCustomThumbnailRenderer": {
+               "thumbnail": {
+                "thumbnails": [
+                 {
+                  "url": "https://i.ytimg.com/vi/pzGsUp3yM8w/hqdefault.jpg?sqp=-oaymwEXCOADEI4CSFryq4qpAwkIARUAAIhCGAE=&rs=AOn4CLBmSSnY_I-lm_C_14urat4Sd5ZSwg",
+                  "width": 480,
+                  "height": 270
+                 }
+                ]
+               }
+              }
+             },
+             "navigationEndpoint": {
+              "commandMetadata": {
+               "webCommandMetadata": {
+                "url": "/show/VLPL6566A39B68523E18?sbp=QAE%253D",
+                "webPageType": "WEB_PAGE_TYPE_PLAYLIST",
+                "rootVe": 5754,
+                "apiUrl": "/youtubei/v1/browse"
+               }
+              },
+              "browseEndpoint": {
+               "browseId": "VLPL6566A39B68523E18",
+               "params": "kgYCQAE%3D",
+               "pageAnimation": {
+                "preloadPageConfig": {
+                 "ghostState": "GHOST_STATE_EPISODIC_SHOW_PAGE"
+                }
+               }
+              }
+             },
+             "shortBylineText": {
+              "runs": [
+               {
+                "text": "Marques Brownlee",
+                "navigationEndpoint": {
+                 "commandMetadata": {
+                  "webCommandMetadata": {
+                   "url": "/@mkbhd",
+                   "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                   "rootVe": 3611,
+                   "apiUrl": "/youtubei/v1/browse"
+                  }
+                 },
+                 "browseEndpoint": {
+                  "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+                  "canonicalBaseUrl": "/@mkbhd"
+                 }
+                }
+               }
+              ]
+             },
+             "longBylineText": {
+              "runs": [
+               {
+                "text": "Marques Brownlee",
+                "navigationEndpoint": {
+                 "commandMetadata": {
+                  "webCommandMetadata": {
+                   "url": "/@mkbhd",
+                   "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                   "rootVe": 3611,
+                   "apiUrl": "/youtubei/v1/browse"
+                  }
+                 },
+                 "browseEndpoint": {
+                  "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+                  "canonicalBaseUrl": "/@mkbhd"
+                 }
+                }
+               }
+              ]
+             },
+             "thumbnailOverlays": [
+              {
+               "thumbnailOverlayBottomPanelRenderer": {
+                "text": {
+                 "runs": [
+                  {
+                   "text": "69"
+                  },
+                  {
+                   "text": " episodes"
+                  }
+                 ]
+                }
+               }
+              }
+             ]
+            }
+           }
+          }
+         }
+        ],
+        "targetId": "6da3698f-0000-2c03-939a-582429be3640",
+        "style": "RICH_GRID_STYLE_COMPACT"
+       }
+      }
+     }
+    },
+    {
+     "tabRenderer": {
+      "endpoint": {
+       "commandMetadata": {
+        "webCommandMetadata": {
+         "url": "/@mkbhd/playlists",
+         "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+         "rootVe": 3611,
+         "apiUrl": "/youtubei/v1/browse"
+        }
+       },
+       "browseEndpoint": {
+        "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+        "params": "EglwbGF5bGlzdHPyBgoKCEIGCgIQaCIA",
+        "canonicalBaseUrl": "/@mkbhd"
+       }
+      },
+      "title": "Playlists"
+     }
+    },
+    {
+     "tabRenderer": {
+      "endpoint": {
+       "commandMetadata": {
+        "webCommandMetadata": {
+         "url": "/@mkbhd/posts",
+         "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+         "rootVe": 3611,
+         "apiUrl": "/youtubei/v1/browse"
+        }
+       },
+       "browseEndpoint": {
+        "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+        "params": "EgVwb3N0c_IGBAoCSgA%3D",
+        "canonicalBaseUrl": "/@mkbhd"
+       }
+      },
+      "title": "Posts"
+     }
+    },
+    {
+     "tabRenderer": {
+      "endpoint": {
+       "commandMetadata": {
+        "webCommandMetadata": {
+         "url": "/@mkbhd/store",
+         "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+         "rootVe": 3611,
+         "apiUrl": "/youtubei/v1/browse"
+        }
+       },
+       "browseEndpoint": {
+        "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+        "params": "EgVzdG9yZfIGBAoCGgA%3D",
+        "canonicalBaseUrl": "/@mkbhd"
+       }
+      },
+      "title": "Store"
+     }
+    },
+    {
+     "expandableTabRenderer": {
+      "endpoint": {
+       "commandMetadata": {
+        "webCommandMetadata": {
+         "url": "/@mkbhd/search",
+         "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+         "rootVe": 3611,
+         "apiUrl": "/youtubei/v1/browse"
+        }
+       },
+       "browseEndpoint": {
+        "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+        "params": "EgZzZWFyY2jyBgQKAloA",
+        "canonicalBaseUrl": "/@mkbhd"
+       }
+      },
+      "title": "Search",
+      "selected": false
+     }
+    }
+   ]
+  }
+ },
+ "header": {
+  "pageHeaderRenderer": {
+   "pageTitle": "Marques Brownlee",
+   "content": {
+    "pageHeaderViewModel": {
+     "title": {
+      "dynamicTextViewModel": {
+       "text": {
+        "content": "Marques Brownlee",
+        "styleRuns": [
+         {
+          "startIndex": 16,
+          "styleRunExtensions": {
+           "styleRunColorMapExtension": {
+            "colorMap": [
+             {
+              "key": "USER_INTERFACE_THEME_DARK",
+              "value": 4294967295
+             },
+             {
+              "key": "USER_INTERFACE_THEME_LIGHT",
+              "value": 4279440147
+             }
+            ]
+           }
+          }
+         }
+        ],
+        "attachmentRuns": [
+         {
+          "startIndex": 16,
+          "length": 0,
+          "element": {
+           "type": {
+            "imageType": {
+             "image": {
+              "sources": [
+               {
+                "clientResource": {
+                 "imageName": "CHECK_CIRCLE_FILLED"
+                },
+                "width": 24,
+                "height": 24
+               }
+              ]
+             }
+            }
+           },
+           "properties": {
+            "layoutProperties": {
+             "height": {
+              "value": 24,
+              "unit": "DIMENSION_UNIT_POINT"
+             },
+             "width": {
+              "value": 24,
+              "unit": "DIMENSION_UNIT_POINT"
+             },
+             "margin": {
+              "left": {
+               "value": 8,
+               "unit": "DIMENSION_UNIT_POINT"
+              }
+             }
+            }
+           }
+          },
+          "alignment": "ALIGNMENT_VERTICAL_CENTER"
+         }
+        ]
+       },
+       "maxLines": 2,
+       "rendererContext": {
+        "loggingContext": {
+         "loggingDirectives": {
+          "visibility": {
+           "types": "12"
+          }
+         }
+        },
+        "accessibilityContext": {
+         "label": "Marques Brownlee, Verified"
+        }
+       }
+      }
+     },
+     "image": {
+      "decoratedAvatarViewModel": {
+       "avatar": {
+        "avatarViewModel": {
+         "image": {
+          "sources": [
+           {
+            "url": "https://yt3.googleusercontent.com/qu4TmIaYUlS41-dJ9gZ7DUR3nilvmB5_11i6OKSdvNnBNiyOusZP1bMN6ICnuxtjFBb6ioKgRQ=s72-c-k-c0x00ffffff-no-rj",
+            "width": 72,
+            "height": 72
+           },
+           {
+            "url": "https://yt3.googleusercontent.com/qu4TmIaYUlS41-dJ9gZ7DUR3nilvmB5_11i6OKSdvNnBNiyOusZP1bMN6ICnuxtjFBb6ioKgRQ=s120-c-k-c0x00ffffff-no-rj",
+            "width": 120,
+            "height": 120
+           },
+           {
+            "url": "https://yt3.googleusercontent.com/qu4TmIaYUlS41-dJ9gZ7DUR3nilvmB5_11i6OKSdvNnBNiyOusZP1bMN6ICnuxtjFBb6ioKgRQ=s160-c-k-c0x00ffffff-no-rj",
+            "width": 160,
+            "height": 160
+           }
+          ],
+          "processor": {
+           "borderImageProcessor": {
+            "circular": true
+           }
+          }
+         },
+         "avatarImageSize": "AVATAR_SIZE_XL",
+         "loggingDirectives": {
+          "visibility": {
+           "types": "12"
+          }
+         }
+        }
+       }
+      }
+     },
+     "metadata": {
+      "contentMetadataViewModel": {
+       "metadataRows": [
+        {
+         "metadataParts": [
+          {
+           "text": {
+            "content": "@mkbhd",
+            "styleRuns": [
+             {
+              "weightLabel": "FONT_WEIGHT_MEDIUM",
+              "styleRunExtensions": {
+               "styleRunColorMapExtension": {
+                "colorMap": [
+                 {
+                  "key": "USER_INTERFACE_THEME_LIGHT",
+                  "value": 4279440147
+                 },
+                 {
+                  "key": "USER_INTERFACE_THEME_DARK",
+                  "value": 4294967295
+                 }
+                ]
+               }
+              }
+             }
+            ]
+           },
+           "enableTruncation": true
+          }
+         ]
+        },
+        {
+         "metadataParts": [
+          {
+           "text": {
+            "content": "21.4M subscribers"
+           },
+           "accessibilityLabel": "21.4 million subscribers"
+          },
+          {
+           "text": {
+            "content": "1.8K videos",
+            "styleRuns": [
+             {
+              "startIndex": 0,
+              "length": 11
+             }
+            ]
+           }
+          }
+         ]
+        }
+       ],
+       "delimiter": "•",
+       "rendererContext": {
+        "loggingContext": {
+         "loggingDirectives": {
+          "visibility": {
+           "types": "12"
+          }
+         }
+        }
+       }
+      }
+     },
+     "actions": {
+      "flexibleActionsViewModel": {
+       "actionsRows": [
+        {
+         "actions": [
+          {
+           "buttonViewModel": {
+            "title": "Subscribe",
+            "onTap": {
+             "innertubeCommand": {
+              "commandMetadata": {
+               "webCommandMetadata": {
+                "ignoreNavigation": true
+               }
+              },
+              "modalEndpoint": {
+               "modal": {
+                "modalWithTitleAndButtonRenderer": {
+                 "title": {
+                  "simpleText": "Want to subscribe to this channel?"
+                 },
+                 "content": {
+                  "simpleText": "Sign in to subscribe to this channel."
+                 },
+                 "button": {
+                  "buttonRenderer": {
+                   "style": "STYLE_MONO_FILLED",
+                   "size": "SIZE_DEFAULT",
+                   "isDisabled": false,
+                   "text": {
+                    "simpleText": "Sign in"
+                   },
+                   "navigationEndpoint": {
+                    "commandMetadata": {
+                     "webCommandMetadata": {
+                      "url": "https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3D%252F%2540mkbhd%252Fshows%26continue_action%3DQUZZTVljRmFJZHVnSWtMaW1Kc2xvb3haclBYU3xBSTVJdTV2bmZDelc2OG1nSVVhcldkYnY5YThyTnUzc1U2SjFfbkNDSDFkaUVyRzNzVTF1R255dHNyVGppSzk5d2ZsVUVVcUwyOGttQkh0elEydzNxWFRMMnpIZkxnRXBrY1VqRG85dkZhUUE4NUNrTV84Rjdfbm9fODZIM21NQmhsYzQ4V1NCa0QxZzhQWHR3X2JmSWVIWjZoaXlvY1ZfZXRDajR0cFZvTkptellnTjluc19DeFJpV3dz&hl=en&ec=66429",
+                      "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                      "rootVe": 83769
+                     }
+                    },
+                    "signInEndpoint": {
+                     "nextEndpoint": {
+                      "commandMetadata": {
+                       "webCommandMetadata": {
+                        "url": "/@mkbhd/shows",
+                        "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                        "rootVe": 3611,
+                        "apiUrl": "/youtubei/v1/browse"
+                       }
+                      },
+                      "browseEndpoint": {
+                       "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+                       "params": "EgVzaG93cw%3D%3D",
+                       "canonicalBaseUrl": "/@mkbhd"
+                      }
+                     },
+                     "continueAction": "QUZZTVljRmFJZHVnSWtMaW1Kc2xvb3haclBYU3xBSTVJdTV2bmZDelc2OG1nSVVhcldkYnY5YThyTnUzc1U2SjFfbkNDSDFkaUVyRzNzVTF1R255dHNyVGppSzk5d2ZsVUVVcUwyOGttQkh0elEydzNxWFRMMnpIZkxnRXBrY1VqRG85dkZhUUE4NUNrTV84Rjdfbm9fODZIM21NQmhsYzQ4V1NCa0QxZzhQWHR3X2JmSWVIWjZoaXlvY1ZfZXRDajR0cFZvTkptellnTjluc19DeFJpV3dz",
+                     "idamTag": "66429"
+                    }
+                   }
+                  }
+                 }
+                }
+               }
+              }
+             }
+            },
+            "accessibilityText": "Subscribe",
+            "style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+            "isFullWidth": false,
+            "type": "BUTTON_VIEW_MODEL_TYPE_FILLED",
+            "buttonSize": "BUTTON_VIEW_MODEL_SIZE_DEFAULT",
+            "state": "BUTTON_VIEW_MODEL_STATE_ACTIVE"
+           }
+          }
+         ]
+        }
+       ],
+       "justifyContent": "FLEXIBLE_ACTIONS_JUSTIFY_CONTENT_START",
+       "minimumRowHeight": 44,
+       "rendererContext": {
+        "loggingContext": {
+         "loggingDirectives": {
+          "visibility": {
+           "types": "12"
+          },
+          "clientVeSpec": {
+           "uiType": 184974,
+           "veCounter": 370032763
+          }
+         }
+        }
+       }
+      }
+     },
+     "description": {
+      "descriptionPreviewViewModel": {
+       "description": {
+        "content": "MKBHD: Quality Tech Videos | YouTuber | Geek | Consumer Electronics | Tech Head | Internet Personality! "
+       },
+       "maxLines": 2,
+       "truncationText": {
+        "content": "...more",
+        "styleRuns": [
+         {
+          "startIndex": 0,
+          "length": 7,
+          "weight": 500
+         }
+        ]
+       },
+       "alwaysShowTruncationText": true,
+       "rendererContext": {
+        "loggingContext": {
+         "loggingDirectives": {
+          "visibility": {
+           "types": "12"
+          }
+         }
+        },
+        "accessibilityContext": {
+         "label": "Description. MKBHD: Quality Tech Videos | YouTuber | Geek | Consumer Elec...tap for more."
+        },
+        "commandContext": {
+         "onTap": {
+          "innertubeCommand": {
+           "showEngagementPanelEndpoint": {
+            "engagementPanel": {
+             "engagementPanelSectionListRenderer": {
+              "header": {
+               "engagementPanelTitleHeaderRenderer": {
+                "title": {
+                 "simpleText": "Marques Brownlee"
+                },
+                "visibilityButton": {
+                 "buttonRenderer": {
+                  "style": "STYLE_DEFAULT",
+                  "size": "SIZE_DEFAULT",
+                  "isDisabled": false,
+                  "icon": {
+                   "iconType": "CLOSE"
+                  },
+                  "accessibility": {
+                   "label": "Close"
+                  },
+                  "accessibilityData": {
+                   "accessibilityData": {
+                    "label": "Close"
+                   }
+                  },
+                  "command": {
+                   "changeEngagementPanelVisibilityAction": {
+                    "targetId": "6da36989-0000-2c03-939a-582429be3640",
+                    "visibility": "ENGAGEMENT_PANEL_VISIBILITY_HIDDEN"
+                   }
+                  }
+                 }
+                }
+               }
+              },
+              "content": {
+               "sectionListRenderer": {
+                "contents": [
+                 {
+                  "itemSectionRenderer": {
+                   "contents": [
+                    {
+                     "continuationItemRenderer": {
+                      "trigger": "CONTINUATION_TRIGGER_ON_ITEM_SHOWN",
+                      "continuationEndpoint": {
+                       "commandMetadata": {
+                        "webCommandMetadata": {
+                         "sendPost": true,
+                         "apiUrl": "/youtubei/v1/browse"
+                        }
+                       },
+                       "continuationCommand": {
+                        "token": "4qmFsgJgEhhVQ0JKeWNzbWR1dllFTDgzUl9VNEpyaVEaRDhnWXJHaW1hQVNZS0pEWmtZVE0yT1RoaExUQXdNREF0TW1Nd015MDVNemxoTFRVNE1qUXlPV0psTXpZME1BJTNEJTNE",
+                        "request": "CONTINUATION_REQUEST_TYPE_BROWSE"
+                       }
+                      }
+                     }
+                    }
+                   ],
+                   "sectionIdentifier": "6da3698a-0000-2c03-939a-582429be3640",
+                   "targetId": "6da3698a-0000-2c03-939a-582429be3640"
+                  }
+                 }
+                ],
+                "scrollPaneStyle": {
+                 "scrollable": true
+                }
+               }
+              },
+              "targetId": "6da36989-0000-2c03-939a-582429be3640",
+              "identifier": {
+               "surface": "ENGAGEMENT_PANEL_SURFACE_BROWSE",
+               "tag": "6da36989-0000-2c03-939a-582429be3640"
+              }
+             }
+            },
+            "identifier": {
+             "surface": "ENGAGEMENT_PANEL_SURFACE_BROWSE",
+             "tag": "6da36989-0000-2c03-939a-582429be3640"
+            },
+            "engagementPanelPresentationConfigs": {
+             "engagementPanelPopupPresentationConfig": {
+              "popupType": "PANEL_POPUP_TYPE_DIALOG"
+             }
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "attribution": {
+      "attributionViewModel": {
+       "text": {
+        "content": " X",
+        "commandRuns": [
+         {
+          "startIndex": 0,
+          "length": 2,
+          "onTap": {
+           "innertubeCommand": {
+            "commandMetadata": {
+             "webCommandMetadata": {
+              "url": "https://www.youtube.com/redirect?event=channel_header&redir_token=QUZZTVljRllJZWxpQ0pXbTdvbjlQLTNZeUluQnxBSTVJdTV2c0s2T1FNTEdjdmFMRWxCdlpLWkMwR0owVkZkSHJacDFscmZGTHV4MmZTYmZqRVpKQlJFSzhhanBTUWlkVlNQa3ZrdXZyRk5lbHRjOXlkWWNVQWdiTkZPRjc0azNK&q=http%3A%2F%2Ftwitter.com%2FMKBHD",
+              "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+              "rootVe": 83769
+             }
+            },
+            "urlEndpoint": {
+             "url": "https://www.youtube.com/redirect?event=channel_header&redir_token=QUZZTVljRllJZWxpQ0pXbTdvbjlQLTNZeUluQnxBSTVJdTV2c0s2T1FNTEdjdmFMRWxCdlpLWkMwR0owVkZkSHJacDFscmZGTHV4MmZTYmZqRVpKQlJFSzhhanBTUWlkVlNQa3ZrdXZyRk5lbHRjOXlkWWNVQWdiTkZPRjc0azNK&q=http%3A%2F%2Ftwitter.com%2FMKBHD",
+             "target": "TARGET_NEW_WINDOW"
+            }
+           }
+          },
+          "loggingDirectives": {
+           "visibility": {
+            "types": "12"
+           }
+          }
+         }
+        ],
+        "styleRuns": [
+         {
+          "weightLabel": "FONT_WEIGHT_NORMAL",
+          "styleRunExtensions": {
+           "styleRunColorMapExtension": {
+            "colorMap": [
+             {
+              "key": "USER_INTERFACE_THEME_DARK",
+              "value": 4282296063
+             },
+             {
+              "key": "USER_INTERFACE_THEME_LIGHT",
+              "value": 4278607828
+             }
+            ]
+           }
+          }
+         }
+        ],
+        "attachmentRuns": [
+         {
+          "startIndex": 0,
+          "length": 0,
+          "element": {
+           "type": {
+            "imageType": {
+             "image": {
+              "sources": [
+               {
+                "customImageSource": {
+                 "youtubeIconSource": {
+                  "clientResource": {
+                   "icon": "YTICON_OUTLINE_LINK_S24"
+                  }
+                 }
+                }
+               }
+              ]
+             }
+            }
+           },
+           "properties": {
+            "layoutProperties": {
+             "height": {
+              "value": 14,
+              "unit": "DIMENSION_UNIT_POINT"
+             },
+             "width": {
+              "value": 14,
+              "unit": "DIMENSION_UNIT_POINT"
+             }
+            }
+           }
+          },
+          "alignment": "ALIGNMENT_VERTICAL_CENTER"
+         }
+        ]
+       },
+       "suffix": {
+        "content": "and 4 more links",
+        "commandRuns": [
+         {
+          "startIndex": 0,
+          "length": 16,
+          "onTap": {
+           "innertubeCommand": {
+            "showEngagementPanelEndpoint": {
+             "engagementPanel": {
+              "engagementPanelSectionListRenderer": {
+               "header": {
+                "engagementPanelTitleHeaderRenderer": {
+                 "title": {
+                  "simpleText": "Marques Brownlee"
+                 },
+                 "visibilityButton": {
+                  "buttonRenderer": {
+                   "style": "STYLE_DEFAULT",
+                   "size": "SIZE_DEFAULT",
+                   "isDisabled": false,
+                   "icon": {
+                    "iconType": "CLOSE"
+                   },
+                   "accessibility": {
+                    "label": "Close"
+                   },
+                   "accessibilityData": {
+                    "accessibilityData": {
+                     "label": "Close"
+                    }
+                   },
+                   "command": {
+                    "changeEngagementPanelVisibilityAction": {
+                     "targetId": "6da3698b-0000-2c03-939a-582429be3640",
+                     "visibility": "ENGAGEMENT_PANEL_VISIBILITY_HIDDEN"
+                    }
+                   }
+                  }
+                 }
+                }
+               },
+               "content": {
+                "sectionListRenderer": {
+                 "contents": [
+                  {
+                   "itemSectionRenderer": {
+                    "contents": [
+                     {
+                      "continuationItemRenderer": {
+                       "trigger": "CONTINUATION_TRIGGER_ON_ITEM_SHOWN",
+                       "continuationEndpoint": {
+                        "commandMetadata": {
+                         "webCommandMetadata": {
+                          "sendPost": true,
+                          "apiUrl": "/youtubei/v1/browse"
+                         }
+                        },
+                        "continuationCommand": {
+                         "token": "4qmFsgJgEhhVQ0JKeWNzbWR1dllFTDgzUl9VNEpyaVEaRDhnWXJHaW1hQVNZS0pEWmtZVE0yT1RoakxUQXdNREF0TW1Nd015MDVNemxoTFRVNE1qUXlPV0psTXpZME1BJTNEJTNE",
+                         "request": "CONTINUATION_REQUEST_TYPE_BROWSE"
+                        }
+                       }
+                      }
+                     }
+                    ],
+                    "sectionIdentifier": "6da3698c-0000-2c03-939a-582429be3640",
+                    "targetId": "6da3698c-0000-2c03-939a-582429be3640"
+                   }
+                  }
+                 ],
+                 "scrollPaneStyle": {
+                  "scrollable": true
+                 }
+                }
+               },
+               "targetId": "6da3698b-0000-2c03-939a-582429be3640",
+               "identifier": {
+                "surface": "ENGAGEMENT_PANEL_SURFACE_BROWSE",
+                "tag": "6da3698b-0000-2c03-939a-582429be3640"
+               }
+              }
+             },
+             "identifier": {
+              "surface": "ENGAGEMENT_PANEL_SURFACE_BROWSE",
+              "tag": "6da3698b-0000-2c03-939a-582429be3640"
+             },
+             "engagementPanelPresentationConfigs": {
+              "engagementPanelPopupPresentationConfig": {
+               "popupType": "PANEL_POPUP_TYPE_DIALOG"
+              }
+             }
+            }
+           }
+          },
+          "loggingDirectives": {
+           "visibility": {
+            "types": "12"
+           }
+          }
+         }
+        ],
+        "styleRuns": [
+         {
+          "fontName": "",
+          "fontSize": 0,
+          "weightLabel": "FONT_WEIGHT_MEDIUM"
+         }
+        ]
+       },
+       "rendererContext": {
+        "loggingContext": {
+         "loggingDirectives": {
+          "visibility": {
+           "types": "12"
+          }
+         }
+        }
+       }
+      }
+     },
+     "banner": {
+      "imageBannerViewModel": {
+       "image": {
+        "sources": [
+         {
+          "url": "https://yt3.googleusercontent.com/zi_48HwHU4s0Hnb6tZuvRzTfCPHrLEnrtIMDLzMauDEyDmURh9JZ4wrNd3lKr7m9uVnT4YjYKw=w1060-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+          "width": 1060,
+          "height": 175
+         },
+         {
+          "url": "https://yt3.googleusercontent.com/zi_48HwHU4s0Hnb6tZuvRzTfCPHrLEnrtIMDLzMauDEyDmURh9JZ4wrNd3lKr7m9uVnT4YjYKw=w1138-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+          "width": 1138,
+          "height": 188
+         },
+         {
+          "url": "https://yt3.googleusercontent.com/zi_48HwHU4s0Hnb6tZuvRzTfCPHrLEnrtIMDLzMauDEyDmURh9JZ4wrNd3lKr7m9uVnT4YjYKw=w1707-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+          "width": 1707,
+          "height": 283
+         },
+         {
+          "url": "https://yt3.googleusercontent.com/zi_48HwHU4s0Hnb6tZuvRzTfCPHrLEnrtIMDLzMauDEyDmURh9JZ4wrNd3lKr7m9uVnT4YjYKw=w2120-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+          "width": 2120,
+          "height": 351
+         },
+         {
+          "url": "https://yt3.googleusercontent.com/zi_48HwHU4s0Hnb6tZuvRzTfCPHrLEnrtIMDLzMauDEyDmURh9JZ4wrNd3lKr7m9uVnT4YjYKw=w2276-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+          "width": 2276,
+          "height": 377
+         },
+         {
+          "url": "https://yt3.googleusercontent.com/zi_48HwHU4s0Hnb6tZuvRzTfCPHrLEnrtIMDLzMauDEyDmURh9JZ4wrNd3lKr7m9uVnT4YjYKw=w2560-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+          "width": 2560,
+          "height": 424
+         }
+        ]
+       },
+       "style": "IMAGE_BANNER_STYLE_INSET",
+       "rendererContext": {
+        "loggingContext": {
+         "loggingDirectives": {
+          "visibility": {
+           "types": "12"
+          }
+         }
+        }
+       }
+      }
+     },
+     "rendererContext": {
+      "loggingContext": {
+       "loggingDirectives": {
+        "visibility": {
+         "types": "12"
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "metadata": {
+  "channelMetadataRenderer": {
+   "title": "Marques Brownlee",
+   "description": "MKBHD: Quality Tech Videos | YouTuber | Geek | Consumer Electronics | Tech Head | Internet Personality!\n\nbusiness@MKBHD.com\n\nNYC",
+   "rssUrl": "https://www.youtube.com/feeds/videos.xml?channel_id=UCBJycsmduvYEL83R_U4JriQ",
+   "channelConversionUrl": "https://www.youtube.com/pagead/viewthroughconversion/962985656/?backend=innertube&cname=1&cver=2_20260925_08_00&data=backend%3Dinnertube%3Bcname%3D1%3Bcver%3D2_20260925_08_00%3Bptype%3Dcview%3Btype%3Dcview%3Butuid%3DBJycsmduvYEL83R_U4JriQ&foc_id=BJycsmduvYEL83R_U4JriQ&label=followon_cvisit&ptype=cview&utuid=BJycsmduvYEL83R_U4JriQ",
+   "externalId": "UCBJycsmduvYEL83R_U4JriQ",
+   "keywords": "MKBHD MarquesBrownlee Marques Brownlee",
+   "ownerUrls": [
+    "http://www.youtube.com/@mkbhd"
+   ],
+   "avatar": {
+    "thumbnails": [
+     {
+      "url": "https://yt3.googleusercontent.com/qu4TmIaYUlS41-dJ9gZ7DUR3nilvmB5_11i6OKSdvNnBNiyOusZP1bMN6ICnuxtjFBb6ioKgRQ=s900-c-k-c0x00ffffff-no-rj",
+      "width": 900,
+      "height": 900
+     }
+    ]
+   },
+   "channelUrl": "https://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ",
+   "isFamilySafe": true,
+   "availableCountryCodes": [
+    "SB",
+    "SE",
+    "VC",
+    "MP",
+    "SL",
+    "VI",
+    "VU",
+    "HR",
+    "GI",
+    "PM",
+    "TZ",
+    "AE",
+    "MG",
+    "MS",
+    "UA",
+    "GM",
+    "WS",
+    "KN",
+    "NC",
+    "CF",
+    "PG",
+    "EG",
+    "GY",
+    "LT",
+    "BT",
+    "MO",
+    "ET",
+    "NR",
+    "GL",
+    "NZ",
+    "ZA",
+    "BG",
+    "KZ",
+    "AD",
+    "BF",
+    "NP",
+    "ME",
+    "GA",
+    "HK",
+    "CW",
+    "MC",
+    "SR",
+    "MH",
+    "AL",
+    "MR",
+    "OM",
+    "AQ",
+    "HM",
+    "SA",
+    "SK",
+    "RO",
+    "PR",
+    "HU",
+    "VA",
+    "CN",
+    "AX",
+    "HN",
+    "NF",
+    "SX",
+    "CC",
+    "SO",
+    "LB",
+    "PH",
+    "CV",
+    "QA",
+    "PY",
+    "IS",
+    "NU",
+    "AG",
+    "SY",
+    "MT",
+    "JO",
+    "MN",
+    "MU",
+    "CL",
+    "CY",
+    "GU",
+    "BJ",
+    "GD",
+    "YE",
+    "SG",
+    "CK",
+    "GH",
+    "SN",
+    "PN",
+    "BO",
+    "CH",
+    "GW",
+    "UY",
+    "CO",
+    "EH",
+    "SD",
+    "IN",
+    "AM",
+    "BA",
+    "CD",
+    "MD",
+    "FM",
+    "AW",
+    "NI",
+    "TK",
+    "BI",
+    "CZ",
+    "MM",
+    "TR",
+    "BL",
+    "CU",
+    "FO",
+    "LY",
+    "GB",
+    "TH",
+    "LS",
+    "KY",
+    "AI",
+    "LU",
+    "FK",
+    "FI",
+    "RE",
+    "PK",
+    "DJ",
+    "AR",
+    "VN",
+    "IM",
+    "KE",
+    "RU",
+    "CA",
+    "GE",
+    "MW",
+    "TG",
+    "TW",
+    "KM",
+    "JM",
+    "KW",
+    "TO",
+    "AT",
+    "ML",
+    "MV",
+    "BZ",
+    "KR",
+    "CR",
+    "PT",
+    "TM",
+    "NA",
+    "PF",
+    "TT",
+    "LC",
+    "LA",
+    "LI",
+    "PL",
+    "TV",
+    "KP",
+    "MQ",
+    "GQ",
+    "GR",
+    "IR",
+    "PE",
+    "LV",
+    "HT",
+    "TL",
+    "VG",
+    "IO",
+    "EE",
+    "SH",
+    "ST",
+    "PW",
+    "NL",
+    "BH",
+    "BQ",
+    "DM",
+    "BM",
+    "SV",
+    "TJ",
+    "CG",
+    "UG",
+    "NG",
+    "ZW",
+    "WF",
+    "AF",
+    "SZ",
+    "MY",
+    "IE",
+    "BN",
+    "TN",
+    "GT",
+    "MZ",
+    "PA",
+    "MX",
+    "KG",
+    "IL",
+    "MA",
+    "PS",
+    "TF",
+    "UM",
+    "RS",
+    "AS",
+    "BY",
+    "SJ",
+    "AO",
+    "EC",
+    "GS",
+    "CM",
+    "SS",
+    "ES",
+    "BS",
+    "KI",
+    "GF",
+    "ZM",
+    "JP",
+    "BR",
+    "MF",
+    "VE",
+    "IT",
+    "DZ",
+    "SI",
+    "AU",
+    "RW",
+    "TD",
+    "YT",
+    "CI",
+    "GG",
+    "DK",
+    "GP",
+    "KH",
+    "MK",
+    "GN",
+    "BV",
+    "TC",
+    "BE",
+    "NO",
+    "DE",
+    "ER",
+    "UZ",
+    "FR",
+    "LK",
+    "NE",
+    "DO",
+    "BB",
+    "SC",
+    "US",
+    "AZ",
+    "ID",
+    "IQ",
+    "SM",
+    "CX",
+    "JE",
+    "BD",
+    "BW",
+    "LR",
+    "FJ"
+   ],
+   "androidDeepLink": "android-app://com.google.android.youtube/http/www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ",
+   "androidAppindexingLink": "android-app://com.google.android.youtube/http/www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ",
+   "iosAppindexingLink": "ios-app://544007664/vnd.youtube/www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ",
+   "vanityChannelUrl": "http://www.youtube.com/@mkbhd"
+  }
+ },
+ "topbar": {
+  "desktopTopbarRenderer": {
+   "logo": {
+    "topbarLogoRenderer": {
+     "iconImage": {
+      "iconType": "YOUTUBE_LOGO"
+     },
+     "tooltipText": {
+      "runs": [
+       {
+        "text": "YouTube Home"
+       }
+      ]
+     },
+     "endpoint": {
+      "commandMetadata": {
+       "webCommandMetadata": {
+        "url": "/",
+        "webPageType": "WEB_PAGE_TYPE_BROWSE",
+        "rootVe": 3854,
+        "apiUrl": "/youtubei/v1/browse"
+       }
+      },
+      "browseEndpoint": {
+       "browseId": "FEwhat_to_watch"
+      }
+     },
+     "overrideEntityKey": "EgZ0b3BiYXIg9QEoAQ%3D%3D"
+    }
+   },
+   "searchbox": {
+    "fusionSearchboxRenderer": {
+     "icon": {
+      "iconType": "SEARCH"
+     },
+     "placeholderText": {
+      "runs": [
+       {
+        "text": "Search"
+       }
+      ]
+     },
+     "config": {
+      "webSearchboxConfig": {
+       "requestLanguage": "en",
+       "requestDomain": "us",
+       "hasOnscreenKeyboard": false,
+       "focusSearchbox": true
+      }
+     },
+     "searchEndpoint": {
+      "commandMetadata": {
+       "webCommandMetadata": {
+        "url": "/results?search_query=",
+        "webPageType": "WEB_PAGE_TYPE_SEARCH",
+        "rootVe": 4724
+       }
+      },
+      "searchEndpoint": {
+       "query": ""
+      }
+     },
+     "clearButton": {
+      "buttonRenderer": {
+       "style": "STYLE_DEFAULT",
+       "size": "SIZE_DEFAULT",
+       "isDisabled": false,
+       "icon": {
+        "iconType": "CLOSE"
+       },
+       "accessibilityData": {
+        "accessibilityData": {
+         "label": "Clear search query"
+        }
+       }
+      }
+     },
+     "showImageSourceDialog": {
+      "showDialogCommand": {
+       "panelLoadingStrategy": {
+        "inlineContent": {
+         "dialogViewModel": {
+          "header": {
+           "dialogHeaderViewModel": {
+            "headline": {
+             "content": "Image source"
+            }
+           }
+          },
+          "footer": {
+           "panelFooterViewModel": {
+            "primaryButton": {
+             "buttonViewModel": {
+              "title": "Visit source",
+              "style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+              "isFullWidth": true,
+              "type": "BUTTON_VIEW_MODEL_TYPE_FILLED"
+             }
+            },
+            "secondaryButton": {
+             "buttonViewModel": {
+              "title": "Cancel",
+              "style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+              "isFullWidth": true,
+              "type": "BUTTON_VIEW_MODEL_TYPE_TONAL"
+             }
+            },
+            "shouldHideDivider": true
+           }
+          },
+          "content": {
+           "basicContentViewModel": {
+            "paragraphs": [
+             {
+              "text": {
+               "content": "Visit image source website?"
+              }
+             }
+            ]
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "disableAiAppearance": true
+    }
+   },
+   "topbarButtons": [
+    {
+     "topbarMenuButtonRenderer": {
+      "icon": {
+       "iconType": "MORE_VERT"
+      },
+      "menuRequest": {
+       "commandMetadata": {
+        "webCommandMetadata": {
+         "sendPost": true,
+         "apiUrl": "/youtubei/v1/account/account_menu"
+        }
+       },
+       "signalServiceEndpoint": {
+        "signal": "GET_ACCOUNT_MENU",
+        "actions": [
+         {
+          "openPopupAction": {
+           "popup": {
+            "multiPageMenuRenderer": {
+             "style": "MULTI_PAGE_MENU_STYLE_TYPE_SYSTEM",
+             "showLoadingSpinner": true
+            }
+           },
+           "popupType": "DROPDOWN",
+           "beReused": true
+          }
+         }
+        ]
+       }
+      },
+      "accessibility": {
+       "accessibilityData": {
+        "label": "Settings"
+       }
+      },
+      "tooltip": "Settings",
+      "style": "STYLE_DEFAULT"
+     }
+    },
+    {
+     "buttonRenderer": {
+      "style": "STYLE_SUGGESTIVE",
+      "size": "SIZE_SMALL",
+      "text": {
+       "runs": [
+        {
+         "text": "Sign in"
+        }
+       ]
+      },
+      "icon": {
+       "iconType": "AVATAR_LOGGED_OUT"
+      },
+      "navigationEndpoint": {
+       "commandMetadata": {
+        "webCommandMetadata": {
+         "url": "https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3Dhttps%253A%252F%252Fwww.youtube.com%252Fyoutubei%252Fv1%252Fbrowse%253FprettyPrint%253Dfalse&hl=en&ec=65620",
+         "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+         "rootVe": 83769
+        }
+       },
+       "signInEndpoint": {
+        "idamTag": "65620"
+       }
+      },
+      "targetId": "topbar-signin"
+     }
+    }
+   ],
+   "hotkeyDialog": {
+    "hotkeyDialogRenderer": {
+     "title": {
+      "runs": [
+       {
+        "text": "Keyboard shortcuts"
+       }
+      ]
+     },
+     "sections": [
+      {
+       "hotkeyDialogSectionRenderer": {
+        "title": {
+         "runs": [
+          {
+           "text": "Playback"
+          }
+         ]
+        },
+        "options": [
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Toggle play/pause"
+             }
+            ]
+           },
+           "hotkey": "k"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Rewind 10 seconds"
+             }
+            ]
+           },
+           "hotkey": "j"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Fast forward 10 seconds"
+             }
+            ]
+           },
+           "hotkey": "l"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Previous video"
+             }
+            ]
+           },
+           "hotkey": "P (SHIFT+p)"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Next video"
+             }
+            ]
+           },
+           "hotkey": "N (SHIFT+n)"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Previous frame (while paused)"
+             }
+            ]
+           },
+           "hotkey": ",",
+           "hotkeyAccessibilityLabel": {
+            "accessibilityData": {
+             "label": "Comma"
+            }
+           }
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Next frame (while paused)"
+             }
+            ]
+           },
+           "hotkey": ".",
+           "hotkeyAccessibilityLabel": {
+            "accessibilityData": {
+             "label": "Period"
+            }
+           }
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Decrease playback rate"
+             }
+            ]
+           },
+           "hotkey": "< (SHIFT+,)",
+           "hotkeyAccessibilityLabel": {
+            "accessibilityData": {
+             "label": "Less than or SHIFT + comma"
+            }
+           }
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Increase playback rate"
+             }
+            ]
+           },
+           "hotkey": "> (SHIFT+.)",
+           "hotkeyAccessibilityLabel": {
+            "accessibilityData": {
+             "label": "Greater than or SHIFT + period"
+            }
+           }
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Seek to specific point in the video (7 advances to 70% of duration)"
+             }
+            ]
+           },
+           "hotkey": "0..9"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Seek to previous chapter"
+             }
+            ]
+           },
+           "hotkey": "CONTROL + ←"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Seek to next chapter"
+             }
+            ]
+           },
+           "hotkey": "CONTROL + →"
+          }
+         }
+        ]
+       }
+      },
+      {
+       "hotkeyDialogSectionRenderer": {
+        "title": {
+         "runs": [
+          {
+           "text": "General"
+          }
+         ]
+        },
+        "options": [
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Toggle full screen"
+             }
+            ]
+           },
+           "hotkey": "f"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Toggle theater mode"
+             }
+            ]
+           },
+           "hotkey": "t"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Toggle miniplayer"
+             }
+            ]
+           },
+           "hotkey": "i"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Close miniplayer or current dialog"
+             }
+            ]
+           },
+           "hotkey": "ESCAPE"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Toggle mute"
+             }
+            ]
+           },
+           "hotkey": "m"
+          }
+         }
+        ]
+       }
+      },
+      {
+       "hotkeyDialogSectionRenderer": {
+        "title": {
+         "runs": [
+          {
+           "text": "Subtitles and closed captions"
+          }
+         ]
+        },
+        "options": [
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "If the video supports captions, toggle captions ON/OFF"
+             }
+            ]
+           },
+           "hotkey": "c"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Rotate through different text opacity levels"
+             }
+            ]
+           },
+           "hotkey": "o"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Rotate through different window opacity levels"
+             }
+            ]
+           },
+           "hotkey": "w"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Rotate through font sizes (increasing)"
+             }
+            ]
+           },
+           "hotkey": "+"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Rotate through font sizes (decreasing)"
+             }
+            ]
+           },
+           "hotkey": "-",
+           "hotkeyAccessibilityLabel": {
+            "accessibilityData": {
+             "label": "Minus"
+            }
+           }
+          }
+         }
+        ]
+       }
+      },
+      {
+       "hotkeyDialogSectionRenderer": {
+        "title": {
+         "runs": [
+          {
+           "text": "Spherical Videos"
+          }
+         ]
+        },
+        "options": [
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Pan up"
+             }
+            ]
+           },
+           "hotkey": "w"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Pan left"
+             }
+            ]
+           },
+           "hotkey": "a"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Pan down"
+             }
+            ]
+           },
+           "hotkey": "s"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Pan right"
+             }
+            ]
+           },
+           "hotkey": "d"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Zoom in"
+             }
+            ]
+           },
+           "hotkey": "+ on numpad or ]",
+           "hotkeyAccessibilityLabel": {
+            "accessibilityData": {
+             "label": "Plus on number pad or right bracket"
+            }
+           }
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Zoom out"
+             }
+            ]
+           },
+           "hotkey": "- on numpad or [",
+           "hotkeyAccessibilityLabel": {
+            "accessibilityData": {
+             "label": "Minus on number pad or left bracket"
+            }
+           }
+          }
+         }
+        ]
+       }
+      }
+     ],
+     "dismissButton": {
+      "buttonRenderer": {
+       "style": "STYLE_BLUE_TEXT",
+       "size": "SIZE_DEFAULT",
+       "isDisabled": false,
+       "text": {
+        "runs": [
+         {
+          "text": "Dismiss"
+         }
+        ]
+       }
+      }
+     }
+    }
+   },
+   "backButton": {
+    "buttonRenderer": {
+     "command": {
+      "commandMetadata": {
+       "webCommandMetadata": {
+        "sendPost": true
+       }
+      },
+      "signalServiceEndpoint": {
+       "signal": "CLIENT_SIGNAL",
+       "actions": [
+        {
+         "signalAction": {
+          "signal": "HISTORY_BACK"
+         }
+        }
+       ]
+      }
+     }
+    }
+   },
+   "forwardButton": {
+    "buttonRenderer": {
+     "command": {
+      "commandMetadata": {
+       "webCommandMetadata": {
+        "sendPost": true
+       }
+      },
+      "signalServiceEndpoint": {
+       "signal": "CLIENT_SIGNAL",
+       "actions": [
+        {
+         "signalAction": {
+          "signal": "HISTORY_FORWARD"
+         }
+        }
+       ]
+      }
+     }
+    }
+   },
+   "a11ySkipNavigationButton": {
+    "buttonRenderer": {
+     "style": "STYLE_DEFAULT",
+     "size": "SIZE_DEFAULT",
+     "isDisabled": false,
+     "text": {
+      "runs": [
+       {
+        "text": "Skip navigation"
+       }
+      ]
+     },
+     "command": {
+      "commandMetadata": {
+       "webCommandMetadata": {
+        "sendPost": true
+       }
+      },
+      "signalServiceEndpoint": {
+       "signal": "CLIENT_SIGNAL",
+       "actions": [
+        {
+         "signalAction": {
+          "signal": "SKIP_NAVIGATION"
+         }
+        }
+       ]
+      }
+     }
+    }
+   },
+   "voiceSearchButton": {
+    "buttonRenderer": {
+     "style": "STYLE_DEFAULT",
+     "size": "SIZE_DEFAULT",
+     "isDisabled": false,
+     "serviceEndpoint": {
+      "commandMetadata": {
+       "webCommandMetadata": {
+        "sendPost": true
+       }
+      },
+      "signalServiceEndpoint": {
+       "signal": "CLIENT_SIGNAL",
+       "actions": [
+        {
+         "openPopupAction": {
+          "popup": {
+           "voiceSearchDialogRenderer": {
+            "placeholderHeader": {
+             "runs": [
+              {
+               "text": "Listening..."
+              }
+             ]
+            },
+            "promptHeader": {
+             "runs": [
+              {
+               "text": "Didn't hear that. Try again."
+              }
+             ]
+            },
+            "exampleQuery1": {
+             "runs": [
+              {
+               "text": "\"Play Dua Lipa\""
+              }
+             ]
+            },
+            "exampleQuery2": {
+             "runs": [
+              {
+               "text": "\"Show me my subscriptions\""
+              }
+             ]
+            },
+            "promptMicrophoneLabel": {
+             "runs": [
+              {
+               "text": "Tap microphone to try again"
+              }
+             ]
+            },
+            "loadingHeader": {
+             "runs": [
+              {
+               "text": "Working..."
+              }
+             ]
+            },
+            "connectionErrorHeader": {
+             "runs": [
+              {
+               "text": "No connection"
+              }
+             ]
+            },
+            "connectionErrorMicrophoneLabel": {
+             "runs": [
+              {
+               "text": "Check your connection and try again"
+              }
+             ]
+            },
+            "permissionsHeader": {
+             "runs": [
+              {
+               "text": "Waiting for permission"
+              }
+             ]
+            },
+            "permissionsSubtext": {
+             "runs": [
+              {
+               "text": "Allow microphone access to search with voice"
+              }
+             ]
+            },
+            "disabledHeader": {
+             "runs": [
+              {
+               "text": "Search with your voice"
+              }
+             ]
+            },
+            "disabledSubtext": {
+             "runs": [
+              {
+               "text": "To search by voice, go to your browser settings and allow access to microphone"
+              }
+             ]
+            },
+            "microphoneButtonAriaLabel": {
+             "runs": [
+              {
+               "text": "Cancel"
+              }
+             ]
+            },
+            "exitButton": {
+             "buttonRenderer": {
+              "style": "STYLE_DEFAULT",
+              "size": "SIZE_DEFAULT",
+              "isDisabled": false,
+              "icon": {
+               "iconType": "CLOSE"
+              },
+              "accessibilityData": {
+               "accessibilityData": {
+                "label": "Cancel"
+               }
+              }
+             }
+            },
+            "microphoneOffPromptHeader": {
+             "runs": [
+              {
+               "text": "Microphone off. Try again."
+              }
+             ]
+            }
+           }
+          },
+          "popupType": "TOP_ALIGNED_DIALOG"
+         }
+        }
+       ]
+      }
+     },
+     "icon": {
+      "iconType": "MICROPHONE_ON"
+     },
+     "tooltip": "Search with your voice",
+     "accessibilityData": {
+      "accessibilityData": {
+       "label": "Search with your voice"
+      }
+     }
+    }
+   }
+  }
+ },
+ "microformat": {
+  "microformatDataRenderer": {
+   "urlCanonical": "https://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ",
+   "title": "Marques Brownlee",
+   "description": "MKBHD: Quality Tech Videos | YouTuber | Geek | Consumer Electronics | Tech Head | Internet Personality! business@MKBHD.com NYC",
+   "thumbnail": {
+    "thumbnails": [
+     {
+      "url": "https://yt3.googleusercontent.com/qu4TmIaYUlS41-dJ9gZ7DUR3nilvmB5_11i6OKSdvNnBNiyOusZP1bMN6ICnuxtjFBb6ioKgRQ=s200-c-k-c0x00ffffff-no-rj?days_since_epoch=20744",
+      "width": 200,
+      "height": 200
+     }
+    ]
+   },
+   "siteName": "YouTube",
+   "appName": "YouTube",
+   "androidPackage": "com.google.android.youtube",
+   "iosAppStoreId": "544007664",
+   "iosAppArguments": "https://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ",
+   "ogType": "yt-fb-app:channel",
+   "urlApplinksWeb": "https://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ?feature=applinks",
+   "urlApplinksIos": "vnd.youtube://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ?feature=applinks",
+   "urlApplinksAndroid": "vnd.youtube://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ?feature=applinks",
+   "urlTwitterIos": "vnd.youtube://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ?feature=twitter-deep-link",
+   "urlTwitterAndroid": "vnd.youtube://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ?feature=twitter-deep-link",
+   "twitterCardType": "summary",
+   "twitterSiteHandle": "@YouTube",
+   "schemaDotOrgType": "http://schema.org/http://schema.org/YoutubeChannelV2",
+   "noindex": false,
+   "unlisted": false,
+   "familySafe": true,
+   "tags": [
+    "MKBHD",
+    "MarquesBrownlee",
+    "Marques",
+    "Brownlee"
+   ],
+   "availableCountries": [
+    "SB",
+    "SE",
+    "VC",
+    "MP",
+    "SL",
+    "VI",
+    "VU",
+    "HR",
+    "GI",
+    "PM",
+    "TZ",
+    "AE",
+    "MG",
+    "MS",
+    "UA",
+    "GM",
+    "WS",
+    "KN",
+    "NC",
+    "CF",
+    "PG",
+    "EG",
+    "GY",
+    "LT",
+    "BT",
+    "MO",
+    "ET",
+    "NR",
+    "GL",
+    "NZ",
+    "ZA",
+    "BG",
+    "KZ",
+    "AD",
+    "BF",
+    "NP",
+    "ME",
+    "GA",
+    "HK",
+    "CW",
+    "MC",
+    "SR",
+    "MH",
+    "AL",
+    "MR",
+    "OM",
+    "AQ",
+    "HM",
+    "SA",
+    "SK",
+    "RO",
+    "PR",
+    "HU",
+    "VA",
+    "CN",
+    "AX",
+    "HN",
+    "NF",
+    "SX",
+    "CC",
+    "SO",
+    "LB",
+    "PH",
+    "CV",
+    "QA",
+    "PY",
+    "IS",
+    "NU",
+    "AG",
+    "SY",
+    "MT",
+    "JO",
+    "MN",
+    "MU",
+    "CL",
+    "CY",
+    "GU",
+    "BJ",
+    "GD",
+    "YE",
+    "SG",
+    "CK",
+    "GH",
+    "SN",
+    "PN",
+    "BO",
+    "CH",
+    "GW",
+    "UY",
+    "CO",
+    "EH",
+    "SD",
+    "IN",
+    "AM",
+    "BA",
+    "CD",
+    "MD",
+    "FM",
+    "AW",
+    "NI",
+    "TK",
+    "BI",
+    "CZ",
+    "MM",
+    "TR",
+    "BL",
+    "CU",
+    "FO",
+    "LY",
+    "GB",
+    "TH",
+    "LS",
+    "KY",
+    "AI",
+    "LU",
+    "FK",
+    "FI",
+    "RE",
+    "PK",
+    "DJ",
+    "AR",
+    "VN",
+    "IM",
+    "KE",
+    "RU",
+    "CA",
+    "GE",
+    "MW",
+    "TG",
+    "TW",
+    "KM",
+    "JM",
+    "KW",
+    "TO",
+    "AT",
+    "ML",
+    "MV",
+    "BZ",
+    "KR",
+    "CR",
+    "PT",
+    "TM",
+    "NA",
+    "PF",
+    "TT",
+    "LC",
+    "LA",
+    "LI",
+    "PL",
+    "TV",
+    "KP",
+    "MQ",
+    "GQ",
+    "GR",
+    "IR",
+    "PE",
+    "LV",
+    "HT",
+    "TL",
+    "VG",
+    "IO",
+    "EE",
+    "SH",
+    "ST",
+    "PW",
+    "NL",
+    "BH",
+    "BQ",
+    "DM",
+    "BM",
+    "SV",
+    "TJ",
+    "CG",
+    "UG",
+    "NG",
+    "ZW",
+    "WF",
+    "AF",
+    "SZ",
+    "MY",
+    "IE",
+    "BN",
+    "TN",
+    "GT",
+    "MZ",
+    "PA",
+    "MX",
+    "KG",
+    "IL",
+    "MA",
+    "PS",
+    "TF",
+    "UM",
+    "RS",
+    "AS",
+    "BY",
+    "SJ",
+    "AO",
+    "EC",
+    "GS",
+    "CM",
+    "SS",
+    "ES",
+    "BS",
+    "KI",
+    "GF",
+    "ZM",
+    "JP",
+    "BR",
+    "MF",
+    "VE",
+    "IT",
+    "DZ",
+    "SI",
+    "AU",
+    "RW",
+    "TD",
+    "YT",
+    "CI",
+    "GG",
+    "DK",
+    "GP",
+    "KH",
+    "MK",
+    "GN",
+    "BV",
+    "TC",
+    "BE",
+    "NO",
+    "DE",
+    "ER",
+    "UZ",
+    "FR",
+    "LK",
+    "NE",
+    "DO",
+    "BB",
+    "SC",
+    "US",
+    "AZ",
+    "ID",
+    "IQ",
+    "SM",
+    "CX",
+    "JE",
+    "BD",
+    "BW",
+    "LR",
+    "FJ"
+   ],
+   "linkAlternates": [
+    {
+     "hrefUrl": "https://m.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ"
+    },
+    {
+     "hrefUrl": "android-app://com.google.android.youtube/http/youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ"
+    },
+    {
+     "hrefUrl": "ios-app://544007664/http/youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ"
+    }
+   ],
+   "channelProfileMicroformatDetails": {
+    "profilePage": {
+     "@context": "https://schema.org",
+     "@type": "ProfilePage",
+     "url": "https://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ",
+     "name": "Marques Brownlee - YouTube",
+     "description": "MKBHD: Quality Tech Videos | YouTuber | Geek | Consumer Electronics | Tech Head | Internet Personality!\n\nbusiness@MKBHD.com\n\nNYC",
+     "mainEntity": {
+      "@type": "Person",
+      "name": "Marques Brownlee",
+      "url": "https://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ",
+      "alternateName": "@mkbhd",
+      "image": "https://yt3.googleusercontent.com/qu4TmIaYUlS41-dJ9gZ7DUR3nilvmB5_11i6OKSdvNnBNiyOusZP1bMN6ICnuxtjFBb6ioKgRQ=s88-c-k-c0x00ffffff-no-rj",
+      "description": "MKBHD: Quality Tech Videos | YouTuber | Geek | Consumer Electronics | Tech Head | Internet Personality!\n\nbusiness@MKBHD.com\n\nNYC",
+      "sameAs": [
+       "http://twitter.com/MKBHD",
+       "http://instagram.com/MKBHD",
+       "http://youtube.com/c/TheStudio",
+       "http://reddit.com/r/MKBHD",
+       "http://discord.gg/MKBHD"
+      ],
+      "interactionStatistic": [
+       {
+        "@type": "InteractionCounter",
+        "interactionType": {
+         "@type": "FollowAction"
+        },
+        "userInteractionCount": "21400000"
+       }
+      ]
+     }
+    }
+   }
+  }
+ }
+}

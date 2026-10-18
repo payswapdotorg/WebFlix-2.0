@@ -701,6 +701,25 @@ export function bareChannelHandle(handle: string): string {
   return handle.replace(/^[@\s/]+/, "").trim();
 }
 
+/** REA-3B (F6) — the 2026 pageHeaderViewModel verified badge: the title's
+ * dynamicTextViewModel.text.attachmentRuns[] attach a CHECK_CIRCLE_FILLED
+ * client resource after the channel name (live-measured 2026-10-18 on
+ * @mkbhd). ONLY the filled check counts — AUDIO_BADGE (the
+ * official-artist-channel note) is a different marker and must not flip
+ * the check-mark badge. */
+function hasCheckCircleAttachment(titleText: unknown): boolean {
+  const runs = (titleText as any)?.attachmentRuns;
+  if (!Array.isArray(runs)) return false;
+  for (const run of runs) {
+    const sources = run?.element?.type?.imageType?.image?.sources;
+    for (const s of Array.isArray(sources) ? sources : []) {
+      const name = s?.clientResource?.imageName ?? s?.clientResource?.icon;
+      if (name === "CHECK_CIRCLE_FILLED") return true;
+    }
+  }
+  return false;
+}
+
 /** Map the current channel page header from a browse/SSR response. */
 export function mapChannelHeader(response: unknown): ChannelHeaderDTO | null {
   const phr = findFirst(response, "pageHeaderRenderer");
@@ -733,8 +752,15 @@ export function mapChannelHeader(response: unknown): ChannelHeaderDTO | null {
       name,
       avatarUrl: lastThumbnailUrl(phv?.image?.decoratedAvatarViewModel?.avatar?.avatarViewModel?.image),
       bannerUrl: lastThumbnailUrl(phv?.banner?.imageBannerViewModel?.image) || null,
-      verified: /verified/i.test(JSON.stringify(phv?.attribution ?? {}) ?? "") ||
-        /verified/i.test(String(phv?.rendererContext?.accessibilityContext?.label ?? "")),
+      verified:
+        /verified/i.test(JSON.stringify(phv?.attribution ?? {}) ?? "") ||
+        /verified/i.test(String(phv?.rendererContext?.accessibilityContext?.label ?? "")) ||
+        // REA-3B (F6) — the 2026 pageHeaderViewModel badge shape: the title's
+        // attachmentRuns carry a CHECK_CIRCLE_FILLED client resource (the
+        // verified check mark attached after the channel name; live-measured
+        // 2026-10-18 on @mkbhd). ONLY the check marks — AUDIO_BADGE (the
+        // official-artist note, rickastley's fixture) stays un-verified.
+        hasCheckCircleAttachment(phv?.title?.dynamicTextViewModel?.text),
       subscriberCount: parseSubscriberCount(subscriberText),
       subscriberCountText: subscriberText,
       videoCountText,
@@ -769,15 +795,21 @@ export function mapChannelHeader(response: unknown): ChannelHeaderDTO | null {
 /** Map the response's tab titles to our tab ids (Community tab = "Posts").
  * WFX2-P7-CH: YouTube's own "Membership" tab title maps to the membership
  * tab id — the channel's own tab list (same source of truth as every other
- * tab) decides the tab renders, gated on joinable in the page. */
+ * tab) decides the tab renders, gated on joinable in the page.
+ * REA-3B (F6): "Shows" and "Store" join the family — youtube.com's own tab
+ * list carries them (live-measured 2026-10-18 on @mkbhd between Live and
+ * Playlists / after Posts); the response's own tab list decides, exactly the
+ * Membership-tab precedent. */
 const TAB_TITLE_TO_ID: Record<string, ChannelTabId> = {
   Home: "home",
   Videos: "videos",
   Shorts: "shorts",
   Live: "live",
+  Shows: "shows",
   Playlists: "playlists",
   Posts: "community",
   Community: "community",
+  Store: "store",
   Membership: "membership",
 };
 

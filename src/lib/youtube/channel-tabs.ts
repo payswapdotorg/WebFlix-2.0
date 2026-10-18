@@ -53,6 +53,9 @@ import type {
   ChannelJoinDTO,
   ChannelMembershipTierDTO,
   ChannelPlaylistDTO,
+  ChannelShowDTO,
+  ChannelStoreShelfDTO,
+  ChannelStoreProductDTO,
   CommunityPostDTO,
   CommunityPollDTO,
   CommunityPollChoiceDTO,
@@ -67,26 +70,35 @@ export type { ChannelJoinDTO };
 /** Live-verified tab-param constants (full forms — the fallback family).
  * WFX2-P7-CH: "membership" has NO browse-tab param — its data rides the
  * join surface (the shared memberships-panel walk), so it is excluded here
- * and branches off in the tab route before getChannelTab. */
+ * and branches off in the tab route before getChannelTab.
+ * REA-3B (F6): "shows" and "store" join the family (live-measured
+ * 2026-10-18 on @mkbhd — gridShowRenderer rows / product-card shelves).
+ * The response's own tab param (tabParamFromResponse) is preferred; these
+ * constants are the verified fallback forms, same law as the rest. */
 export const CHANNEL_TAB_PARAMS: Record<Exclude<ChannelTabId, "home" | "about" | "membership">, string> = {
   videos: "EgZ2aWRlb3PyBgQKAjoA",
   shorts: "EgZzaG9ydHPyBgUKA5oBAA%3D%3D",
   live: "EgdzdHJlYW1z8gYECgJ6AA%3D%3D",
+  shows: "EgVzaG93c_IGBAoCYgA%3D",
   playlists: "EglwbGF5bGlzdHPyBgoKCEIGCgIQaCIA",
   community: "EgVwb3N0c_IGBAoCSgA%3D",
+  store: "EgVzdG9yZfIGBAoCGgA%3D",
 };
 
 /** Map the response's tab titles to our tab ids (Community tab = "Posts").
  * WFX2-P7-CH: "Membership" → the membership tab id, kept in lockstep with
- * mappers.ts's TAB_TITLE_TO_ID (the tab list's source of truth). */
+ * mappers.ts's TAB_TITLE_TO_ID (the tab list's source of truth).
+ * REA-3B (F6): "Shows"/"Store" in the same lockstep. */
 const TAB_TITLE_TO_ID: Record<string, ChannelTabId> = {
   Home: "home",
   Videos: "videos",
   Shorts: "shorts",
   Live: "live",
+  Shows: "shows",
   Playlists: "playlists",
   Posts: "community",
   Community: "community",
+  Store: "store",
   Membership: "membership",
 };
 /** The response-own tab param for one of our tab ids (null → fallback). */
@@ -141,6 +153,100 @@ export function mapChannelPlaylists(response: unknown, limit = 24): ChannelPlayl
     const dto = mapPlaylistLockup(l);
     if (dto) out.push(dto);
     if (out.length >= limit) break;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// REA-3B (F6) — the Shows tab (gridShowRenderer) + the Store tab
+// (shelfRenderer + verticalProductCardRenderer), live-measured 2026-10-18 on
+// @mkbhd from this egress (fixtures carry the same shapes).
+// ---------------------------------------------------------------------------
+
+/** gridShowRenderer → ChannelShowDTO (the show's own playlist target). */
+export function mapShowRenderer(s: unknown): ChannelShowDTO | null {
+  const show = s as any;
+  const title = show?.title?.simpleText ?? runsText(show?.title);
+  if (typeof title !== "string" || !title) return null;
+  // the show's target: navigationEndpoint.browseEndpoint.browseId "VL<PL…>"
+  const browseId = show?.navigationEndpoint?.browseEndpoint?.browseId;
+  const playlistId =
+    typeof browseId === "string" && browseId.startsWith("VL") ? browseId.slice(2) : "";
+  if (!playlistId) return null; // no real playlist target → the row never renders
+  const thumbs = show?.thumbnailRenderer?.showCustomThumbnailRenderer?.thumbnail?.thumbnails;
+  const thumbnailUrl =
+    Array.isArray(thumbs) && thumbs.length ? (thumbs[thumbs.length - 1].url as string) : null;
+  return {
+    playlistId,
+    title,
+    thumbnailUrl: thumbnailUrl ?? null,
+    byline: runsText(show?.shortBylineText) || runsText(show?.longBylineText) || null,
+  };
+}
+
+/** All show rows in a Shows-tab response (document order). */
+export function mapChannelShows(response: unknown, limit = 24): ChannelShowDTO[] {
+  const out: ChannelShowDTO[] = [];
+  for (const s of walkTree(response, "gridShowRenderer")) {
+    const dto = mapShowRenderer(s);
+    if (dto) out.push(dto);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/** The product card's real external merchant URL — the card's own
+ * commandExecutorCommand carries [feedbackEndpoint, …, {webCommandMetadata
+ * .url}] (measured: "https://mkbhd.com/products/overlay-deskpad?…"). The
+ * FIRST http(s) url in the command chain wins; null when none carries one
+ * (the card renders without a link — never a guessed target). */
+export function productCardUrl(card: any): string | null {
+  const commands = card?.navigationEndpoint?.commandExecutorCommand?.commands;
+  if (!Array.isArray(commands)) return null;
+  for (const cmd of commands) {
+    const url = cmd?.commandMetadata?.webCommandMetadata?.url;
+    if (typeof url === "string" && /^https?:\/\//.test(url)) return url;
+  }
+  return null;
+}
+
+/** verticalProductCardRenderer → ChannelStoreProductDTO (every field the
+ * card's own; honest nulls otherwise). */
+export function mapStoreProduct(card: unknown): ChannelStoreProductDTO | null {
+  const c = card as any;
+  const title = typeof c?.title === "string" ? c.title : "";
+  if (!title) return null;
+  const thumbs = c?.thumbnail?.thumbnails;
+  const thumbnailUrl =
+    Array.isArray(thumbs) && thumbs.length ? (thumbs[thumbs.length - 1].url as string) : null;
+  return {
+    title,
+    thumbnailUrl: thumbnailUrl ?? null,
+    price: typeof c?.price === "string" ? c.price : null,
+    priceReplacementText: typeof c?.priceReplacementText === "string" ? c.priceReplacementText : null,
+    merchantName: typeof c?.merchantName === "string" ? c.merchantName : null,
+    fromMerchantText: runsText(c?.fromMerchantText) || runsText(c?.ctaText) || null,
+    productUrl: productCardUrl(c),
+  };
+}
+
+/** The Store tab's shelves in document order — every shelfRenderer whose
+ * content carries verticalProductCardRenderer rows (horizontal or grid —
+ * both measured). Shelves without product cards are skipped (never an empty
+ * fabricated shelf). */
+export function mapChannelStore(response: unknown): ChannelStoreShelfDTO[] {
+  const out: ChannelStoreShelfDTO[] = [];
+  for (const shelf of walkTree(response, "shelfRenderer")) {
+    const products: ChannelStoreProductDTO[] = [];
+    for (const card of walkTree(shelf, "verticalProductCardRenderer")) {
+      const dto = mapStoreProduct(card);
+      if (dto) products.push(dto);
+    }
+    if (products.length === 0) continue;
+    out.push({
+      title: shelf?.title?.simpleText ?? runsText(shelf?.title) ?? null,
+      products,
+    });
   }
   return out;
 }
@@ -417,6 +523,15 @@ async function computeChannelTab(
         break;
       case "playlists":
         dto.playlists = mapChannelPlaylists(response);
+        break;
+      case "shows":
+        // REA-3B (F6) — the Shows tab's rows (gridShowRenderer); a response
+        // without show rows maps to [] (the tab's honest empty state)
+        dto.shows = mapChannelShows(response);
+        break;
+      case "store":
+        // REA-3B (F6) — the Store tab's shelves; no product cards → []
+        dto.store = mapChannelStore(response);
         break;
       case "community":
         dto.posts = mapCommunityPosts(response);

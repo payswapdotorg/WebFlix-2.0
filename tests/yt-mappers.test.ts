@@ -454,6 +454,25 @@ describe("channel_rickastley fixture → channel page", () => {
     expect(shorts.length).toBe(20);
     expect(videos[0].channel.name).toBe("Rick Astley");
   });
+
+  // REA-3B (F6) — the verified badge in the 2026 pageHeaderViewModel shape:
+  // the title's attachmentRuns client resource. Rick Astley's capture carries
+  // AUDIO_BADGE (the official-artist note) — NOT the check mark.
+  test("verified stays false for the AUDIO_BADGE attachment (the artist note is not the check)", () => {
+    expect(mapChannelHeader(response)!.verified).toBe(false);
+  });
+
+  test("REA-3B (F6) — CHECK_CIRCLE_FILLED on the title flips verified (live-measured 2026-10-18 on @mkbhd)", () => {
+    const mkbhd = load("channel_shows_mkbhd_20261018");
+    const header = mapChannelHeader(mkbhd)!;
+    expect(header.verified).toBe(true);
+    // the rest of the measured metadataRows still map
+    expect(header.handle).toBe("@mkbhd");
+    expect(header.name).toBe("Marques Brownlee");
+    expect(header.subscriberCountText).toBe("21.4M subscribers");
+    expect(header.videoCountText).toBe("1.8K videos");
+    expect(header.description).toContain("MKBHD");
+  });
 });
 
 // ---------------------------------------------------------------------------

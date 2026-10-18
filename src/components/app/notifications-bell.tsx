@@ -125,9 +125,13 @@ export function NotificationsBell() {
             />
           )}
           {authed && data?.loginRequired && (
-            <p className="px-4 py-6 text-center text-sm text-muted-foreground">
-              Notifications are personal — sign in (configure the YouTube session) to read
-              them. Empty is also valid when the account has none.
+            /* REA-3B (F7) — the HistoryUnavailableNote law (compact form):
+             * NEVER a "sign in" ask to the signed-in viewer; the missing
+             * YT session is operator-side (the guest ask belongs to the
+             * signed-out screen above). */
+            <p className="px-4 py-6 text-center text-sm text-muted-foreground" role="status">
+              Notifications are unavailable right now — the YouTube session
+              {data.session ? " is connected but didn't serve them." : " isn't connected to this deployment yet."}
             </p>
           )}
           {!data?.loginRequired && (data?.items ?? []).length === 0 && (

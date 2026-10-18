@@ -307,6 +307,49 @@ describe("P18 — the feed header's grid/list switcher", () => {
   });
 });
 
+describe("F5 — the signed-in loginRequired state (the HistoryUnavailableNote law)", () => {
+  test("no YT session → the honest unavailable note, NEVER a 'Sign in …' ask (the viewer is signed in)", async () => {
+    feedData = {
+      channels: [],
+      videos: [],
+      nextCursor: null,
+      loginRequired: true,
+      session: false,
+    };
+    await render(createElement(SubscriptionsPage));
+    const text = host!.textContent ?? "";
+    expect(text).toContain("Your subscriptions feed is unavailable right now");
+    expect(text).toContain("No YouTube session is connected to this deployment yet");
+    expect(text).toContain("your WebFlix sign-in is fine");
+    // THE LAW: the sign-in ask belongs to the GUEST gate only — youtube.com
+    // never asks a signed-in viewer to sign in again.
+    expect(text).not.toContain("Sign in to see your subscriptions feed");
+    // the honest empty-state line does not ride this state either
+    expect(text).not.toContain("No subscriptions surfaced");
+    // the history idiom: role=status (a status note), never role=alert
+    expect(all('[role="status"]').length).toBeGreaterThan(0);
+    expect(all('[role="alert"]').length).toBe(0);
+    // the feed header chrome (the layout switcher) stays mounted — the state
+    // note owns the CONTENT, not the header
+    expect(all('[data-testid="subs-layout-toggle"]').length).toBe(1);
+  });
+
+  test("session connected but the read not served → the connected-but-unavailable copy (honest divergence)", async () => {
+    feedData = {
+      channels: [],
+      videos: [],
+      nextCursor: null,
+      loginRequired: true,
+      session: true,
+    };
+    await render(createElement(SubscriptionsPage));
+    const text = host!.textContent ?? "";
+    expect(text).toContain("The YouTube session is connected but didn't serve your subscriptions feed");
+    expect(text).not.toContain("No YouTube session is connected");
+    expect(text).not.toContain("Sign in to see your subscriptions feed");
+  });
+});
+
 describe("P18 — the list row (YouTube's subscription list-row shape)", () => {
   async function renderList() {
     feedData = FEED;

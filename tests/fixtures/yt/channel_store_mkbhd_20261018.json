@@ -1,0 +1,3452 @@
+{
+ "responseContext": {
+  "visitorData": "CgttNlZUWGRUbjRUMCiCp9TWBjIKCgJISxIEGgAgHw%3D%3D",
+  "serviceTrackingParams": [
+   {
+    "service": "GFEEDBACK",
+    "params": [
+     {
+      "key": "browse_id",
+      "value": "UCBJycsmduvYEL83R_U4JriQ"
+     },
+     {
+      "key": "browse_id_prefix",
+      "value": ""
+     },
+     {
+      "key": "route",
+      "value": "channel.store"
+     },
+     {
+      "key": "is_owner",
+      "value": "false"
+     },
+     {
+      "key": "is_alc_surface",
+      "value": "false"
+     },
+     {
+      "key": "logged_in",
+      "value": "0"
+     },
+     {
+      "key": "visitor_data",
+      "value": "CgttNlZUWGRUbjRUMCiCp9TWBjIKCgJISxIEGgAgHw%3D%3D"
+     }
+    ]
+   },
+   {
+    "service": "GOOGLE_HELP",
+    "params": [
+     {
+      "key": "browse_id",
+      "value": "UCBJycsmduvYEL83R_U4JriQ"
+     },
+     {
+      "key": "browse_id_prefix",
+      "value": ""
+     }
+    ]
+   },
+   {
+    "service": "CSI",
+    "params": [
+     {
+      "key": "c",
+      "value": "WEB"
+     },
+     {
+      "key": "cver",
+      "value": "2.20260925.08.00"
+     },
+     {
+      "key": "yt_li",
+      "value": "0"
+     },
+     {
+      "key": "GetChannelPage_rid",
+      "value": "0xbccd54a71af4d04c"
+     }
+    ]
+   },
+   {
+    "service": "GUIDED_HELP",
+    "params": [
+     {
+      "key": "logged_in",
+      "value": "0"
+     }
+    ]
+   },
+   {
+    "service": "ECATCHER",
+    "params": [
+     {
+      "key": "client.version",
+      "value": "2.20260925"
+     },
+     {
+      "key": "client.name",
+      "value": "WEB"
+     }
+    ]
+   }
+  ],
+  "maxAgeSeconds": 300,
+  "mainAppWebResponseContext": {
+   "loggedOut": true,
+   "trackingParam": "k5_fmPxhoXZRCNoX-f_T9X-MmODzwBLr5GzEkwgX0fb8we7UPjhAz030lwRMkusEmIBwOcCw59TLtslLKPQGSS"
+  },
+  "responseId": "IhMI_Ka_x5zElwMV_Og0Bx1WDRje",
+  "webResponseContextExtensionData": {
+   "webResponseContextPreloadData": {
+    "preloadMessageNames": [
+     "pageHeaderRenderer",
+     "pageHeaderViewModel",
+     "imageBannerViewModel",
+     "dynamicTextViewModel",
+     "decoratedAvatarViewModel",
+     "avatarViewModel",
+     "contentMetadataViewModel",
+     "flexibleActionsViewModel",
+     "buttonViewModel",
+     "modalWithTitleAndButtonRenderer",
+     "buttonRenderer",
+     "descriptionPreviewViewModel",
+     "engagementPanelSectionListRenderer",
+     "engagementPanelTitleHeaderRenderer",
+     "sectionListRenderer",
+     "itemSectionRenderer",
+     "continuationItemRenderer",
+     "attributionViewModel",
+     "channelMetadataRenderer",
+     "twoColumnBrowseResultsRenderer",
+     "tabRenderer",
+     "shelfRenderer",
+     "menuRenderer",
+     "menuPopupRenderer",
+     "menuServiceItemRenderer",
+     "fancyDismissibleDialogRenderer",
+     "horizontalListRenderer",
+     "verticalProductCardRenderer",
+     "gridRenderer",
+     "expandableTabRenderer",
+     "desktopTopbarRenderer",
+     "topbarLogoRenderer",
+     "fusionSearchboxRenderer",
+     "dialogViewModel",
+     "dialogHeaderViewModel",
+     "panelFooterViewModel",
+     "basicContentViewModel",
+     "topbarMenuButtonRenderer",
+     "multiPageMenuRenderer",
+     "hotkeyDialogRenderer",
+     "hotkeyDialogSectionRenderer",
+     "hotkeyDialogSectionOptionRenderer",
+     "voiceSearchDialogRenderer",
+     "microformatDataRenderer"
+    ]
+   },
+   "hasDecorated": true
+  }
+ },
+ "contents": {
+  "twoColumnBrowseResultsRenderer": {
+   "tabs": [
+    {
+     "tabRenderer": {
+      "endpoint": {
+       "commandMetadata": {
+        "webCommandMetadata": {
+         "url": "/@mkbhd/featured",
+         "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+         "rootVe": 3611,
+         "apiUrl": "/youtubei/v1/browse"
+        }
+       },
+       "browseEndpoint": {
+        "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+        "params": "EghmZWF0dXJlZPIGBAoCMgA%3D",
+        "canonicalBaseUrl": "/@mkbhd"
+       }
+      },
+      "title": "Home"
+     }
+    },
+    {
+     "tabRenderer": {
+      "endpoint": {
+       "commandMetadata": {
+        "webCommandMetadata": {
+         "url": "/@mkbhd/videos",
+         "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+         "rootVe": 3611,
+         "apiUrl": "/youtubei/v1/browse"
+        }
+       },
+       "browseEndpoint": {
+        "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+        "params": "EgZ2aWRlb3PyBgQKAjoA",
+        "canonicalBaseUrl": "/@mkbhd"
+       }
+      },
+      "title": "Videos"
+     }
+    },
+    {
+     "tabRenderer": {
+      "endpoint": {
+       "commandMetadata": {
+        "webCommandMetadata": {
+         "url": "/@mkbhd/shorts",
+         "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+         "rootVe": 3611,
+         "apiUrl": "/youtubei/v1/browse"
+        }
+       },
+       "browseEndpoint": {
+        "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+        "params": "EgZzaG9ydHPyBgUKA5oBAA%3D%3D",
+        "canonicalBaseUrl": "/@mkbhd"
+       }
+      },
+      "title": "Shorts"
+     }
+    },
+    {
+     "tabRenderer": {
+      "endpoint": {
+       "commandMetadata": {
+        "webCommandMetadata": {
+         "url": "/@mkbhd/streams",
+         "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+         "rootVe": 3611,
+         "apiUrl": "/youtubei/v1/browse"
+        }
+       },
+       "browseEndpoint": {
+        "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+        "params": "EgdzdHJlYW1z8gYECgJ6AA%3D%3D",
+        "canonicalBaseUrl": "/@mkbhd"
+       }
+      },
+      "title": "Live"
+     }
+    },
+    {
+     "tabRenderer": {
+      "endpoint": {
+       "commandMetadata": {
+        "webCommandMetadata": {
+         "url": "/@mkbhd/shows",
+         "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+         "rootVe": 3611,
+         "apiUrl": "/youtubei/v1/browse"
+        }
+       },
+       "browseEndpoint": {
+        "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+        "params": "EgVzaG93c_IGBAoCYgA%3D",
+        "canonicalBaseUrl": "/@mkbhd"
+       }
+      },
+      "title": "Shows"
+     }
+    },
+    {
+     "tabRenderer": {
+      "endpoint": {
+       "commandMetadata": {
+        "webCommandMetadata": {
+         "url": "/@mkbhd/playlists",
+         "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+         "rootVe": 3611,
+         "apiUrl": "/youtubei/v1/browse"
+        }
+       },
+       "browseEndpoint": {
+        "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+        "params": "EglwbGF5bGlzdHPyBgoKCEIGCgIQaCIA",
+        "canonicalBaseUrl": "/@mkbhd"
+       }
+      },
+      "title": "Playlists"
+     }
+    },
+    {
+     "tabRenderer": {
+      "endpoint": {
+       "commandMetadata": {
+        "webCommandMetadata": {
+         "url": "/@mkbhd/posts",
+         "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+         "rootVe": 3611,
+         "apiUrl": "/youtubei/v1/browse"
+        }
+       },
+       "browseEndpoint": {
+        "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+        "params": "EgVwb3N0c_IGBAoCSgA%3D",
+        "canonicalBaseUrl": "/@mkbhd"
+       }
+      },
+      "title": "Posts"
+     }
+    },
+    {
+     "tabRenderer": {
+      "endpoint": {
+       "commandMetadata": {
+        "webCommandMetadata": {
+         "url": "/@mkbhd/store",
+         "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+         "rootVe": 3611,
+         "apiUrl": "/youtubei/v1/browse"
+        }
+       },
+       "browseEndpoint": {
+        "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+        "params": "EgVzdG9yZfIGBAoCGgA%3D",
+        "canonicalBaseUrl": "/@mkbhd"
+       }
+      },
+      "title": "Store",
+      "selected": true,
+      "content": {
+       "sectionListRenderer": {
+        "contents": [
+         {
+          "itemSectionRenderer": {
+           "contents": [
+            {
+             "shelfRenderer": {
+              "title": {
+               "simpleText": "Just dropped"
+              },
+              "content": {
+               "horizontalListRenderer": {
+                "items": [
+                 {
+                  "verticalProductCardRenderer": {
+                   "title": "Overlay Deskpad",
+                   "thumbnail": {
+                    "thumbnails": [
+                     {
+                      "url": "https://encrypted-tbn2.gstatic.com/shopping?q=tbn:ANd9GcRhZA7ZQ3l62zv6DiugvovJs_q_A2FxYPBWwjSa1Q0_azMc_B67wwvj4Vs7P2s",
+                      "width": 385,
+                      "height": 512
+                     }
+                    ]
+                   },
+                   "navigationEndpoint": {
+                    "commandExecutorCommand": {
+                     "commands": [
+                      {
+                       "commandMetadata": {
+                        "webCommandMetadata": {
+                         "sendPost": true,
+                         "apiUrl": "/youtubei/v1/feedback"
+                        }
+                       },
+                       "feedbackEndpoint": {}
+                      },
+                      {
+                       "commandMetadata": {
+                        "webCommandMetadata": {
+                         "url": "https://mkbhd.com/products/overlay-deskpad?variant=3a68587d-6100-4e2a-a965-64e03297d23f&utm_content=YT3-tt4G98LOwCFclN6e0RuRBF0EY1QvL24prkYW9Z7cY30T4WMRlBNUQkXDJgklW-LfHeE97vurNmnJrEsJRbbizmV-4jA_7_nFO_cF2MDtnE3zVEecvTQ&utm_term=UCBJycsmduvYEL83R_U4JriQ&utm_medium=product_shelf&utm_source=youtube",
+                         "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                         "rootVe": 83769
+                        }
+                       },
+                       "urlEndpoint": {
+                        "url": "https://mkbhd.com/products/overlay-deskpad?variant=3a68587d-6100-4e2a-a965-64e03297d23f&utm_content=YT3-tt4G98LOwCFclN6e0RuRBF0EY1QvL24prkYW9Z7cY30T4WMRlBNUQkXDJgklW-LfHeE97vurNmnJrEsJRbbizmV-4jA_7_nFO_cF2MDtnE3zVEecvTQ&utm_term=UCBJycsmduvYEL83R_U4JriQ&utm_medium=product_shelf&utm_source=youtube",
+                        "target": "TARGET_NEW_WINDOW"
+                       }
+                      }
+                     ]
+                    }
+                   },
+                   "price": "HK$227.60",
+                   "accessibilityTitle": "Overlay Deskpad, Out of stock , from MKBHD",
+                   "merchantName": "MKBHD",
+                   "fromMerchantText": "From MKBHD",
+                   "showOpenInNewIcon": true,
+                   "useNewStyle": false,
+                   "dealsData": {
+                    "currentPrice": "HK$227.60"
+                   },
+                   "ctaText": {
+                    "runs": [
+                     {
+                      "text": "From MKBHD"
+                     }
+                    ]
+                   },
+                   "ctaStyle": "VERTICAL_PRODUCT_CARD_CTA_STYLE_FROM_VENDOR",
+                   "layoutStyle": "VERTICAL_PRODUCT_CARD_LAYOUT_STYLE_HORIZONTAL_SHELF",
+                   "priceReplacementText": "Out of stock"
+                  }
+                 },
+                 {
+                  "verticalProductCardRenderer": {
+                   "title": "Ridge Power Bank - 10k mAh - Burgundy",
+                   "thumbnail": {
+                    "thumbnails": [
+                     {
+                      "url": "https://encrypted-tbn0.gstatic.com/shopping?q=tbn:ANd9GcQlQumDsQ-4zDAuUzZituciz6ggucyaV6qzme0GehGUylEdKt5ASOgg48z5fTPLVYZxfoAXB4o",
+                      "width": 512,
+                      "height": 512
+                     }
+                    ]
+                   },
+                   "navigationEndpoint": {
+                    "commandExecutorCommand": {
+                     "commands": [
+                      {
+                       "commandMetadata": {
+                        "webCommandMetadata": {
+                         "sendPost": true,
+                         "apiUrl": "/youtubei/v1/feedback"
+                        }
+                       },
+                       "feedbackEndpoint": {}
+                      },
+                      {
+                       "commandMetadata": {
+                        "webCommandMetadata": {
+                         "url": "https://ridge.com/products/magnetic-power-bank-burgundy?variant=44012362334282&country=US&currency=USD&utm_campaign=sag_organic&nbt=nb:partnership::YTShoppingShelf::&srsltid=AU7gw4XDITP3ERcFHtM3681Xu4mlB7LaltzG1E0k-DSPt2hwPds6NnRTMew&utm_content=YT3-oqButzBHvoPmAGEYQqR0f7bm1Wwp5cc0flBTBMppg1Nv8FdVDWoye9wfFun5280CaxwLh3Ivd6zr6a0HZAtYK2Wmn8PDxrINWWlnxaS10ZE95kg7RnQ&utm_term=UCBJycsmduvYEL83R_U4JriQ&utm_medium=product_shelf&utm_source=youtube",
+                         "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                         "rootVe": 83769
+                        }
+                       },
+                       "urlEndpoint": {
+                        "url": "https://ridge.com/products/magnetic-power-bank-burgundy?variant=44012362334282&country=US&currency=USD&utm_campaign=sag_organic&nbt=nb:partnership::YTShoppingShelf::&srsltid=AU7gw4XDITP3ERcFHtM3681Xu4mlB7LaltzG1E0k-DSPt2hwPds6NnRTMew&utm_content=YT3-oqButzBHvoPmAGEYQqR0f7bm1Wwp5cc0flBTBMppg1Nv8FdVDWoye9wfFun5280CaxwLh3Ivd6zr6a0HZAtYK2Wmn8PDxrINWWlnxaS10ZE95kg7RnQ&utm_term=UCBJycsmduvYEL83R_U4JriQ&utm_medium=product_shelf&utm_source=youtube",
+                        "target": "TARGET_NEW_WINDOW"
+                       }
+                      }
+                     ]
+                    }
+                   },
+                   "price": "HK$620.01",
+                   "accessibilityTitle": "Ridge Power Bank - 10k mAh - Burgundy, Unavailable , from The Ridge",
+                   "merchantName": "The Ridge",
+                   "fromMerchantText": "From The Ridge",
+                   "showOpenInNewIcon": true,
+                   "useNewStyle": false,
+                   "dealsData": {
+                    "currentPrice": "HK$620.01"
+                   },
+                   "ctaText": {
+                    "runs": [
+                     {
+                      "text": "From The Ridge"
+                     }
+                    ]
+                   },
+                   "ctaStyle": "VERTICAL_PRODUCT_CARD_CTA_STYLE_FROM_VENDOR",
+                   "layoutStyle": "VERTICAL_PRODUCT_CARD_LAYOUT_STYLE_HORIZONTAL_SHELF",
+                   "priceReplacementText": "Unavailable"
+                  }
+                 }
+                ],
+                "visibleItemCount": 2,
+                "nextButton": {
+                 "buttonRenderer": {
+                  "style": "STYLE_DEFAULT",
+                  "size": "SIZE_DEFAULT",
+                  "isDisabled": false,
+                  "icon": {
+                   "iconType": "CHEVRON_RIGHT"
+                  },
+                  "accessibility": {
+                   "label": "Next"
+                  }
+                 }
+                },
+                "previousButton": {
+                 "buttonRenderer": {
+                  "style": "STYLE_DEFAULT",
+                  "size": "SIZE_DEFAULT",
+                  "isDisabled": false,
+                  "icon": {
+                   "iconType": "CHEVRON_LEFT"
+                  },
+                  "accessibility": {
+                   "label": "Previous"
+                  }
+                 }
+                }
+               }
+              },
+              "menu": {
+               "menuRenderer": {
+                "topLevelButtons": [
+                 {
+                  "buttonRenderer": {
+                   "icon": {
+                    "iconType": "MORE_VERT"
+                   },
+                   "command": {
+                    "openPopupAction": {
+                     "popup": {
+                      "menuPopupRenderer": {
+                       "items": [
+                        {
+                         "menuServiceItemRenderer": {
+                          "text": {
+                           "accessibility": {
+                            "accessibilityData": {
+                             "label": "About products and commissions"
+                            }
+                           },
+                           "simpleText": "About products and commissions"
+                          },
+                          "icon": {
+                           "iconType": "HELP"
+                          },
+                          "serviceEndpoint": {
+                           "openPopupAction": {
+                            "popup": {
+                             "fancyDismissibleDialogRenderer": {
+                              "dialogMessage": {
+                               "runs": [
+                                {
+                                 "text": "Product(s) listed here are based on products mentioned in the video you are watching or Shopping Collections or from your past activity while signed in to YouTube, including product(s) you search for, products mentioned in video(s) or related product(s). ",
+                                 "textColor": 4279440147
+                                },
+                                {
+                                 "text": "Learn more",
+                                 "navigationEndpoint": {
+                                  "commandMetadata": {
+                                   "webCommandMetadata": {
+                                    "url": "https://support.google.com/youtube/answer/12257682?nohelpkit=1",
+                                    "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                                    "rootVe": 83769
+                                   }
+                                  },
+                                  "urlEndpoint": {
+                                   "url": "https://support.google.com/youtube/answer/12257682?nohelpkit=1",
+                                   "target": "TARGET_NEW_WINDOW"
+                                  }
+                                 }
+                                },
+                                {
+                                 "text": "\n\nProduct information and final pricing are determined by merchants and may change. You may be charged additional fees, such as shipping and handling fees, which may vary. Click on the products below or visit the merchant’s store for more information, including product availability, the final price that you will be charged by the merchant, and to make a purchase. Prices include VAT where applicable.\n\nProducts marked as ‘channel exclusive’ are listings that a merchant has shared exclusively with a specific YouTube channel. These products are discounted and/or time-limited subject to terms and conditions of the merchant. The merchant determines and is responsible for the final price and conditions of purchase, including but not limited to, warnings, recalls, disclaimers and usage information. ",
+                                 "textColor": 4279440147
+                                },
+                                {
+                                 "text": "Learn more",
+                                 "navigationEndpoint": {
+                                  "commandMetadata": {
+                                   "webCommandMetadata": {
+                                    "url": "https://support.google.com/youtube/answer/12257682?nohelpkit=1",
+                                    "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                                    "rootVe": 83769
+                                   }
+                                  },
+                                  "urlEndpoint": {
+                                   "url": "https://support.google.com/youtube/answer/12257682?nohelpkit=1",
+                                   "target": "TARGET_NEW_WINDOW"
+                                  }
+                                 }
+                                },
+                                {
+                                 "text": "\n\nYouTube is not responsible for merchant products or for the product information provided by merchants. YouTube is also not responsible for your activities and purchases made from merchants (including through the links below) which are governed by the respective merchant's terms and conditions (including their Privacy Policy). YouTube may share information with our partners to perform services, in compliance with our Privacy Policy and other appropriate confidentiality and security measures. For instance, YouTube may share your IP address with the merchant platform to facilitate the transaction. Product reviews are available in select locations only and are not verified by Google. ",
+                                 "textColor": 4279440147
+                                },
+                                {
+                                 "text": "Learn more",
+                                 "navigationEndpoint": {
+                                  "commandMetadata": {
+                                   "webCommandMetadata": {
+                                    "url": "https://support.google.com/googleshopping/answer/9370999?nohelpkit=1",
+                                    "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                                    "rootVe": 83769
+                                   }
+                                  },
+                                  "urlEndpoint": {
+                                   "url": "https://support.google.com/googleshopping/answer/9370999?nohelpkit=1",
+                                   "target": "TARGET_NEW_WINDOW"
+                                  }
+                                 }
+                                },
+                                {
+                                 "text": "\n\nThe just dropped shelf highlights merchandise recently added to this creator's store. Products remain in this section for up to 45 days from when they're added to YouTube, with the most recent items appearing first. Availability may vary, and items are removed once they sell out.",
+                                 "textColor": 4279440147
+                                }
+                               ]
+                              },
+                              "confirmLabel": {
+                               "simpleText": "OK"
+                              }
+                             }
+                            },
+                            "popupType": "DIALOG"
+                           }
+                          }
+                         }
+                        },
+                        {
+                         "menuServiceItemRenderer": {
+                          "text": {
+                           "accessibility": {
+                            "accessibilityData": {
+                             "label": "Report listing"
+                            }
+                           },
+                           "simpleText": "Report listing"
+                          },
+                          "icon": {
+                           "iconType": "FLAG"
+                          },
+                          "serviceEndpoint": {
+                           "commandMetadata": {
+                            "webCommandMetadata": {
+                             "url": "https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den&hl=en",
+                             "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                             "rootVe": 83769
+                            }
+                           },
+                           "signInEndpoint": {
+                            "nextEndpoint": {
+                             "commandMetadata": {
+                              "webCommandMetadata": {
+                               "sendPost": true,
+                               "apiUrl": "/youtubei/v1/flag/get_form"
+                              }
+                             },
+                             "getReportFormEndpoint": {
+                              "params": "ygEIc2hvcHBpbmfQAQ7iAfICCqkBCj0KBwoFTUtCSEQKAwoBLAoDCgEgChEKD092ZXJsYXkgRGVza3BhZAoDCgEsCgMKASAKCwoJSEskMjI3LjYwGmhCMWlCdUFBQUFBQUNBZ0lDd0R3QUFBY0NOdHdFQUlBQTRBWUlCRUhsdmRYUjFZbVV0YzJodmNIQnBibWV5QVJONWIzVjBkV0psTFhOb2IzQndhVzVuTFRGdzRCS2l1WVhTNUlqZjQwMArDAQpXCgsKCVRoZSBSaWRnZQoDCgEsCgMKASAKJwolUmlkZ2UgUG93ZXIgQmFuayAtIDEwayBtQWggLSBCdXJndW5keQoDCgEsCgMKASAKCwoJSEskNjIwLjAxGmhCdG9sNkFBQUFBQUNBZ0lDd0R3QUFBY0NOdHdFQUlBQTRBWUlCRUhsdmRYUjFZbVV0YzJodmNIQnBibWV5QVJONWIzVjBkV0psTFhOb2IzQndhVzVuTFRGdzRCS0o1WjZxcFpUXzhpVQ%3D%3D"
+                             }
+                            }
+                           }
+                          },
+                          "loggingDirectives": {
+                           "visibility": {
+                            "types": "15"
+                           },
+                           "gestures": {
+                            "types": "4"
+                           }
+                          }
+                         }
+                        }
+                       ],
+                       "menuPopupAccessibility": {
+                        "label": "Actions menu"
+                       }
+                      }
+                     },
+                     "popupType": "DROPDOWN"
+                    }
+                   }
+                  }
+                 }
+                ]
+               }
+              },
+              "minColumnCount": 2
+             }
+            }
+           ]
+          }
+         },
+         {
+          "itemSectionRenderer": {
+           "contents": [
+            {
+             "shelfRenderer": {
+              "title": {
+               "simpleText": "Featured"
+              },
+              "content": {
+               "gridRenderer": {
+                "items": [
+                 {
+                  "verticalProductCardRenderer": {
+                   "title": "Ridge Power Bank - 10k mAh - Burgundy",
+                   "thumbnail": {
+                    "thumbnails": [
+                     {
+                      "url": "https://encrypted-tbn0.gstatic.com/shopping?q=tbn:ANd9GcQlQumDsQ-4zDAuUzZituciz6ggucyaV6qzme0GehGUylEdKt5ASOgg48z5fTPLVYZxfoAXB4o",
+                      "width": 512,
+                      "height": 512
+                     }
+                    ]
+                   },
+                   "navigationEndpoint": {
+                    "commandExecutorCommand": {
+                     "commands": [
+                      {
+                       "commandMetadata": {
+                        "webCommandMetadata": {
+                         "sendPost": true,
+                         "apiUrl": "/youtubei/v1/feedback"
+                        }
+                       },
+                       "feedbackEndpoint": {}
+                      },
+                      {
+                       "commandMetadata": {
+                        "webCommandMetadata": {
+                         "url": "https://ridge.com/products/magnetic-power-bank-burgundy?variant=44012362334282&country=US&currency=USD&utm_campaign=sag_organic&nbt=nb:partnership::YTShoppingShelf::&srsltid=AU7gw4XDITP3ERcFHtM3681Xu4mlB7LaltzG1E0k-DSPt2hwPds6NnRTMew&utm_content=YT3-oqButzBHvoPmAGEYQqR0f7bm1Wwp5cc0flBTBMppg1Nv8FdVDWoye9wfFun5280CaxwLh3Ivd6zr6a0HZAtYK2Wmn8PDxrINWWlnxaS10ZE95kg7RnQ&utm_term=UCBJycsmduvYEL83R_U4JriQ&utm_medium=product_shelf&utm_source=youtube",
+                         "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                         "rootVe": 83769
+                        }
+                       },
+                       "urlEndpoint": {
+                        "url": "https://ridge.com/products/magnetic-power-bank-burgundy?variant=44012362334282&country=US&currency=USD&utm_campaign=sag_organic&nbt=nb:partnership::YTShoppingShelf::&srsltid=AU7gw4XDITP3ERcFHtM3681Xu4mlB7LaltzG1E0k-DSPt2hwPds6NnRTMew&utm_content=YT3-oqButzBHvoPmAGEYQqR0f7bm1Wwp5cc0flBTBMppg1Nv8FdVDWoye9wfFun5280CaxwLh3Ivd6zr6a0HZAtYK2Wmn8PDxrINWWlnxaS10ZE95kg7RnQ&utm_term=UCBJycsmduvYEL83R_U4JriQ&utm_medium=product_shelf&utm_source=youtube",
+                        "target": "TARGET_NEW_WINDOW"
+                       }
+                      }
+                     ]
+                    }
+                   },
+                   "price": "HK$620.01",
+                   "accessibilityTitle": "Ridge Power Bank - 10k mAh - Burgundy, Unavailable , from The Ridge",
+                   "merchantName": "The Ridge",
+                   "fromMerchantText": "From The Ridge",
+                   "showOpenInNewIcon": true,
+                   "useNewStyle": false,
+                   "dealsData": {
+                    "currentPrice": "HK$620.01"
+                   },
+                   "ctaText": {
+                    "runs": [
+                     {
+                      "text": "From The Ridge"
+                     }
+                    ]
+                   },
+                   "ctaStyle": "VERTICAL_PRODUCT_CARD_CTA_STYLE_FROM_VENDOR",
+                   "layoutStyle": "VERTICAL_PRODUCT_CARD_LAYOUT_STYLE_DEFAULT",
+                   "priceReplacementText": "Unavailable"
+                  }
+                 },
+                 {
+                  "verticalProductCardRenderer": {
+                   "title": "Overlay Deskpad",
+                   "thumbnail": {
+                    "thumbnails": [
+                     {
+                      "url": "https://encrypted-tbn2.gstatic.com/shopping?q=tbn:ANd9GcRhZA7ZQ3l62zv6DiugvovJs_q_A2FxYPBWwjSa1Q0_azMc_B67wwvj4Vs7P2s",
+                      "width": 385,
+                      "height": 512
+                     }
+                    ]
+                   },
+                   "navigationEndpoint": {
+                    "commandExecutorCommand": {
+                     "commands": [
+                      {
+                       "commandMetadata": {
+                        "webCommandMetadata": {
+                         "sendPost": true,
+                         "apiUrl": "/youtubei/v1/feedback"
+                        }
+                       },
+                       "feedbackEndpoint": {}
+                      },
+                      {
+                       "commandMetadata": {
+                        "webCommandMetadata": {
+                         "url": "https://mkbhd.com/products/overlay-deskpad?variant=3a68587d-6100-4e2a-a965-64e03297d23f&utm_content=YT3-tt4G98LOwCFclN6e0RuRBF0EY1QvL24prkYW9Z7cY30T4WMRlBNUQkXDJgklW-LfHeE97vurNmnJrEsJRbbizmV-4jA_7_nFO_cF2MDtnE3zVEecvTQ&utm_term=UCBJycsmduvYEL83R_U4JriQ&utm_medium=product_shelf&utm_source=youtube",
+                         "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                         "rootVe": 83769
+                        }
+                       },
+                       "urlEndpoint": {
+                        "url": "https://mkbhd.com/products/overlay-deskpad?variant=3a68587d-6100-4e2a-a965-64e03297d23f&utm_content=YT3-tt4G98LOwCFclN6e0RuRBF0EY1QvL24prkYW9Z7cY30T4WMRlBNUQkXDJgklW-LfHeE97vurNmnJrEsJRbbizmV-4jA_7_nFO_cF2MDtnE3zVEecvTQ&utm_term=UCBJycsmduvYEL83R_U4JriQ&utm_medium=product_shelf&utm_source=youtube",
+                        "target": "TARGET_NEW_WINDOW"
+                       }
+                      }
+                     ]
+                    }
+                   },
+                   "price": "HK$227.60",
+                   "accessibilityTitle": "Overlay Deskpad, Out of stock , from MKBHD",
+                   "merchantName": "MKBHD",
+                   "fromMerchantText": "From MKBHD",
+                   "showOpenInNewIcon": true,
+                   "useNewStyle": false,
+                   "dealsData": {
+                    "currentPrice": "HK$227.60"
+                   },
+                   "ctaText": {
+                    "runs": [
+                     {
+                      "text": "From MKBHD"
+                     }
+                    ]
+                   },
+                   "ctaStyle": "VERTICAL_PRODUCT_CARD_CTA_STYLE_FROM_VENDOR",
+                   "layoutStyle": "VERTICAL_PRODUCT_CARD_LAYOUT_STYLE_DEFAULT",
+                   "priceReplacementText": "Out of stock"
+                  }
+                 },
+                 {
+                  "verticalProductCardRenderer": {
+                   "title": "Color Picker Sticker Pack",
+                   "thumbnail": {
+                    "thumbnails": [
+                     {
+                      "url": "https://encrypted-tbn0.gstatic.com/shopping?q=tbn:ANd9GcRNRwQiEWb_iayuG7fUVXbRJzfkbGsJKCyhbY7Fx2WZLLLyL9Q5uCgxa3N4gSA",
+                      "width": 385,
+                      "height": 512
+                     }
+                    ]
+                   },
+                   "navigationEndpoint": {
+                    "commandExecutorCommand": {
+                     "commands": [
+                      {
+                       "commandMetadata": {
+                        "webCommandMetadata": {
+                         "sendPost": true,
+                         "apiUrl": "/youtubei/v1/feedback"
+                        }
+                       },
+                       "feedbackEndpoint": {}
+                      },
+                      {
+                       "commandMetadata": {
+                        "webCommandMetadata": {
+                         "url": "https://mkbhd.com/products/color-picker-sticker-pack?variant=9609cbf3-c6f6-44e4-9b34-55fc4feaf34a&utm_content=YT3-8t7xoxWnQXEHsDBPR2illUmuv_XPxyKGz5VzCDUFQrNRY9DKD74XU6PfQNNbARIWkQ-quri4EY8Bnj_Ow-1_J3cceey3c0yhNwlv5kdJpkG6U3XpqiU&utm_term=UCBJycsmduvYEL83R_U4JriQ&utm_medium=product_shelf&utm_source=youtube",
+                         "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                         "rootVe": 83769
+                        }
+                       },
+                       "urlEndpoint": {
+                        "url": "https://mkbhd.com/products/color-picker-sticker-pack?variant=9609cbf3-c6f6-44e4-9b34-55fc4feaf34a&utm_content=YT3-8t7xoxWnQXEHsDBPR2illUmuv_XPxyKGz5VzCDUFQrNRY9DKD74XU6PfQNNbARIWkQ-quri4EY8Bnj_Ow-1_J3cceey3c0yhNwlv5kdJpkG6U3XpqiU&utm_term=UCBJycsmduvYEL83R_U4JriQ&utm_medium=product_shelf&utm_source=youtube",
+                        "target": "TARGET_NEW_WINDOW"
+                       }
+                      }
+                     ]
+                    }
+                   },
+                   "price": "HK$62.79",
+                   "accessibilityTitle": "Color Picker Sticker Pack, HK$62.79 , from MKBHD",
+                   "merchantName": "MKBHD",
+                   "fromMerchantText": "From MKBHD",
+                   "showOpenInNewIcon": true,
+                   "useNewStyle": false,
+                   "dealsData": {
+                    "currentPrice": "HK$62.79"
+                   },
+                   "ctaText": {
+                    "runs": [
+                     {
+                      "text": "From MKBHD"
+                     }
+                    ]
+                   },
+                   "ctaStyle": "VERTICAL_PRODUCT_CARD_CTA_STYLE_FROM_VENDOR",
+                   "layoutStyle": "VERTICAL_PRODUCT_CARD_LAYOUT_STYLE_DEFAULT"
+                  }
+                 },
+                 {
+                  "verticalProductCardRenderer": {
+                   "title": "Production T-Shirt",
+                   "thumbnail": {
+                    "thumbnails": [
+                     {
+                      "url": "https://encrypted-tbn1.gstatic.com/shopping?q=tbn:ANd9GcSHMZGAt3flHQFtcPxxCJ5i56DLUZJMyzEzImxya6GwzMFuWdXRl_wiO79KgYQ",
+                      "width": 384,
+                      "height": 512
+                     }
+                    ]
+                   },
+                   "navigationEndpoint": {
+                    "commandExecutorCommand": {
+                     "commands": [
+                      {
+                       "commandMetadata": {
+                        "webCommandMetadata": {
+                         "sendPost": true,
+                         "apiUrl": "/youtubei/v1/feedback"
+                        }
+                       },
+                       "feedbackEndpoint": {}
+                      },
+                      {
+                       "commandMetadata": {
+                        "webCommandMetadata": {
+                         "url": "https://mkbhd.com/products/production-t-shirt?variant=48625b1b-ddda-4a01-bef5-e5bda6fcc118&utm_content=YT3-Bdsv5Am8u6xD9yvjnVWYnshibfjfyjx-7wbr371yA2esJzwTl4KB06CZxBk9kaKcNSNiRqP9EhquolpDMEY1NBfe_qbL2yrCs60L5mu2flFjr-1TDwc&utm_term=UCBJycsmduvYEL83R_U4JriQ&utm_medium=product_shelf&utm_source=youtube",
+                         "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                         "rootVe": 83769
+                        }
+                       },
+                       "urlEndpoint": {
+                        "url": "https://mkbhd.com/products/production-t-shirt?variant=48625b1b-ddda-4a01-bef5-e5bda6fcc118&utm_content=YT3-Bdsv5Am8u6xD9yvjnVWYnshibfjfyjx-7wbr371yA2esJzwTl4KB06CZxBk9kaKcNSNiRqP9EhquolpDMEY1NBfe_qbL2yrCs60L5mu2flFjr-1TDwc&utm_term=UCBJycsmduvYEL83R_U4JriQ&utm_medium=product_shelf&utm_source=youtube",
+                        "target": "TARGET_NEW_WINDOW"
+                       }
+                      }
+                     ]
+                    }
+                   },
+                   "price": "HK$227.60",
+                   "accessibilityTitle": "Production T-Shirt, HK$227.60 , from MKBHD",
+                   "merchantName": "MKBHD",
+                   "fromMerchantText": "From MKBHD",
+                   "showOpenInNewIcon": true,
+                   "useNewStyle": false,
+                   "dealsData": {
+                    "currentPrice": "HK$227.60"
+                   },
+                   "ctaText": {
+                    "runs": [
+                     {
+                      "text": "From MKBHD"
+                     }
+                    ]
+                   },
+                   "ctaStyle": "VERTICAL_PRODUCT_CARD_CTA_STYLE_FROM_VENDOR",
+                   "layoutStyle": "VERTICAL_PRODUCT_CARD_LAYOUT_STYLE_DEFAULT"
+                  }
+                 },
+                 {
+                  "verticalProductCardRenderer": {
+                   "title": "Deconstructed T-Shirt",
+                   "thumbnail": {
+                    "thumbnails": [
+                     {
+                      "url": "https://encrypted-tbn0.gstatic.com/shopping?q=tbn:ANd9GcSElDsciUBoYAajiP-gLZ-dgSHNP0VZFrvOZG1GYBWlKOIk3Qu5XH9HQwcyhvwti-aSUbbtJMU",
+                      "width": 387,
+                      "height": 512
+                     }
+                    ]
+                   },
+                   "navigationEndpoint": {
+                    "commandExecutorCommand": {
+                     "commands": [
+                      {
+                       "commandMetadata": {
+                        "webCommandMetadata": {
+                         "sendPost": true,
+                         "apiUrl": "/youtubei/v1/feedback"
+                        }
+                       },
+                       "feedbackEndpoint": {}
+                      },
+                      {
+                       "commandMetadata": {
+                        "webCommandMetadata": {
+                         "url": "https://mkbhd.com/products/deconstructed-t-shirt?variant=069d8861-23de-40fb-b7d7-e961fdd5cd18&utm_content=YT3-yoaOv4kHmqne6TvexZ85yS93vz8WW0IDV1sUjWkC1MnUVkV51zJDfsGLMkrCtxWEftJAwav22LbduShhvYSM_n2yNVSpmkkbnUykkPzFO3sjYEg71P4&utm_term=UCBJycsmduvYEL83R_U4JriQ&utm_medium=product_shelf&utm_source=youtube",
+                         "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                         "rootVe": 83769
+                        }
+                       },
+                       "urlEndpoint": {
+                        "url": "https://mkbhd.com/products/deconstructed-t-shirt?variant=069d8861-23de-40fb-b7d7-e961fdd5cd18&utm_content=YT3-yoaOv4kHmqne6TvexZ85yS93vz8WW0IDV1sUjWkC1MnUVkV51zJDfsGLMkrCtxWEftJAwav22LbduShhvYSM_n2yNVSpmkkbnUykkPzFO3sjYEg71P4&utm_term=UCBJycsmduvYEL83R_U4JriQ&utm_medium=product_shelf&utm_source=youtube",
+                        "target": "TARGET_NEW_WINDOW"
+                       }
+                      }
+                     ]
+                    }
+                   },
+                   "price": "HK$227.60",
+                   "accessibilityTitle": "Deconstructed T-Shirt, HK$227.60 , from MKBHD",
+                   "merchantName": "MKBHD",
+                   "fromMerchantText": "From MKBHD",
+                   "showOpenInNewIcon": true,
+                   "useNewStyle": false,
+                   "dealsData": {
+                    "currentPrice": "HK$227.60"
+                   },
+                   "ctaText": {
+                    "runs": [
+                     {
+                      "text": "From MKBHD"
+                     }
+                    ]
+                   },
+                   "ctaStyle": "VERTICAL_PRODUCT_CARD_CTA_STYLE_FROM_VENDOR",
+                   "layoutStyle": "VERTICAL_PRODUCT_CARD_LAYOUT_STYLE_DEFAULT"
+                  }
+                 },
+                 {
+                  "verticalProductCardRenderer": {
+                   "title": "Reverb T-Shirt",
+                   "thumbnail": {
+                    "thumbnails": [
+                     {
+                      "url": "https://encrypted-tbn1.gstatic.com/shopping?q=tbn:ANd9GcQoQtdhjeE1_EiL7HkAk2tCjlmc2EOo-gOrkpO2q6pq52mgBq9Ht7KbkRPLzg",
+                      "width": 385,
+                      "height": 512
+                     }
+                    ]
+                   },
+                   "navigationEndpoint": {
+                    "commandExecutorCommand": {
+                     "commands": [
+                      {
+                       "commandMetadata": {
+                        "webCommandMetadata": {
+                         "sendPost": true,
+                         "apiUrl": "/youtubei/v1/feedback"
+                        }
+                       },
+                       "feedbackEndpoint": {}
+                      },
+                      {
+                       "commandMetadata": {
+                        "webCommandMetadata": {
+                         "url": "https://mkbhd.com/products/reverb-t-shirt?variant=0db99077-c23f-449b-ac9f-132a0f79dee0&utm_content=YT3-Petqj_iTkaihBsKOlnmNVXqqFGRV3u3CqEP46rgqJL8iP66zwvbYNP112DPbVU4no_Vv_4LSp8VXsfpMNTmxEV6YmnO3Kp-DrBvtWtm-QhLeky6DYPM&utm_term=UCBJycsmduvYEL83R_U4JriQ&utm_medium=product_shelf&utm_source=youtube",
+                         "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                         "rootVe": 83769
+                        }
+                       },
+                       "urlEndpoint": {
+                        "url": "https://mkbhd.com/products/reverb-t-shirt?variant=0db99077-c23f-449b-ac9f-132a0f79dee0&utm_content=YT3-Petqj_iTkaihBsKOlnmNVXqqFGRV3u3CqEP46rgqJL8iP66zwvbYNP112DPbVU4no_Vv_4LSp8VXsfpMNTmxEV6YmnO3Kp-DrBvtWtm-QhLeky6DYPM&utm_term=UCBJycsmduvYEL83R_U4JriQ&utm_medium=product_shelf&utm_source=youtube",
+                        "target": "TARGET_NEW_WINDOW"
+                       }
+                      }
+                     ]
+                    }
+                   },
+                   "price": "HK$227.60",
+                   "accessibilityTitle": "Reverb T-Shirt, HK$227.60 , from MKBHD",
+                   "merchantName": "MKBHD",
+                   "fromMerchantText": "From MKBHD",
+                   "showOpenInNewIcon": true,
+                   "useNewStyle": false,
+                   "dealsData": {
+                    "currentPrice": "HK$227.60"
+                   },
+                   "ctaText": {
+                    "runs": [
+                     {
+                      "text": "From MKBHD"
+                     }
+                    ]
+                   },
+                   "ctaStyle": "VERTICAL_PRODUCT_CARD_CTA_STYLE_FROM_VENDOR",
+                   "layoutStyle": "VERTICAL_PRODUCT_CARD_LAYOUT_STYLE_DEFAULT"
+                  }
+                 },
+                 {
+                  "verticalProductCardRenderer": {
+                   "title": "Shutter Speed T-Shirt",
+                   "thumbnail": {
+                    "thumbnails": [
+                     {
+                      "url": "https://encrypted-tbn0.gstatic.com/shopping?q=tbn:ANd9GcTxT-rpWXsqczOSg7u-sZAcDBm2pOJKuxDdge8vRzvbinaImrkNZKcAxAcTWwM",
+                      "width": 384,
+                      "height": 512
+                     }
+                    ]
+                   },
+                   "navigationEndpoint": {
+                    "commandExecutorCommand": {
+                     "commands": [
+                      {
+                       "commandMetadata": {
+                        "webCommandMetadata": {
+                         "sendPost": true,
+                         "apiUrl": "/youtubei/v1/feedback"
+                        }
+                       },
+                       "feedbackEndpoint": {}
+                      },
+                      {
+                       "commandMetadata": {
+                        "webCommandMetadata": {
+                         "url": "https://mkbhd.com/products/shutter-speed-t-shirt?variant=12bad2b9-ad17-4e4b-8fcc-2410b45221c2&utm_content=YT3-1FjacDzHyKStCyBiVMYeAy3NZWmUp_D5KFdb-Oy9A-W2o8_P1m4HRzfWzoi3T1ePDfZvZXLUgvxfk72LBjfc8ZBtGQNB7SLNvbC4LujIviwkpGpRxfk&utm_term=UCBJycsmduvYEL83R_U4JriQ&utm_medium=product_shelf&utm_source=youtube",
+                         "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                         "rootVe": 83769
+                        }
+                       },
+                       "urlEndpoint": {
+                        "url": "https://mkbhd.com/products/shutter-speed-t-shirt?variant=12bad2b9-ad17-4e4b-8fcc-2410b45221c2&utm_content=YT3-1FjacDzHyKStCyBiVMYeAy3NZWmUp_D5KFdb-Oy9A-W2o8_P1m4HRzfWzoi3T1ePDfZvZXLUgvxfk72LBjfc8ZBtGQNB7SLNvbC4LujIviwkpGpRxfk&utm_term=UCBJycsmduvYEL83R_U4JriQ&utm_medium=product_shelf&utm_source=youtube",
+                        "target": "TARGET_NEW_WINDOW"
+                       }
+                      }
+                     ]
+                    }
+                   },
+                   "price": "HK$227.60",
+                   "accessibilityTitle": "Shutter Speed T-Shirt, HK$227.60 , from MKBHD",
+                   "merchantName": "MKBHD",
+                   "fromMerchantText": "From MKBHD",
+                   "showOpenInNewIcon": true,
+                   "useNewStyle": false,
+                   "dealsData": {
+                    "currentPrice": "HK$227.60"
+                   },
+                   "ctaText": {
+                    "runs": [
+                     {
+                      "text": "From MKBHD"
+                     }
+                    ]
+                   },
+                   "ctaStyle": "VERTICAL_PRODUCT_CARD_CTA_STYLE_FROM_VENDOR",
+                   "layoutStyle": "VERTICAL_PRODUCT_CARD_LAYOUT_STYLE_DEFAULT"
+                  }
+                 }
+                ]
+               }
+              },
+              "menu": {
+               "menuRenderer": {
+                "topLevelButtons": [
+                 {
+                  "buttonRenderer": {
+                   "icon": {
+                    "iconType": "MORE_VERT"
+                   },
+                   "command": {
+                    "openPopupAction": {
+                     "popup": {
+                      "menuPopupRenderer": {
+                       "items": [
+                        {
+                         "menuServiceItemRenderer": {
+                          "text": {
+                           "accessibility": {
+                            "accessibilityData": {
+                             "label": "About products and commissions"
+                            }
+                           },
+                           "simpleText": "About products and commissions"
+                          },
+                          "icon": {
+                           "iconType": "HELP"
+                          },
+                          "serviceEndpoint": {
+                           "openPopupAction": {
+                            "popup": {
+                             "fancyDismissibleDialogRenderer": {
+                              "dialogMessage": {
+                               "runs": [
+                                {
+                                 "text": "Product(s) listed here are based on products mentioned in the video you are watching or Shopping Collections or from your past activity while signed in to YouTube, including product(s) you search for, products mentioned in video(s) or related product(s). ",
+                                 "textColor": 4279440147
+                                },
+                                {
+                                 "text": "Learn more",
+                                 "navigationEndpoint": {
+                                  "commandMetadata": {
+                                   "webCommandMetadata": {
+                                    "url": "https://support.google.com/youtube/answer/12257682?nohelpkit=1",
+                                    "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                                    "rootVe": 83769
+                                   }
+                                  },
+                                  "urlEndpoint": {
+                                   "url": "https://support.google.com/youtube/answer/12257682?nohelpkit=1",
+                                   "target": "TARGET_NEW_WINDOW"
+                                  }
+                                 }
+                                },
+                                {
+                                 "text": "\n\nProduct information and final pricing are determined by merchants and may change. You may be charged additional fees, such as shipping and handling fees, which may vary. Click on the products below or visit the merchant’s store for more information, including product availability, the final price that you will be charged by the merchant, and to make a purchase. Prices include VAT where applicable.\n\nProducts marked as ‘channel exclusive’ are listings that a merchant has shared exclusively with a specific YouTube channel. These products are discounted and/or time-limited subject to terms and conditions of the merchant. The merchant determines and is responsible for the final price and conditions of purchase, including but not limited to, warnings, recalls, disclaimers and usage information. ",
+                                 "textColor": 4279440147
+                                },
+                                {
+                                 "text": "Learn more",
+                                 "navigationEndpoint": {
+                                  "commandMetadata": {
+                                   "webCommandMetadata": {
+                                    "url": "https://support.google.com/youtube/answer/12257682?nohelpkit=1",
+                                    "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                                    "rootVe": 83769
+                                   }
+                                  },
+                                  "urlEndpoint": {
+                                   "url": "https://support.google.com/youtube/answer/12257682?nohelpkit=1",
+                                   "target": "TARGET_NEW_WINDOW"
+                                  }
+                                 }
+                                },
+                                {
+                                 "text": "\n\nYouTube is not responsible for merchant products or for the product information provided by merchants. YouTube is also not responsible for your activities and purchases made from merchants (including through the links below) which are governed by the respective merchant's terms and conditions (including their Privacy Policy). YouTube may share information with our partners to perform services, in compliance with our Privacy Policy and other appropriate confidentiality and security measures. For instance, YouTube may share your IP address with the merchant platform to facilitate the transaction. Product reviews are available in select locations only and are not verified by Google. ",
+                                 "textColor": 4279440147
+                                },
+                                {
+                                 "text": "Learn more",
+                                 "navigationEndpoint": {
+                                  "commandMetadata": {
+                                   "webCommandMetadata": {
+                                    "url": "https://support.google.com/googleshopping/answer/9370999?nohelpkit=1",
+                                    "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                                    "rootVe": 83769
+                                   }
+                                  },
+                                  "urlEndpoint": {
+                                   "url": "https://support.google.com/googleshopping/answer/9370999?nohelpkit=1",
+                                   "target": "TARGET_NEW_WINDOW"
+                                  }
+                                 }
+                                }
+                               ]
+                              },
+                              "confirmLabel": {
+                               "simpleText": "OK"
+                              }
+                             }
+                            },
+                            "popupType": "DIALOG"
+                           }
+                          }
+                         }
+                        },
+                        {
+                         "menuServiceItemRenderer": {
+                          "text": {
+                           "accessibility": {
+                            "accessibilityData": {
+                             "label": "Report listing"
+                            }
+                           },
+                           "simpleText": "Report listing"
+                          },
+                          "icon": {
+                           "iconType": "FLAG"
+                          },
+                          "serviceEndpoint": {
+                           "commandMetadata": {
+                            "webCommandMetadata": {
+                             "url": "https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den&hl=en",
+                             "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                             "rootVe": 83769
+                            }
+                           },
+                           "signInEndpoint": {
+                            "nextEndpoint": {
+                             "commandMetadata": {
+                              "webCommandMetadata": {
+                               "sendPost": true,
+                               "apiUrl": "/youtubei/v1/flag/get_form"
+                              }
+                             },
+                             "getReportFormEndpoint": {
+                              "params": "ygEIc2hvcHBpbmfQAQ7iAegJCsMBClcKCwoJVGhlIFJpZGdlCgMKASwKAwoBIAonCiVSaWRnZSBQb3dlciBCYW5rIC0gMTBrIG1BaCAtIEJ1cmd1bmR5CgMKASwKAwoBIAoLCglISyQ2MjAuMDEaaEJ0b2w2QUFBQUFBQ0FnSUN3RHdBQUFjQ050d0VBSUFBNEFZSUJFSGx2ZFhSMVltVXRjMmh2Y0hCcGJtZXlBUk41YjNWMGRXSmxMWE5vYjNCd2FXNW5MVEZ3NEJLSjVaNnFwWlRfOGlVCqkBCj0KBwoFTUtCSEQKAwoBLAoDCgEgChEKD092ZXJsYXkgRGVza3BhZAoDCgEsCgMKASAKCwoJSEskMjI3LjYwGmhCMWlCdUFBQUFBQUNBZ0lDd0R3QUFBY0NOdHdFQUlBQTRBWUlCRUhsdmRYUjFZbVV0YzJodmNIQnBibWV5QVJONWIzVjBkV0psTFhOb2IzQndhVzVuTFRGdzRCS2l1WVhTNUlqZjQwMAqzAQpGCgcKBU1LQkhECgMKASwKAwoBIAobChlDb2xvciBQaWNrZXIgU3RpY2tlciBQYWNrCgMKASwKAwoBIAoKCghISyQ2Mi43ORppQjRoekdBQUFBQUFDQWdJQ3dEd0FBQWNDTnR3RUFJQUE0QVlJQkVIbHZkWFIxWW1VdGMyaHZjSEJwYm1leUFSTjViM1YwZFdKbExYTm9iM0J3YVc1bkxURnc0QkxfLXN5RXlOV0RucVFCCqwBCkAKBwoFTUtCSEQKAwoBLAoDCgEgChQKElByb2R1Y3Rpb24gVC1TaGlydAoDCgEsCgMKASAKCwoJSEskMjI3LjYwGmhCajJmM0FBQUFBQUNBZ0lDd0R3QUFBY0NOdHdFQUlBQTRBWUlCRUhsdmRYUjFZbVV0YzJodmNIQnBibWV5QVJONWIzVjBkV0psTFhOb2IzQndhVzVuTFRGdzRCS2l2ZjZXay1LMDhYQQqwAQpDCgcKBU1LQkhECgMKASwKAwoBIAoXChVEZWNvbnN0cnVjdGVkIFQtU2hpcnQKAwoBLAoDCgEgCgsKCUhLJDIyNy42MBppQjVla1FBQUFBQUFDQWdJQ3dEd0FBQWNDTnR3RUFJQUE0QVlJQkVIbHZkWFIxWW1VdGMyaHZjSEJwYm1leUFSTjViM1YwZFdKbExYTm9iM0J3YVc1bkxURnc0QkxWdUpTXy0tQ0VnTW9CCqkBCjwKBwoFTUtCSEQKAwoBLAoDCgEgChAKDlJldmVyYiBULVNoaXJ0CgMKASwKAwoBIAoLCglISyQyMjcuNjAaaUJ6dFdsQUFBQUFBQ0FnSUN3RHdBQUFjQ050d0VBSUFBNEFZSUJFSGx2ZFhSMVltVXRjMmh2Y0hCcGJtZXlBUk41YjNWMGRXSmxMWE5vYjNCd2FXNW5MVEZ3NEJLRW03bkhoNWZ0N01vQgqvAQpDCgcKBU1LQkhECgMKASwKAwoBIAoXChVTaHV0dGVyIFNwZWVkIFQtU2hpcnQKAwoBLAoDCgEgCgsKCUhLJDIyNy42MBpoQmRZaHVBQUFBQUFDQWdJQ3dEd0FBQWNDTnR3RUFJQUE0QVlJQkVIbHZkWFIxWW1VdGMyaHZjSEJwYm1leUFSTjViM1YwZFdKbExYTm9iM0J3YVc1bkxURnc0QktfM2IzaXlJU3lpaU0%3D"
+                             }
+                            }
+                           }
+                          },
+                          "loggingDirectives": {
+                           "visibility": {
+                            "types": "15"
+                           },
+                           "gestures": {
+                            "types": "4"
+                           }
+                          }
+                         }
+                        }
+                       ],
+                       "menuPopupAccessibility": {
+                        "label": "Actions menu"
+                       }
+                      }
+                     },
+                     "popupType": "DROPDOWN"
+                    }
+                   }
+                  }
+                 }
+                ]
+               }
+              }
+             }
+            }
+           ]
+          }
+         }
+        ],
+        "disablePullToRefresh": true
+       }
+      }
+     }
+    },
+    {
+     "expandableTabRenderer": {
+      "endpoint": {
+       "commandMetadata": {
+        "webCommandMetadata": {
+         "url": "/@mkbhd/search",
+         "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+         "rootVe": 3611,
+         "apiUrl": "/youtubei/v1/browse"
+        }
+       },
+       "browseEndpoint": {
+        "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+        "params": "EgZzZWFyY2jyBgQKAloA",
+        "canonicalBaseUrl": "/@mkbhd"
+       }
+      },
+      "title": "Search",
+      "selected": false
+     }
+    }
+   ]
+  }
+ },
+ "header": {
+  "pageHeaderRenderer": {
+   "pageTitle": "Marques Brownlee",
+   "content": {
+    "pageHeaderViewModel": {
+     "title": {
+      "dynamicTextViewModel": {
+       "text": {
+        "content": "Marques Brownlee",
+        "styleRuns": [
+         {
+          "startIndex": 16,
+          "styleRunExtensions": {
+           "styleRunColorMapExtension": {
+            "colorMap": [
+             {
+              "key": "USER_INTERFACE_THEME_DARK",
+              "value": 4294967295
+             },
+             {
+              "key": "USER_INTERFACE_THEME_LIGHT",
+              "value": 4279440147
+             }
+            ]
+           }
+          }
+         }
+        ],
+        "attachmentRuns": [
+         {
+          "startIndex": 16,
+          "length": 0,
+          "element": {
+           "type": {
+            "imageType": {
+             "image": {
+              "sources": [
+               {
+                "clientResource": {
+                 "imageName": "CHECK_CIRCLE_FILLED"
+                },
+                "width": 24,
+                "height": 24
+               }
+              ]
+             }
+            }
+           },
+           "properties": {
+            "layoutProperties": {
+             "height": {
+              "value": 24,
+              "unit": "DIMENSION_UNIT_POINT"
+             },
+             "width": {
+              "value": 24,
+              "unit": "DIMENSION_UNIT_POINT"
+             },
+             "margin": {
+              "left": {
+               "value": 8,
+               "unit": "DIMENSION_UNIT_POINT"
+              }
+             }
+            }
+           }
+          },
+          "alignment": "ALIGNMENT_VERTICAL_CENTER"
+         }
+        ]
+       },
+       "maxLines": 2,
+       "rendererContext": {
+        "loggingContext": {
+         "loggingDirectives": {
+          "visibility": {
+           "types": "12"
+          }
+         }
+        },
+        "accessibilityContext": {
+         "label": "Marques Brownlee, Verified"
+        }
+       }
+      }
+     },
+     "image": {
+      "decoratedAvatarViewModel": {
+       "avatar": {
+        "avatarViewModel": {
+         "image": {
+          "sources": [
+           {
+            "url": "https://yt3.googleusercontent.com/qu4TmIaYUlS41-dJ9gZ7DUR3nilvmB5_11i6OKSdvNnBNiyOusZP1bMN6ICnuxtjFBb6ioKgRQ=s72-c-k-c0x00ffffff-no-rj",
+            "width": 72,
+            "height": 72
+           },
+           {
+            "url": "https://yt3.googleusercontent.com/qu4TmIaYUlS41-dJ9gZ7DUR3nilvmB5_11i6OKSdvNnBNiyOusZP1bMN6ICnuxtjFBb6ioKgRQ=s120-c-k-c0x00ffffff-no-rj",
+            "width": 120,
+            "height": 120
+           },
+           {
+            "url": "https://yt3.googleusercontent.com/qu4TmIaYUlS41-dJ9gZ7DUR3nilvmB5_11i6OKSdvNnBNiyOusZP1bMN6ICnuxtjFBb6ioKgRQ=s160-c-k-c0x00ffffff-no-rj",
+            "width": 160,
+            "height": 160
+           }
+          ],
+          "processor": {
+           "borderImageProcessor": {
+            "circular": true
+           }
+          }
+         },
+         "avatarImageSize": "AVATAR_SIZE_XL",
+         "loggingDirectives": {
+          "visibility": {
+           "types": "12"
+          }
+         }
+        }
+       }
+      }
+     },
+     "metadata": {
+      "contentMetadataViewModel": {
+       "metadataRows": [
+        {
+         "metadataParts": [
+          {
+           "text": {
+            "content": "@mkbhd",
+            "styleRuns": [
+             {
+              "weightLabel": "FONT_WEIGHT_MEDIUM",
+              "styleRunExtensions": {
+               "styleRunColorMapExtension": {
+                "colorMap": [
+                 {
+                  "key": "USER_INTERFACE_THEME_DARK",
+                  "value": 4294967295
+                 },
+                 {
+                  "key": "USER_INTERFACE_THEME_LIGHT",
+                  "value": 4279440147
+                 }
+                ]
+               }
+              }
+             }
+            ]
+           },
+           "enableTruncation": true
+          }
+         ]
+        },
+        {
+         "metadataParts": [
+          {
+           "text": {
+            "content": "21.4M subscribers"
+           },
+           "accessibilityLabel": "21.4 million subscribers"
+          },
+          {
+           "text": {
+            "content": "1.8K videos",
+            "styleRuns": [
+             {
+              "startIndex": 0,
+              "length": 11
+             }
+            ]
+           }
+          }
+         ]
+        }
+       ],
+       "delimiter": "•",
+       "rendererContext": {
+        "loggingContext": {
+         "loggingDirectives": {
+          "visibility": {
+           "types": "12"
+          }
+         }
+        }
+       }
+      }
+     },
+     "actions": {
+      "flexibleActionsViewModel": {
+       "actionsRows": [
+        {
+         "actions": [
+          {
+           "buttonViewModel": {
+            "title": "Subscribe",
+            "onTap": {
+             "innertubeCommand": {
+              "commandMetadata": {
+               "webCommandMetadata": {
+                "ignoreNavigation": true
+               }
+              },
+              "modalEndpoint": {
+               "modal": {
+                "modalWithTitleAndButtonRenderer": {
+                 "title": {
+                  "simpleText": "Want to subscribe to this channel?"
+                 },
+                 "content": {
+                  "simpleText": "Sign in to subscribe to this channel."
+                 },
+                 "button": {
+                  "buttonRenderer": {
+                   "style": "STYLE_MONO_FILLED",
+                   "size": "SIZE_DEFAULT",
+                   "isDisabled": false,
+                   "text": {
+                    "simpleText": "Sign in"
+                   },
+                   "navigationEndpoint": {
+                    "commandMetadata": {
+                     "webCommandMetadata": {
+                      "url": "https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3D%252F%2540mkbhd%252Fstore%26continue_action%3DQUZZTVljRkhkQkVYTEV1VGJfeVV2cllVMWZRTHxBSTVJdTVzLUhyWlNWc0JoWXhVVGg0clB6ZE5vZVF6X1BjR3B3YzVuNFBIaXl2c0U5YlhzbEFfT2dwN3pyTHJKbGp1ZGs1WVc1WmZRc0lVYzh5MUt0YUp3ODUxRkgtMGZnYWVnb1NqV0FyZXBsQ2swNnIxT3N5Mk5MX1lleXg0bk1VeFJNbFpHZDVHVGRiWWV0N3RYV081ei1EZEQ3amxKQjVFNms5MEc4ZkJDX2tBZXFCbmo2R1VJazU0&hl=en&ec=66429",
+                      "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+                      "rootVe": 83769
+                     }
+                    },
+                    "signInEndpoint": {
+                     "nextEndpoint": {
+                      "commandMetadata": {
+                       "webCommandMetadata": {
+                        "url": "/@mkbhd/store",
+                        "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                        "rootVe": 3611,
+                        "apiUrl": "/youtubei/v1/browse"
+                       }
+                      },
+                      "browseEndpoint": {
+                       "browseId": "UCBJycsmduvYEL83R_U4JriQ",
+                       "params": "EgVzdG9yZQ%3D%3D",
+                       "canonicalBaseUrl": "/@mkbhd"
+                      }
+                     },
+                     "continueAction": "QUZZTVljRkhkQkVYTEV1VGJfeVV2cllVMWZRTHxBSTVJdTVzLUhyWlNWc0JoWXhVVGg0clB6ZE5vZVF6X1BjR3B3YzVuNFBIaXl2c0U5YlhzbEFfT2dwN3pyTHJKbGp1ZGs1WVc1WmZRc0lVYzh5MUt0YUp3ODUxRkgtMGZnYWVnb1NqV0FyZXBsQ2swNnIxT3N5Mk5MX1lleXg0bk1VeFJNbFpHZDVHVGRiWWV0N3RYV081ei1EZEQ3amxKQjVFNms5MEc4ZkJDX2tBZXFCbmo2R1VJazU0",
+                     "idamTag": "66429"
+                    }
+                   }
+                  }
+                 }
+                }
+               }
+              }
+             }
+            },
+            "accessibilityText": "Subscribe",
+            "style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+            "isFullWidth": false,
+            "type": "BUTTON_VIEW_MODEL_TYPE_FILLED",
+            "buttonSize": "BUTTON_VIEW_MODEL_SIZE_DEFAULT",
+            "state": "BUTTON_VIEW_MODEL_STATE_ACTIVE"
+           }
+          }
+         ]
+        }
+       ],
+       "justifyContent": "FLEXIBLE_ACTIONS_JUSTIFY_CONTENT_START",
+       "minimumRowHeight": 44,
+       "rendererContext": {
+        "loggingContext": {
+         "loggingDirectives": {
+          "visibility": {
+           "types": "12"
+          },
+          "clientVeSpec": {
+           "uiType": 184974,
+           "veCounter": 416289582
+          }
+         }
+        }
+       }
+      }
+     },
+     "description": {
+      "descriptionPreviewViewModel": {
+       "description": {
+        "content": "MKBHD: Quality Tech Videos | YouTuber | Geek | Consumer Electronics | Tech Head | Internet Personality! "
+       },
+       "maxLines": 2,
+       "truncationText": {
+        "content": "...more",
+        "styleRuns": [
+         {
+          "startIndex": 0,
+          "length": 7,
+          "weight": 500
+         }
+        ]
+       },
+       "alwaysShowTruncationText": true,
+       "rendererContext": {
+        "loggingContext": {
+         "loggingDirectives": {
+          "visibility": {
+           "types": "12"
+          }
+         }
+        },
+        "accessibilityContext": {
+         "label": "Description. MKBHD: Quality Tech Videos | YouTuber | Geek | Consumer Elec...tap for more."
+        },
+        "commandContext": {
+         "onTap": {
+          "innertubeCommand": {
+           "showEngagementPanelEndpoint": {
+            "engagementPanel": {
+             "engagementPanelSectionListRenderer": {
+              "header": {
+               "engagementPanelTitleHeaderRenderer": {
+                "title": {
+                 "simpleText": "Marques Brownlee"
+                },
+                "visibilityButton": {
+                 "buttonRenderer": {
+                  "style": "STYLE_DEFAULT",
+                  "size": "SIZE_DEFAULT",
+                  "isDisabled": false,
+                  "icon": {
+                   "iconType": "CLOSE"
+                  },
+                  "accessibility": {
+                   "label": "Close"
+                  },
+                  "accessibilityData": {
+                   "accessibilityData": {
+                    "label": "Close"
+                   }
+                  },
+                  "command": {
+                   "changeEngagementPanelVisibilityAction": {
+                    "targetId": "6e593250-0000-2d56-8046-582429bc8fe4",
+                    "visibility": "ENGAGEMENT_PANEL_VISIBILITY_HIDDEN"
+                   }
+                  }
+                 }
+                }
+               }
+              },
+              "content": {
+               "sectionListRenderer": {
+                "contents": [
+                 {
+                  "itemSectionRenderer": {
+                   "contents": [
+                    {
+                     "continuationItemRenderer": {
+                      "trigger": "CONTINUATION_TRIGGER_ON_ITEM_SHOWN",
+                      "continuationEndpoint": {
+                       "commandMetadata": {
+                        "webCommandMetadata": {
+                         "sendPost": true,
+                         "apiUrl": "/youtubei/v1/browse"
+                        }
+                       },
+                       "continuationCommand": {
+                        "token": "4qmFsgJgEhhVQ0JKeWNzbWR1dllFTDgzUl9VNEpyaVEaRDhnWXJHaW1hQVNZS0pEWmxOVGt6TWpVeExUQXdNREF0TW1RMU5pMDRNRFEyTFRVNE1qUXlPV0pqT0dabE5BJTNEJTNE",
+                        "request": "CONTINUATION_REQUEST_TYPE_BROWSE"
+                       }
+                      }
+                     }
+                    }
+                   ],
+                   "sectionIdentifier": "6e593251-0000-2d56-8046-582429bc8fe4",
+                   "targetId": "6e593251-0000-2d56-8046-582429bc8fe4"
+                  }
+                 }
+                ],
+                "scrollPaneStyle": {
+                 "scrollable": true
+                }
+               }
+              },
+              "targetId": "6e593250-0000-2d56-8046-582429bc8fe4",
+              "identifier": {
+               "surface": "ENGAGEMENT_PANEL_SURFACE_BROWSE",
+               "tag": "6e593250-0000-2d56-8046-582429bc8fe4"
+              }
+             }
+            },
+            "identifier": {
+             "surface": "ENGAGEMENT_PANEL_SURFACE_BROWSE",
+             "tag": "6e593250-0000-2d56-8046-582429bc8fe4"
+            },
+            "engagementPanelPresentationConfigs": {
+             "engagementPanelPopupPresentationConfig": {
+              "popupType": "PANEL_POPUP_TYPE_DIALOG"
+             }
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "attribution": {
+      "attributionViewModel": {
+       "text": {
+        "content": " X",
+        "commandRuns": [
+         {
+          "startIndex": 0,
+          "length": 2,
+          "onTap": {
+           "innertubeCommand": {
+            "commandMetadata": {
+             "webCommandMetadata": {
+              "url": "https://www.youtube.com/redirect?event=channel_header&redir_token=QUZZTVljRmluT2VDZWFNRmZWcklsN0VDbUxTQnxBSTVJdTV2d2Iya180a3J1S0w0RTl5bGtWWXljdjBSZ1pfLWNWUWpzVTRtNDQxbmNzM2czeU9zTFc0dUFPSXBHdlhmdVNWSGxVQW9jbVhMYnlVamNWRkRzdkV3VTFSdVRiZlNH&q=http%3A%2F%2Ftwitter.com%2FMKBHD",
+              "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+              "rootVe": 83769
+             }
+            },
+            "urlEndpoint": {
+             "url": "https://www.youtube.com/redirect?event=channel_header&redir_token=QUZZTVljRmluT2VDZWFNRmZWcklsN0VDbUxTQnxBSTVJdTV2d2Iya180a3J1S0w0RTl5bGtWWXljdjBSZ1pfLWNWUWpzVTRtNDQxbmNzM2czeU9zTFc0dUFPSXBHdlhmdVNWSGxVQW9jbVhMYnlVamNWRkRzdkV3VTFSdVRiZlNH&q=http%3A%2F%2Ftwitter.com%2FMKBHD",
+             "target": "TARGET_NEW_WINDOW"
+            }
+           }
+          },
+          "loggingDirectives": {
+           "visibility": {
+            "types": "12"
+           }
+          }
+         }
+        ],
+        "styleRuns": [
+         {
+          "weightLabel": "FONT_WEIGHT_NORMAL",
+          "styleRunExtensions": {
+           "styleRunColorMapExtension": {
+            "colorMap": [
+             {
+              "key": "USER_INTERFACE_THEME_DARK",
+              "value": 4282296063
+             },
+             {
+              "key": "USER_INTERFACE_THEME_LIGHT",
+              "value": 4278607828
+             }
+            ]
+           }
+          }
+         }
+        ],
+        "attachmentRuns": [
+         {
+          "startIndex": 0,
+          "length": 0,
+          "element": {
+           "type": {
+            "imageType": {
+             "image": {
+              "sources": [
+               {
+                "customImageSource": {
+                 "youtubeIconSource": {
+                  "clientResource": {
+                   "icon": "YTICON_OUTLINE_LINK_S24"
+                  }
+                 }
+                }
+               }
+              ]
+             }
+            }
+           },
+           "properties": {
+            "layoutProperties": {
+             "height": {
+              "value": 14,
+              "unit": "DIMENSION_UNIT_POINT"
+             },
+             "width": {
+              "value": 14,
+              "unit": "DIMENSION_UNIT_POINT"
+             }
+            }
+           }
+          },
+          "alignment": "ALIGNMENT_VERTICAL_CENTER"
+         }
+        ]
+       },
+       "suffix": {
+        "content": "and 4 more links",
+        "commandRuns": [
+         {
+          "startIndex": 0,
+          "length": 16,
+          "onTap": {
+           "innertubeCommand": {
+            "showEngagementPanelEndpoint": {
+             "engagementPanel": {
+              "engagementPanelSectionListRenderer": {
+               "header": {
+                "engagementPanelTitleHeaderRenderer": {
+                 "title": {
+                  "simpleText": "Marques Brownlee"
+                 },
+                 "visibilityButton": {
+                  "buttonRenderer": {
+                   "style": "STYLE_DEFAULT",
+                   "size": "SIZE_DEFAULT",
+                   "isDisabled": false,
+                   "icon": {
+                    "iconType": "CLOSE"
+                   },
+                   "accessibility": {
+                    "label": "Close"
+                   },
+                   "accessibilityData": {
+                    "accessibilityData": {
+                     "label": "Close"
+                    }
+                   },
+                   "command": {
+                    "changeEngagementPanelVisibilityAction": {
+                     "targetId": "6e593252-0000-2d56-8046-582429bc8fe4",
+                     "visibility": "ENGAGEMENT_PANEL_VISIBILITY_HIDDEN"
+                    }
+                   }
+                  }
+                 }
+                }
+               },
+               "content": {
+                "sectionListRenderer": {
+                 "contents": [
+                  {
+                   "itemSectionRenderer": {
+                    "contents": [
+                     {
+                      "continuationItemRenderer": {
+                       "trigger": "CONTINUATION_TRIGGER_ON_ITEM_SHOWN",
+                       "continuationEndpoint": {
+                        "commandMetadata": {
+                         "webCommandMetadata": {
+                          "sendPost": true,
+                          "apiUrl": "/youtubei/v1/browse"
+                         }
+                        },
+                        "continuationCommand": {
+                         "token": "4qmFsgJgEhhVQ0JKeWNzbWR1dllFTDgzUl9VNEpyaVEaRDhnWXJHaW1hQVNZS0pEWmxOVGt6TWpVekxUQXdNREF0TW1RMU5pMDRNRFEyTFRVNE1qUXlPV0pqT0dabE5BJTNEJTNE",
+                         "request": "CONTINUATION_REQUEST_TYPE_BROWSE"
+                        }
+                       }
+                      }
+                     }
+                    ],
+                    "sectionIdentifier": "6e593253-0000-2d56-8046-582429bc8fe4",
+                    "targetId": "6e593253-0000-2d56-8046-582429bc8fe4"
+                   }
+                  }
+                 ],
+                 "scrollPaneStyle": {
+                  "scrollable": true
+                 }
+                }
+               },
+               "targetId": "6e593252-0000-2d56-8046-582429bc8fe4",
+               "identifier": {
+                "surface": "ENGAGEMENT_PANEL_SURFACE_BROWSE",
+                "tag": "6e593252-0000-2d56-8046-582429bc8fe4"
+               }
+              }
+             },
+             "identifier": {
+              "surface": "ENGAGEMENT_PANEL_SURFACE_BROWSE",
+              "tag": "6e593252-0000-2d56-8046-582429bc8fe4"
+             },
+             "engagementPanelPresentationConfigs": {
+              "engagementPanelPopupPresentationConfig": {
+               "popupType": "PANEL_POPUP_TYPE_DIALOG"
+              }
+             }
+            }
+           }
+          },
+          "loggingDirectives": {
+           "visibility": {
+            "types": "12"
+           }
+          }
+         }
+        ],
+        "styleRuns": [
+         {
+          "fontName": "",
+          "fontSize": 0,
+          "weightLabel": "FONT_WEIGHT_MEDIUM"
+         }
+        ]
+       },
+       "rendererContext": {
+        "loggingContext": {
+         "loggingDirectives": {
+          "visibility": {
+           "types": "12"
+          }
+         }
+        }
+       }
+      }
+     },
+     "banner": {
+      "imageBannerViewModel": {
+       "image": {
+        "sources": [
+         {
+          "url": "https://yt3.googleusercontent.com/zi_48HwHU4s0Hnb6tZuvRzTfCPHrLEnrtIMDLzMauDEyDmURh9JZ4wrNd3lKr7m9uVnT4YjYKw=w1060-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+          "width": 1060,
+          "height": 175
+         },
+         {
+          "url": "https://yt3.googleusercontent.com/zi_48HwHU4s0Hnb6tZuvRzTfCPHrLEnrtIMDLzMauDEyDmURh9JZ4wrNd3lKr7m9uVnT4YjYKw=w1138-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+          "width": 1138,
+          "height": 188
+         },
+         {
+          "url": "https://yt3.googleusercontent.com/zi_48HwHU4s0Hnb6tZuvRzTfCPHrLEnrtIMDLzMauDEyDmURh9JZ4wrNd3lKr7m9uVnT4YjYKw=w1707-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+          "width": 1707,
+          "height": 283
+         },
+         {
+          "url": "https://yt3.googleusercontent.com/zi_48HwHU4s0Hnb6tZuvRzTfCPHrLEnrtIMDLzMauDEyDmURh9JZ4wrNd3lKr7m9uVnT4YjYKw=w2120-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+          "width": 2120,
+          "height": 351
+         },
+         {
+          "url": "https://yt3.googleusercontent.com/zi_48HwHU4s0Hnb6tZuvRzTfCPHrLEnrtIMDLzMauDEyDmURh9JZ4wrNd3lKr7m9uVnT4YjYKw=w2276-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+          "width": 2276,
+          "height": 377
+         },
+         {
+          "url": "https://yt3.googleusercontent.com/zi_48HwHU4s0Hnb6tZuvRzTfCPHrLEnrtIMDLzMauDEyDmURh9JZ4wrNd3lKr7m9uVnT4YjYKw=w2560-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+          "width": 2560,
+          "height": 424
+         }
+        ]
+       },
+       "style": "IMAGE_BANNER_STYLE_INSET",
+       "rendererContext": {
+        "loggingContext": {
+         "loggingDirectives": {
+          "visibility": {
+           "types": "12"
+          }
+         }
+        }
+       }
+      }
+     },
+     "rendererContext": {
+      "loggingContext": {
+       "loggingDirectives": {
+        "visibility": {
+         "types": "12"
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "metadata": {
+  "channelMetadataRenderer": {
+   "title": "Marques Brownlee",
+   "description": "MKBHD: Quality Tech Videos | YouTuber | Geek | Consumer Electronics | Tech Head | Internet Personality!\n\nbusiness@MKBHD.com\n\nNYC",
+   "rssUrl": "https://www.youtube.com/feeds/videos.xml?channel_id=UCBJycsmduvYEL83R_U4JriQ",
+   "channelConversionUrl": "https://www.youtube.com/pagead/viewthroughconversion/962985656/?backend=innertube&cname=1&cver=2_20260925_08_00&data=backend%3Dinnertube%3Bcname%3D1%3Bcver%3D2_20260925_08_00%3Bptype%3Dcview%3Btype%3Dcview%3Butuid%3DBJycsmduvYEL83R_U4JriQ&foc_id=BJycsmduvYEL83R_U4JriQ&label=followon_cvisit&ptype=cview&utuid=BJycsmduvYEL83R_U4JriQ",
+   "externalId": "UCBJycsmduvYEL83R_U4JriQ",
+   "keywords": "MKBHD MarquesBrownlee Marques Brownlee",
+   "ownerUrls": [
+    "http://www.youtube.com/@mkbhd"
+   ],
+   "avatar": {
+    "thumbnails": [
+     {
+      "url": "https://yt3.googleusercontent.com/qu4TmIaYUlS41-dJ9gZ7DUR3nilvmB5_11i6OKSdvNnBNiyOusZP1bMN6ICnuxtjFBb6ioKgRQ=s900-c-k-c0x00ffffff-no-rj",
+      "width": 900,
+      "height": 900
+     }
+    ]
+   },
+   "channelUrl": "https://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ",
+   "isFamilySafe": true,
+   "availableCountryCodes": [
+    "TZ",
+    "KP",
+    "AM",
+    "NZ",
+    "BT",
+    "SX",
+    "NF",
+    "BY",
+    "PS",
+    "NU",
+    "PW",
+    "AD",
+    "MZ",
+    "TD",
+    "AT",
+    "LC",
+    "BS",
+    "AO",
+    "ET",
+    "SO",
+    "DK",
+    "CN",
+    "MY",
+    "FJ",
+    "NG",
+    "TT",
+    "JM",
+    "DE",
+    "VG",
+    "AE",
+    "RE",
+    "CF",
+    "GH",
+    "TR",
+    "VN",
+    "NE",
+    "IE",
+    "LT",
+    "GE",
+    "US",
+    "NP",
+    "SJ",
+    "SV",
+    "MP",
+    "TV",
+    "KH",
+    "TG",
+    "MC",
+    "EC",
+    "WS",
+    "BW",
+    "BD",
+    "MO",
+    "SG",
+    "GT",
+    "VI",
+    "MF",
+    "PG",
+    "GL",
+    "QA",
+    "BO",
+    "PH",
+    "SA",
+    "AS",
+    "GN",
+    "VU",
+    "IT",
+    "LR",
+    "ZW",
+    "KR",
+    "EH",
+    "MN",
+    "AG",
+    "MT",
+    "EG",
+    "GI",
+    "GF",
+    "SE",
+    "LI",
+    "CA",
+    "BR",
+    "CR",
+    "PM",
+    "FK",
+    "PN",
+    "NR",
+    "ER",
+    "IS",
+    "MS",
+    "RW",
+    "NI",
+    "BL",
+    "VE",
+    "RU",
+    "DZ",
+    "LS",
+    "GA",
+    "GW",
+    "IO",
+    "KM",
+    "BH",
+    "TO",
+    "BA",
+    "IM",
+    "AF",
+    "TW",
+    "LU",
+    "MQ",
+    "WF",
+    "CM",
+    "ST",
+    "KY",
+    "VA",
+    "TC",
+    "FO",
+    "CV",
+    "AZ",
+    "MV",
+    "GQ",
+    "NO",
+    "TN",
+    "GP",
+    "NA",
+    "CY",
+    "SD",
+    "BZ",
+    "CI",
+    "SS",
+    "CO",
+    "AX",
+    "SN",
+    "LK",
+    "AR",
+    "UM",
+    "SK",
+    "HR",
+    "HT",
+    "LV",
+    "CH",
+    "UG",
+    "AW",
+    "MR",
+    "UY",
+    "IN",
+    "TF",
+    "BI",
+    "IR",
+    "BE",
+    "JP",
+    "SL",
+    "TJ",
+    "IQ",
+    "CK",
+    "GU",
+    "GD",
+    "MA",
+    "HM",
+    "PT",
+    "BB",
+    "BQ",
+    "RO",
+    "BV",
+    "FM",
+    "LB",
+    "GG",
+    "GM",
+    "MW",
+    "HK",
+    "UZ",
+    "CW",
+    "KI",
+    "MM",
+    "KZ",
+    "PF",
+    "CL",
+    "SY",
+    "MU",
+    "ZM",
+    "KE",
+    "YT",
+    "KG",
+    "HU",
+    "AU",
+    "BJ",
+    "PK",
+    "BM",
+    "BN",
+    "NC",
+    "FI",
+    "AL",
+    "ZA",
+    "RS",
+    "EE",
+    "ML",
+    "HN",
+    "SH",
+    "ME",
+    "AI",
+    "GS",
+    "IL",
+    "PY",
+    "PA",
+    "BF",
+    "CG",
+    "MX",
+    "AQ",
+    "LY",
+    "CX",
+    "DO",
+    "MG",
+    "PE",
+    "SM",
+    "CD",
+    "SR",
+    "TH",
+    "TK",
+    "DJ",
+    "VC",
+    "GY",
+    "CZ",
+    "JO",
+    "NL",
+    "LA",
+    "CC",
+    "BG",
+    "TL",
+    "ES",
+    "GR",
+    "UA",
+    "KN",
+    "YE",
+    "KW",
+    "SB",
+    "SZ",
+    "OM",
+    "SI",
+    "DM",
+    "MH",
+    "PL",
+    "FR",
+    "SC",
+    "JE",
+    "MK",
+    "ID",
+    "GB",
+    "MD",
+    "CU",
+    "TM",
+    "PR"
+   ],
+   "androidDeepLink": "android-app://com.google.android.youtube/http/www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ",
+   "androidAppindexingLink": "android-app://com.google.android.youtube/http/www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ",
+   "iosAppindexingLink": "ios-app://544007664/vnd.youtube/www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ",
+   "vanityChannelUrl": "http://www.youtube.com/@mkbhd"
+  }
+ },
+ "topbar": {
+  "desktopTopbarRenderer": {
+   "logo": {
+    "topbarLogoRenderer": {
+     "iconImage": {
+      "iconType": "YOUTUBE_LOGO"
+     },
+     "tooltipText": {
+      "runs": [
+       {
+        "text": "YouTube Home"
+       }
+      ]
+     },
+     "endpoint": {
+      "commandMetadata": {
+       "webCommandMetadata": {
+        "url": "/",
+        "webPageType": "WEB_PAGE_TYPE_BROWSE",
+        "rootVe": 3854,
+        "apiUrl": "/youtubei/v1/browse"
+       }
+      },
+      "browseEndpoint": {
+       "browseId": "FEwhat_to_watch"
+      }
+     },
+     "overrideEntityKey": "EgZ0b3BiYXIg9QEoAQ%3D%3D"
+    }
+   },
+   "searchbox": {
+    "fusionSearchboxRenderer": {
+     "icon": {
+      "iconType": "SEARCH"
+     },
+     "placeholderText": {
+      "runs": [
+       {
+        "text": "Search"
+       }
+      ]
+     },
+     "config": {
+      "webSearchboxConfig": {
+       "requestLanguage": "en",
+       "requestDomain": "us",
+       "hasOnscreenKeyboard": false,
+       "focusSearchbox": true
+      }
+     },
+     "searchEndpoint": {
+      "commandMetadata": {
+       "webCommandMetadata": {
+        "url": "/results?search_query=",
+        "webPageType": "WEB_PAGE_TYPE_SEARCH",
+        "rootVe": 4724
+       }
+      },
+      "searchEndpoint": {
+       "query": ""
+      }
+     },
+     "clearButton": {
+      "buttonRenderer": {
+       "style": "STYLE_DEFAULT",
+       "size": "SIZE_DEFAULT",
+       "isDisabled": false,
+       "icon": {
+        "iconType": "CLOSE"
+       },
+       "accessibilityData": {
+        "accessibilityData": {
+         "label": "Clear search query"
+        }
+       }
+      }
+     },
+     "showImageSourceDialog": {
+      "showDialogCommand": {
+       "panelLoadingStrategy": {
+        "inlineContent": {
+         "dialogViewModel": {
+          "header": {
+           "dialogHeaderViewModel": {
+            "headline": {
+             "content": "Image source"
+            }
+           }
+          },
+          "footer": {
+           "panelFooterViewModel": {
+            "primaryButton": {
+             "buttonViewModel": {
+              "title": "Visit source",
+              "style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+              "isFullWidth": true,
+              "type": "BUTTON_VIEW_MODEL_TYPE_FILLED"
+             }
+            },
+            "secondaryButton": {
+             "buttonViewModel": {
+              "title": "Cancel",
+              "style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+              "isFullWidth": true,
+              "type": "BUTTON_VIEW_MODEL_TYPE_TONAL"
+             }
+            },
+            "shouldHideDivider": true
+           }
+          },
+          "content": {
+           "basicContentViewModel": {
+            "paragraphs": [
+             {
+              "text": {
+               "content": "Visit image source website?"
+              }
+             }
+            ]
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "disableAiAppearance": true
+    }
+   },
+   "topbarButtons": [
+    {
+     "topbarMenuButtonRenderer": {
+      "icon": {
+       "iconType": "MORE_VERT"
+      },
+      "menuRequest": {
+       "commandMetadata": {
+        "webCommandMetadata": {
+         "sendPost": true,
+         "apiUrl": "/youtubei/v1/account/account_menu"
+        }
+       },
+       "signalServiceEndpoint": {
+        "signal": "GET_ACCOUNT_MENU",
+        "actions": [
+         {
+          "openPopupAction": {
+           "popup": {
+            "multiPageMenuRenderer": {
+             "style": "MULTI_PAGE_MENU_STYLE_TYPE_SYSTEM",
+             "showLoadingSpinner": true
+            }
+           },
+           "popupType": "DROPDOWN",
+           "beReused": true
+          }
+         }
+        ]
+       }
+      },
+      "accessibility": {
+       "accessibilityData": {
+        "label": "Settings"
+       }
+      },
+      "tooltip": "Settings",
+      "style": "STYLE_DEFAULT"
+     }
+    },
+    {
+     "buttonRenderer": {
+      "style": "STYLE_SUGGESTIVE",
+      "size": "SIZE_SMALL",
+      "text": {
+       "runs": [
+        {
+         "text": "Sign in"
+        }
+       ]
+      },
+      "icon": {
+       "iconType": "AVATAR_LOGGED_OUT"
+      },
+      "navigationEndpoint": {
+       "commandMetadata": {
+        "webCommandMetadata": {
+         "url": "https://accounts.google.com/ServiceLogin?service=youtube&uilel=3&passive=true&continue=https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop%26hl%3Den%26next%3Dhttps%253A%252F%252Fwww.youtube.com%252Fyoutubei%252Fv1%252Fbrowse%253FprettyPrint%253Dfalse&hl=en&ec=65620",
+         "webPageType": "WEB_PAGE_TYPE_UNKNOWN",
+         "rootVe": 83769
+        }
+       },
+       "signInEndpoint": {
+        "idamTag": "65620"
+       }
+      },
+      "targetId": "topbar-signin"
+     }
+    }
+   ],
+   "hotkeyDialog": {
+    "hotkeyDialogRenderer": {
+     "title": {
+      "runs": [
+       {
+        "text": "Keyboard shortcuts"
+       }
+      ]
+     },
+     "sections": [
+      {
+       "hotkeyDialogSectionRenderer": {
+        "title": {
+         "runs": [
+          {
+           "text": "Playback"
+          }
+         ]
+        },
+        "options": [
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Toggle play/pause"
+             }
+            ]
+           },
+           "hotkey": "k"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Rewind 10 seconds"
+             }
+            ]
+           },
+           "hotkey": "j"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Fast forward 10 seconds"
+             }
+            ]
+           },
+           "hotkey": "l"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Previous video"
+             }
+            ]
+           },
+           "hotkey": "P (SHIFT+p)"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Next video"
+             }
+            ]
+           },
+           "hotkey": "N (SHIFT+n)"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Previous frame (while paused)"
+             }
+            ]
+           },
+           "hotkey": ",",
+           "hotkeyAccessibilityLabel": {
+            "accessibilityData": {
+             "label": "Comma"
+            }
+           }
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Next frame (while paused)"
+             }
+            ]
+           },
+           "hotkey": ".",
+           "hotkeyAccessibilityLabel": {
+            "accessibilityData": {
+             "label": "Period"
+            }
+           }
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Decrease playback rate"
+             }
+            ]
+           },
+           "hotkey": "< (SHIFT+,)",
+           "hotkeyAccessibilityLabel": {
+            "accessibilityData": {
+             "label": "Less than or SHIFT + comma"
+            }
+           }
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Increase playback rate"
+             }
+            ]
+           },
+           "hotkey": "> (SHIFT+.)",
+           "hotkeyAccessibilityLabel": {
+            "accessibilityData": {
+             "label": "Greater than or SHIFT + period"
+            }
+           }
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Seek to specific point in the video (7 advances to 70% of duration)"
+             }
+            ]
+           },
+           "hotkey": "0..9"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Seek to previous chapter"
+             }
+            ]
+           },
+           "hotkey": "CONTROL + ←"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Seek to next chapter"
+             }
+            ]
+           },
+           "hotkey": "CONTROL + →"
+          }
+         }
+        ]
+       }
+      },
+      {
+       "hotkeyDialogSectionRenderer": {
+        "title": {
+         "runs": [
+          {
+           "text": "General"
+          }
+         ]
+        },
+        "options": [
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Toggle full screen"
+             }
+            ]
+           },
+           "hotkey": "f"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Toggle theater mode"
+             }
+            ]
+           },
+           "hotkey": "t"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Toggle miniplayer"
+             }
+            ]
+           },
+           "hotkey": "i"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Close miniplayer or current dialog"
+             }
+            ]
+           },
+           "hotkey": "ESCAPE"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Toggle mute"
+             }
+            ]
+           },
+           "hotkey": "m"
+          }
+         }
+        ]
+       }
+      },
+      {
+       "hotkeyDialogSectionRenderer": {
+        "title": {
+         "runs": [
+          {
+           "text": "Subtitles and closed captions"
+          }
+         ]
+        },
+        "options": [
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "If the video supports captions, toggle captions ON/OFF"
+             }
+            ]
+           },
+           "hotkey": "c"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Rotate through different text opacity levels"
+             }
+            ]
+           },
+           "hotkey": "o"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Rotate through different window opacity levels"
+             }
+            ]
+           },
+           "hotkey": "w"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Rotate through font sizes (increasing)"
+             }
+            ]
+           },
+           "hotkey": "+"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Rotate through font sizes (decreasing)"
+             }
+            ]
+           },
+           "hotkey": "-",
+           "hotkeyAccessibilityLabel": {
+            "accessibilityData": {
+             "label": "Minus"
+            }
+           }
+          }
+         }
+        ]
+       }
+      },
+      {
+       "hotkeyDialogSectionRenderer": {
+        "title": {
+         "runs": [
+          {
+           "text": "Spherical Videos"
+          }
+         ]
+        },
+        "options": [
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Pan up"
+             }
+            ]
+           },
+           "hotkey": "w"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Pan left"
+             }
+            ]
+           },
+           "hotkey": "a"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Pan down"
+             }
+            ]
+           },
+           "hotkey": "s"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Pan right"
+             }
+            ]
+           },
+           "hotkey": "d"
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Zoom in"
+             }
+            ]
+           },
+           "hotkey": "+ on numpad or ]",
+           "hotkeyAccessibilityLabel": {
+            "accessibilityData": {
+             "label": "Plus on number pad or right bracket"
+            }
+           }
+          }
+         },
+         {
+          "hotkeyDialogSectionOptionRenderer": {
+           "label": {
+            "runs": [
+             {
+              "text": "Zoom out"
+             }
+            ]
+           },
+           "hotkey": "- on numpad or [",
+           "hotkeyAccessibilityLabel": {
+            "accessibilityData": {
+             "label": "Minus on number pad or left bracket"
+            }
+           }
+          }
+         }
+        ]
+       }
+      }
+     ],
+     "dismissButton": {
+      "buttonRenderer": {
+       "style": "STYLE_BLUE_TEXT",
+       "size": "SIZE_DEFAULT",
+       "isDisabled": false,
+       "text": {
+        "runs": [
+         {
+          "text": "Dismiss"
+         }
+        ]
+       }
+      }
+     }
+    }
+   },
+   "backButton": {
+    "buttonRenderer": {
+     "command": {
+      "commandMetadata": {
+       "webCommandMetadata": {
+        "sendPost": true
+       }
+      },
+      "signalServiceEndpoint": {
+       "signal": "CLIENT_SIGNAL",
+       "actions": [
+        {
+         "signalAction": {
+          "signal": "HISTORY_BACK"
+         }
+        }
+       ]
+      }
+     }
+    }
+   },
+   "forwardButton": {
+    "buttonRenderer": {
+     "command": {
+      "commandMetadata": {
+       "webCommandMetadata": {
+        "sendPost": true
+       }
+      },
+      "signalServiceEndpoint": {
+       "signal": "CLIENT_SIGNAL",
+       "actions": [
+        {
+         "signalAction": {
+          "signal": "HISTORY_FORWARD"
+         }
+        }
+       ]
+      }
+     }
+    }
+   },
+   "a11ySkipNavigationButton": {
+    "buttonRenderer": {
+     "style": "STYLE_DEFAULT",
+     "size": "SIZE_DEFAULT",
+     "isDisabled": false,
+     "text": {
+      "runs": [
+       {
+        "text": "Skip navigation"
+       }
+      ]
+     },
+     "command": {
+      "commandMetadata": {
+       "webCommandMetadata": {
+        "sendPost": true
+       }
+      },
+      "signalServiceEndpoint": {
+       "signal": "CLIENT_SIGNAL",
+       "actions": [
+        {
+         "signalAction": {
+          "signal": "SKIP_NAVIGATION"
+         }
+        }
+       ]
+      }
+     }
+    }
+   },
+   "voiceSearchButton": {
+    "buttonRenderer": {
+     "style": "STYLE_DEFAULT",
+     "size": "SIZE_DEFAULT",
+     "isDisabled": false,
+     "serviceEndpoint": {
+      "commandMetadata": {
+       "webCommandMetadata": {
+        "sendPost": true
+       }
+      },
+      "signalServiceEndpoint": {
+       "signal": "CLIENT_SIGNAL",
+       "actions": [
+        {
+         "openPopupAction": {
+          "popup": {
+           "voiceSearchDialogRenderer": {
+            "placeholderHeader": {
+             "runs": [
+              {
+               "text": "Listening..."
+              }
+             ]
+            },
+            "promptHeader": {
+             "runs": [
+              {
+               "text": "Didn't hear that. Try again."
+              }
+             ]
+            },
+            "exampleQuery1": {
+             "runs": [
+              {
+               "text": "\"Play Dua Lipa\""
+              }
+             ]
+            },
+            "exampleQuery2": {
+             "runs": [
+              {
+               "text": "\"Show me my subscriptions\""
+              }
+             ]
+            },
+            "promptMicrophoneLabel": {
+             "runs": [
+              {
+               "text": "Tap microphone to try again"
+              }
+             ]
+            },
+            "loadingHeader": {
+             "runs": [
+              {
+               "text": "Working..."
+              }
+             ]
+            },
+            "connectionErrorHeader": {
+             "runs": [
+              {
+               "text": "No connection"
+              }
+             ]
+            },
+            "connectionErrorMicrophoneLabel": {
+             "runs": [
+              {
+               "text": "Check your connection and try again"
+              }
+             ]
+            },
+            "permissionsHeader": {
+             "runs": [
+              {
+               "text": "Waiting for permission"
+              }
+             ]
+            },
+            "permissionsSubtext": {
+             "runs": [
+              {
+               "text": "Allow microphone access to search with voice"
+              }
+             ]
+            },
+            "disabledHeader": {
+             "runs": [
+              {
+               "text": "Search with your voice"
+              }
+             ]
+            },
+            "disabledSubtext": {
+             "runs": [
+              {
+               "text": "To search by voice, go to your browser settings and allow access to microphone"
+              }
+             ]
+            },
+            "microphoneButtonAriaLabel": {
+             "runs": [
+              {
+               "text": "Cancel"
+              }
+             ]
+            },
+            "exitButton": {
+             "buttonRenderer": {
+              "style": "STYLE_DEFAULT",
+              "size": "SIZE_DEFAULT",
+              "isDisabled": false,
+              "icon": {
+               "iconType": "CLOSE"
+              },
+              "accessibilityData": {
+               "accessibilityData": {
+                "label": "Cancel"
+               }
+              }
+             }
+            },
+            "microphoneOffPromptHeader": {
+             "runs": [
+              {
+               "text": "Microphone off. Try again."
+              }
+             ]
+            }
+           }
+          },
+          "popupType": "TOP_ALIGNED_DIALOG"
+         }
+        }
+       ]
+      }
+     },
+     "icon": {
+      "iconType": "MICROPHONE_ON"
+     },
+     "tooltip": "Search with your voice",
+     "accessibilityData": {
+      "accessibilityData": {
+       "label": "Search with your voice"
+      }
+     }
+    }
+   }
+  }
+ },
+ "microformat": {
+  "microformatDataRenderer": {
+   "urlCanonical": "https://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ/store",
+   "title": "Marques Brownlee store",
+   "description": "MKBHD: Quality Tech Videos | YouTuber | Geek | Consumer Electronics | Tech Head | Internet Personality! business@MKBHD.com NYC",
+   "thumbnail": {
+    "thumbnails": [
+     {
+      "url": "https://yt3.googleusercontent.com/qu4TmIaYUlS41-dJ9gZ7DUR3nilvmB5_11i6OKSdvNnBNiyOusZP1bMN6ICnuxtjFBb6ioKgRQ=s200-c-k-c0x00ffffff-no-rj?days_since_epoch=20744",
+      "width": 200,
+      "height": 200
+     }
+    ]
+   },
+   "siteName": "YouTube",
+   "appName": "YouTube",
+   "androidPackage": "com.google.android.youtube",
+   "iosAppStoreId": "544007664",
+   "iosAppArguments": "https://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ/store",
+   "ogType": "yt-fb-app:channel",
+   "urlApplinksWeb": "https://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ/store?feature=applinks",
+   "urlApplinksIos": "vnd.youtube://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ/store?feature=applinks",
+   "urlApplinksAndroid": "vnd.youtube://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ/store?feature=applinks",
+   "urlTwitterIos": "vnd.youtube://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ/store?feature=twitter-deep-link",
+   "urlTwitterAndroid": "vnd.youtube://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ/store?feature=twitter-deep-link",
+   "twitterCardType": "summary",
+   "twitterSiteHandle": "@YouTube",
+   "schemaDotOrgType": "http://schema.org/http://schema.org/YoutubeChannelV2",
+   "noindex": false,
+   "unlisted": false,
+   "familySafe": true,
+   "tags": [
+    "MKBHD",
+    "MarquesBrownlee",
+    "Marques",
+    "Brownlee"
+   ],
+   "availableCountries": [
+    "TZ",
+    "KP",
+    "AM",
+    "NZ",
+    "BT",
+    "SX",
+    "NF",
+    "BY",
+    "PS",
+    "NU",
+    "PW",
+    "AD",
+    "MZ",
+    "TD",
+    "AT",
+    "LC",
+    "BS",
+    "AO",
+    "ET",
+    "SO",
+    "DK",
+    "CN",
+    "MY",
+    "FJ",
+    "NG",
+    "TT",
+    "JM",
+    "DE",
+    "VG",
+    "AE",
+    "RE",
+    "CF",
+    "GH",
+    "TR",
+    "VN",
+    "NE",
+    "IE",
+    "LT",
+    "GE",
+    "US",
+    "NP",
+    "SJ",
+    "SV",
+    "MP",
+    "TV",
+    "KH",
+    "TG",
+    "MC",
+    "EC",
+    "WS",
+    "BW",
+    "BD",
+    "MO",
+    "SG",
+    "GT",
+    "VI",
+    "MF",
+    "PG",
+    "GL",
+    "QA",
+    "BO",
+    "PH",
+    "SA",
+    "AS",
+    "GN",
+    "VU",
+    "IT",
+    "LR",
+    "ZW",
+    "KR",
+    "EH",
+    "MN",
+    "AG",
+    "MT",
+    "EG",
+    "GI",
+    "GF",
+    "SE",
+    "LI",
+    "CA",
+    "BR",
+    "CR",
+    "PM",
+    "FK",
+    "PN",
+    "NR",
+    "ER",
+    "IS",
+    "MS",
+    "RW",
+    "NI",
+    "BL",
+    "VE",
+    "RU",
+    "DZ",
+    "LS",
+    "GA",
+    "GW",
+    "IO",
+    "KM",
+    "BH",
+    "TO",
+    "BA",
+    "IM",
+    "AF",
+    "TW",
+    "LU",
+    "MQ",
+    "WF",
+    "CM",
+    "ST",
+    "KY",
+    "VA",
+    "TC",
+    "FO",
+    "CV",
+    "AZ",
+    "MV",
+    "GQ",
+    "NO",
+    "TN",
+    "GP",
+    "NA",
+    "CY",
+    "SD",
+    "BZ",
+    "CI",
+    "SS",
+    "CO",
+    "AX",
+    "SN",
+    "LK",
+    "AR",
+    "UM",
+    "SK",
+    "HR",
+    "HT",
+    "LV",
+    "CH",
+    "UG",
+    "AW",
+    "MR",
+    "UY",
+    "IN",
+    "TF",
+    "BI",
+    "IR",
+    "BE",
+    "JP",
+    "SL",
+    "TJ",
+    "IQ",
+    "CK",
+    "GU",
+    "GD",
+    "MA",
+    "HM",
+    "PT",
+    "BB",
+    "BQ",
+    "RO",
+    "BV",
+    "FM",
+    "LB",
+    "GG",
+    "GM",
+    "MW",
+    "HK",
+    "UZ",
+    "CW",
+    "KI",
+    "MM",
+    "KZ",
+    "PF",
+    "CL",
+    "SY",
+    "MU",
+    "ZM",
+    "KE",
+    "YT",
+    "KG",
+    "HU",
+    "AU",
+    "BJ",
+    "PK",
+    "BM",
+    "BN",
+    "NC",
+    "FI",
+    "AL",
+    "ZA",
+    "RS",
+    "EE",
+    "ML",
+    "HN",
+    "SH",
+    "ME",
+    "AI",
+    "GS",
+    "IL",
+    "PY",
+    "PA",
+    "BF",
+    "CG",
+    "MX",
+    "AQ",
+    "LY",
+    "CX",
+    "DO",
+    "MG",
+    "PE",
+    "SM",
+    "CD",
+    "SR",
+    "TH",
+    "TK",
+    "DJ",
+    "VC",
+    "GY",
+    "CZ",
+    "JO",
+    "NL",
+    "LA",
+    "CC",
+    "BG",
+    "TL",
+    "ES",
+    "GR",
+    "UA",
+    "KN",
+    "YE",
+    "KW",
+    "SB",
+    "SZ",
+    "OM",
+    "SI",
+    "DM",
+    "MH",
+    "PL",
+    "FR",
+    "SC",
+    "JE",
+    "MK",
+    "ID",
+    "GB",
+    "MD",
+    "CU",
+    "TM",
+    "PR"
+   ],
+   "linkAlternates": [
+    {
+     "hrefUrl": "https://m.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ/store"
+    },
+    {
+     "hrefUrl": "android-app://com.google.android.youtube/http/youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ/store"
+    },
+    {
+     "hrefUrl": "ios-app://544007664/http/youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ/store"
+    }
+   ],
+   "channelProfileMicroformatDetails": {
+    "profilePage": {
+     "@context": "https://schema.org",
+     "@type": "ProfilePage",
+     "url": "https://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ/store",
+     "name": "Marques Brownlee - YouTube",
+     "description": "MKBHD: Quality Tech Videos | YouTuber | Geek | Consumer Electronics | Tech Head | Internet Personality!\n\nbusiness@MKBHD.com\n\nNYC",
+     "mainEntity": {
+      "@type": "Person",
+      "name": "Marques Brownlee",
+      "url": "https://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ/store",
+      "alternateName": "@mkbhd",
+      "image": "https://yt3.googleusercontent.com/qu4TmIaYUlS41-dJ9gZ7DUR3nilvmB5_11i6OKSdvNnBNiyOusZP1bMN6ICnuxtjFBb6ioKgRQ=s88-c-k-c0x00ffffff-no-rj",
+      "description": "MKBHD: Quality Tech Videos | YouTuber | Geek | Consumer Electronics | Tech Head | Internet Personality!\n\nbusiness@MKBHD.com\n\nNYC",
+      "sameAs": [
+       "http://twitter.com/MKBHD",
+       "http://instagram.com/MKBHD",
+       "http://youtube.com/c/TheStudio",
+       "http://reddit.com/r/MKBHD",
+       "http://discord.gg/MKBHD"
+      ],
+      "interactionStatistic": [
+       {
+        "@type": "InteractionCounter",
+        "interactionType": {
+         "@type": "FollowAction"
+        },
+        "userInteractionCount": "21400000"
+       }
+      ]
+     }
+    }
+   }
+  }
+ }
+}
