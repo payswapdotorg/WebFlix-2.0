@@ -438,6 +438,45 @@ describe("LiveChatPanel — replay mode (chat replay is read-only)", () => {
   });
 });
 
+// ---- P24-SEND (G8): the paid-send disclosure (the honest-degradation law).
+// youtube.com's signed-in composer carries the $ entry (the Super Chat /
+// Super Sticker purchase panel) + Super Thanks on the watch page — PAID
+// checkout surfaces. WebFlix has NO payment rail and never fabricates one:
+// the paid interactions stay DISPLAY-only (the mapper + message rows —
+// display parity pinned by the livechat-mapping suite) and the signed-in
+// composer area carries the honest reason (role=note). Measured basis:
+// the logged-out live chat (yOXXI7_crys) carries NO Super Chat entry in
+// the header/composer; the logged-out watch page carries no Super Thanks
+// shapes — the send affordances are honestly absent.
+describe("LiveChatPanel — the paid-send disclosure (P24-SEND G8)", () => {
+  const paidNote = () => q('[role="note"][data-testid="chat-paid-send-note"]');
+
+  test("signed-in + live: the composer area carries the paid-send note — read-only display, purchases on YouTube's checkout", async () => {
+    await renderPanel();
+    const note = paidNote();
+    expect(note).not.toBeNull();
+    expect(note!.textContent).toContain("Super Chats, Super Stickers and Super Thanks");
+    expect(note!.textContent).toContain("purchases happen on YouTube's checkout");
+    // the honest-degradation form: NO $ entry, NO purchase panel next to the
+    // composer (never a fabricated payment affordance)
+    expect(host!.textContent ?? "").not.toContain("Send a Super Chat");
+    expect(host!.textContent ?? "").not.toContain("$");
+  });
+
+  test("replay hides the disclosure (the note belongs to the live send surface only)", async () => {
+    useReplayFrame();
+    await renderPanel();
+    expect(paidNote()).toBeNull();
+  });
+
+  test("the guest gate hides the disclosure too (the existing honest form stands)", async () => {
+    sessionState = { status: "unauthenticated", user: null };
+    await renderPanel();
+    expect(paidNote()).toBeNull();
+    expect(bodyText()).toContain("Sign in to chat");
+  });
+});
+
 // ---- the send client's pure units ----------------------------------------------
 describe("livechat send client — classification + echo reconciliation", () => {
   test("classifyLiveChatSendError maps the broker taxonomy to the honest states", () => {
