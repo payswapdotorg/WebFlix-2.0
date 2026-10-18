@@ -15,13 +15,16 @@ import {
   Shuffle,
   UserRound,
   AudioLines,
+  Share2,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useApi } from "@/hooks/use-api";
+import { useApi, postJson } from "@/hooks/use-api";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { PersonalSurfaceGate } from "@/components/auth/personal-surface-gate";
 import { makeShuffleSeed, seededShuffle } from "@/lib/playlist/shuffle";
+import { PlaylistSaveDialog } from "@/components/video/playlist-save-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,7 +47,14 @@ import type { PlaylistPageDTO, VideoDTO } from "@/lib/types";
  *    shape) with the honest unavailable/no-session/empty states in the
  *    list column;
  *  - reorder (Move up/down) stays public-playlist-only; Load more pages
- *    the browse continuation.
+ *    the browse continuation;
+ *  - REA-3 F3: the special-list rows carry youtube.com's own per-row
+ *    Action menu — "Remove from Watch later" (WL) / "Remove from Liked
+ *    videos" (LL) through the EXISTING write seams (the watch-later
+ *    remove + the remove-rating like write), plus Save to playlist and
+ *    Share. Download is honestly absent (no seam — the parity-debt
+ *    ledger). Reorder is still never offered: YouTube's own lists cannot
+ *    be reordered (the route honestly 400s).
  */
 function isSpecialListId(id: string | undefined): id is "WL" | "LL" {
   return id === "WL" || id === "LL";
@@ -156,14 +166,21 @@ function PlaylistContent({ id, special }: { id: string; special: boolean }) {
   // optimistic local reorder (the broker's intended effect)
   const [order, setOrder] = useState<VideoDTO[] | null>(null);
   const [reordering, setReordering] = useState<number | null>(null);
+  // REA-3 F3 — optimistic special-list removals (youtube.com's own row
+  // action: the row leaves the list the moment the write is in flight;
+  // failure reverts honestly)
+  const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
   // cursor pagination (youtube.com's playlist page grows the list on demand)
   const [extraVideos, setExtraVideos] = useState<VideoDTO[]>([]);
   const [moreCursor, setMoreCursor] = useState<string | null>(null);
   const [pagingMore, setPagingMore] = useState(false);
 
-  const listedVideos = order ?? [...(data?.videos ?? []), ...extraVideos];
+  const listedVideos = (order ?? [...(data?.videos ?? []), ...extraVideos]).filter(
+    (v) => !removedIds.has(v.id)
+  );
   // the special lists cannot be reordered (YouTube's own lists — the reorder
-  // route honestly 400s); the ⋯ menu is never offered for them
+  // route honestly 400s); the ⋯ menu carries the platform's own row actions
+  // instead (remove-from-list — REA-3 F3)
   const canReorder = !special;
 
   async function loadMore() {
@@ -276,6 +293,37 @@ function PlaylistContent({ id, special }: { id: string; special: boolean }) {
     router.push(`/watch/${first.id}?list=${encodeURIComponent(id)}&shuffle=${seed}`);
   }
 
+  // REA-3 F3 — youtube.com's per-row action on its own lists: WL removes
+  // ride the existing watch-later write (add:false); LL removes ride the
+  // existing remove-rating like write (action:"none"). Optimistic removal,
+  // honest revert on failure — never a fake success.
+  async function removeFromSpecialList(video: VideoDTO) {
+    const list = id === "LL" ? "LL" : "WL";
+    const label = list === "WL" ? "Watch later" : "Liked videos";
+    setRemovedIds((prev) => {
+      const next = new Set(prev);
+      next.add(video.id);
+      return next;
+    });
+    try {
+      if (list === "WL") {
+        await postJson("/api/playlists/watch-later", { videoId: video.id, add: false });
+      } else {
+        await postJson(`/api/videos/${encodeURIComponent(video.id)}/like`, { action: "none" });
+      }
+      toast.success(`Removed from ${label}`);
+    } catch (err) {
+      setRemovedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(video.id);
+        return next;
+      });
+      toast.error(
+        err instanceof Error ? err.message : `Failed to remove from ${label.toLowerCase()}`
+      );
+    }
+  }
+
   return (
     <div className="pb-10">
       {loading && (
@@ -364,8 +412,14 @@ function PlaylistContent({ id, special }: { id: string; special: boolean }) {
                     data.playlist.channelName
                   )}
                   {(specialList || data.playlist.channelName) && " · "}
-                  {data.playlist.videoCountText ??
-                    `${listedVideos.length} video${listedVideos.length === 1 ? "" : "s"}`}
+                  {specialList
+                    ? // REA-3 F3 — the special lists count the LIVE list (the
+                      // optimistic removal updates it, exactly youtube.com's
+                      // own header count behavior; the DTO's captured text
+                      // would go stale the moment a row leaves)
+                      `${listedVideos.length} video${listedVideos.length === 1 ? "" : "s"}`
+                    : (data.playlist.videoCountText ??
+                      `${listedVideos.length} video${listedVideos.length === 1 ? "" : "s"}`)}
                   {!specialList && data.playlist.viewsText ? ` · ${data.playlist.viewsText}` : ""}
                 </p>
                 {!specialList && data.playlist.description ? (
@@ -411,11 +465,13 @@ function PlaylistContent({ id, special }: { id: string; special: boolean }) {
                   video={video}
                   index={i}
                   canReorder={canReorder}
+                  specialList={specialList}
                   reordering={reordering === i}
                   disableUp={i === 0 || reordering !== null}
                   disableDown={i === listedVideos.length - 1 || reordering !== null}
                   onMoveUp={() => moveItem(i, i - 1)}
                   onMoveDown={() => moveItem(i, i + 1)}
+                  onRemove={specialList ? () => removeFromSpecialList(video) : null}
                 />
               ))}
             </ol>
@@ -447,28 +503,47 @@ function PlaylistContent({ id, special }: { id: string; special: boolean }) {
 /**
  * One playlist ROW — youtube.com's playlist lockup: the index (tabular,
  * muted), a 160px 16:9 thumbnail with the duration chip, and the compact
- * title/channel text block. Reorder rides the per-row ⋯ menu (public
- * playlists only).
+ * title/channel text block. The ⋯ menu: reorder (Move up/down) on public
+ * playlists; youtube.com's own row actions on the special lists (remove
+ * from the list / Save to playlist / Share — REA-3 F3).
  */
 function PlaylistRow({
   video,
   index,
   canReorder,
+  specialList,
   reordering,
   disableUp,
   disableDown,
   onMoveUp,
   onMoveDown,
+  onRemove,
 }: {
   video: VideoDTO;
   index: number;
   canReorder: boolean;
+  specialList: "WL" | "LL" | null;
   reordering: boolean;
   disableUp: boolean;
   disableDown: boolean;
   onMoveUp: () => void;
   onMoveDown: () => void;
+  onRemove: (() => void) | null;
 }) {
+  // the Save-to-playlist dialog state (youtube.com's WL/LL row menu item —
+  // the house PlaylistSaveDialog, existing seams only)
+  const [saveOpen, setSaveOpen] = useState(false);
+
+  async function copyLink() {
+    const link = `${window.location.origin}/watch/${video.id}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      toast.success("Link copied to clipboard");
+    } catch {
+      toast.info(`Copy manually: ${link}`);
+    }
+  }
+
   return (
     <li className="group/row relative">
       <div className="flex items-center gap-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-accent/50">
@@ -517,7 +592,7 @@ function PlaylistRow({
             {video.viewsText ? ` · ${video.viewsText}` : ""}
           </p>
         </div>
-        {canReorder && (
+        {(canReorder || onRemove) && (
           <div className="opacity-0 transition-opacity focus-within:opacity-100 group-hover/row:opacity-100">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -536,17 +611,45 @@ function PlaylistRow({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem disabled={disableUp} onClick={onMoveUp}>
-                  <ChevronUp className="mr-2 size-3.5" /> Move up
-                </DropdownMenuItem>
-                <DropdownMenuItem disabled={disableDown} onClick={onMoveDown}>
-                  <ChevronDown className="mr-2 size-3.5" /> Move down
-                </DropdownMenuItem>
+                {canReorder && (
+                  <>
+                    <DropdownMenuItem disabled={disableUp} onClick={onMoveUp}>
+                      <ChevronUp className="mr-2 size-3.5" /> Move up
+                    </DropdownMenuItem>
+                    <DropdownMenuItem disabled={disableDown} onClick={onMoveDown}>
+                      <ChevronDown className="mr-2 size-3.5" /> Move down
+                    </DropdownMenuItem>
+                  </>
+                )}
+                {onRemove && (
+                  <DropdownMenuItem onClick={onRemove} data-testid="playlist-row-remove">
+                    <X className="mr-2 size-3.5" />
+                    {specialList === "WL" ? "Remove from Watch later" : "Remove from Liked videos"}
+                  </DropdownMenuItem>
+                )}
+                {onRemove && (
+                  <DropdownMenuItem onClick={() => setSaveOpen(true)}>
+                    <ListVideo className="mr-2 size-3.5" /> Save to playlist
+                  </DropdownMenuItem>
+                )}
+                {(canReorder || onRemove) && (
+                  <DropdownMenuItem onClick={copyLink}>
+                    <Share2 className="mr-2 size-3.5" /> Share
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         )}
       </div>
+      {onRemove && (
+        <PlaylistSaveDialog
+          open={saveOpen}
+          onOpenChange={setSaveOpen}
+          videoId={video.id}
+          videoTitle={video.title}
+        />
+      )}
     </li>
   );
 }

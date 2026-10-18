@@ -12,7 +12,9 @@
  *     (session configured, read not served) and `loginRequired` (no
  *     session) are two different states and the page says which one it is;
  *   - the reorder ⋯ menu is never offered for the special lists (the route
- *     honestly 400s — YouTube's own lists);
+ *     honestly 400s — YouTube's own lists); REA-3 F3 replaced that with
+ *     youtube.com's own per-row Action menu (remove-from-list through the
+ *     existing write seams + Save to playlist + Share — never reorder);
  *   - the sidebar You section = youtube.com's guide order (Your channel,
  *     History, Playlists, Your videos, Watch later, Liked videos, Downloads)
  *     with "Your channel" honestly hidden when the seam unresolved;
@@ -311,7 +313,7 @@ describe("PlaylistPage — the special lists (WL) on the playlist page route", (
     expect(q("[data-testid='playlist-special-no-session']")).toBeNull();
   });
 
-  test("served with videos → the grid + Play all + the You owner row; the reorder ⋯ menu is NEVER offered", async () => {
+  test("served with videos → the grid + Play all + Shuffle + the You owner row; the ⋯ Action menu exists but NEVER reorders", async () => {
     routeParams = { id: "WL" };
     const videos = [makeVideo("v1", "Saved one"), makeVideo("v2", "Saved two"), makeVideo("v3", "Saved three")];
     fetchHandler = (url) => {
@@ -329,9 +331,15 @@ describe("PlaylistPage — the special lists (WL) on the playlist page route", (
     // /watch?v=<first>&list=<id> — the watch page's queue follows the list);
     // updated from the pre-G16 bare /watch/v1 assertion by the lane contract.
     expect(playAll!.getAttribute("href")).toBe("/watch/v1?list=WL");
-    // the special lists cannot be reordered — no ⋯ affordance anywhere
-    expect(all("[aria-label^='Actions for']")).toHaveLength(0);
+    // the special lists cannot be reordered — but REA-3 F3: youtube.com's
+    // own per-row Action menu IS offered (remove-from-list / save / share);
+    // "Move up"/"Move down" never ride it (the reorder route honestly 400s)
+    expect(all("[aria-label^='Actions for']")).toHaveLength(3);
     expect(win.document.body.textContent ?? "").not.toContain("Move up");
+    expect(win.document.body.textContent ?? "").not.toContain("Move down");
+    // REA-1 G16 reaches the WL special list specifically (the REA-3 work
+    // order's verification ask): Shuffle rides the header card beside Play all
+    expect(q("[data-testid='playlist-shuffle']")).not.toBeNull();
   });
 
   test("LL variant: the unavailable note names the liked list; the title falls back honestly", async () => {
@@ -774,5 +782,120 @@ describe("HistoryView — REA-3 F2: the tab family + the watched-shorts shelves"
     expect(shelf!.querySelectorAll("a").length).toBe(1);
     expect(shelf!.querySelector('a[href="/watch/s2"]')).not.toBeNull();
     expect(shelf!.querySelector('a[href="/watch/s1"]')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// REA-3 F3 — youtube.com's per-row Action menu on its own special lists
+// (the station pack, measured logged-in 2026-10-17: "WATCH LATER (playlist
+// WL): header actions 'Play all' AND 'Shuffle'; per-row Action menu").
+// The remove rides the EXISTING write seams — the WL toggle (add:false) and
+// the remove-rating like write (action:"none"); optimistic removal with an
+// honest revert, never a fake success.
+// ---------------------------------------------------------------------------
+
+describe("REA-3 F3 — the special-list row Action menu (remove / save / share)", () => {
+  function serveSpecial(id: "WL" | "LL") {
+    const videos = [makeVideo("v1", "Saved one"), makeVideo("v2", "Saved two"), makeVideo("v3", "Saved three")];
+    fetchHandler = (url) => {
+      if (url.includes(`/api/playlist/${id}`)) return Response.json(makeSpecialPage(id, videos));
+      return Response.json({}, { status: 200 });
+    };
+  }
+
+  async function openFirstRowMenu() {
+    const kebab = all("[aria-label^='Actions for']")[0];
+    await act(async () => {
+      kebab.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0 }));
+    });
+    await act(async () => {});
+  }
+
+  test("WL rows carry the ⋯ menu with youtube.com's own items — never reorder", async () => {
+    routeParams = { id: "WL" };
+    serveSpecial("WL");
+    await render(<PlaylistPage />);
+    await act(async () => {});
+    expect(all("[aria-label^='Actions for']")).toHaveLength(3);
+    await openFirstRowMenu();
+    const body = win.document.body.textContent ?? "";
+    expect(body).toContain("Remove from Watch later");
+    expect(body).toContain("Save to playlist");
+    expect(body).toContain("Share");
+    expect(body).not.toContain("Move up");
+    expect(body).not.toContain("Move down");
+  });
+
+  test("Remove from Watch later → the existing WL write seam (add:false), optimistic row removal + the live count", async () => {
+    routeParams = { id: "WL" };
+    serveSpecial("WL");
+    await render(<PlaylistPage />);
+    await act(async () => {});
+    expect(q("[data-testid='playlist-meta']")?.textContent).toContain("3 videos");
+    await openFirstRowMenu();
+    const remove = docAll("[data-testid='playlist-row-remove']")[0];
+    expect(remove).toBeDefined();
+    await act(async () => {
+      remove.click();
+    });
+    await act(async () => {});
+    await act(async () => {});
+    // the write rode the EXISTING seam — the same route the video-card save
+    // uses, with the honest remove direction (add:false)
+    const post = fetchLog.find((f) => f.url.includes("/api/playlists/watch-later"));
+    expect(post).toBeDefined();
+    expect(post!.method).toBe("POST");
+    expect(post!.body).toEqual({ videoId: "v1", add: false });
+    // the row left optimistically; the header count follows the live list
+    expect(host!.textContent ?? "").not.toContain("Saved one");
+    expect(q("[data-testid='playlist-meta']")?.textContent).toContain("2 videos");
+    expect(toasts.some((t) => t === "success:Removed from Watch later")).toBe(true);
+  });
+
+  test("a failed remove reverts honestly (never a silent fake success)", async () => {
+    routeParams = { id: "WL" };
+    const videos = [makeVideo("v1", "Saved one")];
+    fetchHandler = (url) => {
+      if (url.includes("/api/playlist/WL")) return Response.json(makeSpecialPage("WL", videos));
+      if (url.includes("/api/playlists/watch-later")) return Response.json({}, { status: 502 });
+      return Response.json({}, { status: 200 });
+    };
+    await render(<PlaylistPage />);
+    await act(async () => {});
+    await openFirstRowMenu();
+    const remove = docAll("[data-testid='playlist-row-remove']")[0];
+    await act(async () => {
+      remove.click();
+    });
+    await act(async () => {});
+    await act(async () => {});
+    // the row is back (the honest revert) with the error toast — no success
+    expect(host!.textContent ?? "").toContain("Saved one");
+    expect(q("[data-testid='playlist-meta']")?.textContent).toContain("1 video");
+    expect(toasts.some((t) => t.startsWith("error:"))).toBe(true);
+    expect(toasts.some((t) => t === "success:Removed from Watch later")).toBe(false);
+  });
+
+  test("LL rows: Remove from Liked videos rides the existing remove-rating like write", async () => {
+    routeParams = { id: "LL" };
+    serveSpecial("LL");
+    await render(<PlaylistPage />);
+    await act(async () => {});
+    await openFirstRowMenu();
+    const body = win.document.body.textContent ?? "";
+    expect(body).toContain("Remove from Liked videos");
+    expect(body).not.toContain("Remove from Watch later");
+    const remove = docAll("[data-testid='playlist-row-remove']")[0];
+    await act(async () => {
+      remove.click();
+    });
+    await act(async () => {});
+    await act(async () => {});
+    const post = fetchLog.find((f) => f.url.includes("/api/videos/v1/like"));
+    expect(post).toBeDefined();
+    expect(post!.method).toBe("POST");
+    expect(post!.body).toEqual({ action: "none" });
+    expect(host!.textContent ?? "").not.toContain("Saved one");
+    expect(toasts.some((t) => t === "success:Removed from Liked videos")).toBe(true);
   });
 });
