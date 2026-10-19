@@ -14,16 +14,28 @@ import type { HomeFeedDTO } from "@/lib/types";
 /**
  * The WebFlix home feed (P12-UX: youtube.com parity).
  *
- * Layout — youtube.com's home shape (2026-10-16 operator pass: the shorts
- * shelf is INTERLEAVED with the long-form grid, not parked at the bottom):
+ * Layout — the 2026-10-19 operator directive (the infinite-scroll FEEL):
  * category chips → the first rows of the regular thumbnail grid → the
- * SHORTS SHELF (full-width, horizontal rail) → the rest of the grid → the
- * feature rails (continue-watching, because-you-watched) → the demoted
- * trending rail. youtube.com places its shorts shelf within the first 1-2
- * rows of the feed so shorts and long-form mix exactly the way the
- * operator sees on youtube.com; the rest of the grid flows on below it.
- * The infinite-scroll sentinel renders at the very END of the feed so
- * appended grid pages never push the rails away mid-scroll.
+ * SHORTS SHELF (full-width, horizontal rail, interleaved within the first
+ * rows exactly like youtube.com) → the static feature rails
+ * (continue-watching, because-you-watched, trending) → THE GROWING GRID —
+ * the long-form infinite-scroll feed as the LAST content element, with
+ * the sentinel directly beneath it.
+ *
+ * WHY the growing grid rides last: every section after the feed's growth
+ * point re-creates the scroll-up disease the operator reported — appended
+ * pages would land above the user's viewport and force them to scroll UP
+ * to see the videos they just earned. With all static sections (shorts,
+ * rails) rendered BEFORE the growing grid, an appended page extends the
+ * bottom of the page itself: new cards appear below the current scroll
+ * position, the sentinel keeps chasing the bottom edge, and the feed reads
+ * as endless. The load-more skeletons render inside that same last grid,
+ * right where the user is looking.
+ *
+ * The scaffold-era second shorts shelf (parked at the very bottom) is
+ * GONE — the interleaved shelf is the one true shelf (youtube.com's own
+ * placement, the 2026-10-16 operator pass), and a bottom-parked shelf is
+ * exactly the "shorts as the last element" the operator rejected.
  */
 
 /**
@@ -74,23 +86,19 @@ export function HomeFeed() {
             data.recommended.length === 0 && <CategoryEmptyState category={category} />}
 
           {/**
-           * The interleaved feed: first rows of long-form videos, the shorts
-           * shelf, then the rest — youtube.com's own home composition (the
-           * shelf rides WITHIN the grid flow, never pinned to the bottom).
+           * The interleaved feed: the first rows of long-form videos, the
+           * shorts shelf, then the STATIC rails — and the GROWING grid
+           * (the rest of the long-form feed, the part infinite scroll
+           * appends to) rides LAST, below every static section, with the
+           * sentinel directly beneath it (the 2026-10-19 operator
+           * directive: appended pages must land BELOW the user's viewport,
+           * never above it).
            * A category filter hides the shelf exactly like youtube.com does
            * (shorts shelves only ride the unfiltered home feed).
            */}
           <RecommendedGrid videos={recommendedVideos.slice(0, SHORTS_SHELF_AFTER)} loading={false} />
 
           {category === "All" && <ShortsShelf shorts={data.shorts} />}
-
-          {recommendedVideos.length > SHORTS_SHELF_AFTER && (
-            <RecommendedGrid
-              videos={recommendedVideos.slice(SHORTS_SHELF_AFTER)}
-              loading={loadingMore}
-              className="pt-0"
-            />
-          )}
 
           <ContinueWatchingRail videos={data.continueWatching} />
 
@@ -103,8 +111,6 @@ export function HomeFeed() {
             />
           )}
 
-          <ShortsShelf shorts={data.shorts} />
-
           {data.trending.length > 0 && (
             <VideoRail
               title="Trending now"
@@ -112,6 +118,21 @@ export function HomeFeed() {
               icon={<Flame className="size-5 text-muted-foreground" />}
               moreHref="/trending"
               railLabel="Trending now rail"
+            />
+          )}
+
+          {/**
+           * THE GROWING GRID — the last content element. Appended pages
+           * (and their loading skeletons) render here, at the bottom of
+           * the page: the infinite-scroll feel the operator asked for.
+           * mt-4 keeps the rail rhythm (rail pb-2 + mt-4 + grid pt-2 ≈ the
+           * 32px inter-section spacing the rails themselves use).
+           */}
+          {recommendedVideos.length > SHORTS_SHELF_AFTER && (
+            <RecommendedGrid
+              videos={recommendedVideos.slice(SHORTS_SHELF_AFTER)}
+              loading={loadingMore}
+              className="mt-4"
             />
           )}
 
