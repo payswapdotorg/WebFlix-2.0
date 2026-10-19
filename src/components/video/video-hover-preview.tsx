@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { PlayCircle, Volume2, VolumeX } from "lucide-react";
+import { PlayCircle, VideoOff, Volume2, VolumeX } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { loadYouTubeIframeApi } from "@/components/watch/youtube-player";
 import { formatDuration } from "@/lib/format";
@@ -75,6 +75,17 @@ import type { StoryboardLevelDto, StreamFormatDto } from "@/lib/watch/types";
  * BOTH playing lanes through one lane-agnostic ops adapter (previewOps).
  * Reduced-motion keeps frames-only (the documented device policy — no
  * playing video on that lane).
+ *
+ * P26B-HPV3 — the walled-floor pill (the operator's 2026-10-19 re-file:
+ * "showing a slideshow for some videos"). When BOTH playing lanes are dead
+ * AND the playback fetch has settled, the storyboard/ken-burns floor is
+ * FINAL — and a silent cycling slideshow reads as a BROKEN preview, which
+ * is exactly how the operator filed it. The floor now says what it is: a
+ * compact "Preview unavailable" pill in the same geometry as the playing
+ * lanes' own Preview pill (honest degrade over silent fake-play — the
+ * repo's house law). It NEVER shows while a lane is still booting (the
+ * storyboard stays the loading companion there) nor on the reduced-motion
+ * lane (storyboard-only is that lane's DESIGN, not a degrade).
  *
  * Device policy (youtube.com parity):
  *  - touch / coarse pointers: NO preview at all (hover doesn't exist);
@@ -684,6 +695,18 @@ export function VideoHoverPreviewLayer() {
           ? "degraded"
           : "loading";
 
+  // P26B-HPV3 — the walled floor is FINAL when the embed lane is dead, the
+  // native lane cannot arm (no format / died) and the playback fetch has
+  // settled: no playing lane can still arrive. This is the pill's gate —
+  // strictly narrower than `phase === "storyboard"`, which also covers the
+  // loading companion while a lane boots.
+  const walledFloor =
+    mode === "embed" &&
+    embedDead &&
+    !nativeLane &&
+    fetchDone &&
+    (phase === "storyboard" || phase === "degraded");
+
   // P26-HPV — belt-and-braces play (the NativeFallbackPlayer precedent): a
   // declarative <video muted autoPlay> can still arrive paused in odd
   // runtimes, so one delayed nudge re-asks for playback — guarded twice:
@@ -985,6 +1008,20 @@ export function VideoHoverPreviewLayer() {
                 imageRendering: "auto",
               }}
             />
+          ) : null}
+          {/* P26B-HPV3 — the walled-floor pill: both playing lanes dead + the
+              fetch settled → the floor is final and SAYS SO (the operator's
+              2026-10-19 re-file: a silent slideshow reads as a broken
+              preview). Same geometry as the playing lanes' Preview pill. */}
+          {walledFloor ? (
+            <span
+              data-testid="hover-preview-unavailable"
+              title="Playback is blocked from this server right now — these are storyboard preview frames"
+              className="pointer-events-none absolute bottom-3 left-2 z-10 flex items-center gap-1 rounded bg-black/80 px-1.5 py-0.5 text-[10px] font-medium text-white/90"
+            >
+              <VideoOff className="size-3" aria-hidden="true" />
+              Preview unavailable
+            </span>
           ) : null}
           {phase === "embed" || phase === "native" ? (
             <>

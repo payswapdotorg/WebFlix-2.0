@@ -1186,3 +1186,135 @@ describe("P26-HPV — the native lane: embed death plays the real video (the ope
     (win as unknown as Record<string, unknown>).matchMedia = real;
   });
 });
+
+describe("P26B-HPV3 — the walled-floor pill (the operator's 2026-10-19 re-file: a silent slideshow reads as a broken preview)", () => {
+  const pill = () => q('[data-testid="hover-preview-unavailable"]');
+  const previewVideoEl = () =>
+    q('[data-testid="hover-preview-video"]') as unknown as HTMLVideoElement | null;
+
+  /** Show in embed mode, then kill the embed (onError — the wall / 101/150). */
+  async function embedDeathFloor(video: { id: string; title: string; thumbnailUrl?: string | null }) {
+    const { card, anchor } = await renderApp(video);
+    await show(video, card, anchor);
+    await act(async () => {
+      await sleep(30); // the player + the playback fetch settle
+    });
+    const player = livePlayer()!;
+    await act(async () => {
+      playerEvents(player).onError?.();
+    });
+  }
+
+  test("the walled Vevo class floor SAYS what it is: the Preview-unavailable pill over the animating storyboard frames", async () => {
+    // the operator's exact symptom class: embed death + a cipher-filtered
+    // payload (storyboards, zero formats) — the floor is final, and a silent
+    // cycling slideshow is how they read it as "the preview is not working".
+    // The pill is the honest degrade the house law demands.
+    const vevoVideo = {
+      id: "VEVO0000002",
+      title: "Walled Vevo floor",
+      thumbnailUrl: "https://i.ytimg.com/vi/VEVO0000002/hqdefault.jpg",
+    };
+    await embedDeathFloor(vevoVideo);
+    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
+    expect(q('[data-testid="storyboard-frame"]')).not.toBeNull(); // the frames keep animating
+    expect(pill()).not.toBeNull();
+    expect(pill()!.textContent).toContain("Preview unavailable");
+    expect(pill()!.getAttribute("title")).toContain("blocked");
+  });
+
+  test("the no-storyboard degrade (fetch settled, nothing usable at all) shows the pill too — the ken-burns floor is equally final", async () => {
+    const walledVideo = {
+      id: "WALL0000002",
+      title: "Fully walled",
+      thumbnailUrl: "https://i.ytimg.com/vi/WALL0000002/hqdefault.jpg",
+    };
+    await embedDeathFloor(walledVideo);
+    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("degraded");
+    expect(pill()).not.toBeNull();
+  });
+
+  test("NEVER during a lane's boot: a healthy-but-slow embed keeps the pill off (the storyboard companion is loading state, not the floor)", async () => {
+    const { card, anchor } = await renderApp(videoA);
+    await show(videoA, card, anchor);
+    await act(async () => {
+      await sleep(30); // embed booting, storyboard data in hand → companion
+    });
+    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
+    expect(pill()).toBeNull(); // the embed lane is still live — no floor yet
+    const player = livePlayer()!;
+    await act(async () => {
+      playerEvents(player).onReady?.();
+      playerEvents(player).onStateChange({ data: 1 }); // PLAYING
+    });
+    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("embed");
+    expect(pill()).toBeNull();
+  });
+
+  test("NEVER on the native lane — not while it buffers (companion), not while it plays", async () => {
+    const nativeVideoC = {
+      id: "NATIVE00003",
+      title: "Native lane C",
+      thumbnailUrl: "https://i.ytimg.com/vi/NATIVE00003/hqdefault.jpg",
+    };
+    const { card, anchor } = await renderApp(nativeVideoC);
+    await show(nativeVideoC, card, anchor);
+    await act(async () => {
+      await sleep(30);
+    });
+    const player = livePlayer()!;
+    await act(async () => {
+      playerEvents(player).onError?.(); // embed death → the native lane arms
+    });
+    expect(previewVideoEl()).not.toBeNull();
+    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard"); // companion
+    expect(pill()).toBeNull(); // a lane is armed — the floor is NOT final
+    const video = previewVideoEl()!;
+    await act(() => {
+      video.dispatchEvent(new win.Event("playing") as unknown as Event);
+    });
+    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("native");
+    expect(pill()).toBeNull();
+  });
+
+  test("native death (the stream itself fails) returns to the floor AND arms the pill", async () => {
+    const nativeVideoD = {
+      id: "NATIVE00004",
+      title: "Native lane D",
+      thumbnailUrl: "https://i.ytimg.com/vi/NATIVE00004/hqdefault.jpg",
+    };
+    const { card, anchor } = await renderApp(nativeVideoD);
+    await show(nativeVideoD, card, anchor);
+    await act(async () => {
+      await sleep(30);
+    });
+    const player = livePlayer()!;
+    await act(async () => {
+      playerEvents(player).onError?.();
+    });
+    const video = previewVideoEl()!;
+    expect(pill()).toBeNull(); // still armed
+    await act(() => {
+      video.dispatchEvent(new win.Event("error") as unknown as Event); // the proxy stream dies
+    });
+    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
+    expect(pill()).not.toBeNull(); // the floor is final now
+  });
+
+  test("NEVER on the reduced-motion lane — storyboard-only is that lane's DESIGN, not a degrade", async () => {
+    const real = (win as unknown as Record<string, unknown>).matchMedia;
+    setMatchMedia((query) => query.includes("prefers-reduced-motion"));
+    const { card, anchor } = await renderApp(videoA);
+    stubRect(anchor, { left: 10, top: 20, width: 300, height: 169 });
+    await enter(card);
+    await act(async () => {
+      await sleep(850); // past the dwell
+    });
+    await act(async () => {
+      await sleep(30); // the storyboard fetch settles
+    });
+    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
+    expect(pill()).toBeNull(); // the designed lane, never the walled floor
+    (win as unknown as Record<string, unknown>).matchMedia = real;
+  });
+});
