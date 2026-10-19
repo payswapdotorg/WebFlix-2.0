@@ -46,6 +46,8 @@ import {
   VideoHoverPreviewLayer,
   EMBED_NO_READY_MS,
   EMBED_PLAYING_MS,
+  EMBED_RETRY_NO_READY_MS,
+  EMBED_HOSTS,
   NATIVE_NO_PLAY_MS,
 } from "@/components/video/video-hover-preview";
 
@@ -627,8 +629,15 @@ describe("P22-A — the embed lane: the fair health gate (the zoom bug's fix)", 
     expect(MockYTPlayer.instances).toHaveLength(1);
     const player = MockYTPlayer.instances[0];
     expect(player.options["videoId"]).toBe("AAAAAAAAAAA");
+    // P28-HPV4 — the host ladder: the FIRST boot rides the no-cookie host
+    // (webflix-steel's endorsed domain), and the var bundle is MINIMAL
+    // (the measured matrix's boot shape — the old noisy bundle is gone).
+    expect(player.options["host"]).toBe(EMBED_HOSTS[0]);
     const vars = player.options["playerVars"] as Record<string, number>;
     expect(vars).toMatchObject({ autoplay: 1, mute: 1, controls: 0, playsinline: 1 });
+    expect(vars).not.toHaveProperty("modestbranding");
+    expect(vars).not.toHaveProperty("iv_load_policy");
+    expect(vars).not.toHaveProperty("disablekb");
     // the embed reports PLAYING → the embed phase with youtube.com's chrome
     await act(async () => {
       playerEvents(player).onStateChange({ data: 1 });
@@ -708,25 +717,44 @@ describe("P22-A — the embed lane: the fair health gate (the zoom bug's fix)", 
     expect(MockYTPlayer.destroyed).toHaveLength(0);
   }, 12_000);
 
-  test("P22-A — a never-ready iframe (the wall) is destroyed at the no-ready deadline → storyboard takes over", async () => {
+  test("P22-A — a never-ready iframe (the wall) burns BOTH host boots at their deadlines → the settled floor (P28: the animation STOPS, the pill says it)", async () => {
     const { card, anchor } = await renderApp(videoA);
     await show(videoA, card, anchor);
     await act(async () => {
       await sleep(30);
     });
     expect(MockYTPlayer.instances).toHaveLength(1);
-    // the walled signature: onReady NEVER fires (the wall never initializes
-    // the player — the watch page's own no-ready law)
+    expect(MockYTPlayer.instances[0].options["host"]).toBe(EMBED_HOSTS[0]); // nocookie first
+    // the walled signature: onReady NEVER fires on EITHER host (the wall
+    // never initializes the player — the watch page's own no-ready law).
+    // Boot 1 dies at EMBED_NO_READY_MS; the retry (host 2, the tightened
+    // EMBED_RETRY_NO_READY_MS window) dies too — only THEN is the lane dead.
+    // Two staged sleeps (each with its own margin) — one long sleep races
+    // boot 2's death under file-load timer drift.
     await act(async () => {
-      await sleep(EMBED_NO_READY_MS + 400); // past the no-ready deadline
+      await sleep(EMBED_NO_READY_MS + 500);
     });
-    expect(MockYTPlayer.destroyed).toHaveLength(1); // the embed was destroyed
+    // boot 1 is dead; the retry has booted on the second host
+    expect(MockYTPlayer.instances).toHaveLength(2);
+    expect(MockYTPlayer.instances[1].options["host"]).toBe(EMBED_HOSTS[1]); // the youtube.com retry
+    expect(MockYTPlayer.destroyed).toHaveLength(1); // one death, one destroy
+    await act(async () => {
+      await sleep(EMBED_RETRY_NO_READY_MS + 700);
+    });
+    expect(MockYTPlayer.instances).toHaveLength(2);
+    expect(MockYTPlayer.destroyed).toHaveLength(2); // both boots destroyed
     expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
-    expect(q('[data-testid="storyboard-frame"]')).not.toBeNull();
+    // P28-HPV4 — youtube.com's own measured floor law: on the settled
+    // walled floor the storyboard animation STOPS (the frame layer
+    // unmounts — the card's own static thumbnail shows through) and the
+    // honest pill says what happened. A cycling slideshow on a known-dead
+    // floor is exactly what the operator filed as the bug.
+    expect(q('[data-testid="storyboard-frame"]')).toBeNull();
+    expect(q('[data-testid="hover-preview-unavailable"]')).not.toBeNull();
     expect(q('[data-testid="hover-preview-mute"]')).toBeNull(); // chrome gone with it
   }, 15_000);
 
-  test("P22-A — onError (embed-disabled 101/150 included) destroys the embed immediately → storyboard", async () => {
+  test("P22-A/P28 — onError (embed-disabled 101/150 included) on the first boot RETRIES on the second host — and a healthy retry SAVES the preview", async () => {
     const { card, anchor } = await renderApp(videoA);
     await show(videoA, card, anchor);
     await act(async () => {
@@ -734,16 +762,24 @@ describe("P22-A — the embed lane: the fair health gate (the zoom bug's fix)", 
     });
     const player = livePlayer()!;
     await act(async () => {
-      playerEvents(player).onReady?.();
-      playerEvents(player).onStateChange({ data: 1 }); // healthy…
-    });
-    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("embed");
-    await act(async () => {
-      playerEvents(player).onError?.(); // …then the video errors mid-flight
+      playerEvents(player).onError?.(); // the nocookie boot dies hard
     });
     expect(MockYTPlayer.destroyed).toHaveLength(1); // destroyed at once
-    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
-    expect(q('[data-testid="storyboard-frame"]')).not.toBeNull();
+    // the retry boot exists, on the OTHER host
+    await act(async () => {
+      await sleep(30);
+    });
+    expect(MockYTPlayer.instances).toHaveLength(2);
+    const retry = livePlayer()!;
+    expect(retry.options["host"]).toBe(EMBED_HOSTS[1]);
+    // the retry comes ready and PLAYS → the preview is saved, phase embed
+    await act(async () => {
+      playerEvents(retry).onReady?.();
+      playerEvents(retry).onStateChange({ data: 1 });
+    });
+    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("embed");
+    expect(q('[data-testid="storyboard-frame"]')).not.toBeNull(); // the crossfade base
+    expect(MockYTPlayer.destroyed).toHaveLength(1); // the retry lives
   });
 
   test("hide destroys the embed (the single-instance law, exit side)", async () => {
@@ -985,16 +1021,25 @@ describe("P26-HPV — the native lane: embed death plays the real video (the ope
   const previewVideoEl = () =>
     q('[data-testid="hover-preview-video"]') as unknown as HTMLVideoElement | null;
 
-  /** Show in embed mode, then kill the embed at once (onError 101/150 — the wall). */
+  /** Show in embed mode, then kill the embed ladder — BOTH host boots
+   *  (P28-HPV4: the nocookie boot dies → the youtube.com retry boots →
+   *  dies too → the lane is dead and the native lane arms). */
   async function embedToNative(video = nativeVideoA) {
     const { card, anchor } = await renderApp(video);
     await show(video, card, anchor);
     await act(async () => {
       await sleep(30); // the player + the playback fetch settle
     });
-    const player = livePlayer()!;
+    let player = livePlayer()!;
     await act(async () => {
-      playerEvents(player).onError?.();
+      playerEvents(player).onError?.(); // boot 1 (nocookie) dies
+    });
+    await act(async () => {
+      await sleep(30); // the retry constructs
+    });
+    player = livePlayer()!;
+    await act(async () => {
+      playerEvents(player).onError?.(); // the retry (youtube.com) dies — the lane is dead
     });
     return { card, anchor };
   }
@@ -1011,9 +1056,9 @@ describe("P26-HPV — the native lane: embed death plays the real video (the ope
     expect(video!.getAttribute("aria-hidden")).toBe("true"); // the layer carries the aria
     // the nearest-360p format won — NOT the 1080p one (the tiny preview box)
     expect(video!.getAttribute("src")).not.toContain("itag=137");
-    // the embed lane is gone; its player destroyed (never two players)
+    // the embed ladder is gone; BOTH host boots destroyed (never two players)
     expect(q('[data-testid="hover-preview-embed"]')).toBeNull();
-    expect(MockYTPlayer.destroyed).toHaveLength(1);
+    expect(MockYTPlayer.destroyed).toHaveLength(2);
   });
 
   test("while the native video buffers (no events fired): phase storyboard + the video opacity-0 (the companion law)", async () => {
@@ -1085,7 +1130,7 @@ describe("P26-HPV — the native lane: embed death plays the real video (the ope
     expect(parseFloat(fill.style.width)).toBeCloseTo((60 / 213) * 100, 1);
   });
 
-  test("native onError → phase returns to storyboard (the honest floor) with the video gone", async () => {
+  test("native onError → phase returns to storyboard (the settled floor: the animation stops, the pill says it) with the video gone", async () => {
     await embedToNative();
     const video = previewVideoEl()!;
     await act(() => {
@@ -1097,11 +1142,14 @@ describe("P26-HPV — the native lane: embed death plays the real video (the ope
     });
     expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
     expect(previewVideoEl()).toBeNull(); // the dead lane unmounts its video
-    expect(q('[data-testid="storyboard-frame"]')).not.toBeNull();
+    // P28-HPV4 — the floor is final now: the frame layer unmounts (the
+    // static thumbnail shows through) and the honest pill appears.
+    expect(q('[data-testid="storyboard-frame"]')).toBeNull();
+    expect(q('[data-testid="hover-preview-unavailable"]')).not.toBeNull();
     expect(q('[data-testid="hover-preview-mute"]')).toBeNull(); // chrome gone with the lane
   });
 
-  test("embed death + NO streamFormats (walled payload) → storyboard-only — the pre-fix floor preserved", async () => {
+  test("embed death + NO streamFormats (walled payload) → storyboard-only — the pre-fix floor preserved (P28: settled, not animating)", async () => {
     // a plain storyboard payload (no formats): the fix raised the ladder
     // ABOVE the floor, it did not move the floor itself
     const slideVideo = {
@@ -1114,21 +1162,31 @@ describe("P26-HPV — the native lane: embed death plays the real video (the ope
     await act(async () => {
       await sleep(30);
     });
-    const player = livePlayer()!;
+    // P28-HPV4 — kill BOTH host boots (the ladder, not just the first boot)
+    let player = livePlayer()!;
+    await act(async () => {
+      playerEvents(player).onError?.();
+    });
+    await act(async () => {
+      await sleep(30);
+    });
+    player = livePlayer()!;
     await act(async () => {
       playerEvents(player).onError?.();
     });
     expect(previewVideoEl()).toBeNull(); // no formats → the native lane never arms
     expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
-    expect(q('[data-testid="storyboard-frame"]')).not.toBeNull();
+    // the settled floor: the animation stopped, the pill honest
+    expect(q('[data-testid="storyboard-frame"]')).toBeNull();
+    expect(q('[data-testid="hover-preview-unavailable"]')).not.toBeNull();
   });
 
-  test("P26-HPV2 — the walled Vevo class's REAL 2026-10-18 DTO (watch-page, cipher-filtered) → the storyboard floor, never a broken native lane", async () => {
+  test("P26-HPV2 — the walled Vevo class's REAL 2026-10-18 DTO (watch-page, cipher-filtered) → the settled storyboard floor, never a broken native lane", async () => {
     // the exact payload shape the widened chain + watch-page rung serve for
     // kJQP7kiw5Fk's class from the sandbox egress: storyboards + duration
     // survive, ZERO streamFormats (the ciphered formats honestly dropped —
     // no decipher exists in the current player world). The native lane never
-    // arms on an empty surface — the storyboard companion is the honest floor.
+    // arms on an empty surface — the storyboard floor is honest.
     const vevoVideo = {
       id: "VEVO0000001",
       title: "Walled Vevo class",
@@ -1139,17 +1197,28 @@ describe("P26-HPV — the native lane: embed death plays the real video (the ope
     await act(async () => {
       await sleep(30);
     });
-    const player = livePlayer()!;
+    // P28-HPV4 — the host ladder: both boots die before the floor is final
+    let player = livePlayer()!;
     await act(async () => {
       playerEvents(player).onError?.(); // embed death on the walled class
     });
+    await act(async () => {
+      await sleep(30);
+    });
+    player = livePlayer()!;
+    await act(async () => {
+      playerEvents(player).onError?.();
+    });
     expect(previewVideoEl()).toBeNull(); // no plain formats → no native lane
     expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
-    expect(q('[data-testid="storyboard-frame"]')).not.toBeNull(); // the companion animates
+    // the SETTLED floor: static thumbnail + the honest pill (P28 — the
+    // cycling companion is the loading lane's, not the floor's)
+    expect(q('[data-testid="storyboard-frame"]')).toBeNull();
+    expect(q('[data-testid="hover-preview-unavailable"]')).not.toBeNull();
     expect(q('[data-testid="hover-preview-mute"]')).toBeNull(); // no chrome without a video
   });
 
-  test("NATIVE_NO_PLAY_MS zombie guard: a never-playing, never-erroring video goes dead after the window → storyboard", async () => {
+  test("NATIVE_NO_PLAY_MS zombie guard: a never-playing, never-erroring video goes dead after the window → the settled floor", async () => {
     await embedToNative();
     expect(previewVideoEl()).not.toBeNull();
     // no events fired, readyState stays 0 (< 2) — a hanging proxy fetch must
@@ -1159,7 +1228,9 @@ describe("P26-HPV — the native lane: embed death plays the real video (the ope
     });
     expect(previewVideoEl()).toBeNull(); // the zombie was disarmed
     expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
-    expect(q('[data-testid="storyboard-frame"]')).not.toBeNull();
+    // the floor settled — the animation stopped, the pill says it
+    expect(q('[data-testid="storyboard-frame"]')).toBeNull();
+    expect(q('[data-testid="hover-preview-unavailable"]')).not.toBeNull();
   }, 15_000);
 
   test("reduced motion (storyboard lane): no video element ever renders — the device policy is unchanged", async () => {
@@ -1192,24 +1263,34 @@ describe("P26B-HPV3 — the walled-floor pill (the operator's 2026-10-19 re-file
   const previewVideoEl = () =>
     q('[data-testid="hover-preview-video"]') as unknown as HTMLVideoElement | null;
 
-  /** Show in embed mode, then kill the embed (onError — the wall / 101/150). */
+  /** Show in embed mode, then kill the embed LADDER (both host boots —
+   *  P28-HPV4: onError on boot 1, then onError on the retry) so the
+   *  floor is genuinely final. */
   async function embedDeathFloor(video: { id: string; title: string; thumbnailUrl?: string | null }) {
     const { card, anchor } = await renderApp(video);
     await show(video, card, anchor);
     await act(async () => {
       await sleep(30); // the player + the playback fetch settle
     });
-    const player = livePlayer()!;
+    let player = livePlayer()!;
+    await act(async () => {
+      playerEvents(player).onError?.();
+    });
+    await act(async () => {
+      await sleep(30); // the retry constructs
+    });
+    player = livePlayer()!;
     await act(async () => {
       playerEvents(player).onError?.();
     });
   }
 
-  test("the walled Vevo class floor SAYS what it is: the Preview-unavailable pill over the animating storyboard frames", async () => {
+  test("the walled Vevo class floor SAYS what it is: the pill over the STATIC thumbnail (P28 — the animation stops on the settled floor)", async () => {
     // the operator's exact symptom class: embed death + a cipher-filtered
     // payload (storyboards, zero formats) — the floor is final, and a silent
     // cycling slideshow is how they read it as "the preview is not working".
-    // The pill is the honest degrade the house law demands.
+    // The pill is the honest degrade the house law demands; P28 adds
+    // youtube.com's own law — the floor never ANIMATES either.
     const vevoVideo = {
       id: "VEVO0000002",
       title: "Walled Vevo floor",
@@ -1217,7 +1298,9 @@ describe("P26B-HPV3 — the walled-floor pill (the operator's 2026-10-19 re-file
     };
     await embedDeathFloor(vevoVideo);
     expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
-    expect(q('[data-testid="storyboard-frame"]')).not.toBeNull(); // the frames keep animating
+    // the frame layer is GONE (the card's static thumbnail shows through
+    // the preview layer) — never a cycling slideshow on a known-dead floor
+    expect(q('[data-testid="storyboard-frame"]')).toBeNull();
     expect(pill()).not.toBeNull();
     expect(pill()!.textContent).toContain("Preview unavailable");
     expect(pill()!.getAttribute("title")).toContain("blocked");
@@ -1262,9 +1345,18 @@ describe("P26B-HPV3 — the walled-floor pill (the operator's 2026-10-19 re-file
     await act(async () => {
       await sleep(30);
     });
-    const player = livePlayer()!;
+    // P28-HPV4 — the full ladder dies (both host boots) before the native
+    // lane arms
+    let player = livePlayer()!;
     await act(async () => {
-      playerEvents(player).onError?.(); // embed death → the native lane arms
+      playerEvents(player).onError?.();
+    });
+    await act(async () => {
+      await sleep(30);
+    });
+    player = livePlayer()!;
+    await act(async () => {
+      playerEvents(player).onError?.();
     });
     expect(previewVideoEl()).not.toBeNull();
     expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard"); // companion
@@ -1288,7 +1380,15 @@ describe("P26B-HPV3 — the walled-floor pill (the operator's 2026-10-19 re-file
     await act(async () => {
       await sleep(30);
     });
-    const player = livePlayer()!;
+    // P28-HPV4 — the full ladder dies (both host boots) first
+    let player = livePlayer()!;
+    await act(async () => {
+      playerEvents(player).onError?.();
+    });
+    await act(async () => {
+      await sleep(30);
+    });
+    player = livePlayer()!;
     await act(async () => {
       playerEvents(player).onError?.();
     });
