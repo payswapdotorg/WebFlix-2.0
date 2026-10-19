@@ -210,7 +210,12 @@ describe("the category page — the chip row (All + the 14, URL-synced)", () => 
     expect(chipHrefs[0]).toBe("/explore"); // All → the explore hub
     expect(chipHrefs[CATEGORY_CHIPS.indexOf("Music")]).toBe("/explore/category/Music");
     expect(chipHrefs[CATEGORY_CHIPS.indexOf("Gaming")]).toBe("/explore/category/Gaming");
-    expect(chipHrefs[CATEGORY_CHIPS.indexOf("Podcasts")]).toBe("/explore/category/Podcasts");
+    // P25 G13 — Podcasts is a DESTINATION now: youtube.com's own card routes
+    // to the dedicated /podcasts surface (measured live 2026-10-19), so the
+    // chip row (categoryDestination) routes there too — the composed grid
+    // stays reachable at /explore/category/Podcasts but is no longer the
+    // destination.
+    expect(chipHrefs[CATEGORY_CHIPS.indexOf("Podcasts")]).toBe("/podcasts");
     expect(chipHrefs[CATEGORY_CHIPS.indexOf("Mixes")]).toBe("/explore/category/Mixes");
     expect(chipHrefs[CATEGORY_CHIPS.indexOf("Live")]).toBe("/explore/live"); // Live keeps its own surface
   });
@@ -315,19 +320,148 @@ describe("the category page — infinite scroll (the search-view sentinel patter
 });
 
 describe("the explore hub — every card lands on a real-data destination", () => {
-  test("Live keeps /explore/live; the 13 browse categories → their own pages", async () => {
+  test("Live keeps /explore/live; the 12 browse categories → their own pages; Podcasts → /podcasts (P25 G13)", async () => {
     await render(createElement(ExploreHub));
 
     // REA-3 — the hub's cards are the 14 CATEGORIES (the browse ladder);
     // the home-only dynamic chips (Recently uploaded) are not cards here.
+    // P25 G13 — the Podcasts card is a DESTINATION card now (youtube.com's
+    // own Podcasts browse surface, measured): it links /podcasts, not the
+    // composed /explore/category/Podcasts grid.
     const cardLinks = all("a").filter((a) => a.getAttribute("href")?.startsWith("/explore"));
     expect(cardLinks.map((a) => a.getAttribute("href"))).toContain("/explore/live");
-    for (const category of CATEGORY_CHIPS.filter((c) => c !== "All" && c !== "Live")) {
+    for (const category of CATEGORY_CHIPS.filter(
+      (c) => c !== "All" && c !== "Live" && c !== "Podcasts"
+    )) {
       expect(cardLinks.map((a) => a.getAttribute("href"))).toContain(
         `/explore/category/${category}`
       );
     }
-    // 13 category cards + the Live card = 14 explore links (no scoped-search stragglers)
-    expect(cardLinks).toHaveLength(14);
+    // 12 category cards + the Live card = 13 explore links (the Podcasts
+    // card left the /explore family for its own destination)
+    expect(cardLinks).toHaveLength(13);
+    // …and the Podcasts destination card itself is present with its own copy
+    const podcastsCard = all("a").find((a) => a.getAttribute("href") === "/podcasts");
+    expect(podcastsCard?.textContent).toContain("Podcasts");
+    expect(podcastsCard?.textContent).toContain("podcasts destination");
+    expect(podcastsCard?.textContent).not.toContain("from YouTube search");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P25 G13 — the dedicated podcasts page view (src/app/podcasts/view.tsx),
+// pinned against the sanitized REAL capture
+// (tests/fixtures/yt/podcasts_destination_public.json — youtube.com's
+// FEpodcasts_destination page, logged-out, 2026-10-19) parsed through the
+// REAL parsePodcastsPage: the header + the shelf family in document order +
+// the response's own card targets + the honest states + the measured
+// one-page law (NO sentinel, NO chips — nothing continuation-shaped was
+// measured in the payload).
+// ---------------------------------------------------------------------------
+const { default: PodcastsView } = await import("@/app/podcasts/view");
+const { parsePodcastsPage } = await import("@/lib/youtube/podcasts");
+import { readFileSync } from "node:fs";
+
+const podcastsDto = (over: Record<string, any> = {}) => {
+  const fixture = JSON.parse(
+    readFileSync("tests/fixtures/yt/podcasts_destination_public.json", "utf8")
+  );
+  const parsed = parsePodcastsPage(fixture);
+  return { ...parsed, source: "ssr", publicMode: true, ...over };
+};
+
+describe("the podcasts page (P25 G13 — youtube.com's own destination surface)", () => {
+  test("the header (Mic + the response's own title) + the 13 shelves in document order", async () => {
+    viewData = podcastsDto();
+    await render(createElement(PodcastsView));
+
+    const h1 = all("h1")[0];
+    expect(h1?.textContent).toContain("Podcasts");
+    const shelves = all('[data-testid="podcast-shelf"]');
+    expect(shelves.map((s) => s.querySelector("h2")?.textContent)).toEqual([
+      "Popular episodes",
+      "Popular podcasts",
+      "Live now",
+      "Ghost stories",
+      "Wealth",
+      "Stock markets",
+      "Economics",
+      "Finances",
+      "Psychology",
+      "Health care",
+      "AI",
+      "Vocabulary",
+      "Popular podcast creators",
+    ]);
+    // the honest public-mode label rides the payload's own flag
+    expect(all('[data-testid="podcasts-public-mode"]')).toHaveLength(1);
+    expect(text('[data-testid="podcasts-public-mode"]')[0]).toContain("public mode");
+  });
+
+  test("every card target is the response's own: episodes → /watch/<id>, shows → the measured Play-all form, creators → /channel/<handle>", async () => {
+    viewData = podcastsDto();
+    await render(createElement(PodcastsView));
+
+    // episodes ride the house VideoCard rail — real /watch targets
+    const watchLinks = all("a").filter((a) => /^\/watch\/[\w-]+$/.test(a.getAttribute("href") ?? ""));
+    expect(watchLinks.map((a) => a.getAttribute("href"))).toContain("/watch/lmRCN_E9ZI8");
+
+    // the show card's own target is the MEASURED Play-all watchEndpoint in
+    // the APP's own form — the house Play-all idiom /watch/<videoId>?list=<PL>
+    // (the playlist page's own link; the watch route is /watch/[id])
+    const showCards = all('[data-testid="podcast-show-card"]');
+    expect(showCards.length).toBeGreaterThan(0);
+    expect(showCards[0].getAttribute("href")).toBe(
+      "/watch/svf7jACondc?list=PLdY_rFY03hT4ezNATc8jI_4QhXf60ol9G"
+    );
+    // the publisher row links the measured channel handle
+    expect(hrefs("a")).toContain("/channel/@celebuzzhk");
+
+    // the creator card links the measured channel handle
+    const creatorCards = all('[data-testid="podcast-creator-card"]');
+    expect(creatorCards.length).toBeGreaterThan(0);
+    expect(creatorCards[0].getAttribute("href")).toBe("/channel/@CalebHammer");
+    expect(creatorCards[0].textContent).toContain("4M subscribers");
+    expect(creatorCards[0].textContent).toContain("5,014 videos");
+  });
+
+  test("the measured ONE-PAGE law: NO sentinel, NO IntersectionObserver, NO chips (nothing to scroll)", async () => {
+    viewData = podcastsDto();
+    await render(createElement(PodcastsView));
+
+    expect(all('[data-testid*="sentinel"]')).toHaveLength(0);
+    expect(all('[data-testid="category-chip"]')).toHaveLength(0);
+    // the capturing stub proves the view registered NO observer at all
+    expect(observerCallbacks).toHaveLength(0);
+  });
+
+  test("the honest states: skeletons while loading, role=alert on error, the empty note", async () => {
+    // loading (the useApi stub derives loading from null data)
+    viewData = null;
+    viewError = null;
+    await render(createElement(PodcastsView));
+    expect(all('[aria-busy="true"]')).toHaveLength(1);
+    expect(all('[data-testid="podcast-shelf"]')).toHaveLength(0);
+    act(() => root?.unmount());
+    host?.remove();
+
+    // error — honest, never a fabricated grid
+    viewError = "Failed to load podcasts";
+    await render(createElement(PodcastsView));
+    const alert = all('[role="alert"]');
+    expect(alert).toHaveLength(1);
+    expect(alert[0].textContent).toContain("Failed to load podcasts");
+    expect(all('[data-testid="podcast-shelf"]')).toHaveLength(0);
+    act(() => root?.unmount());
+    host?.remove();
+
+    // empty — the honest note, not a promo
+    viewData = { title: "Podcasts", shelves: [], source: "ssr", publicMode: true };
+    viewError = null;
+    await render(createElement(PodcastsView));
+    expect(text("p")).toEqual(
+      expect.arrayContaining([expect.stringContaining("Nothing on the podcasts page right now")])
+    );
+    expect(all('[data-testid="podcast-shelf"]')).toHaveLength(0);
   });
 });

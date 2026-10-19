@@ -8,6 +8,7 @@ import {
   HOME_CATEGORY_CHIPS,
   CATEGORY_CHIPS,
   RECENTLY_UPLOADED_CHIP,
+  categoryDestination,
   normalizeCategory,
   filterVideosByCategory,
 } from "@/lib/categories";
@@ -105,6 +106,24 @@ describe("chips filter behavior (filterVideosByCategory)", () => {
 
   test("empty result is honest (no fallback content)", () => {
     expect(filterVideosByCategory(videos, "Podcasts")).toHaveLength(0);
+  });
+});
+
+describe("categoryDestination (P25 G13 — the Podcasts destination re-routed, measured)", () => {
+  test("Podcasts → the dedicated podcasts destination /podcasts (youtube.com's own FEpodcasts_destination)", () => {
+    expect(categoryDestination("Podcasts")).toBe("/podcasts");
+  });
+
+  test("Live keeps its own surface; every OTHER category keeps the composed grid", () => {
+    expect(categoryDestination("Live")).toBe("/explore/live");
+    for (const c of CATEGORIES.filter((c) => c !== "Podcasts" && c !== "Live")) {
+      expect(categoryDestination(c)).toBe(`/explore/category/${encodeURIComponent(c)}`);
+    }
+  });
+
+  test("unknown values keep the composed form (never a fabricated destination)", () => {
+    expect(categoryDestination("NotACategory")).toBe("/explore/category/NotACategory");
+    expect(categoryDestination("")).toBe("/explore/category/");
   });
 });
 
