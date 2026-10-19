@@ -103,8 +103,28 @@ import { soundTokenToKeyLink } from "@/lib/youtube/sound-key";
  * (the upload wizard is long-form only; the broker registry carries no
  * remix/shorts-creation kind — verified), so the WebFlix Remix rides in
  * youtube.com's own disabled form: rendered, aria-disabled, never faking
- * work, with the honest note "Shorts creation is not available in WebFlix"
- * (youtube.com's own honest-toast pattern, mirrored).
+ * work, with the honest note (youtube.com's own honest-toast pattern,
+ * mirrored).
+ *
+ * P25 G14 (2026-10-19, re-measured this run — the Shorts-AI verdict):
+ * youtube.com's 2026 Shorts AI editing family (AI first-draft editing) is
+ * studio/app-side and unreachable from this egress — MEASURED: studio
+ * .youtube.com → 302 → accounts.google.com ServiceLogin (login-walled);
+ * /shorts/create → 404 (no public web surface); the /shorts SSR is the reel
+ * shell with ZERO "AI edit"/"Gemini"/"first draft"/"Create a Short"/
+ * "Shorts camera" strings; the reel/reel_watch_sequence payload's ⋯ sheet
+ * carries Description / Save to playlist / Captions [Off] / Full screen /
+ * Playback speed / Report / Send feedback — ZERO AI-editing entries — and
+ * the rail's Remix button itself renders DISABLED with youtube.com's own
+ * addToToastAction "Feature not available for this video" on THIS egress's
+ * measured short; the payload's only "veo"-like string hits are base64
+ * tracking-param artifacts (verified in-context). The P23-B LLM seam is
+ * READ-side (env-keyed answer/summary, honest degradation when un-keyed) —
+ * an LLM-backed local "AI edit" surface would be an editor that cannot
+ * save anything to youtube.com: the fake-affordance law. G14's honest
+ * deliverable IS this disabled entry's disclosure — the toast carries the
+ * measured reason (studio/app-side), the entry never fakes work, and NO
+ * editing affordance is invented anywhere in the rail or the ⋯ menu.
  */
 
 /** "612" / "768K" / "2.4M" / "1,234 views" → 612 / 768000 / 2400000 / 1234 (null when unparseable). */
@@ -430,11 +450,13 @@ export function ShortsEngagementRail({
         count="Share"
         onClick={onShare}
       />
-      {/* Remix (P23-C G6) — youtube.com's own rail slot (between Share and
-          the disc, measured). WebFlix has no shorts-creation flow: the entry
-          renders in youtube.com's own DISABLED honest form — aria-disabled,
-          never faking work; the click surfaces the honest note (youtube.com's
-          own addToToastAction pattern for non-remixable videos). */}
+      {/* Remix (P23-C G6; P25 G14 disclosure) — youtube.com's own rail slot
+          (between Share and the disc, measured). WebFlix has no
+          shorts-creation flow: the entry renders in youtube.com's own
+          DISABLED honest form — aria-disabled, never faking work; the click
+          surfaces the honest note WITH the measured reason (youtube.com's
+          own addToToastAction pattern; the 2026 AI editing family is
+          studio/app-side — the G14 record in the file header). */}
       <RailAction
         label="Remix"
         icon={<Disc3 className="size-6" aria-hidden="true" />}
@@ -443,7 +465,9 @@ export function ShortsEngagementRail({
         onClick={() => {
           // youtube.com's own honest toast family, mirrored for WebFlix's
           // honest absence: the affordance cannot work and never pretends to
-          toast.info("Shorts creation is not available in WebFlix");
+          toast.info(
+            "Shorts creation is not available in WebFlix — YouTube's Shorts editor (incl. the 2026 AI editing family) is studio/app-side",
+          );
         }}
       />
       {/* More (⋯) — the app's real actions only; honest absence otherwise. */}
