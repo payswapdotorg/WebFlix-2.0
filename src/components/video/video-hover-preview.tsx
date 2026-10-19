@@ -87,6 +87,35 @@ import type { StoryboardLevelDto, StreamFormatDto } from "@/lib/watch/types";
  * storyboard stays the loading companion there) nor on the reduced-motion
  * lane (storyboard-only is that lane's DESIGN, not a degrade).
  *
+ * P28-HPV4 — the operator's 2026-10-19 third re-file (verbatim: "the
+ * slideshow bug is still not solved… check how youtube.com does it… the
+ * previous webflix implementation (webflix-steel.vercel.app) also does the
+ * preview better"), answered with the two measured laws:
+ *
+ *  1. THE NO-COOKIE HOST + THE HOST RETRY: webflix-steel's preview (the
+ *     operator-endorsed implementation, measured live 2026-10-19) boots
+ *     youtube-nocookie.com — the privacy-enhanced embed domain. The
+ *     measured matrix (4 shapes × walled + control videos): every shape
+ *     plays the healthy class; the wall is per-VIDEO protection class
+ *     (music/VEVO), domain-insensitive from a datacenter. But the
+ *     operator's browser may treat the nocookie shape differently than
+ *     this sandbox could measure — so the embed lane now boots
+ *     NOCOOKIE-FIRST (steel's endorsed domain, minimal playerVars) and,
+ *     when that boot dies, retries ONCE on the youtube.com host with a
+ *     tightened no-ready window (the API script + iframe machinery are
+ *     warm; a healthy second boot reports ready fast). Coverage over
+ *     latency: a walled video costs one extra boot before the honest
+ *     floor; a host-walled-for-the-operator video gets SAVED by the retry.
+ *  2. THE YOUTUBE.COM FLOOR ("check how youtube.com does it" — measured
+ *     live 2026-10-19: youtube.com's own hover degrade NEVER animates a
+ *     dead preview; it plays real video or shows the static thumbnail,
+ *     nothing in between): when the walled floor is FINAL (both playing
+ *     lanes dead + fetch settled), the storyboard CLOCK STOPS and the
+ *     frame layer unmounts — the card's own static thumbnail shows
+ *     through the preview layer, with the honest pill. The storyboard
+ *     animates only while it has a real job: the loading companion under
+ *     booting lanes (and the reduced-motion design lane, untouched).
+ *
  * Device policy (youtube.com parity):
  *  - touch / coarse pointers: NO preview at all (hover doesn't exist);
  *  - prefers-reduced-motion: storyboard-only (no embed; the ken-burns
@@ -239,6 +268,29 @@ async function drainPlaybackPrefetch(): Promise<void> {
  * deadline, which killed healthy first-hover embeds mid-boot.
  */
 export const EMBED_NO_READY_MS = 5000;
+
+/**
+ * P28-HPV4 — the no-ready window for the RETRY boot (the youtube.com host,
+ * after the nocookie boot died). The iframe API script and the player
+ * machinery are already warm by then; a healthy second boot reports ready
+ * fast, so the tightened window only shortens the walled class's road to
+ * the honest floor (never murders a healthy boot — the first boot's own
+ * 5s window already covered the slow-boot class).
+ */
+export const EMBED_RETRY_NO_READY_MS = 2500;
+
+/**
+ * P28-HPV4 — the embed hosts, in boot order: NOCOOKIE first (the
+ * privacy-enhanced domain webflix-steel rides — the operator-endorsed
+ * implementation, measured no-worse on the healthy class), then the
+ * classic youtube.com host as the one retry (the host axis is the one
+ * degree of freedom a datacenter sandbox cannot measure for the
+ * operator's browser).
+ */
+export const EMBED_HOSTS = [
+  "https://www.youtube-nocookie.com",
+  "https://www.youtube.com",
+] as const;
 
 /**
  * P22-A — how long after onReady the embed has to report playback
@@ -432,6 +484,10 @@ export function VideoHoverPreviewLayer() {
   const [frame, setFrame] = useState(0);
   const [embedDead, setEmbedDead] = useState(false);
   const [embedAlive, setEmbedAlive] = useState(false);
+  // P28-HPV4 — which EMBED_HOSTS boot this is (0 = nocookie first,
+  // 1 = the youtube.com retry). embedAttempt === EMBED_HOSTS.length
+  // means every host died — the lane is dead.
+  const [embedAttempt, setEmbedAttempt] = useState(0);
   const [muted, setMuted] = useState(true);
   const [progress, setProgress] = useState<{ time: number; duration: number }>({
     time: 0,
@@ -463,6 +519,7 @@ export function VideoHoverPreviewLayer() {
     setFrame(0);
     setEmbedDead(false);
     setEmbedAlive(false);
+    setEmbedAttempt(0);
     setMuted(true);
     setProgress({ time: 0, duration: 0 });
     setScrubFrac(null);
@@ -504,11 +561,20 @@ export function VideoHoverPreviewLayer() {
   // replaces the host with an iframe, so the React-owned mount stays
   // stable). The P22-A health gate (honest ladder — never a walled iframe,
   // never a murdered healthy one):
-  //   - onReady within EMBED_NO_READY_MS, else give up (dead iframe);
+  //   - onReady within the boot's no-ready window (EMBED_NO_READY_MS for
+  //     the first boot; the tighter EMBED_RETRY_NO_READY_MS for retries),
+  //     else give up (dead iframe);
   //   - onReady → belt-and-braces mute + play, then a EMBED_PLAYING_MS
   //     window for playback, extended ONCE to 2× by a BUFFERING report;
   //   - onError → give up immediately (101/150 embed-disabled included);
   //   - PLAYING/ENDED → healthy, the deadline clocks stop for good.
+  //
+  // P28-HPV4 — the HOST LADDER: boot 0 rides the no-cookie host
+  // (webflix-steel's endorsed domain), and give-up on any boot before the
+  // last RETRIES on the next host rather than declaring the lane dead —
+  // the host axis is the one degree of freedom the datacenter matrix
+  // could not measure for the operator's browser. Only the LAST boot's
+  // death sets embedDead (arming the native lane / the honest floor).
   useEffect(() => {
     if (shownId === null || mode !== "embed") return;
     const mount = embedMountRef.current;
@@ -516,6 +582,9 @@ export function VideoHoverPreviewLayer() {
     // a fresh embed means a fresh scrub (an interrupted drag must not leak
     // into the next preview's pointermove — refs only move inside effects)
     draggingRef.current = false;
+    const attempt = Math.min(embedAttempt, EMBED_HOSTS.length - 1);
+    const embedHost = EMBED_HOSTS[attempt];
+    const isRetry = attempt > 0;
     let cancelled = false;
     let noReadyTimer: ReturnType<typeof setTimeout> | null = null;
     let playingTimer: ReturnType<typeof setTimeout> | null = null;
@@ -540,15 +609,29 @@ export function VideoHoverPreviewLayer() {
       if (cancelled) return;
       cancelled = true;
       clearTimers();
+      // capture the handle before nulling the closure (the ref clear below
+      // must compare against the REAL player, not against null)
+      const dead = embed;
       try {
-        embed?.destroy();
+        dead?.destroy();
       } catch {
         /* already destroyed */
       }
-      if (embedRef.current === embed) embedRef.current = null;
+      // P28-HPV4 — null the closure's handle: the effect cleanup that
+      // follows the embedAttempt bump must not destroy this boot a SECOND
+      // time (the real YT destroy is idempotent, but the double call is
+      // observable in tests and semantically wrong — one death, one destroy).
+      embed = null;
+      if (embedRef.current === dead) embedRef.current = null;
       host.remove();
-      setEmbedDead(true);
       setEmbedAlive(false);
+      if (attempt < EMBED_HOSTS.length - 1) {
+        // P28-HPV4 — one host remains: boot it (the effect re-runs on the
+        // embedAttempt bump; this cleanup already tore this boot down).
+        setEmbedAttempt(attempt + 1);
+      } else {
+        setEmbedDead(true);
+      }
     };
 
     const armPlaying = (ms: number) => {
@@ -574,6 +657,9 @@ export function VideoHoverPreviewLayer() {
         if (cancelled) return;
         embed = new YT.Player(host, {
           videoId: shownId,
+          // P28-HPV4 — the host ladder: no-cookie first (steel's endorsed
+          // privacy-enhanced domain), youtube.com as the retry.
+          host: embedHost,
           width: "100%",
           height: "100%",
           playerVars: {
@@ -581,14 +667,12 @@ export function VideoHoverPreviewLayer() {
             mute: 1,
             // youtube.com's preview chrome is its own slim timeline + mute
             // toggle (see the controls below) — the full ytp chrome would
-            // dwarf a 320px card. The controls live in OUR layer.
+            // dwarf a 320px card. The controls live in OUR layer. The rest
+            // of the old var bundle (rel/modestbranding/iv_load_policy/
+            // fs/disablekb) is GONE — the P28 measured matrix keeps the
+            // boot shape minimal, exactly the family webflix-steel rides.
             controls: 0,
-            rel: 0,
-            modestbranding: 1,
             playsinline: 1,
-            iv_load_policy: 3,
-            fs: 0,
-            disablekb: 1,
           },
           events: {
             onReady: () => {
@@ -629,10 +713,11 @@ export function VideoHoverPreviewLayer() {
         });
         embedRef.current = embed;
         // The no-ready law: a loaded iframe API whose onReady never arrives
-        // is a dead/walled iframe (the watch player's ~5s precedent).
+        // is a dead/walled iframe (the watch player's ~5s precedent). The
+        // retry boot rides the tightened window — the machinery is warm.
         noReadyTimer = setTimeout(() => {
           if (!cancelled) giveUp();
-        }, EMBED_NO_READY_MS);
+        }, isRetry ? EMBED_RETRY_NO_READY_MS : EMBED_NO_READY_MS);
       })
       .catch(() => giveUp()); // iframe_api dead → no embed can play
 
@@ -647,7 +732,7 @@ export function VideoHoverPreviewLayer() {
       if (embedRef.current === embed) embedRef.current = null;
       host.remove();
     };
-  }, [shownId, mode]);
+  }, [shownId, mode, embedAttempt]);
 
   // P26-HPV — the NATIVE lane's stream: a pure pick (nearest-360p — the
   // preview box renders at thumbnail size) from the SAME playback fetch that
@@ -751,14 +836,21 @@ export function VideoHoverPreviewLayer() {
   }, [nativeLane, nativeAlive]);
 
   // The animation clock: advance the frame cursor while shown + storyboard.
+  // P28-HPV4 — the clock STOPS on the settled walled floor: youtube.com's
+  // own measured hover degrade never animates a dead preview (it plays
+  // real video or shows the static thumbnail, nothing in between), and a
+  // cycling slideshow on a known-dead floor is exactly what the operator
+  // filed as "the bug". The storyboard animates only while it has a real
+  // job — the loading companion under booting lanes + the reduced-motion
+  // design lane (where walledFloor never fires).
   useEffect(() => {
-    if (phase !== "storyboard" || !level || shownId === null) return;
+    if (phase !== "storyboard" || !level || shownId === null || walledFloor) return;
     const tick = frameTickMs(level);
     const timer = setInterval(() => {
       setFrame((f) => (f + 1) % Math.max(1, level.frameCount));
     }, tick);
     return () => clearInterval(timer);
-  }, [phase, level, shownId]);
+  }, [phase, level, shownId, walledFloor]);
 
   // P26-HPV — the ops adapter: the ONE lane-agnostic surface the P22-A
   // chrome drives. The "embed" phase maps it onto the YT embedRef methods,
@@ -996,7 +1088,13 @@ export function VideoHoverPreviewLayer() {
               <span className="size-6 animate-spin rounded-full border-2 border-white/30 border-t-white" />
             </div>
           ) : null}
-          {geom ? (
+          {/* P28-HPV4 — the storyboard frame layer: the loading companion
+              under booting lanes, animated. On the SETTLED walled floor it
+              UNMOUNTS — youtube.com's own measured law (play video or show
+              the static thumbnail, never a cycling slideshow on a known-dead
+              floor) — so the card's own static thumbnail shows through the
+              preview layer underneath the honest pill. */}
+          {geom && !walledFloor ? (
             <div
               data-testid="storyboard-frame"
               className="absolute inset-0 transition-opacity duration-300"
@@ -1016,7 +1114,7 @@ export function VideoHoverPreviewLayer() {
           {walledFloor ? (
             <span
               data-testid="hover-preview-unavailable"
-              title="Playback is blocked from this server right now — these are storyboard preview frames"
+              title="Playback is blocked from this server right now — the preview cannot play this video here"
               className="pointer-events-none absolute bottom-3 left-2 z-10 flex items-center gap-1 rounded bg-black/80 px-1.5 py-0.5 text-[10px] font-medium text-white/90"
             >
               <VideoOff className="size-3" aria-hidden="true" />
