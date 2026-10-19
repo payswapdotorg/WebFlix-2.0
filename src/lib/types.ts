@@ -660,6 +660,61 @@ export type ExploreCategoryPageDTO = {
   publicMode: boolean;
 };
 
+/**
+ * The podcasts destination surface (/podcasts — P25 G13), read from
+ * youtube.com's own FEpodcasts_destination page (the SSR mechanism, the
+ * trending read's sibling). The measured surface is a ONE-PAGE shelf family
+ * (no continuation anywhere in the served payload — never a fabricated
+ * scroll); each shelf carries the response's own card families:
+ * episodes (videoRenderer → VideoDTO), shows (lockupViewModel
+ * LOCKUP_CONTENT_TYPE_PODCAST → PodcastShowDTO), creators
+ * (gridChannelRenderer → PodcastCreatorDTO).
+ */
+export type PodcastShowDTO = {
+  /** the podcast's playlist id (the "View full podcast" target) */
+  playlistId: string;
+  title: string;
+  /** the publisher row's channel name (null when the row carries none) */
+  publisherName: string | null;
+  /** the publisher's @handle (null when unresolvable — never guessed) */
+  publisherHandle: string | null;
+  publisherVerified: boolean;
+  /** the thumbnail badge text ("139 episodes") — null when absent */
+  episodeCountText: string | null;
+  /** the metadata row text ("Updated today") — null when absent */
+  updatedText: string | null;
+  thumbnailUrl: string | null;
+  /** the card's own Play-all watch target's videoId (null → no card link) */
+  playAllVideoId: string | null;
+};
+
+export type PodcastCreatorDTO = {
+  id: string;
+  handle: string;
+  name: string;
+  avatarUrl: string | null;
+  subscriberCountText: string | null;
+  videoCountText: string | null;
+};
+
+export type PodcastShelfDTO = {
+  title: string;
+  episodes: VideoDTO[];
+  shows: PodcastShowDTO[];
+  creators: PodcastCreatorDTO[];
+};
+
+export type PodcastsPageDTO = {
+  /** the response's own page header title ("Podcasts") */
+  title: string;
+  shelves: PodcastShelfDTO[];
+  /** "ssr" = the real FEpodcasts_destination page read — the honest source
+   *  label discipline (the same family as trending's "trending"|"search"). */
+  source: "ssr";
+  /** true when no YouTube operator session is configured (public mode). */
+  publicMode: boolean;
+};
+
 /** In-channel search results ("Search this channel"). */
 export type ChannelSearchDTO = {
   query: string;

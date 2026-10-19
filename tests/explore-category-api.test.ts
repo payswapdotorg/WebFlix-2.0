@@ -546,3 +546,98 @@ describe("P22-C — the category cursor chain survives append-shape continuation
     throw new Error("the category chain never reached the append token — it ended early");
   });
 });
+
+// ---------------------------------------------------------------------------
+// P25 G13 — the podcasts destination route (GET /api/podcasts): the SSR read
+// proven at the route level with the sanitized REAL capture (the same
+// setUpstream seam; no live network). The fixture HTML is the wrapper the
+// ssr.ts extractor parses — the house idiom (trending-region.test.ts):
+// `<script>var ytInitialData = {…};</script>` — NO wrapping parens (the
+// extractor's `({…})` is its capture group, not literal parens).
+// ---------------------------------------------------------------------------
+import { GET as podcastsRoute } from "@/app/api/podcasts/route";
+import type { PodcastsPageDTO } from "@/lib/types";
+
+const podcastsFixture = load("podcasts_destination_public");
+const podcastsHtml =
+  `<html><head></head><body><script>var ytInitialData = ` +
+  JSON.stringify(podcastsFixture) +
+  `;</script></body></html>`;
+
+/** The podcasts-serving upstream: the /podcasts SSR GET + a failure switch. */
+function podcastsUpstream() {
+  const recorded: { url: string; method: string }[] = [];
+  let fail = false;
+  const impl = async (url: string, init?: RequestInit): Promise<Response> => {
+    recorded.push({ url, method: init?.method ?? "GET" });
+    if (url === "https://www.youtube.com/podcasts") {
+      if (fail) return new Response("boom", { status: 500 });
+      return new Response(podcastsHtml, {
+        status: 200,
+        headers: { "Content-Type": "text/html" },
+      });
+    }
+    return new Response("not found", { status: 404 });
+  };
+  return { impl, recorded, setFail: (v: boolean) => (fail = v) };
+}
+
+const podcastsPage = async (
+  url = "http://localhost/api/podcasts"
+): Promise<{ res: Response; page: PodcastsPageDTO & { error?: string } }> => {
+  const res = await podcastsRoute(new Request(url));
+  return { res, page: (await res.json()) as PodcastsPageDTO & { error?: string } };
+};
+
+describe("GET /api/podcasts (P25 G13 — the destination surface's route)", () => {
+  let pod: ReturnType<typeof podcastsUpstream>;
+
+  beforeEach(() => {
+    clearCache();
+    pod = podcastsUpstream();
+    setUpstream(pod.impl);
+  });
+
+  afterEach(() => {
+    setUpstream(null);
+  });
+
+  test("serves the measured surface: the title + the 13 shelves + the honest source label", async () => {
+    const { res, page } = await podcastsPage();
+    expect(res.status).toBe(200);
+    expect(page.title).toBe("Podcasts");
+    expect(page.source).toBe("ssr");
+    expect(page.shelves).toHaveLength(13);
+    expect(page.shelves[0].title).toBe("Popular episodes");
+    expect(page.shelves[1].shows[0].playAllVideoId).toBe("svf7jACondc");
+    expect(page.shelves[12].creators[0].handle).toBe("@CalebHammer");
+    // public mode is honest (no YT_COOKIES in this file)
+    expect(page.publicMode).toBe(true);
+  });
+
+  test("the SSR read is CACHED — two calls, ONE upstream /podcasts fetch (the live-call law)", async () => {
+    await podcastsPage();
+    await podcastsPage();
+    const hits = pod.recorded.filter((r) => r.url === "https://www.youtube.com/podcasts");
+    expect(hits).toHaveLength(1);
+  });
+
+  test("an upstream failure → the honest 502 (never a fabricated shelf)", async () => {
+    pod.setFail(true);
+    const { res, page } = await podcastsPage();
+    expect(res.status).toBe(502);
+    expect(page.error).toBe("Failed to load podcasts");
+    expect(page.shelves).toBeUndefined();
+  });
+
+  test("a page without ytInitialData → the honest 502 (the extractor's own failure)", async () => {
+    setUpstream(async (url: string) =>
+      url === "https://www.youtube.com/podcasts"
+        ? new Response("<html>no data here</html>", { status: 200 })
+        : new Response("not found", { status: 404 })
+    );
+    const { res, page } = await podcastsPage();
+    expect(res.status).toBe(502);
+    expect(page.error).toBe("Failed to load podcasts");
+  });
+});

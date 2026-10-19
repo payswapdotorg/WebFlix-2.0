@@ -84,10 +84,17 @@ export function normalizeCategory(value: string | null | undefined): string {
  *    (/explore/category/<key> — the ranked grid composed from per-category
  *    seed searches, infinite scroll through live search continuations);
  *  - Live → the Live surface (/explore/live — the Features→Live filter
- *    search, real live streams).
+ *    search, real live streams);
+ *  - Podcasts → the dedicated podcasts destination (/podcasts — P25 G13:
+ *    youtube.com's own Podcasts card routes to its dedicated
+ *    FEpodcasts_destination surface, measured live 2026-10-19 — the
+ *    explore-category compose stays reachable but is no longer the
+ *    Podcasts destination; the home chip row keeps its own family
+ *    (/?category=Podcasts — youtube.com's home chip stays on home)).
  */
 export function categoryDestination(category: string): string {
   if (category === "Live") return "/explore/live";
+  if (category === "Podcasts") return "/podcasts";
   return `/explore/category/${encodeURIComponent(category)}`;
 }
 

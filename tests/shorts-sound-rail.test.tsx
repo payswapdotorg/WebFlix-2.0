@@ -233,13 +233,16 @@ describe("Remix (P23-C G6 — youtube.com's own disabled honest form)", () => {
     expect(host!.textContent).toContain("Remix");
   });
 
-  test("the click surfaces the honest note — never a fake flow (no navigation, no fetch)", async () => {
+  test("the click surfaces the honest note WITH the measured reason — never a fake flow (no navigation, no fetch)", async () => {
     await renderRail({ meta: META_WITH_SOUND });
     const remix = qa("button").find((b) => b.getAttribute("aria-label") === "Remix");
     await act(async () => {
       remix!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
-    expect(toasts).toContain("info:Shorts creation is not available in WebFlix");
+    // P25 G14 — the upgraded disclosure: the measured reason rides the toast
+    expect(toasts).toContain(
+      "info:Shorts creation is not available in WebFlix — YouTube's Shorts editor (incl. the 2026 AI editing family) is studio/app-side",
+    );
     // no write seam fired (the affordance cannot work — it never pretends)
     expect(posts).toHaveLength(0);
   });
@@ -248,6 +251,82 @@ describe("Remix (P23-C G6 — youtube.com's own disabled honest form)", () => {
     await renderRail({ meta: META_NO_SOUND });
     const remix = qa("button").find((b) => b.getAttribute("aria-label") === "Remix");
     expect(remix).toBeTruthy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P25 G14 — the Shorts-AI honest verdict, pinned on the rail: youtube.com's
+// 2026 Shorts AI editing family (AI first-draft editing) is studio/app-side
+// and UNREACHABLE from this egress (re-measured 2026-10-19: studio.youtube
+// .com → 302 → accounts.google.com; /shorts/create → 404; the reel
+// sequence payload's ⋯ sheet + rail carry ZERO AI-editing entries — and the
+// Remix button itself renders DISABLED with youtube.com's own honest toast
+// on the measured short). The P23-B LLM seam is READ-side; a local
+// "AI edit" editor cannot save anything to youtube.com — the
+// fake-affordance law. The honest deliverable: the disabled Remix entry's
+// disclosure (the measured reason) + ZERO invented editing affordance in
+// the rail and the ⋯ menu.
+// ---------------------------------------------------------------------------
+
+describe("P25 G14 — the Shorts-AI honest-absent disclosure (zero editing affordance)", () => {
+  test("the rail carries ZERO editing/AI affordances beyond the honest-disabled Remix entry", async () => {
+    await renderRail({ meta: META_WITH_SOUND });
+    const buttons = qa("button").map((b) => (b.getAttribute("aria-label") ?? "").toLowerCase());
+    // youtube.com's measured rail: like / dislike / comments / share /
+    // remix / more — nothing else; NO "edit", "create", "draft", "AI" label
+    for (const forbidden of ["ai", "edit", "create", "draft", "veo", "gemini"]) {
+      expect(buttons.some((l) => l.includes(forbidden) && l !== "remix")).toBe(false);
+    }
+    // the one creation-family entry (Remix) is the honest-disabled form
+    const remix = qa("button").find((b) => b.getAttribute("aria-label") === "Remix");
+    expect(remix!.getAttribute("aria-disabled")).toBe("true");
+    expect(remix!.hasAttribute("disabled")).toBe(false); // stays focusable (youtube.com's own form)
+  });
+
+  test("the ⋯ menu carries ZERO editing/AI entries (the measured sheet family only)", async () => {
+    await renderRail({ meta: META_NO_SOUND, guest: false });
+    // open the menu (the G12 openMenu idiom)
+    const more = qa("button").find((b) => b.getAttribute("aria-label") === "More actions");
+    await act(async () => {
+      more!.dispatchEvent(
+        new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+    await act(async () => {});
+    const items = Array.from(
+      win.document.querySelectorAll("[role='menuitem']") as unknown as HTMLElement[],
+    ).map((el) => (el.textContent ?? "").trim().toLowerCase());
+    // the app's real ⋯ actions only (Report / Save to Watch later / Copy
+    // link / Not interested / Don't recommend channel) — youtube.com's
+    // measured sheet carries Description / Save to playlist / Captions /
+    // Full screen / Playback speed / Report / Send feedback: ZERO
+    // AI-editing entries on either side. NEVER an invented "AI edit" item.
+    for (const forbidden of ["ai", "edit", "create", "draft", "veo", "gemini"]) {
+      expect(items.some((t) => t.includes(forbidden))).toBe(false);
+    }
+    expect(items).toContain("report");
+    expect(items).toContain("save to watch later");
+    expect(items).toContain("copy link");
+  });
+
+  test("the honest-absence law: no Captions / Playback speed items either (the player-bound defer family, G15)", async () => {
+    await renderRail({ meta: META_NO_SOUND, guest: false });
+    const more = qa("button").find((b) => b.getAttribute("aria-label") === "More actions");
+    await act(async () => {
+      more!.dispatchEvent(
+        new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+    await act(async () => {});
+    const items = Array.from(
+      win.document.querySelectorAll("[role='menuitem']") as unknown as HTMLElement[],
+    ).map((el) => (el.textContent ?? "").trim());
+    // youtube.com's sheet DOES carry Captions/Playback-speed (player-bound
+    // commands); the app's shorts player is the embed (controls=0) with NO
+    // host control seam — the items stay deferred (the player ladder's own
+    // rung), so they are honestly ABSENT here, never dead controls
+    expect(items).not.toContain("Captions");
+    expect(items).not.toContain("Playback speed");
   });
 });
 

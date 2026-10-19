@@ -52,6 +52,10 @@ export default function ExplorePage() {
         </Link>
 
         {CATEGORIES.filter((c) => c !== "Live").map((category) => {
+          // P25 G13 — Podcasts is a destination now (youtube.com's own card
+          // routes to the dedicated /podcasts surface, measured): its card
+          // copy names the real destination, not the search compose.
+          const isPodcasts = category === "Podcasts";
           return (
             <Link
               key={category}
@@ -63,7 +67,9 @@ export default function ExplorePage() {
             >
               <p className="text-lg font-semibold">{category}</p>
               <p className="text-xs text-muted-foreground">
-                Real {category.toLowerCase()} videos from YouTube search
+                {isPodcasts
+                  ? "The podcasts destination — shows, episodes, creators"
+                  : `Real ${category.toLowerCase()} videos from YouTube search`}
               </p>
             </Link>
           );
