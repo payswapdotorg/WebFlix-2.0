@@ -72,11 +72,29 @@ import { soundTokenToKeyLink } from "@/lib/youtube/sound-key";
  *
  * HONEST ABSENCE (youtube.com ships these; this app has NO real seam —
  * never a fake affordance, per the create-menu precedent):
- * - Captions / Playback speed in the ⋯ menu — the embed runs controls=0
- *   and cannot honor them; no seams exist. (P24-SEND G12 note: "Don't
- *   recommend channel" LEFT this list — its write seam is real now; the
- *   login-scoped menu family rides the operator tab like Not
- *   interested, per the station's measured evidence pack.)
+ * - Captions / Playback speed in the ⋯ menu — DEFERRED, re-derived on fresh
+ *   measurement 2026-10-19 (P25 G15; the reel_watch_sequence sheet re-probed
+ *   live by the lane's completing incarnation, search seed "podcast shorts"
+ *   → sequenceParams → POST reel/reel_watch_sequence): youtube.com's measured
+ *   sheet carries "Captions" (selectionText "Off" +
+ *   showCaptionLanguageSelectActionCommand) and "Playback speed"
+ *   (showPlaybackRatePickerActionCommand) — both ride the sheet item's
+ *   commandExecutorCommand family and both drive youtube.com's OWN native
+ *   shorts player (the player-entity family: the caption-language and
+ *   playback-rate entity keys). WebFlix's PRIMARY shorts player is the embed
+ *   iframe with controls=0 (shorts-player-slot.tsx) — NO host-page
+ *   caption/speed control seam exists; the native innertube ladder
+ *   (P26-HPV2 rung 2) is wired ONLY as the wall fallback (PlayerFallback),
+ *   so a ⋯ item would either be two-faced (working only on the walled path)
+ *   or dead on the primary player — both forbidden. The verdict: the item
+ *   needs the player ladder's OWN rung (a native primary shorts player with
+ *   real caption/speed control), not a UI patch in this menu. (Drift note:
+ *   today's measured sheet carries NO "Audio Track" item — the sheet family
+ *   is per-short/per-locale variable; the absence note stays keyed to the
+ *   two audited items only. P24-SEND G12 note: "Don't recommend channel"
+ *   LEFT this list — its write seam is real now; the login-scoped menu
+ *   family rides the operator tab like Not interested, per the station's
+ *   measured evidence pack.)
  *
  * P23-C (G5, 2026-10-17) — the SOUND DISC (real, measured live — see
  * evidence/wfx2p23c/DISCOVERY.md): youtube.com's rail carries the pivot
