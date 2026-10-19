@@ -4,16 +4,33 @@
  * WFX2-P6-UP — the topbar's "+ CREATE" pill, youtube.com parity: a pill
  * button (Plus + "Create", icon-only below md) opening the create dropdown —
  *   Upload video → /upload (the studio upload wizard, this lane)
- *   Go live      → /explore/live (the real live rail route)
+ *   Go live      → youtube.com's own live surface, EXTERNAL (see the G10
+ *                  note below — the honest-degradation form)
  *   New post     → /channel/{own-handle}?compose=1 — the community composer
  *                  deep link, shown ONLY while the operator's real channel
  *                  handle resolves (the AccountMenu lazy /api/studio idiom;
  *                  honestly absent otherwise, never a dead link).
  * Nothing else is fabricated: items whose surface does not exist stay out.
+ *
+ * P24-SEND (G10) — the "Go live" rung speaks the Join-sheet precedent,
+ * generalized to a menu rung: youtube.com's CREATE menu "Go live" opens
+ * the Live Control Room (the creator's stream-setup surface — the
+ * ingestion surface), NOT a live-video browse page. WebFlix has NO
+ * streaming-ingestion surface and the control room's DOM is unmeasurable
+ * from this egress (the logged-out /live hub is the browse page — real
+ * live cards, no go-live CTA anywhere; the CREATE menu itself is
+ * login-walled) — the invented-shape law forbids guessing a broker drive.
+ * The honest form: the rung STAYS in the menu (youtube.com's own rung
+ * family), routes EXTERNALLY to the measured real URL
+ * https://www.youtube.com/live (noopener/noreferrer, _blank), carries the
+ * honest reason in the tooltip + aria-label, and the app's live BROWSE
+ * page keeps its honest home at /explore/live (the Explore hub card).
+ * Parity-debt: the full go-live flow needs measured Live Control Room DOM
+ * shapes + an ingestion surface (a future lane's seam).
  */
 import { useState } from "react";
 import Link from "next/link";
-import { Pencil, Plus, UploadCloud, Video } from "lucide-react";
+import { ExternalLink, Pencil, Plus, UploadCloud, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -57,9 +74,22 @@ export function CreateMenu() {
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link href="/explore/live" className="cursor-pointer" data-testid="create-go-live">
+          {/* P24-SEND (G10): the honest-degradation form — youtube.com's own
+              live surface, EXTERNAL (the Live Control Room is the creator's
+              stream-setup surface; WebFlix has no ingestion surface — the
+              tooltip + aria-label carry the honest reason). */}
+          <a
+            href="https://www.youtube.com/live"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="cursor-pointer"
+            data-testid="create-go-live"
+            title="Go live opens YouTube's Live Control Room — WebFlix has no streaming setup; live browsing stays in Explore"
+            aria-label="Go live on YouTube — opens YouTube's live surface in a new tab; WebFlix has no streaming setup"
+          >
             <Video className="size-4" aria-hidden="true" /> Go live
-          </Link>
+            <ExternalLink className="size-3 opacity-60" aria-hidden="true" />
+          </a>
         </DropdownMenuItem>
         {channelHandle && (
           <DropdownMenuItem asChild>

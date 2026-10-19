@@ -10,6 +10,7 @@ import {
   Share2,
   ListVideo,
   Link2,
+  UserX,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -92,9 +93,52 @@ export function VideoCard({ video, progress, variant = "grid", className, watche
     try {
       await postJson("/api/not-interested", { videoId: video.id });
       setHidden(true);
-      toast("Got it — we'll show fewer videos like this");
+      // P24-SEND (G12): youtube.com's own family — the feedback toast
+      // carries the UNDO affordance ("Video removed · Undo"); the undo
+      // click drives youtube.com's own toast button while its window is
+      // live (POST /api/not-interested/undo), restoring this card on
+      // success and surfacing the honest failure when the window closed.
+      toast("Video removed", {
+        action: {
+          label: "Undo",
+          onClick: () => void undoHide("/api/not-interested/undo"),
+        },
+      });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to hide video");
+    }
+  }
+
+  // P24-SEND (G12) — the channel variant: the feed card's own ⋯ menu item,
+  // the not-interested sibling (youtube.com's own adjacency in the menu).
+  async function dontRecommendChannel() {
+    try {
+      await postJson("/api/dont-recommend-channel", { videoId: video.id });
+      setHidden(true);
+      toast("We won't recommend this channel anymore", {
+        action: {
+          label: "Undo",
+          onClick: () => void undoHide("/api/dont-recommend-channel/undo"),
+        },
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update recommendations");
+    }
+  }
+
+  // The shared undo: youtube.com's toast window is short — an expired
+  // window surfaces the honest server error, never a fake restoration.
+  async function undoHide(undoUrl: string) {
+    try {
+      await postJson(undoUrl, {});
+      setHidden(false);
+      toast("Recommendations restored");
+    } catch (err) {
+      toast.error(
+        err instanceof Error && err.message
+          ? `Undo is no longer available — ${err.message}`
+          : "Undo is no longer available — YouTube's undo window has closed",
+      );
     }
   }
 
@@ -251,6 +295,9 @@ export function VideoCard({ video, progress, variant = "grid", className, watche
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={notInterested}>
               <Ban className="size-4" /> Not interested
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void dontRecommendChannel()}>
+              <UserX className="size-4" /> Don&apos;t recommend channel
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link href={`/watch/${video.id}`} className="cursor-pointer">

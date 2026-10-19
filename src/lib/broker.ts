@@ -45,6 +45,9 @@ export type BrokerKind =
   | "playlist-add"
   | "watch-later"
   | "not-interested"
+  // P24-SEND (G12) — the feed-feedback family's additive kinds
+  | "dont-recommend-channel"
+  | "feedback-undo"
   // WFX2-B-B (personal surfaces) — additive
   | "history-remove"
   | "history-clear-all"

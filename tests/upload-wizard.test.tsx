@@ -429,6 +429,35 @@ describe("Visibility — the save payload rides the real APIs", () => {
     expect(q('[data-testid="upload-published-card"]')).toBeNull();
     expect(captured.execute).toHaveLength(0); // the drive never started
   });
+
+  // P24-SEND (G11) — the premiere honest-absent disclosure: youtube.com's
+  // Visibility step ALSO schedules premieres (the studio's date/time picker
+  // + premiere toggle — NEVER measured from this egress; the invented-shape
+  // law forbids guessing a drive, and a local date-picker that cannot
+  // schedule anything would be a fake affordance). The step carries the
+  // honest reason (role=note) and the three visibility cards stay the
+  // publish drive's own levels — unchanged.
+  test("the premiere disclosure renders (role=note) — the schedule is set on YouTube; the three cards stay unchanged", async () => {
+    installFetch();
+    await renderWizard();
+    await walkToVisibility("Premiere note walkthrough");
+
+    const note = q('[role="note"][data-testid="visibility-premiere-note"]');
+    expect(note).not.toBeNull();
+    expect(note!.textContent).toContain("Premieres are scheduled on YouTube");
+    expect(note!.textContent).toContain("YouTube Studio after publishing");
+
+    // the three visibility cards unchanged (the publish drive's own levels)
+    for (const id of ["private", "unlisted", "public"]) {
+      expect(q(`[data-testid="visibility-${id}"]`), `card ${id}`).not.toBeNull();
+    }
+    expect(q('[data-testid="visibility-private"]')!.getAttribute("aria-checked")).toBe("true");
+    // no scheduling affordance anywhere in the step — never a fake one
+    const step = q('[data-testid="upload-visibility-step"]')!;
+    expect(step.querySelector("input[type='date']")).toBeNull();
+    expect(step.querySelector("input[type='time']")).toBeNull();
+    expect(step.querySelectorAll("[role='radio']")).toHaveLength(3); // exactly the three levels
+  });
 });
 
 /* ------------------------------------------------------------------ */

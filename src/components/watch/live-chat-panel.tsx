@@ -26,6 +26,23 @@
  *    it with the real row); failure clears the echo, restores the draft and
  *    shows the honest error copy (members-only / slow mode / chat disabled —
  *    youtube.com's own states).
+ *
+ * P24-SEND (G8) — the paid-send disclosure (the honest-degradation family):
+ * youtube.com's signed-in live-chat composer carries the $ entry (the Super
+ * Chat / Super Sticker purchase panel) and the watch page carries Super
+ * Thanks — both PAID checkout surfaces. WebFlix has NO payment rail and
+ * NEVER fabricates one (the honest-stop law), so the send affordances are
+ * honestly absent and the composer area carries the honest reason
+ * (role=note): the paid interactions are DISPLAYED read-only (the mapper +
+ * the message rows render liveChatPaidMessageRenderer /
+ * liveChatPaidStickerRenderer — display parity, pinned by the livechat
+ * suites); purchases happen on YouTube's checkout. Measured basis (this
+ * egress): the logged-out live chat (yOXXI7_crys, 141KB) carries NO Super
+ * Chat entry in the header/composer (the $ entry is login-scoped — the
+ * only "Super Chat" strings in the payload are the XP-levels explainer
+ * dialog), and the logged-out watch page carries no Super Thanks shapes.
+ * The replay + guest states keep their existing honest forms (no note:
+ * the disclosure is for the signed-in send surface only).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -577,6 +594,19 @@ function LiveChatPanelInner({
               <Send className="size-4" aria-hidden="true" />
             </Button>
           </div>
+          {/* P24-SEND (G8) — the paid-send disclosure (role=note): Super
+              Chat / Super Sticker / Super Thanks are PAID checkout surfaces
+              on youtube.com; WebFlix has no payment rail and never fakes
+              one — the paid interactions are displayed read-only here,
+              purchases happen on YouTube's checkout. */}
+          <p
+            role="note"
+            data-testid="chat-paid-send-note"
+            className="mt-2 px-1 text-[11px] leading-snug text-muted-foreground"
+          >
+            Super Chats, Super Stickers and Super Thanks are shown as sent — purchases
+            happen on YouTube&apos;s checkout.
+          </p>
         </div>
       )}
     </section>

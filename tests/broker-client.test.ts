@@ -218,6 +218,40 @@ describe("brokerAction contract (mocked fetch)", () => {
     expect((r as BrokerError).kind).toBe("offline");
     expect((r as BrokerError).message).toBe(BROKER_OFFLINE_MESSAGE);
   });
+
+  // P24-SEND (G12) — the feed-feedback family's two new kinds ride the SAME
+  // wire contract ({kind,target,payload} + the secret/affinity headers):
+  // the channel variant of not-interested + the shared undo (the drive
+  // clicks youtube.com's own feedback-toast Undo button).
+  test("P24-SEND (G12): dont-recommend-channel + feedback-undo ride the same {kind,target,payload} wire", async () => {
+    mockFetch(() =>
+      jsonResponse(200, { ok: true, verified: true, path: "ui", detail: { restored: true } }),
+    );
+    const r = await brokerAction("dont-recommend-channel", { videoId: "dQw4w9WgXcQ" });
+    const r2 = await brokerAction("feedback-undo", {});
+    expect(calls).toHaveLength(2);
+    const body = JSON.parse(String(calls[0].init.body)) as {
+      kind: string;
+      target: unknown;
+      payload: unknown;
+    };
+    expect(body.kind).toBe("dont-recommend-channel");
+    expect(body.target).toEqual({ videoId: "dQw4w9WgXcQ" });
+    expect(body.payload).toBeUndefined();
+    const body2 = JSON.parse(String(calls[1].init.body)) as {
+      kind: string;
+      target: unknown;
+    };
+    expect(body2.kind).toBe("feedback-undo");
+    expect(body2.target).toEqual({});
+    for (const c of calls) {
+      const headers = c.init.headers as Record<string, string>;
+      expect(headers["x-broker-secret"]).toBe("s3cret");
+      expect(headers["x-session-id"]).toBe("webflix-producer");
+    }
+    expect((r as { ok: boolean }).ok).toBe(true);
+    expect((r2 as { ok: boolean; detail?: { restored: boolean } }).detail?.restored).toBe(true);
+  });
 });
 
 describe("brokerFetchPage contract (WFX2-4A — the fetch READ transport)", () => {

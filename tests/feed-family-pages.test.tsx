@@ -29,6 +29,35 @@ const win = new dom.Window() as unknown as typeof globalThis;
 for (const k of ["document", "MutationObserver", "SVGElement", "HTMLElement"]) {
   (globalThis as Record<string, unknown>)[k] = (win as unknown as Record<string, unknown>)[k];
 }
+// P24-SEND (G12): the ⋯-menu tests open the VideoCard's radix dropdown —
+// the portal + presence machinery needs the fuller global set (the
+// personal-surface-states/you-hub domProps family: getComputedStyle,
+// rAF, the event constructors, ResizeObserver).
+for (const k of [
+  "Element",
+  "Node",
+  "NodeList",
+  "Event",
+  "FocusEvent",
+  "InputEvent",
+  "KeyboardEvent",
+  "MouseEvent",
+  "CustomEvent",
+  "getComputedStyle",
+  "requestAnimationFrame",
+  "cancelAnimationFrame",
+  "navigator",
+  "ResizeObserver",
+  "HTMLButtonElement",
+  "HTMLAnchorElement",
+  "HTMLInputElement",
+  "HTMLTextAreaElement",
+]) {
+  const v = (win as unknown as Record<string, unknown>)[k];
+  if (v !== undefined) {
+    Object.defineProperty(globalThis, k, { value: v, configurable: true, writable: true });
+  }
+}
 Object.defineProperty(globalThis, "localStorage", {
   value: win.localStorage,
   configurable: true,
@@ -65,6 +94,9 @@ mock.module("next/link", () => ({
 }));
 let viewData: any = null;
 let viewError: string | null = null;
+// P24-SEND (G12) — the logged postJson seam + its per-test handler
+const postJsonLog: { url: string; body: unknown }[] = [];
+let postJsonHandler: (url: string, body: unknown) => Promise<unknown> = async () => ({});
 mock.module("@/hooks/use-api", () => ({
   useApi: (url: string | null) => ({
     data: viewData,
@@ -72,10 +104,27 @@ mock.module("@/hooks/use-api", () => ({
     error: viewError,
     reload: () => {},
   }),
-  postJson: async () => ({}),
+  // P24-SEND (G12): postJson is a logged programmable seam now — the
+  // video card's feedback writes (not-interested / dont-recommend-channel /
+  // the undos) ride it; the personal-surface-states fetch-stub idiom,
+  // scoped to the module the card actually imports.
+  postJson: async (url: string, body: unknown) => {
+    postJsonLog.push({ url, body });
+    return postJsonHandler(url, body);
+  },
 }));
+const toasts: { text: string; action?: { label: string; onClick: () => void } }[] = [];
 mock.module("sonner", () => ({
-  toast: Object.assign(() => {}, { success: () => {}, error: () => {}, info: () => {} }),
+  toast: Object.assign(
+    (msg: string, opts?: { action?: { label: string; onClick: () => void } }) => {
+      toasts.push({ text: String(msg), action: opts?.action });
+    },
+    {
+      success: (m: string) => toasts.push({ text: `success:${m}` }),
+      error: (m: string) => toasts.push({ text: `error:${m}` }),
+      info: (m: string) => toasts.push({ text: `info:${m}` }),
+    },
+  ),
 }));
 
 const { default: HashtagView } = await import("@/app/hashtag/[tag]/view");
@@ -129,6 +178,9 @@ beforeEach(() => {
   routeParams = "PLFgquLnL59al";
   viewData = null;
   viewError = null;
+  postJsonLog.length = 0;
+  postJsonHandler = async () => ({});
+  toasts.length = 0;
 });
 
 afterEach(() => {
@@ -437,5 +489,152 @@ describe("the shorts title hashtag routing (source-scan — the llm-seam precede
     const source = readFileSync("src/lib/watch/chapters.ts", "utf8");
     expect(source).toContain("hashtagHref(m[1])");
     expect(source).not.toContain("/search?q=");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P24-SEND (G12) — the feed card's ⋯ menu gains "Don't recommend channel"
+// + the feedback-toast UNDO family. Measured adjacency basis: this repo's
+// own real capture tests/fixtures/yt/ssr_trending.json (youtube.com's card
+// menu logged-out): … Share | ⋯ | "Not interested", "Don't recommend
+// channel", "Report" — the channel variant follows Not interested. The
+// toast family is youtube.com's own: "Video removed · UNDO" / "We won't
+// recommend this channel anymore · UNDO"; the undo click drives the
+// broker's feedback-undo while youtube.com's toast window is live.
+// ---------------------------------------------------------------------------
+
+describe("the feed card's ⋯ menu — Don't recommend channel + the undo family (P24-SEND G12)", () => {
+  const menuItems = () =>
+    Array.from(
+      win.document.querySelectorAll("[role='menuitem']") as unknown as HTMLElement[],
+    ).map((el) => (el.textContent ?? "").trim());
+
+  async function openFirstCardMenu() {
+    const trigger = all("[aria-label^='More options for']")[0]!;
+    await act(async () => {
+      trigger.dispatchEvent(
+        new win.MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+    await act(async () => {});
+  }
+
+  function serveTwoVideos() {
+    viewData = {
+      tag: "lofi",
+      title: "#lofi",
+      metaText: "7M videos",
+      videos: [video("sF80I-TQiW0", "90's Chill Lofi"), video("BCxTQq0UiFs", "Chill Lofi Beats")],
+      nextCursor: null,
+    };
+  }
+
+  test("the ⋯ menu carries 'Don't recommend channel' directly AFTER 'Not interested' (the measured adjacency)", async () => {
+    serveTwoVideos();
+    await render(createElement(HashtagView, { tag: "lofi" }));
+    await openFirstCardMenu();
+    const items = menuItems();
+    expect(items).toContain("Not interested");
+    expect(items).toContain("Don't recommend channel");
+    expect(items.indexOf("Don't recommend channel")).toBe(items.indexOf("Not interested") + 1);
+  });
+
+  test("Don't recommend channel → the real write, the card hides, the toast carries UNDO", async () => {
+    serveTwoVideos();
+    await render(createElement(HashtagView, { tag: "lofi" }));
+    await openFirstCardMenu();
+    const item = Array.from(
+      win.document.querySelectorAll("[role='menuitem']") as unknown as HTMLElement[],
+    ).find((el) => (el.textContent ?? "").trim() === "Don't recommend channel")!;
+    await act(async () => {
+      item.click();
+    });
+    await act(async () => {});
+    await act(async () => {});
+    expect(postJsonLog).toContainEqual({ url: "/api/dont-recommend-channel", body: { videoId: "sF80I-TQiW0" } });
+    // the first card left the feed; its sibling stays
+    expect(host?.textContent ?? "").not.toContain("90's Chill Lofi");
+    expect(host?.textContent ?? "").toContain("Chill Lofi Beats");
+    const t = toasts.find((x) => x.text === "We won't recommend this channel anymore");
+    expect(t).toBeDefined();
+    expect(t?.action?.label).toBe("Undo");
+  });
+
+  test("the UNDO click drives the undo route and restores the card", async () => {
+    serveTwoVideos();
+    await render(createElement(HashtagView, { tag: "lofi" }));
+    await openFirstCardMenu();
+    const item = Array.from(
+      win.document.querySelectorAll("[role='menuitem']") as unknown as HTMLElement[],
+    ).find((el) => (el.textContent ?? "").trim() === "Don't recommend channel")!;
+    await act(async () => {
+      item.click();
+    });
+    await act(async () => {});
+    const undo = toasts.find((x) => x.text === "We won't recommend this channel anymore")?.action;
+    expect(undo).toBeDefined();
+    await act(async () => {
+      undo!.onClick();
+    });
+    await act(async () => {});
+    await act(async () => {});
+    expect(postJsonLog).toContainEqual({ url: "/api/dont-recommend-channel/undo", body: {} });
+    expect(host?.textContent ?? "").toContain("90's Chill Lofi");
+    expect(toasts.some((x) => x.text === "Recommendations restored")).toBe(true);
+  });
+
+  test("Not interested now carries the same UNDO family (the shared seam — youtube.com's one toast, one Undo button)", async () => {
+    serveTwoVideos();
+    await render(createElement(HashtagView, { tag: "lofi" }));
+    await openFirstCardMenu();
+    const item = Array.from(
+      win.document.querySelectorAll("[role='menuitem']") as unknown as HTMLElement[],
+    ).find((el) => (el.textContent ?? "").trim() === "Not interested")!;
+    await act(async () => {
+      item.click();
+    });
+    await act(async () => {});
+    await act(async () => {});
+    expect(postJsonLog).toContainEqual({ url: "/api/not-interested", body: { videoId: "sF80I-TQiW0" } });
+    expect(host?.textContent ?? "").not.toContain("90's Chill Lofi");
+    const t = toasts.find((x) => x.text === "Video removed");
+    expect(t?.action?.label).toBe("Undo");
+    await act(async () => {
+      t!.action!.onClick();
+    });
+    await act(async () => {});
+    await act(async () => {});
+    expect(postJsonLog).toContainEqual({ url: "/api/not-interested/undo", body: {} });
+    expect(host?.textContent ?? "").toContain("90's Chill Lofi");
+  });
+
+  test("an expired undo window surfaces the honest error — the card stays hidden, never a fake restoration", async () => {
+    serveTwoVideos();
+    postJsonHandler = (url) =>
+      url.includes("/undo")
+        ? Promise.reject(new Error("undo-toast-not-found"))
+        : Promise.resolve({});
+    await render(createElement(HashtagView, { tag: "lofi" }));
+    await openFirstCardMenu();
+    const item = Array.from(
+      win.document.querySelectorAll("[role='menuitem']") as unknown as HTMLElement[],
+    ).find((el) => (el.textContent ?? "").trim() === "Don't recommend channel")!;
+    await act(async () => {
+      item.click();
+    });
+    await act(async () => {});
+    const undo = toasts.find((x) => x.text === "We won't recommend this channel anymore")?.action;
+    expect(undo).toBeDefined();
+    await act(async () => {
+      undo!.onClick();
+    });
+    await act(async () => {});
+    await act(async () => {});
+    expect(postJsonLog).toContainEqual({ url: "/api/dont-recommend-channel/undo", body: {} });
+    expect(
+      toasts.some((x) => x.text === "error:Undo is no longer available — undo-toast-not-found"),
+    ).toBe(true);
+    expect(toasts.some((x) => x.text === "Recommendations restored")).toBe(false);
+    expect(host?.textContent ?? "").not.toContain("90's Chill Lofi");
   });
 });

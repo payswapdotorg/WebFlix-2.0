@@ -15,6 +15,11 @@ export const ACTION_KINDS = [
   "playlist-add",
   "watch-later",
   "not-interested",
+  // P24-SEND (G12) — the feed-feedback family's additive kinds: the channel
+  // variant of not-interested, and the shared undo (clicks the visible Undo
+  // button on youtube.com's feedback toast).
+  "dont-recommend-channel",
+  "feedback-undo",
   // WFX2-B-B (personal surfaces) — additive
   "history-remove",
   "history-clear-all",
