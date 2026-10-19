@@ -445,6 +445,7 @@ describe("P26-HPV2 — the widened rung-1 client chain (six lottery tickets)", (
       "WEB", // INNER_TUBE_PLAYER_CLIENT default
       "IOS",
       "ANDROID",
+      "ANDROID_VR", // P26B-HPV3 — the seventh ticket (the measured native-family winner)
       "MWEB",
       "WEB_EMBEDDED_PLAYER",
       "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
@@ -470,7 +471,7 @@ describe("P26-HPV2 — the widened rung-1 client chain (six lottery tickets)", (
     expect(embedded[1].clientVersion).toBe("2.0"); // TVHTML5_SIMPLY_EMBEDDED_PLAYER v2.0
   });
 
-  test("every walled rung costs one FAST request: the full chain fires exactly six player calls, NO STS anywhere", async () => {
+  test("every walled rung costs one FAST request: the full chain fires exactly seven player calls, NO STS anywhere", async () => {
     const { impl, recorded } = chainUpstream(WALLED_PLAYER, null);
     setUpstream(impl);
     const dto = await getPlayback("WALLED77777");
@@ -480,6 +481,7 @@ describe("P26-HPV2 — the widened rung-1 client chain (six lottery tickets)", (
       "WEB",
       "IOS",
       "ANDROID",
+      "ANDROID_VR",
       "MWEB",
       "WEB_EMBEDDED_PLAYER",
       "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
@@ -501,6 +503,18 @@ describe("P26-HPV2 — the widened rung-1 client chain (six lottery tickets)", (
     const android = playerCalls.find((r) => r.body.context.client.clientName === "ANDROID")!;
     expect(android.body.context.client).toMatchObject({ androidSdkVersion: 30, osName: "Android" });
     expect(android.body.context.thirdParty).toBeUndefined();
+    // P26B-HPV3 — the ANDROID_VR rung sent the VR device shape (no thirdParty)
+    const vr = playerCalls.find((r) => r.body.context.client.clientName === "ANDROID_VR")!;
+    expect(vr.body.context.client).toMatchObject({
+      clientName: "ANDROID_VR",
+      clientVersion: "1.61.48",
+      deviceMake: "Oculus",
+      deviceModel: "Quest 3",
+      osName: "Android",
+      osVersion: "12L",
+    });
+    expect(vr.body.context.client.userAgent).toContain("com.google.android.apps.youtube.vr.oculus/1.61.48");
+    expect(vr.body.context.thirdParty).toBeUndefined();
   });
 
   test("the widened chain's new winning cell: WEB + IOS walled → ANDROID answers plain formats (no watch fetch)", async () => {
@@ -516,6 +530,87 @@ describe("P26-HPV2 — the widened rung-1 client chain (six lottery tickets)", (
     const playerCalls = recorded.filter((r) => r.url.includes("/youtubei/v1/player"));
     expect(playerCalls.map((r) => r.body.context.client.clientName)).toEqual(["WEB", "IOS", "ANDROID"]);
     expect(recorded.some((r) => r.url.includes("youtube.com/watch"))).toBe(false);
+  });
+});
+
+describe("P26B-HPV3 — the formats-first hunt (the operator's 2026-10-19 re-file)", () => {
+  test("the ANDROID_VR ticket's context (the 2026-10-18 measurement's unwired winner, re-measured 2026-10-19: OK + 23 plain formats for dQw4)", () => {
+    const vr = playerClientChain().find((c) => c.clientName === "ANDROID_VR")!;
+    expect(vr).toMatchObject({
+      clientName: "ANDROID_VR",
+      clientVersion: "1.61.48",
+      deviceMake: "Oculus",
+      deviceModel: "Quest 3",
+      osName: "Android",
+      osVersion: "12L",
+    });
+    expect(vr.userAgent).toContain("com.google.android.apps.youtube.vr.oculus/1.61.48");
+    expect(vr.thirdPartyEmbedUrl).toBeUndefined(); // a native-family rung, never an embed shape
+    // the chain position: inside the native family, after ANDROID
+    expect(playerClientChain().map((c) => c.clientName).indexOf("ANDROID_VR")).toBe(3);
+  });
+
+  test("a STORYBOARDS-ONLY answer must NOT capture the loop — the formats-bearing rung behind it wins (no watch fetch)", async () => {
+    // the starvation mode the STS note feared, now structurally impossible:
+    // WEB answers OK-with-storyboards-but-ciphered-formats; the hunt runs on
+    // to ANDROID's plain formats instead of stopping at the slideshow fuel
+    const { impl, recorded } = perClientUpstream(
+      { WEB: STORYBOARDS_ONLY_PLAYER, IOS: WALLED_PLAYER, ANDROID: OK_PLAYER_WITH_FORMATS },
+      watchHtmlFor(playerFixture),
+    );
+    setUpstream(impl);
+    const dto = await getPlayback("dQw4w9WgXcQ");
+    expect(dto.source).toBe("player");
+    expect(dto.streamFormats.map((f) => f.itag)).toEqual([18]); // ANDROID's formats, not WEB's storyboards
+    expect(dto.storyboards).toHaveLength(3);
+    const playerCalls = recorded.filter((r) => r.url.includes("/youtubei/v1/player"));
+    expect(playerCalls.map((r) => r.body.context.client.clientName)).toEqual([
+      "WEB",
+      "IOS",
+      "ANDROID",
+    ]);
+    expect(recorded.some((r) => r.url.includes("youtube.com/watch"))).toBe(false);
+  });
+
+  test("every rung storyboards-only → the remembered fallback returns (source player, formats honestly empty) after the rung-2 formats hunt", async () => {
+    const { impl, recorded } = perClientUpstream(
+      { WEB: STORYBOARDS_ONLY_PLAYER },
+      watchHtmlFor(playerFixture),
+    );
+    setUpstream(impl);
+    const dto = await getPlayback("dQw4w9WgXcQ");
+    // no rung carried formats — the rung-1 storyboards-only answer survives
+    // as the fallback (the rung-2 storyboards answer does not displace it)
+    expect(dto.source).toBe("player");
+    expect(dto.streamFormats).toEqual([]);
+    expect(dto.storyboards.map((l) => l.level)).toEqual([1, 2, 3]);
+    // the hunt ran the full chain AND probed rung 2 for formats before settling
+    const playerCalls = recorded.filter((r) => r.url.includes("/youtubei/v1/player"));
+    expect(playerCalls.map((r) => r.body.context.client.clientName)).toEqual([
+      "WEB",
+      "IOS",
+      "ANDROID",
+      "ANDROID_VR",
+      "MWEB",
+      "WEB_EMBEDDED_PLAYER",
+      "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
+    ]);
+    expect(recorded.some((r) => r.url.includes("youtube.com/watch?v=dQw4w9WgXcQ"))).toBe(true);
+  });
+
+  test("rung 1 storyboards-only + rung 2 FORMATS-bearing → rung 2 wins (the watch page's plain itag18 cells, measured 2026-10-19 on production)", async () => {
+    const { impl, recorded } = perClientUpstream(
+      { WEB: STORYBOARDS_ONLY_PLAYER },
+      watchHtmlFor(OK_PLAYER_WITH_FORMATS),
+    );
+    setUpstream(impl);
+    const dto = await getPlayback("dQw4w9WgXcQ");
+    expect(dto.source).toBe("watch-page");
+    expect(dto.streamFormats.map((f) => f.itag)).toEqual([18]);
+    expect(dto.storyboards).toHaveLength(3);
+    const playerCalls = recorded.filter((r) => r.url.includes("/youtubei/v1/player"));
+    expect(playerCalls).toHaveLength(7); // the full rung-1 hunt ran first
+    expect(recorded.some((r) => r.url.includes("youtube.com/watch?v=dQw4w9WgXcQ"))).toBe(true);
   });
 });
 
@@ -595,6 +690,32 @@ const OK_PLAYER_WITH_FORMATS = {
 };
 
 const WALLED_PLAYER = { playabilityStatus: { status: "LOGIN_REQUIRED", reason: "Sign in to confirm you're not a bot" } };
+
+/**
+ * P26B-HPV3 — the storyboards-only player answer (the STS-flip's measured
+ * shape, and the watch page's own family): playabilityStatus OK, storyboards
+ * present, formats CIPHERED-ONLY (signatureCipher, no plain url) — honestly
+ * filtered to an empty streamFormats. The old first-usable-wins loop STOPPED
+ * here and starved the native lane; the formats-first hunt runs on.
+ */
+const STORYBOARDS_ONLY_PLAYER = {
+  playabilityStatus: { status: "OK" },
+  videoDetails: { videoId: "dQw4w9WgXcQ", lengthSeconds: "213" },
+  storyboards: playerFixture.storyboards,
+  streamingData: {
+    formats: [
+      {
+        itag: 18,
+        mimeType: 'video/mp4; codecs="avc1.42001E, mp4a.40.2"',
+        signatureCipher:
+          "s=abc&sp=sig&url=https%3A%2F%2Frr4.googlevideo.com%2Fvideoplayback%3Fitag%3D18",
+        qualityLabel: "360p",
+        width: 640,
+        height: 360,
+      },
+    ],
+  },
+};
 
 let envBefore: string | undefined;
 
@@ -712,6 +833,7 @@ describe("getPlayback — the chain (player endpoint → watch page → honest e
     expect(playerCalls.map((r) => r.body.context.client.clientName)).toEqual([
       "IOS",
       "ANDROID",
+      "ANDROID_VR",
       "MWEB",
       "WEB_EMBEDDED_PLAYER",
       "TVHTML5_SIMPLY_EMBEDDED_PLAYER",

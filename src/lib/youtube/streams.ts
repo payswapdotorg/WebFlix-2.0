@@ -146,6 +146,27 @@ const PLAYER_CLIENTS: Record<string, PlayerClientContext> = {
     osVersion: "11",
     userAgent: "com.google.android.youtube/20.10.38 (Linux; U; Android 11) gzip",
   },
+  // P26B-HPV3 — the ANDROID_VR ticket (the rung the 2026-10-18 measurements
+  // named but never wired: "IOS / ANDROID (and ANDROID_VR)" answered OK with
+  // plain-url formats for dQw4w9WgXcQ). Re-measured 2026-10-19 from the
+  // sandbox egress: OK with 23 plain video formats for dQw4w9WgXcQ — a real
+  // third native-family cell. For the walled class (kJQP7kiw5Fk /
+  // 8hRGBcr_gJc) it answers LOGIN_REQUIRED like every other client probed
+  // (the 13-client matrix of 2026-10-19: WEB/IOS/ANDROID/MWEB/
+  // WEB_EMBEDDED_PLAYER/TVHTML5_SIMPLY_EMBEDDED_PLAYER/ANDROID_VR/TVHTML5/
+  // ANDROID_MUSIC/IOS_MUSIC/ANDROID_CREATOR → LOGIN_REQUIRED or ERROR,
+  // WEB_REMIX → 404, MEDIA_CONNECT_FRONTEND → 403) — a cheap ticket, never
+  // a cure for the label-content wall.
+  ANDROID_VR: {
+    clientName: "ANDROID_VR",
+    clientVersion: "1.61.48",
+    deviceMake: "Oculus",
+    deviceModel: "Quest 3",
+    osName: "Android",
+    osVersion: "12L",
+    userAgent:
+      "com.google.android.apps.youtube.vr.oculus/1.61.48 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
+  },
 };
 
 /** The configured `player` client context (INNER_TUBE_PLAYER_CLIENT, default WEB). */
@@ -157,11 +178,12 @@ export function playerClientContext(): PlayerClientContext {
 
 /**
  * The rung-1 client chain (P26-HPV2 — widened from [configured, IOS] to six
- * rungs): the configured client first, then the NATIVE-APP family (the
- * plain-URL lottery winners — IOS and ANDROID both answered OK with plain
- * formats for dQw4w9WgXcQ from the sandbox egress on 2026-10-18), then the
- * web/embedded family (MWEB, WEB_EMBEDDED_PLAYER, TVHTML5_SIMPLY_EMBEDDED
- * PLAYER — cheap tickets: walled answers cost one FAST request each).
+ * rungs; P26B-HPV3 — ANDROID_VR joins as the seventh): the configured client
+ * first, then the NATIVE-APP family (the plain-URL lottery winners — IOS,
+ * ANDROID and ANDROID_VR all answered OK with plain formats for dQw4w9WgXcQ
+ * from the sandbox egress), then the web/embedded family (MWEB,
+ * WEB_EMBEDDED_PLAYER, TVHTML5_SIMPLY_EMBEDDED_PLAYER — cheap tickets:
+ * walled answers cost one FAST request each).
  * Deduped — configuring INNER_TUBE_PLAYER_CLIENT to any chained client
  * removes that rung's duplicate.
  *
@@ -187,6 +209,7 @@ export function playerClientChain(): PlayerClientContext[] {
     playerClientContext(),
     PLAYER_CLIENTS.IOS,
     PLAYER_CLIENTS.ANDROID,
+    PLAYER_CLIENTS.ANDROID_VR,
     PLAYER_CLIENTS.MWEB,
     PLAYER_CLIENTS.WEB_EMBEDDED_PLAYER,
     PLAYER_CLIENTS.TVHTML5_SIMPLY_EMBEDDED_PLAYER,
@@ -375,18 +398,27 @@ export function parseStoryboardSpec(spec: unknown): StoryboardLevelDto[] {
 /* ------------------------------------------------------------------ */
 
 /**
- * Rung 1 — the innertube `player` CLIENT CHAIN (P26-HPV2: six rungs — the
- * configured client, then IOS, ANDROID, MWEB, WEB_EMBEDDED_PLAYER,
- * TVHTML5_SIMPLY_EMBEDDED_PLAYER). The FIRST response that parses into a
- * USABLE payload (streamFormats or storyboards) wins and the loop stops —
- * a healthy primary client still costs exactly one request; each walled
- * rung costs one FAST request. Null when every client is walled/empty.
+ * Rung 1 — the innertube `player` CLIENT CHAIN (P26-HPV2: six rungs;
+ * P26B-HPV3: ANDROID_VR joins, and the loop is FORMATS-FIRST). The FIRST
+ * response that parses into a formats-bearing payload wins and stops the
+ * loop immediately (a healthy primary client still costs exactly one
+ * request). A STORYBOARDS-ONLY answer is the remembered FALLBACK — it must
+ * NOT stop the hunt: the operator's 2026-10-19 re-file ("showing a
+ * slideshow for some videos") is exactly the starvation mode the STS note
+ * feared — on any egress where a web-family rung answers OK-with-
+ * storyboards-but-ciphered-formats, the old first-usable-wins loop STOPPED
+ * there and the IOS/ANDROID/ANDROID_VR plain-format rungs never fired, so
+ * the native preview lane starved and the hover preview fell to the
+ * storyboard. Now the loop runs on (each walled/empty rung costs one FAST
+ * request), and the storyboards-only answer is returned only when NO rung
+ * yields formats. Null when every client is walled/empty.
  *
  * The embed-player family's thirdParty context rides as
  * context.thirdParty.embedUrl (sibling of context.client — the historical
  * embed-player shape), never inside the client object itself.
  */
 async function fetchInnertubePlayer(videoId: string): Promise<PlaybackDto | null> {
+  let storyboardFallback: PlaybackDto | null = null;
   for (const client of playerClientChain()) {
     const { thirdPartyEmbedUrl, ...clientFields } = client;
     const context: Record<string, unknown> = { client: { ...clientFields, hl: "en", gl: "US" } };
@@ -403,9 +435,10 @@ async function fetchInnertubePlayer(videoId: string): Promise<PlaybackDto | null
       continue; // walled answers also arrive as HTTP 200 + UNPLAYABLE — and hard errors
     }
     const dto = parsePlayback("player", response);
-    if (dto.streamFormats.length > 0 || dto.storyboards.length > 0) return dto;
+    if (dto.streamFormats.length > 0) return dto; // formats win IMMEDIATELY
+    if (dto.storyboards.length > 0) storyboardFallback ??= dto; // remembered, never a chain-stopper
   }
-  return null;
+  return storyboardFallback;
 }
 
 const YT_INITIAL_PLAYER_RESPONSE_RE = /var ytInitialPlayerResponse\s*=\s*(\{[\s\S]*?\});\s*(?:var |<\/script>)/;
@@ -456,21 +489,47 @@ async function fetchBrokerWatchPlayerResponse(videoId: string): Promise<unknown 
  * WATCH_MS) — the WINNING rung's payload is cached per video id. The result
  * is NEVER thrown — a walled egress yields the honest empty payload
  * (source: "").
+ *
+ * P26B-HPV3 — the chain is FORMATS-FIRST end to end: a storyboards-only
+ * rung-1 answer no longer returns early — the hunt continues into rung 2
+ * (whose watch-page reads measured plain itag18 urls on walled-player
+ * cells: 2026-10-19 production census, 31/51 home-feed videos) and rung 3,
+ * and the storyboards-only answer survives only as the remembered fallback
+ * when NO rung yields formats. Semantics otherwise preserved: a rung-2
+ * answer carrying storyboards still short-circuits the broker (the WFX2-4A
+ * trigger law — the broker is the last resort for a rung-2 HTML fetch that
+ * produced nothing parseable at all).
  */
 export async function getPlayback(videoId: string): Promise<PlaybackDto> {
   return cachedResilient(
     `yt:playback:${videoId}`,
     TTL.WATCH_MS,
     async () => {
+      let storyboardFallback: PlaybackDto | null = null;
       const fromPlayer = await fetchInnertubePlayer(videoId);
-      if (fromPlayer) return fromPlayer;
+      if (fromPlayer) {
+        if (fromPlayer.streamFormats.length > 0) return fromPlayer;
+        storyboardFallback = fromPlayer; // storyboards-only — remembered, hunt continues
+      }
       const fromPage = await fetchWatchPagePlayerResponse(videoId);
-      if (fromPage) return parsePlayback("watch-page", fromPage);
+      if (fromPage) {
+        const pageDto = parsePlayback("watch-page", fromPage);
+        if (pageDto.streamFormats.length > 0) return pageDto; // the formats hunt's rung-2 win
+        if (pageDto.storyboards.length > 0) {
+          storyboardFallback ??= pageDto;
+          return storyboardFallback; // storyboards in hand — the broker is not the last resort for these
+        }
+      }
       // WFX2-4A rung 3 — the broker's page-context watch read (the logged-in
-      // session's own page); honest failure → the empty degrade below
+      // session's own page); honest failure → the degrade below
       const fromBroker = await fetchBrokerWatchPlayerResponse(videoId);
-      if (fromBroker) return parsePlayback("broker-watch", fromBroker);
-      return { streamFormats: [], storyboards: [], durationSec: null, source: "" };
+      if (fromBroker) {
+        const brokerDto = parsePlayback("broker-watch", fromBroker);
+        if (brokerDto.streamFormats.length > 0 || brokerDto.storyboards.length > 0) {
+          return brokerDto;
+        }
+      }
+      return storyboardFallback ?? { streamFormats: [], storyboards: [], durationSec: null, source: "" };
     },
     // WFX2-5 poisoning guard (the 4-c incident): the honest empty degrade is
     // NEVER cached — a wedge/wall window must not poison the key for the
