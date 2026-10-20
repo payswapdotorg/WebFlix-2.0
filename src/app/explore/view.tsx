@@ -55,7 +55,11 @@ export default function ExplorePage() {
           // P25 G13 — Podcasts is a destination now (youtube.com's own card
           // routes to the dedicated /podcasts surface, measured): its card
           // copy names the real destination, not the search compose.
+          // P30 — Music is a destination too (youtube.com's own Music page,
+          // measured 2026-10-20: the channel-style header + the square-lockup
+          // shelf family): the same destination-copy law.
           const isPodcasts = category === "Podcasts";
+          const isMusic = category === "Music";
           return (
             <Link
               key={category}
@@ -69,7 +73,9 @@ export default function ExplorePage() {
               <p className="text-xs text-muted-foreground">
                 {isPodcasts
                   ? "The podcasts destination — shows, episodes, creators"
-                  : `Real ${category.toLowerCase()} videos from YouTube search`}
+                  : isMusic
+                    ? "The music destination — videos, new releases, live sets"
+                    : `Real ${category.toLowerCase()} videos from YouTube search`}
               </p>
             </Link>
           );

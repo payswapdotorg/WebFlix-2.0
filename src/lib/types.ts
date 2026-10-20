@@ -715,6 +715,25 @@ export type PodcastsPageDTO = {
   publicMode: boolean;
 };
 
+/** P30 — one music destination shelf: the seed query's own title plus its
+ *  real first-page videos (square music lockups in the view). */
+export type MusicShelfDTO = {
+  /** the shelf's honest title — sentence-cased from the REAL seed query */
+  title: string;
+  videos: VideoDTO[];
+};
+
+export type MusicDestinationDTO = {
+  /** the destination's own header title ("Music") */
+  title: string;
+  shelves: MusicShelfDTO[];
+  /** "search" = the real per-seed search compose (youtube.com's own music
+   *  destination is session-walled; the same honest label family). */
+  source: "search";
+  /** true when no YouTube operator session is configured (public mode). */
+  publicMode: boolean;
+};
+
 /** In-channel search results ("Search this channel"). */
 export type ChannelSearchDTO = {
   query: string;

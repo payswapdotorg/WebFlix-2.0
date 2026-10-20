@@ -79,6 +79,15 @@ export function useRecommendedInfiniteScroll(
  * The grid itself — regular full-size youtube.com-parity thumbnails from
  * the first row (P12-UX Task 1/2: no giant hero above it, no heading —
  * exactly youtube.com's home).
+ *
+ * Card sizing = the 2026-10-20 operator directive (verbatim: "the long
+ * format video boxes need to be bigger such that 3 fit in one row (check
+ * youtube.com for reference)") — the desktop density is capped at THREE
+ * columns at every width (the 2xl 4-up tier retired), so each box is
+ * bigger. Row gap stays gap-y-9 (36px), the inter-card gap gap-x-4 — the
+ * youtube.com rhythm at the new density. On 1-2-up viewports the
+ * interleaved sections simply arrive sooner, which is youtube.com's own
+ * behavior on narrow layouts.
  */
 export function RecommendedGrid({
   videos,
@@ -94,7 +103,7 @@ export function RecommendedGrid({
       aria-label="Recommended videos"
       className={`px-4 pb-4 pt-2 sm:px-6 ${className}`}
     >
-      <div className="grid grid-cols-1 gap-x-4 gap-y-9 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-x-4 gap-y-9 sm:grid-cols-2 lg:grid-cols-3">
         {videos.map((video) => (
           <VideoCard key={video.id} video={video} />
         ))}
