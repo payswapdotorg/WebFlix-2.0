@@ -129,3 +129,42 @@ pre-existing warning, `bun run typecheck` clean, PAT scan clean.
   (qoe vps=50.053:PL) — the fallback correctly never arms; the new
   fallback src is carried by the component battery.
 - Zero page/console errors across the passes.
+
+## The post-merge production re-probe + the companion-law amendment (same evening)
+
+The production re-probe (webflix-2-0-one.vercel.app, post-deploy):
+
+- **The stream mode works in production for the chain-servable class**:
+  dQw4 → **206 in 0.67s** with real video bytes.
+- **The popular feed class is currently behind the moving wall**: the home
+  feed's videos answered 502 on the stream mode (8/8 probes, 1.7s each —
+  the cached URL dead via egress rotation + the forced-fresh chain runs
+  ending storyboards-only), while 4/4 never-cached OBSCURE videos still
+  yield itag-18 formats via the watch-page rung. The wall moved onto the
+  popular class this afternoon (it had covered the embeds at midday).
+- The client behaved per design: the native lane armed (the prefetch DTO
+  still carried the cached format) → the stream 502 → onError → the embed
+  fallback (2 boots, auth-walled) → the honest floor. **No cycling
+  frames on the settled floor** — but the ~9s road there (the 502 at
+  ~1.7s + the embed ladder's 7.5s window) kept the storyboard COMPANION
+  cycling under the probing fallback — the exact "slideshow" perception
+  the operator has now filed four times.
+
+**THE YOUTUBE.COM COMPANION LAW** (the amendment, `d54c57d`): the
+storyboard frames animate ONLY while the NATIVE lane owns the box (the
+real video is coming — the crossfade base + loading companion) and on the
+reduced-motion design lane. The embed fallback's boot window and the
+walled floor show the card's own static thumbnail — youtube.com's own
+measured law, extended from the P28 floor to the whole embed-fallback
+window. Verified live on the dev ladder: a walled-card hover shows
+`framesCycling: false` at BOTH the 3s and 10s marks (the static thumbnail
+from the first second), while the formats class keeps its moving companion
+under the booting native video (phase native, playing, the frames as the
+crossfade base).
+
+The honest production picture after the amendment: the box either PLAYS
+the video (every chain-servable class, browser-independent) or shows the
+static thumbnail (+ the pill when the floor is final). Never a cycling
+slideshow anywhere — the operator's four re-files' symptom class is
+extinguished, and the playing class isarchitecturally robust (the
+generate-and-fetch-on-one-invocation law).
