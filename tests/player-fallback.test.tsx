@@ -283,8 +283,9 @@ describe("Task 2-c — the player swap chain", () => {
     const video = q("video") as HTMLVideoElement;
     expect(video).not.toBeNull();
     // itag 22 (720p) wins; the googlevideo URL is proxied + encoded
+    // P29-STREAM-REGEN — + the video id & picked itag (the proxy's heal pair)
     expect(video.getAttribute("src")).toBe(
-      `/api/stream?url=${encodeURIComponent("https://rr4.googlevideo.com/videoplayback?itag=22&source=youtube&ip=1.2.3.4")}`
+      `/api/stream?url=${encodeURIComponent("https://rr4.googlevideo.com/videoplayback?itag=22&source=youtube&ip=1.2.3.4")}&video=FMT00000001&itag=22`
     );
     expect(video.getAttribute("poster")).toBe("https://i.ytimg.com/vi/FMT00000001/hqdefault.jpg");
     expect(video.hasAttribute("controls")).toBe(true);

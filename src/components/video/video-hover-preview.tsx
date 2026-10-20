@@ -739,9 +739,17 @@ export function VideoHoverPreviewLayer() {
   // feeds the storyboard lane; the URL is proxied through the server-side
   // googlevideo proxy exactly like the watch page's PlayerFallback swap.
   const nativeFmt = useMemo(() => pickPreviewStreamFormat(formats), [formats]);
+  // P29-STREAM-REGEN — the src carries the video id + the picked itag so
+  // the proxy can heal an IP-bound 403 by re-running the playback chain
+  // from ITS OWN egress (serverless deploys: the playback API and the
+  // stream proxy are separate functions whose egresses differ — the
+  // client-held URL is dead on arrival there; measured 2026-10-20).
   const nativeSrc = useMemo(
-    () => (nativeFmt ? `/api/stream?url=${encodeURIComponent(nativeFmt.url)}` : null),
-    [nativeFmt]
+    () =>
+      nativeFmt && shownId
+        ? `/api/stream?url=${encodeURIComponent(nativeFmt.url)}&video=${encodeURIComponent(shownId)}&itag=${nativeFmt.itag}`
+        : null,
+    [nativeFmt, shownId]
   );
   // The native lane arms only on EMBED DEATH (the operator's bug: the
   // embed-disabled videos degrading to a slideshow) — the embed lane itself

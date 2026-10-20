@@ -97,9 +97,15 @@ export function NativeFallbackPlayer({
   // tap-to-unmute affordance (the native controls can also unmute).
   const [mutedAutostart, setMutedAutostart] = useState(false);
 
+  // P29-STREAM-REGEN — the src carries the video id + the picked itag so
+  // the proxy can heal an IP-bound 403 by re-running the playback chain
+  // from ITS OWN egress (serverless deploys: the playback API and the
+  // stream proxy are separate functions whose egresses differ — the
+  // client-held URL is dead on arrival there; measured 2026-10-20).
   const src = useMemo(
-    () => `/api/stream?url=${encodeURIComponent(format.url)}`,
-    [format.url]
+    () =>
+      `/api/stream?url=${encodeURIComponent(format.url)}&video=${encodeURIComponent(videoId)}&itag=${format.itag}`,
+    [format.url, format.itag, videoId]
   );
 
   // P12-UX — reset per stream via the sanctioned adjust-during-render
