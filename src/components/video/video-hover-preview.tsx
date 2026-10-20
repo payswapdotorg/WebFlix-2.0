@@ -884,21 +884,25 @@ export function VideoHoverPreviewLayer() {
   }, [nativeLane, nativeAlive]);
 
   // The animation clock: advance the frame cursor while shown + storyboard.
-  // P28-HPV4 — the clock STOPS on the settled walled floor: youtube.com's
-  // own measured hover degrade never animates a dead preview (it plays
-  // real video or shows the static thumbnail, nothing in between), and a
-  // cycling slideshow on a known-dead floor is exactly what the operator
-  // filed as "the bug". The storyboard animates only while it has a real
-  // job — the loading companion under booting lanes + the reduced-motion
-  // design lane (where walledFloor never fires).
+  // P31-HPV5 — THE YOUTUBE.COM COMPANION LAW (the operator's four slideshow
+  // re-files distilled): the frames animate ONLY while the NATIVE lane
+  // owns the box (the real video is coming — the frames are its crossfade
+  // base and loading companion) and on the reduced-motion design lane
+  // (mode "storyboard" — that lane's documented DESIGN). Everywhere else
+  // — the embed fallback's boot window, the walled floor — the frame layer
+  // is GONE and the card's own static thumbnail shows through: youtube.com's
+  // own measured hover law ("it plays real video or shows the static
+  // thumbnail, nothing in between"). A cycling frame sequence under a
+  // probing fallback is exactly the "slideshow" the operator kept filing.
+  const framesLive = nativeLane || mode === "storyboard";
   useEffect(() => {
-    if (phase !== "storyboard" || !level || shownId === null || walledFloor) return;
+    if (!framesLive || phase !== "storyboard" || !level || shownId === null) return;
     const tick = frameTickMs(level);
     const timer = setInterval(() => {
       setFrame((f) => (f + 1) % Math.max(1, level.frameCount));
     }, tick);
     return () => clearInterval(timer);
-  }, [phase, level, shownId, walledFloor]);
+  }, [framesLive, phase, level, shownId]);
 
   // P26-HPV — the ops adapter: the ONE lane-agnostic surface the P22-A
   // chrome drives. The "embed" phase maps it onto the YT embedRef methods,
@@ -989,12 +993,15 @@ export function VideoHoverPreviewLayer() {
 
   const visible = !!video && !!rect;
 
-  // storyboard geometry for the current frame (sheet/col/row) — also kept
-  // mounted during the "embed" AND "native" phases so the video crossfades
-  // in OVER the animating frames (no thumbnail flash mid-fade — the same
-  // companion law for both playing lanes)
+  // storyboard geometry for the current frame (sheet/col/row) — P31's
+  // companion law: the frames render ONLY where they animate (the native
+  // lane's crossfade base — kept mounted through the "native" phase so
+  // the video crossfades in OVER the moving frames, no thumbnail flash
+  // mid-fade — and the reduced-motion design lane). The embed fallback
+  // crossfades over the card's own static thumbnail instead (the img below
+  // is always mounted).
   const geom = (() => {
-    if (!level || (phase !== "storyboard" && phase !== "embed" && phase !== "native")) {
+    if (!framesLive || !level) {
       return null;
     }
     const perSheet = level.cols * level.rows;
@@ -1137,12 +1144,13 @@ export function VideoHoverPreviewLayer() {
               <span className="size-6 animate-spin rounded-full border-2 border-white/30 border-t-white" />
             </div>
           ) : null}
-          {/* P28-HPV4 — the storyboard frame layer: the loading companion
-              under booting lanes, animated. On the SETTLED walled floor it
-              UNMOUNTS — youtube.com's own measured law (play video or show
-              the static thumbnail, never a cycling slideshow on a known-dead
-              floor) — so the card's own static thumbnail shows through the
-              preview layer underneath the honest pill. */}
+          {/* P31-HPV5 — the storyboard frame layer: the NATIVE lane's
+              loading companion + crossfade base, and the reduced-motion
+              design lane. NOWHERE ELSE — the embed fallback's boot window
+              and the walled floor show the card's own static thumbnail
+              (youtube.com's own measured law: play video or show the
+              static thumbnail, never a cycling "slideshow" while a
+              fallback probes or a floor is known dead). */}
           {geom && !walledFloor ? (
             <div
               data-testid="storyboard-frame"

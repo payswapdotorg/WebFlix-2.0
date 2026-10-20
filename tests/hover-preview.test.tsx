@@ -652,10 +652,11 @@ describe("P22-A — the embed lane: the fair health gate (the zoom bug's fix)", 
     const seek = q('[data-testid="hover-preview-seek"]');
     expect(seek).not.toBeNull();
     expect(seek!.getAttribute("role")).toBe("slider");
-    // 2026-10-16 operator pass (hover speed): the storyboard frame stays
-    // mounted UNDER the live embed — the crossfade base (no thumbnail flash
-    // mid-fade); the embed owns the card visually.
-    expect(q('[data-testid="storyboard-frame"]')).not.toBeNull();
+    // P31-HPV5 — the youtube.com companion law: on the EMBED fallback's
+    // phase the frames are GONE (the card's own static thumbnail is the
+    // crossfade base now) — the cycling "slideshow" under a probing
+    // fallback is exactly what the operator kept filing.
+    expect(q('[data-testid="storyboard-frame"]')).toBeNull();
   });
 
   test("P22-A — a ready-but-slow embed SURVIVES past P12's 1.5s construction deadline (the regression pin)", async () => {
@@ -778,7 +779,9 @@ describe("P22-A — the embed lane: the fair health gate (the zoom bug's fix)", 
       playerEvents(retry).onStateChange({ data: 1 });
     });
     expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("embed");
-    expect(q('[data-testid="storyboard-frame"]')).not.toBeNull(); // the crossfade base
+    // P31 — the embed phase crossfades over the static thumbnail (the
+    // frames are the NATIVE lane's companion only)
+    expect(q('[data-testid="storyboard-frame"]')).toBeNull();
     expect(MockYTPlayer.destroyed).toHaveLength(1); // the retry lives
   });
 
