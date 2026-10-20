@@ -1491,4 +1491,36 @@ describe("GET /api/videos/[id]/playback?stream=1 — P31-HPV5: the box-player st
     // client asked for 18 (a resume must ride the same stream)
     expect(gvFetches.map((f) => f.url)).toEqual([URL_18, URL_18_ROTATED]);
   });
+
+  test("P32-HPV6 — THE MULTI-FORMAT TICKET LOOP: the fresh chain's preferred itag dying tries the NEXT distinct-itag candidate before any 502 (the per-format wall lottery)", async () => {
+    // gen-1 cached URLs (dead together — the egress rotated)
+    primeChain(playerWithUrls(URL_18, URL_22));
+    stubRouteUpstream({});
+    await call("http://localhost/api/videos/dQw4w9WgXcQ/playback"); // fill the cache
+    // the fresh generation: the moving wall killed itag 18's URL but itag
+    // 22's URL (a different googlevideo host) still serves
+    primeChain(playerWithUrls(URL_18_ROTATED, URL_22));
+    stubRouteUpstream({ [URL_22]: 206 }); // URL_18_ROTATED falls through to 403
+    const res = await call(streamUrl("dQw4w9WgXcQ", 18), "bytes=0-1023");
+    expect(res.status).toBe(206);
+    // the ticket trail: the CACHED single pick (dead generation, one try —
+    // cached URLs die TOGETHER) → the fresh itag-18 ticket (the Range-resume
+    // law, dead) → the SECOND fresh ticket: the picker's next-best candidate
+    // (itag 22 — nearest-360p applied to the remaining pool) SAVES the stream
+    expect(gvFetches.map((f) => f.url)).toEqual([URL_18, URL_18_ROTATED, URL_22]);
+    expect(gvFetches[2].range).toBe("bytes=0-1023"); // the ticket rides the client's Range
+  });
+
+  test("P32-HPV6 — the ticket loop is BOUNDED: every candidate dead → the honest 502 after exactly the ticket count (never an unbounded scan)", async () => {
+    primeChain(playerWithUrls(URL_18, URL_22));
+    stubRouteUpstream({});
+    await call("http://localhost/api/videos/dQw4w9WgXcQ/playback"); // cache gen-1
+    primeChain(playerWithUrls(URL_18_ROTATED, URL_22)); // fresh gen-2, ALL dead
+    stubRouteUpstream({}); // every URL 403
+    const res = await call(streamUrl("dQw4w9WgXcQ", 18));
+    expect(res.status).toBe(502);
+    // the cached pick + BOTH fresh tickets (the two-format pool is exhausted
+    // before MAX_STREAM_TICKETS) — then the honest floor, no third fetch
+    expect(gvFetches.map((f) => f.url)).toEqual([URL_18, URL_18_ROTATED, URL_22]);
+  });
 });

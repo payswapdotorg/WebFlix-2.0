@@ -109,7 +109,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     // Attempt 2 — the dead-URL cure: re-run the whole chain in THIS
     // invocation (force — no cache read, write-through) and fetch the
     // fresh URL it yields. Generate + fetch on one egress: the one axis
-    // that always matches.
+    // that always matches. P32-HPV6: attemptChainStream now rides the
+    // MULTI-FORMAT TICKET LOOP (the fresh answer's picked format first —
+    // the Range-resume law — then up to two more distinct-itag candidates
+    // in the picker's own order; the moving wall is a per-format lottery).
+    // Attempt 1 above stays the single cached pick: a cached generation's
+    // URLs are dead TOGETHER.
     if (!upstream) {
       const fresh = await getPlayback(id, { fresh: true });
       upstream = await attemptChainStream(

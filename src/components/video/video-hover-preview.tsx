@@ -106,6 +106,40 @@ import type { StoryboardLevelDto, StreamFormatDto } from "@/lib/watch/types";
  * storyboard stays the loading companion there) nor on the reduced-motion
  * lane (storyboard-only is that lane's DESIGN, not a degrade).
  *
+ * P32-HPV6 — THE STRICT YOUTUBE.COM PREVIEW LAW + THE PARALLEL EMBED
+ * HEAD-START (the operator's FIFTH slideshow re-file, 2026-10-21, verbatim:
+ * "the shorts preview boxes are playing correctly as opposed to the long
+ * format video preview boxes that are showing slideshows instead of the
+ * video"; the measured truths behind it — production 2026-10-21: ALL 12
+ * shorts tiles' stream modes 502, so the operator's playing shorts ride
+ * THEIR browser's embed lane; the long-format popular class's native lane
+ * ARMS on watch-page formats whose googlevideo fetches die at ~1.5–4.4s,
+ * and while that doomed boot runs the storyboard frames CYCLE — the exact
+ * "slideshow" window the operator keeps filing; the healthy class plays
+ * in ~1–2.5s — TTFB 0.3–0.8s + first buffer):
+ *
+ *  1. THE STRICT LAW: the storyboard frames animate ONLY on the
+ *     reduced-motion design lane (mode "storyboard" — that lane never
+ *     plays video; cycling frames ARE its documented design). On every
+ *     video-capable lane the box shows the card's own static thumbnail
+ *     until a lane reports playback — the playing lane crossfades in over
+ *     the STATIC THUMBNAIL. NEVER cycling pictures anywhere else: under a
+ *     booting native lane, under a probing embed fallback, on a settled
+ *     floor — all five re-files read the animating storyboard as "a
+ *     slideshow instead of the video". (P31's companion law already banned
+ *     the embed-boot window and the floor; P32 closes the last cycling
+ *     class — the native boot window.)
+ *  2. THE PARALLEL EMBED HEAD-START: when the native lane is armed but
+ *     silent past EMBED_HEADSTART_MS, the embed boots INVISIBLE in
+ *     parallel. Whichever lane proves playback first owns the box — the
+ *     native's canplay/playing destroys the parallel embed boot (never two
+ *     players), and the parallel embed's playback makes the silent native
+ *     CONCEDE (a derived lane term — the video unmounts and the ladder
+ *     falls through to the embed lane it already owns, a 2–4s earlier
+ *     handoff for the operator's browser on the class whose stream is
+ *     Vercel-walled but whose embed is residentially playable — exactly
+ *     the shorts' measured path).
+ *
  * P28-HPV4 — the operator's 2026-10-19 third re-file (verbatim: "the
  * slideshow bug is still not solved… check how youtube.com does it… the
  * previous webflix implementation (webflix-steel.vercel.app) also does the
@@ -322,6 +356,20 @@ export const EMBED_HOSTS = [
 export const EMBED_PLAYING_MS = 4000;
 
 /**
+ * P32-HPV6 — the parallel embed head-start window. The healthy native lane
+ * proves life within ~1–2.5s of arming (measured 2026-10-21 on production:
+ * the stream mode's TTFB is 0.3–0.8s, canplay follows the first buffer);
+ * the doomed classes never do (the popular class's stream 502s at
+ * 1.5–4.4s — and a 502 only ERRORS the element then). Past this window the
+ * silent native is presumptively doomed and the embed gets its parallel
+ * head start — the operator's browser can play classes the server cannot
+ * (the measured shorts path: ALL 12 production shorts streams 502, the
+ * operator's shorts still play — their embed lane). A healthy-but-slow
+ * native that wins after the head start simply destroys the parallel boot.
+ */
+export const EMBED_HEADSTART_MS = 1500;
+
+/**
  * P26-HPV — how long the NATIVE lane's <video> gets to prove it is booting
  * (playing/canplay fired, or readyState >= 2 = current data in hand). A
  * hanging /api/stream proxy fetch keeps the element in readyState 0
@@ -518,6 +566,11 @@ export function VideoHoverPreviewLayer() {
   const [formats, setFormats] = useState<StreamFormatDto[]>([]);
   const [nativeAlive, setNativeAlive] = useState(false);
   const [nativeDead, setNativeDead] = useState(false);
+  // P32-HPV6 — the parallel embed head-start flag: fired once the armed
+  // native lane has been silent past EMBED_HEADSTART_MS (the timer effect
+  // below). Sits in the embedLane gate so the parallel boot survives renders
+  // while `!nativeAlive` still guards the never-two-players law.
+  const [embedHeadstart, setEmbedHeadstart] = useState(false);
   const embedMountRef = useRef<HTMLDivElement>(null);
   const embedRef = useRef<PreviewEmbedPlayer | null>(null);
   const nativeVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -550,14 +603,38 @@ export function VideoHoverPreviewLayer() {
   // storyboard/loading companion holds the box (neither lane is decidable
   // yet — never a wasted iframe boot on the healthy class). Reduced-motion
   // (mode "storyboard") never plays video — the design lane, untouched.
-  const nativeLane = mode === "embed" && !!nativeFmt && !nativeDead;
+  const nativeLane =
+    mode === "embed" &&
+    !!nativeFmt &&
+    !nativeDead &&
+    // P32-HPV6 — THE CONCESSION, derived (never a setState-in-effect): a
+    // parallel embed that reported playback while the native is
+    // armed-and-silent takes the box — the silent native's lane folds RIGHT
+    // HERE, the video unmounts in the same render, and the ladder falls
+    // through to the embed lane it already owns. This is the operator's
+    // measured shorts path generalized: the browser's embed plays classes
+    // the server's stream cannot. (embedAlive is only ever set by a BOOTED
+    // embed, which required the head start — so the term is inert before it.)
+    !(embedAlive && !nativeAlive);
   // P31-HPV5 — the EMBED lane is the FALLBACK: it boots only when the
   // native lane cannot — the fetch settled with NO formats (the walled
-  // class) or the native stream died mid-preview. The fetchDone gate keeps
-  // the embed from booting speculatively during the in-flight window (the
-  // old first-rung position is gone: the operator's own browser class now
-  // sits behind the same auth wall the datacenter measured).
-  const embedLane = mode === "embed" && !embedDead && !nativeLane && fetchDone;
+  // class), the native stream died mid-preview, the native CONCEDED to a
+  // playing parallel embed (the derived term above), OR (P32-HPV6) the
+  // armed native has been silent past the parallel head-start window while
+  // not (yet) proving playback (the doomed class's stream dies at 1.5–4.4s
+  // while the operator's browser can still play that class's embed — the
+  // measured shorts path). The fetchDone gate keeps the embed from booting
+  // speculatively during the in-flight window (the old first-rung position
+  // is gone: the operator's own browser class now sits behind the same auth
+  // wall the datacenter measured). A native that DIED (nativeDead — error
+  // after playback included) hands the box back via `!nativeLane`; a native
+  // that is PLAYING keeps it (the `!nativeAlive` term inside the head-start
+  // arm — the single-player law: the lane flip destroys the parallel boot).
+  const embedLane =
+    mode === "embed" &&
+    !embedDead &&
+    fetchDone &&
+    (!nativeLane || (embedHeadstart && !nativeAlive));
 
   // Reset the animation + controls when the shown video changes — the
   // sanctioned adjust-during-render pattern (setState synchronously in an
@@ -578,6 +655,7 @@ export function VideoHoverPreviewLayer() {
     setFormats([]);
     setNativeAlive(false);
     setNativeDead(false);
+    setEmbedHeadstart(false);
   }
 
   // Hide when the page scrolls (the anchor rect would go stale).
@@ -883,18 +961,35 @@ export function VideoHoverPreviewLayer() {
     return () => clearTimeout(timer);
   }, [nativeLane, nativeAlive]);
 
+  // P32-HPV6 — the parallel embed head-start timer: an armed native that
+  // stays silent past EMBED_HEADSTART_MS is presumptively doomed (the
+  // healthy class proves life in ~1–2.5s — measured; the popular class's
+  // stream dies at 1.5–4.4s). Firing the flag arms the embed lane IN
+  // PARALLEL (invisible — its opacity gate is the phase, which stays on the
+  // native's storyboard/loading label until a lane reports playback). A
+  // native that proves life afterwards simply flips embedLane false via
+  // `!nativeAlive` and the boot effect's cleanup destroys the parallel
+  // embed — never two players, and the healthy class's only cost is one
+  // speculative iframe boot on its slow tail.
+  useEffect(() => {
+    if (!nativeLane || nativeAlive) return;
+    const timer = setTimeout(() => setEmbedHeadstart(true), EMBED_HEADSTART_MS);
+    return () => clearTimeout(timer);
+  }, [nativeLane, nativeAlive]);
+
   // The animation clock: advance the frame cursor while shown + storyboard.
-  // P31-HPV5 — THE YOUTUBE.COM COMPANION LAW (the operator's four slideshow
-  // re-files distilled): the frames animate ONLY while the NATIVE lane
-  // owns the box (the real video is coming — the frames are its crossfade
-  // base and loading companion) and on the reduced-motion design lane
-  // (mode "storyboard" — that lane's documented DESIGN). Everywhere else
-  // — the embed fallback's boot window, the walled floor — the frame layer
-  // is GONE and the card's own static thumbnail shows through: youtube.com's
-  // own measured hover law ("it plays real video or shows the static
-  // thumbnail, nothing in between"). A cycling frame sequence under a
-  // probing fallback is exactly the "slideshow" the operator kept filing.
-  const framesLive = nativeLane || mode === "storyboard";
+  // P31-HPV5 — THE YOUTUBE.COM COMPANION LAW; P32-HPV6 — THE STRICT LAW (the
+  // operator's five slideshow re-files distilled): the frames animate ONLY
+  // on the reduced-motion design lane (mode "storyboard" — that lane's
+  // documented DESIGN, it never plays video). On every video-capable lane
+  // the frames are GONE — the card's own static thumbnail holds the box
+  // until a lane reports playback, and the playing lane crossfades in over
+  // the static thumbnail: youtube.com's own measured hover law ("it plays
+  // real video or shows the static thumbnail, nothing in between") applied
+  // to EVERY lane state — booting native, probing embed, settled floor. A
+  // cycling frame sequence under ANY lane is exactly the "slideshow" the
+  // operator kept filing (re-files #1–#5, 2026-10-16 → 2026-10-21).
+  const framesLive = mode === "storyboard";
   useEffect(() => {
     if (!framesLive || phase !== "storyboard" || !level || shownId === null) return;
     const tick = frameTickMs(level);
@@ -993,13 +1088,13 @@ export function VideoHoverPreviewLayer() {
 
   const visible = !!video && !!rect;
 
-  // storyboard geometry for the current frame (sheet/col/row) — P31's
-  // companion law: the frames render ONLY where they animate (the native
-  // lane's crossfade base — kept mounted through the "native" phase so
-  // the video crossfades in OVER the moving frames, no thumbnail flash
-  // mid-fade — and the reduced-motion design lane). The embed fallback
-  // crossfades over the card's own static thumbnail instead (the img below
-  // is always mounted).
+  // storyboard geometry for the current frame (sheet/col/row) — P32's
+  // STRICT LAW: the frames render ONLY on the reduced-motion design lane
+  // (their one animating home — the clock above runs there). On the
+  // video-capable lanes the geom stays null and the card's own static
+  // thumbnail (the img below, always mounted) is every lane's crossfade
+  // base — the playing <video>/embed fades in over IT, exactly the way the
+  // embed lane already did (P28).
   const geom = (() => {
     if (!framesLive || !level) {
       return null;
@@ -1144,13 +1239,15 @@ export function VideoHoverPreviewLayer() {
               <span className="size-6 animate-spin rounded-full border-2 border-white/30 border-t-white" />
             </div>
           ) : null}
-          {/* P31-HPV5 — the storyboard frame layer: the NATIVE lane's
-              loading companion + crossfade base, and the reduced-motion
-              design lane. NOWHERE ELSE — the embed fallback's boot window
-              and the walled floor show the card's own static thumbnail
-              (youtube.com's own measured law: play video or show the
-              static thumbnail, never a cycling "slideshow" while a
-              fallback probes or a floor is known dead). */}
+          {/* P32-HPV6 — the storyboard frame layer: the reduced-motion
+              design lane's OWN surface (cycling frames are that lane's
+              documented design — it never plays video). NOWHERE ELSE — the
+              video-capable lanes show the card's own static thumbnail (the
+              img above, always mounted) until a lane reports playback, and
+              the playing lane crossfades in over IT: youtube.com's own
+              measured law (play video or show the static thumbnail — never
+              a cycling "slideshow" under a booting native, a probing embed
+              fallback, or a settled floor; the operator's five re-files). */}
           {geom && !walledFloor ? (
             <div
               data-testid="storyboard-frame"

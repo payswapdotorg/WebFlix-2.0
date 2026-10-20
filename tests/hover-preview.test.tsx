@@ -48,6 +48,7 @@ import {
   EMBED_PLAYING_MS,
   EMBED_RETRY_NO_READY_MS,
   EMBED_HOSTS,
+  EMBED_HEADSTART_MS,
   NATIVE_NO_PLAY_MS,
 } from "@/components/video/video-hover-preview";
 
@@ -1036,7 +1037,7 @@ describe("P31-HPV5 — the native lane FIRST: the box IS the video player (the o
     return { card, anchor };
   }
 
-  test("the formats class: the native lane arms FIRST — no embed ever booted; the stream rides the playback route's own stream mode", async () => {
+  test("the formats class: the native lane arms FIRST — no embed booted inside the head-start window; the stream rides the playback route's own stream mode", async () => {
     await nativeFirst();
     const video = previewVideoEl();
     expect(video).not.toBeNull();
@@ -1061,19 +1062,23 @@ describe("P31-HPV5 — the native lane FIRST: the box IS the video player (the o
     expect(q('[data-testid="hover-preview-embed"]')).toBeNull();
   });
 
-  test("while the native video buffers (no events fired): phase storyboard + the video opacity-0 (the companion law)", async () => {
+  test("while the native video buffers (no events fired): phase storyboard + the video opacity-0 (P32 — the STRICT LAW: no frames on the video-capable lanes, the static thumbnail holds the box)", async () => {
     await nativeFirst();
     const video = previewVideoEl()!;
     expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
     expect(video.className).toContain("opacity-0");
     expect(video.className).not.toContain("opacity-100");
-    // the frames animate underneath; no chrome yet (nothing proved playback)
-    expect(q('[data-testid="storyboard-frame"]')).not.toBeNull();
+    // P32-HPV6 — THE STRICT LAW: the frame layer is GONE on the video-capable
+    // lanes (the operator's five slideshow re-files) — the card's own static
+    // thumbnail holds the box while the native buffers. Cycling pictures
+    // exist ONLY on the reduced-motion design lane.
+    expect(q('[data-testid="storyboard-frame"]')).toBeNull();
+    // no chrome yet (nothing proved playback)
     expect(q('[data-testid="hover-preview-mute"]')).toBeNull();
     expect(q('[data-testid="hover-preview-seek"]')).toBeNull();
   });
 
-  test("playing → the native phase: the chrome present + the video visible (the frames stay as companion)", async () => {
+  test("playing → the native phase: the chrome present + the video visible (P32 — the crossfade rides the STATIC THUMBNAIL, never frames)", async () => {
     await nativeFirst();
     const video = previewVideoEl()!;
     await act(() => {
@@ -1085,8 +1090,10 @@ describe("P31-HPV5 — the native lane FIRST: the box IS the video player (the o
     expect(q('[data-testid="hover-preview-mute"]')).not.toBeNull();
     expect(q('[data-testid="hover-preview-seek"]')).not.toBeNull();
     expect(q("[data-preview-phase]")!.textContent).toContain("Preview");
-    // the storyboard frames stay mounted UNDER the playing video (crossfade base)
-    expect(q('[data-testid="storyboard-frame"]')).not.toBeNull();
+    // P32-HPV6 — the STRICT LAW: no frame layer under the playing video — it
+    // crossfades in over the card's own static thumbnail (the img, always
+    // mounted), exactly the way the embed lane always did.
+    expect(q('[data-testid="storyboard-frame"]')).toBeNull();
   });
 
   test("the chrome drives the element: mute toggle flips video.muted; a scrub sets currentTime; a timeupdate advances the fill", async () => {
@@ -1242,13 +1249,16 @@ describe("P31-HPV5 — the native lane FIRST: the box IS the video player (the o
     await nativeFirst();
     expect(previewVideoEl()).not.toBeNull();
     // no events fired, readyState stays 0 (< 2) — a hanging proxy fetch must
-    // not keep a dead lane armed (the real-clock proof, EMBED_*_MS pattern)
+    // not keep a dead lane armed (the real-clock proof, EMBED_*_MS pattern).
+    // (React's act collapses the timer-driven updates inside the awaited
+    // window into one exit flush — the head start's parallel boot and the
+    // zombie's death land TOGETHER, so exactly ONE embed boot exists after
+    // the sleep; the parallel-probe era itself is pinned by the P32 battery.)
     await act(async () => {
       await sleep(NATIVE_NO_PLAY_MS + 400);
     });
     expect(previewVideoEl()).toBeNull(); // the zombie was disarmed
-    // P31 — the disarm arms the EMBED fallback (the native lane cannot hold
-    // the box anymore); the fallback ladder must die before the floor
+    // the embed ladder owns the box now — its boots must die before the floor
     expect(MockYTPlayer.instances).toHaveLength(1);
     let player = livePlayer()!;
     await act(async () => {
@@ -1288,7 +1298,123 @@ describe("P31-HPV5 — the native lane FIRST: the box IS the video player (the o
     expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
     expect(previewVideoEl()).toBeNull(); // never a <video> on the frames-only lane
     expect(q("video")).toBeNull();
+    // P32 — the frames DO animate on this lane (the design lane is the strict
+    // law's ONE animating home): the frame layer is present and ticking
+    const frame = q('[data-testid="storyboard-frame"]') as HTMLElement;
+    expect(frame).not.toBeNull();
+    await act(async () => {
+      await sleep(1150); // one 1000ms tick (frameTickMs clamps to 1000)
+    });
+    expect(frame.style.backgroundPosition).toBe("-160px 0px"); // frame 1 — cycling BY DESIGN
     (win as unknown as Record<string, unknown>).matchMedia = real;
+  });
+});
+
+describe("P32-HPV6 — THE STRICT PREVIEW LAW + THE PARALLEL EMBED HEAD-START (the operator's 2026-10-21 fifth re-file: shorts play, long-format boxes showed slideshows)", () => {
+  const nativeVideoE = {
+    id: "NATIVE00005",
+    title: "Native lane E",
+    thumbnailUrl: "https://i.ytimg.com/vi/NATIVE00005/hqdefault.jpg",
+  };
+  const previewVideoEl = () =>
+    q('[data-testid="hover-preview-video"]') as unknown as HTMLVideoElement | null;
+  const embedMountEl = () => q('[data-testid="hover-preview-embed"]');
+
+  async function nativeFirstSilent(video = nativeVideoE) {
+    const { card, anchor } = await renderApp(video);
+    await show(video, card, anchor);
+    await act(async () => {
+      await sleep(30); // the playback fetch lands the formats → the native lane arms
+    });
+    return { card, anchor };
+  }
+
+  test("THE STRICT LAW, end to end: an armed-and-silent native NEVER shows cycling frames — the static thumbnail holds the box (storyboard data in hand, formats in hand)", async () => {
+    await nativeFirstSilent();
+    // the payload carries BOTH storyboards and formats — the exact
+    // formats-land class the operator's fifth re-file measured on production
+    // (the popular class: watch-page formats + storyboard levels)
+    expect(previewVideoEl()).not.toBeNull(); // the native lane is armed
+    // the strict law: the frame layer is GONE at every instant of the boot —
+    // no cycling pictures under a lane that has not proved playback
+    expect(q('[data-testid="storyboard-frame"]')).toBeNull();
+    // the card's own static thumbnail is the visible base (the img, mounted)
+    expect(q("[data-preview-phase] img")).not.toBeNull();
+    // and it STAYS gone past the head-start window (the parallel-probe era)
+    await act(async () => {
+      await sleep(EMBED_HEADSTART_MS + 400);
+    });
+    expect(q('[data-testid="storyboard-frame"]')).toBeNull();
+    expect(previewVideoEl()).not.toBeNull(); // the native is still armed (silent)
+    // the frame layer appears ONLY on the reduced-motion design lane — pinned
+    // by the storyboard-mode battery above (mode default "storyboard")
+  });
+
+  test("THE PARALLEL HEAD-START: a silent native past EMBED_HEADSTART_MS boots the embed IN PARALLEL — invisible, the native still armed, one boot", async () => {
+    await nativeFirstSilent();
+    expect(MockYTPlayer.instances).toHaveLength(0); // inside the window: no boot
+    await act(async () => {
+      await sleep(EMBED_HEADSTART_MS + 400); // the head start fires
+    });
+    // the parallel embed booted exactly once (the nocookie host, boot 0)
+    expect(MockYTPlayer.instances).toHaveLength(1);
+    // INVISIBLE: the phase is still the native's storyboard label and the
+    // embed mount carries the opacity-0 gate (it crossfades in ONLY when it
+    // owns the box — the phase flip)
+    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
+    const embedMount = embedMountEl()!;
+    expect(embedMount).not.toBeNull();
+    expect(embedMount.className).toContain("opacity-0");
+    expect(embedMount.className).not.toContain("opacity-100");
+    // the native is STILL armed — the parallel boot never disarmed it
+    expect(previewVideoEl()).not.toBeNull();
+    // no chrome (nothing proved playback), no floor
+    expect(q('[data-testid="hover-preview-mute"]')).toBeNull();
+    expect(q('[data-testid="hover-preview-unavailable"]')).toBeNull();
+  });
+
+  test("THE CONCESSION: the parallel embed reports playback → the silent native concedes — video unmounted, the embed owns the box with the full chrome", async () => {
+    await nativeFirstSilent();
+    await act(async () => {
+      await sleep(EMBED_HEADSTART_MS + 400); // the parallel boot exists
+    });
+    const player = livePlayer()!;
+    await act(async () => {
+      playerEvents(player).onReady?.();
+      playerEvents(player).onStateChange({ data: 1 }); // PLAYING
+    });
+    // the concession: the native lane died and unmounted its <video>
+    expect(previewVideoEl()).toBeNull();
+    // the embed owns the box: phase embed, visible, the full chrome
+    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("embed");
+    const embedMount = embedMountEl()!;
+    expect(embedMount.className).toContain("opacity-100");
+    expect(q('[data-testid="hover-preview-mute"]')).not.toBeNull();
+    expect(q('[data-testid="hover-preview-seek"]')).not.toBeNull();
+    // exactly one player ever constructed (no re-boot on the concession —
+    // the ladder falls through to the lane it already owns)
+    expect(MockYTPlayer.instances).toHaveLength(1);
+    expect(MockYTPlayer.destroyed).toHaveLength(0);
+  });
+
+  test("THE NATIVE WINS THE RACE: playback after the head start destroyed the parallel boot — never two players", async () => {
+    await nativeFirstSilent();
+    await act(async () => {
+      await sleep(EMBED_HEADSTART_MS + 400); // the parallel boot exists
+    });
+    expect(MockYTPlayer.instances).toHaveLength(1);
+    const video = previewVideoEl()!;
+    await act(() => {
+      video.dispatchEvent(new win.Event("playing") as unknown as Event); // the native proves life
+    });
+    // the native owns the box: phase native, the video visible
+    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("native");
+    expect(video.className).toContain("opacity-100");
+    // the parallel embed boot was DESTROYED on the lane flip (never two
+    // players) and its mount unmounted
+    expect(MockYTPlayer.destroyed).toHaveLength(1);
+    expect(embedMountEl()).toBeNull();
+    expect(MockYTPlayer.instances.filter((p) => !MockYTPlayer.destroyed.includes(p))).toHaveLength(0);
   });
 });
 
