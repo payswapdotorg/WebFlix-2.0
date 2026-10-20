@@ -1048,7 +1048,11 @@ describe("P26-HPV — the native lane: embed death plays the real video (the ope
     await embedToNative();
     const video = previewVideoEl();
     expect(video).not.toBeNull();
-    expect(video!.getAttribute("src")).toBe(`/api/stream?url=${encodeURIComponent(nativeFmtUrl)}`);
+    // P29-STREAM-REGEN — the src carries the video id + the picked itag so
+    // the proxy can heal an IP-bound 403 from its own egress
+    expect(video!.getAttribute("src")).toBe(
+      `/api/stream?url=${encodeURIComponent(nativeFmtUrl)}&video=NATIVE00001&itag=134`
+    );
     expect(video!.muted).toBe(true);
     expect(video!.hasAttribute("playsinline")).toBe(true);
     expect(video!.hasAttribute("autoplay")).toBe(true);
