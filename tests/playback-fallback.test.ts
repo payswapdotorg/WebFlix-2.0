@@ -1267,3 +1267,228 @@ describe("GET /api/stream — P29-STREAM-REGEN: the self-healing pass (the produ
     expect(gvFetches.map((f) => f.url)).toEqual([DEAD_CLIENT_URL, FRESH_18_URL]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// P31-HPV5 — the playback route's BOX-PLAYER STREAM MODE
+// (/api/videos/[id]/playback?itag=<n>&stream=1)
+// ---------------------------------------------------------------------------
+
+describe("GET /api/videos/[id]/playback?stream=1 — P31-HPV5: the box-player stream mode (generate + fetch on ONE invocation)", () => {
+  const realFetch = globalThis.fetch;
+  /** googlevideo fetches made by the ROUTE (the chain rides the setUpstream seam) */
+  const gvFetches: { url: string; range: string | undefined }[] = [];
+  /** innertube calls made by the route's getPlayback runs (cached + forced-fresh) */
+  let innertubeCalls = 0;
+
+  function stubRouteUpstream(byUrl: Record<string, number>) {
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      const u = String(url);
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      gvFetches.push({ url: u, range: headers["Range"] });
+      const status = byUrl[u] ?? 403;
+      if (status === 206) {
+        return new Response("MP4BYTES", {
+          status: 206,
+          headers: {
+            "Content-Type": "video/mp4",
+            "Content-Length": "1024",
+            "Content-Range": "bytes 0-1023/444226",
+            "Accept-Ranges": "bytes",
+          },
+        });
+      }
+      return new Response("forbidden", { status, headers: { "Content-Type": "text/html" } });
+    }) as typeof fetch;
+  }
+
+  /** Serve `player` (rung 1 OK, formats-bearing) for the route's chain runs. */
+  function primeChain(player: unknown) {
+    const { impl } = chainUpstream(player, null);
+    const countingImpl = async (url: string, init?: RequestInit): Promise<Response> => {
+      if (url.includes("/youtubei/v1/player")) innertubeCalls += 1;
+      return impl(url, init);
+    };
+    setUpstream(countingImpl);
+  }
+
+  const URL_18 = "https://rr4.googlevideo.com/videoplayback?itag=18&source=youtube";
+  const URL_22 = "https://rr5.googlevideo.com/videoplayback?itag=22&source=youtube";
+  /** a SECOND-generation chain answer (a different googlevideo URL — the
+   *  egress-rotated fresh URL after the cached one went dead) */
+  const URL_18_ROTATED = "https://rr6.googlevideo.com/videoplayback?itag=18&source=youtube";
+
+  const playerWithUrls = (u18: string, u22: string) => ({
+    ...OK_PLAYER_TWO_FORMATS,
+    streamingData: {
+      formats: [
+        {
+          itag: 18,
+          mimeType: 'video/mp4; codecs="avc1.42001E, mp4a.40.2"',
+          url: u18,
+          qualityLabel: "360p",
+          width: 640,
+          height: 360,
+          audioQuality: "AUDIO_QUALITY_LOW",
+        },
+        {
+          itag: 22,
+          mimeType: 'video/mp4; codecs="avc1.64001F, mp4a.40.2"',
+          url: u22,
+          qualityLabel: "720p",
+          width: 1280,
+          height: 720,
+          audioQuality: "AUDIO_QUALITY_MEDIUM",
+        },
+      ],
+    },
+  });
+
+  const streamUrl = (video: string, itag: number | null) =>
+    `http://localhost/api/videos/${video}/playback?${itag !== null ? `itag=${itag}&` : ""}stream=1`;
+
+  const call = (url: string, range?: string) =>
+    playbackRoute(
+      new Request(url, range ? { headers: { Range: range } } : undefined),
+      { params: Promise.resolve({ id: url.split("/api/videos/")[1]?.split("/")[0] ?? "" }) } as any
+    );
+
+  beforeEach(() => {
+    gvFetches.length = 0;
+    innertubeCalls = 0;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    setUpstream(null);
+  });
+
+  test("the DTO law is byte-identical without stream=1 (the mode switch is stream-only — even with an itag param)", async () => {
+    primeChain(OK_PLAYER_TWO_FORMATS);
+    stubRouteUpstream({});
+    const res = await call("http://localhost/api/videos/dQw4w9WgXcQ/playback?itag=18");
+    expect(res.status).toBe(200);
+    const dto = (await res.json()) as any;
+    expect(Array.isArray(dto.streamFormats)).toBe(true);
+    expect(dto.streamFormats).toHaveLength(2);
+    expect(gvFetches).toHaveLength(0); // never a googlevideo fetch in DTO mode
+  });
+
+  test("the happy path: the chain's URL fetched from THIS invocation (Range forwarded, headers + CSP law passed through)", async () => {
+    primeChain(OK_PLAYER_TWO_FORMATS);
+    stubRouteUpstream({ [URL_18]: 206, [URL_22]: 206 });
+    const res = await call(streamUrl("dQw4w9WgXcQ", 18), "bytes=0-1023");
+    expect(res.status).toBe(206);
+    expect(res.headers.get("Content-Type")).toBe("video/mp4");
+    expect(res.headers.get("Content-Range")).toBe("bytes 0-1023/444226");
+    expect(res.headers.get("Accept-Ranges")).toBe("bytes");
+    // the same-origin proxy must never let the browser sniff something else
+    expect(res.headers.get("Content-Security-Policy")).toBe("default-src 'none'; media-src 'self'");
+    expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect([...res.headers.keys()]).not.toContain("cookie");
+    expect(await res.text()).toBe("MP4BYTES");
+    // the client's itag rode the pick (a Range resume must ride the same stream)
+    expect(gvFetches.map((f) => f.url)).toEqual([URL_18]);
+    expect(gvFetches[0].range).toBe("bytes=0-1023");
+  });
+
+  test("no itag param → the server's nearest-360p muxed-preferred law picks", async () => {
+    primeChain(OK_PLAYER_TWO_FORMATS);
+    stubRouteUpstream({ [URL_18]: 206, [URL_22]: 206 });
+    const res = await call(streamUrl("dQw4w9WgXcQ", null));
+    expect(res.status).toBe(206);
+    expect(gvFetches.map((f) => f.url)).toEqual([URL_18]); // 360p muxed beats 720p
+  });
+
+  test("THE DEAD-CACHED-URL CURE: a cached URL answering 403 forces ONE fresh chain run in the SAME invocation — and the write-through makes the NEXT request ride the fresh URL with ZERO chain runs", async () => {
+    // 1) fill the cache with generation-1 URLs (the DTO mode — the way the
+    //    card-mount prefetch does it in the app)
+    primeChain(playerWithUrls(URL_18, URL_22));
+    stubRouteUpstream({});
+    await call("http://localhost/api/videos/dQw4w9WgXcQ/playback");
+    const chainRunsAfterDto = innertubeCalls;
+    expect(chainRunsAfterDto).toBeGreaterThanOrEqual(1);
+
+    // 2) egress rotated: generation-1 URLs are dead (403); the chain now
+    //    answers generation-2 URLs (a fresh watch-page/player read)
+    primeChain(playerWithUrls(URL_18_ROTATED, URL_22));
+    stubRouteUpstream({ [URL_18_ROTATED]: 206 });
+
+    // 3) the stream mode: the cached URL dies → the forced-fresh chain run
+    //    (generation 2) → the fresh URL streams — generate + fetch on ONE
+    //    invocation, the one axis that always matches
+    const res = await call(streamUrl("dQw4w9WgXcQ", 18), "bytes=0-1023");
+    expect(res.status).toBe(206);
+    expect(gvFetches.map((f) => f.url)).toEqual([URL_18, URL_18_ROTATED]);
+    expect(innertubeCalls).toBeGreaterThan(chainRunsAfterDto); // the fresh run happened
+
+    // 4) the write-through: the next Range request rides the FRESH cached
+    //    URL with ZERO new chain runs (the seek-storm law)
+    gvFetches.length = 0;
+    const runsBeforeSecond = innertubeCalls;
+    const res2 = await call(streamUrl("dQw4w9WgXcQ", 18), "bytes=1024-2047");
+    expect(res2.status).toBe(206);
+    expect(gvFetches.map((f) => f.url)).toEqual([URL_18_ROTATED]);
+    expect(innertubeCalls).toBe(runsBeforeSecond); // no chain re-run
+  });
+
+  test("the walled class (no formats anywhere, both attempts) → the honest 502 — never a fake stream", async () => {
+    primeChain(WALLED_PLAYER);
+    stubRouteUpstream({});
+    const res = await call(streamUrl("dQw4w9WgXcQ", 18));
+    expect(res.status).toBe(502);
+    const body = (await res.json()) as any;
+    expect(body.error).toContain("unavailable");
+    expect(gvFetches).toHaveLength(0); // no format ever fetched
+  });
+
+  test("the upstream throwing on the cached URL (not 403) also rides the fresh retry", async () => {
+    primeChain(OK_PLAYER_TWO_FORMATS);
+    // the cached URL is unreachable (throws); the fresh URL after the retry streams
+    let throwOnce = true;
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      const u = String(url);
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      gvFetches.push({ url: u, range: headers["Range"] });
+      if (u === URL_18 && throwOnce) {
+        throwOnce = false;
+        throw new Error("upstream unreachable");
+      }
+      return new Response("MP4BYTES", {
+        status: 206,
+        headers: {
+          "Content-Type": "video/mp4",
+          "Content-Length": "1024",
+          "Content-Range": "bytes 0-1023/444226",
+          "Accept-Ranges": "bytes",
+        },
+      });
+    }) as typeof fetch;
+    const res = await call(streamUrl("dQw4w9WgXcQ", 18));
+    expect(res.status).toBe(206);
+    expect(gvFetches.map((f) => f.url)).toEqual([URL_18, URL_18]);
+  });
+
+  test("invalid ids are rejected in stream mode too (400, never proxied)", async () => {
+    primeChain(OK_PLAYER_TWO_FORMATS);
+    stubRouteUpstream({});
+    const res = await playbackRoute(
+      new Request("http://localhost/api/videos/<script>/playback?stream=1"),
+      { params: Promise.resolve({ id: "<script>" }) } as any
+    );
+    expect(res.status).toBe(400);
+    expect(gvFetches).toHaveLength(0);
+  });
+
+  test("the fresh retry prefers the SAME itag when the fresh answer carries it (the Range-resume law)", async () => {
+    primeChain(OK_PLAYER_TWO_FORMATS);
+    stubRouteUpstream({});
+    await call("http://localhost/api/videos/dQw4w9WgXcQ/playback"); // cache gen-1
+    primeChain(playerWithUrls(URL_18_ROTATED, URL_22));
+    stubRouteUpstream({ [URL_18_ROTATED]: 206, [URL_22]: 206 });
+    const res = await call(streamUrl("dQw4w9WgXcQ", 18), "bytes=0-1023");
+    expect(res.status).toBe(206);
+    // the retry picked itag 18's fresh URL — NOT itag 22 — because the
+    // client asked for 18 (a resume must ride the same stream)
+    expect(gvFetches.map((f) => f.url)).toEqual([URL_18, URL_18_ROTATED]);
+  });
+});

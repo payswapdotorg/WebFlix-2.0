@@ -7,7 +7,9 @@
  *  - a blocked verdict (probe/onError → playerHost.markBlocked) swaps the
  *    iframe lane for the fallback INSIDE the persistent wrapper:
  *      · streamFormats available → a native <video controls autoplay> fed
- *        by /api/stream?url=<encoded googlevideo url> (poster = thumbnail);
+ *        by the playback route's own stream mode
+ *        /api/videos/<id>/playback?itag=<n>&stream=1 (poster = thumbnail;
+ *        P31-HPV5 — generate + fetch on the playback function's egress);
  *      · no formats → the blocked card (the P22-C what-to-try wording:
  *        "This video can't play here right now" + the youtube.com-sign-in
  *        hint + Open on YouTube + Retry embed);
@@ -282,10 +284,13 @@ describe("Task 2-c — the player swap chain", () => {
     });
     const video = q("video") as HTMLVideoElement;
     expect(video).not.toBeNull();
-    // itag 22 (720p) wins; the googlevideo URL is proxied + encoded
-    // P29-STREAM-REGEN — + the video id & picked itag (the proxy's heal pair)
+    // itag 22 (720p) wins; P31-HPV5 — the src rides the playback route's
+    // own stream mode (the route generates AND fetches the URL in its own
+    // invocation — the legacy /api/stream lane is dead in production by
+    // construction: cross-egress IP binding + the stream function's
+    // chain-walled egress)
     expect(video.getAttribute("src")).toBe(
-      `/api/stream?url=${encodeURIComponent("https://rr4.googlevideo.com/videoplayback?itag=22&source=youtube&ip=1.2.3.4")}&video=FMT00000001&itag=22`
+      `/api/videos/FMT00000001/playback?itag=22&stream=1`
     );
     expect(video.getAttribute("poster")).toBe("https://i.ytimg.com/vi/FMT00000001/hqdefault.jpg");
     expect(video.hasAttribute("controls")).toBe(true);

@@ -1009,49 +1009,40 @@ describe("P22-A — riding the controls keeps the preview (the layer is a fixed 
 
 // ---- P26-HPV: the native lane — embed death plays the real video ----------
 
-describe("P26-HPV — the native lane: embed death plays the real video (the operator's fix)", () => {
+describe("P31-HPV5 — the native lane FIRST: the box IS the video player (the operator's 2026-10-20 fix)", () => {
   const nativeVideoA = {
     id: "NATIVE00001",
     title: "Native lane A",
     thumbnailUrl: "https://i.ytimg.com/vi/NATIVE00001/hqdefault.jpg",
   };
   /** the format the preview picker must choose (nearest-360p beats 1080p) */
-  const nativeFmtUrl = "https://rr5.googlevideo.com/videoplayback?itag=134&id=NATIVE00001";
+  const nativeFmtItag = 134;
 
   const previewVideoEl = () =>
     q('[data-testid="hover-preview-video"]') as unknown as HTMLVideoElement | null;
 
-  /** Show in embed mode, then kill the embed ladder — BOTH host boots
-   *  (P28-HPV4: the nocookie boot dies → the youtube.com retry boots →
-   *  dies too → the lane is dead and the native lane arms). */
-  async function embedToNative(video = nativeVideoA) {
+  /** Show in embed mode and let the (stubbed) playback fetch land its
+   *  formats — P31: the native lane arms FIRST, no embed boot ever
+   *  happens on the formats class. */
+  async function nativeFirst(video = nativeVideoA) {
     const { card, anchor } = await renderApp(video);
     await show(video, card, anchor);
     await act(async () => {
-      await sleep(30); // the player + the playback fetch settle
-    });
-    let player = livePlayer()!;
-    await act(async () => {
-      playerEvents(player).onError?.(); // boot 1 (nocookie) dies
-    });
-    await act(async () => {
-      await sleep(30); // the retry constructs
-    });
-    player = livePlayer()!;
-    await act(async () => {
-      playerEvents(player).onError?.(); // the retry (youtube.com) dies — the lane is dead
+      await sleep(30); // the playback fetch lands the formats
     });
     return { card, anchor };
   }
 
-  test("embed onError → the native lane boots: the real stream through /api/stream, muted, playsInline, NO controls", async () => {
-    await embedToNative();
+  test("the formats class: the native lane arms FIRST — no embed ever booted; the stream rides the playback route's own stream mode", async () => {
+    await nativeFirst();
     const video = previewVideoEl();
     expect(video).not.toBeNull();
-    // P29-STREAM-REGEN — the src carries the video id + the picked itag so
-    // the proxy can heal an IP-bound 403 from its own egress
+    // P31-HPV5 — the src rides /api/videos/<id>/playback?itag=<n>&stream=1:
+    // the playback route generates AND fetches the URL in its own
+    // invocation (the egress that wins the chain lottery — the legacy
+    // /api/stream lane is dead in production by construction)
     expect(video!.getAttribute("src")).toBe(
-      `/api/stream?url=${encodeURIComponent(nativeFmtUrl)}&video=NATIVE00001&itag=134`
+      `/api/videos/NATIVE00001/playback?itag=${nativeFmtItag}&stream=1`
     );
     expect(video!.muted).toBe(true);
     expect(video!.hasAttribute("playsinline")).toBe(true);
@@ -1060,13 +1051,15 @@ describe("P26-HPV — the native lane: embed death plays the real video (the ope
     expect(video!.getAttribute("aria-hidden")).toBe("true"); // the layer carries the aria
     // the nearest-360p format won — NOT the 1080p one (the tiny preview box)
     expect(video!.getAttribute("src")).not.toContain("itag=137");
-    // the embed ladder is gone; BOTH host boots destroyed (never two players)
+    // NATIVE-FIRST: no embed boot ever happened on the formats class (the
+    // embed is the FALLBACK lane now — it boots only when the native lane
+    // cannot)
+    expect(MockYTPlayer.instances).toHaveLength(0);
     expect(q('[data-testid="hover-preview-embed"]')).toBeNull();
-    expect(MockYTPlayer.destroyed).toHaveLength(2);
   });
 
   test("while the native video buffers (no events fired): phase storyboard + the video opacity-0 (the companion law)", async () => {
-    await embedToNative();
+    await nativeFirst();
     const video = previewVideoEl()!;
     expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
     expect(video.className).toContain("opacity-0");
@@ -1078,7 +1071,7 @@ describe("P26-HPV — the native lane: embed death plays the real video (the ope
   });
 
   test("playing → the native phase: the chrome present + the video visible (the frames stay as companion)", async () => {
-    await embedToNative();
+    await nativeFirst();
     const video = previewVideoEl()!;
     await act(() => {
       video.dispatchEvent(new win.Event("playing") as unknown as Event);
@@ -1094,7 +1087,7 @@ describe("P26-HPV — the native lane: embed death plays the real video (the ope
   });
 
   test("the chrome drives the element: mute toggle flips video.muted; a scrub sets currentTime; a timeupdate advances the fill", async () => {
-    await embedToNative();
+    await nativeFirst();
     const video = previewVideoEl()!;
     await act(() => {
       video.dispatchEvent(new win.Event("playing") as unknown as Event);
@@ -1134,8 +1127,8 @@ describe("P26-HPV — the native lane: embed death plays the real video (the ope
     expect(parseFloat(fill.style.width)).toBeCloseTo((60 / 213) * 100, 1);
   });
 
-  test("native onError → phase returns to storyboard (the settled floor: the animation stops, the pill says it) with the video gone", async () => {
-    await embedToNative();
+  test("native onError → the EMBED fallback boots (the operator's browser may still play the walled class) → ladder death → the settled floor", async () => {
+    await nativeFirst();
     const video = previewVideoEl()!;
     await act(() => {
       video.dispatchEvent(new win.Event("playing") as unknown as Event);
@@ -1144,8 +1137,27 @@ describe("P26-HPV — the native lane: embed death plays the real video (the ope
     await act(() => {
       video.dispatchEvent(new win.Event("error") as unknown as Event);
     });
-    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
+    // P31 — the native lane died: the dead lane unmounts its video and the
+    // EMBED fallback takes the box (the operator's browser class may still
+    // play the embed — the datacenter cannot; measured 2026-10-20)
     expect(previewVideoEl()).toBeNull(); // the dead lane unmounts its video
+    expect(MockYTPlayer.instances).toHaveLength(1); // the fallback booted
+    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
+    expect(q('[data-testid="hover-preview-unavailable"]')).toBeNull(); // a lane is live — no floor yet
+    // the fallback ladder dies (both host boots) → the floor is final
+    let player = livePlayer()!;
+    await act(async () => {
+      playerEvents(player).onError?.();
+    });
+    await act(async () => {
+      await sleep(30); // the retry constructs
+    });
+    player = livePlayer()!;
+    await act(async () => {
+      playerEvents(player).onError?.();
+    });
+    expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
+    expect(previewVideoEl()).toBeNull();
     // P28-HPV4 — the floor is final now: the frame layer unmounts (the
     // static thumbnail shows through) and the honest pill appears.
     expect(q('[data-testid="storyboard-frame"]')).toBeNull();
@@ -1153,9 +1165,10 @@ describe("P26-HPV — the native lane: embed death plays the real video (the ope
     expect(q('[data-testid="hover-preview-mute"]')).toBeNull(); // chrome gone with the lane
   });
 
-  test("embed death + NO streamFormats (walled payload) → storyboard-only — the pre-fix floor preserved (P28: settled, not animating)", async () => {
-    // a plain storyboard payload (no formats): the fix raised the ladder
-    // ABOVE the floor, it did not move the floor itself
+  test("NO streamFormats (walled payload) → the EMBED fallback boots directly (P31: the native lane cannot arm) → ladder death → the settled floor", async () => {
+    // a plain storyboard payload (no formats): the native lane never arms
+    // and the embed fallback takes the box straight away (P31 — the embed
+    // is the no-formats class's own lane now)
     const slideVideo = {
       id: "SLIDES00001",
       title: "Storyboard only",
@@ -1222,8 +1235,8 @@ describe("P26-HPV — the native lane: embed death plays the real video (the ope
     expect(q('[data-testid="hover-preview-mute"]')).toBeNull(); // no chrome without a video
   });
 
-  test("NATIVE_NO_PLAY_MS zombie guard: a never-playing, never-erroring video goes dead after the window → the settled floor", async () => {
-    await embedToNative();
+  test("NATIVE_NO_PLAY_MS zombie guard: a never-playing, never-erroring video goes dead after the window → the embed fallback boots → the settled floor", async () => {
+    await nativeFirst();
     expect(previewVideoEl()).not.toBeNull();
     // no events fired, readyState stays 0 (< 2) — a hanging proxy fetch must
     // not keep a dead lane armed (the real-clock proof, EMBED_*_MS pattern)
@@ -1231,6 +1244,20 @@ describe("P26-HPV — the native lane: embed death plays the real video (the ope
       await sleep(NATIVE_NO_PLAY_MS + 400);
     });
     expect(previewVideoEl()).toBeNull(); // the zombie was disarmed
+    // P31 — the disarm arms the EMBED fallback (the native lane cannot hold
+    // the box anymore); the fallback ladder must die before the floor
+    expect(MockYTPlayer.instances).toHaveLength(1);
+    let player = livePlayer()!;
+    await act(async () => {
+      playerEvents(player).onError?.();
+    });
+    await act(async () => {
+      await sleep(30); // the retry constructs
+    });
+    player = livePlayer()!;
+    await act(async () => {
+      playerEvents(player).onError?.();
+    });
     expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
     // the floor settled — the animation stopped, the pill says it
     expect(q('[data-testid="storyboard-frame"]')).toBeNull();
@@ -1347,21 +1374,10 @@ describe("P26B-HPV3 — the walled-floor pill (the operator's 2026-10-19 re-file
     const { card, anchor } = await renderApp(nativeVideoC);
     await show(nativeVideoC, card, anchor);
     await act(async () => {
-      await sleep(30);
+      await sleep(30); // the fetch lands the formats → the native lane arms
     });
-    // P28-HPV4 — the full ladder dies (both host boots) before the native
-    // lane arms
-    let player = livePlayer()!;
-    await act(async () => {
-      playerEvents(player).onError?.();
-    });
-    await act(async () => {
-      await sleep(30);
-    });
-    player = livePlayer()!;
-    await act(async () => {
-      playerEvents(player).onError?.();
-    });
+    // P31 — no embed boots on the formats class: the native lane owns the box
+    expect(MockYTPlayer.instances).toHaveLength(0);
     expect(previewVideoEl()).not.toBeNull();
     expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard"); // companion
     expect(pill()).toBeNull(); // a lane is armed — the floor is NOT final
@@ -1373,7 +1389,7 @@ describe("P26B-HPV3 — the walled-floor pill (the operator's 2026-10-19 re-file
     expect(pill()).toBeNull();
   });
 
-  test("native death (the stream itself fails) returns to the floor AND arms the pill", async () => {
+  test("native death (the stream itself fails) → the embed fallback boots → its ladder dies → the floor AND the pill", async () => {
     const nativeVideoD = {
       id: "NATIVE00004",
       title: "Native lane D",
@@ -1382,9 +1398,16 @@ describe("P26B-HPV3 — the walled-floor pill (the operator's 2026-10-19 re-file
     const { card, anchor } = await renderApp(nativeVideoD);
     await show(nativeVideoD, card, anchor);
     await act(async () => {
-      await sleep(30);
+      await sleep(30); // the fetch lands the formats → the native lane arms
     });
-    // P28-HPV4 — the full ladder dies (both host boots) first
+    expect(MockYTPlayer.instances).toHaveLength(0); // native-first: no embed boot
+    const video = previewVideoEl()!;
+    expect(pill()).toBeNull(); // still armed
+    await act(() => {
+      video.dispatchEvent(new win.Event("error") as unknown as Event); // the proxy stream dies
+    });
+    // P31 — the embed fallback takes the box; its ladder must die for the floor
+    expect(MockYTPlayer.instances).toHaveLength(1);
     let player = livePlayer()!;
     await act(async () => {
       playerEvents(player).onError?.();
@@ -1395,11 +1418,6 @@ describe("P26B-HPV3 — the walled-floor pill (the operator's 2026-10-19 re-file
     player = livePlayer()!;
     await act(async () => {
       playerEvents(player).onError?.();
-    });
-    const video = previewVideoEl()!;
-    expect(pill()).toBeNull(); // still armed
-    await act(() => {
-      video.dispatchEvent(new win.Event("error") as unknown as Event); // the proxy stream dies
     });
     expect(q("[data-preview-phase]")!.getAttribute("data-preview-phase")).toBe("storyboard");
     expect(pill()).not.toBeNull(); // the floor is final now

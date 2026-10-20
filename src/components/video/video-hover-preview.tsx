@@ -59,18 +59,37 @@ import type { StoryboardLevelDto, StreamFormatDto } from "@/lib/watch/types";
  * not how youtube.com does it"). Embed-disabled videos (onError 101/150 —
  * extremely common on real content) used to fall PERMANENTLY to the
  * storyboard; youtube.com plays its own streams so no embed wall exists
- * for it. The fix: embed death now arms a native `<video muted autoPlay
- * playsInline>` (no controls — OUR chrome drives it) fed by
- * pickPreviewStreamFormat → /api/stream?url=<enc> (the server-side
- * googlevideo proxy — the SAME mechanism the watch page's PlayerFallback
- * uses). The honest ladder, full order:
+ * for it. The fix: embed death armed a native `<video muted autoPlay
+ * playsInline>` (no controls — OUR chrome drives it) fed by the server-side
+ * googlevideo proxy.
  *
- *   1. the EMBED lane (embed allowed + healthy under the P22-A gate);
- *   2. the NATIVE lane (embed dead + a playable stream format — muted
- *      autoplay through the proxy; NATIVE_NO_PLAY_MS zombie guard);
+ * P31-HPV5 — NATIVE-FIRST (the operator's 2026-10-20 dispatch, verbatim:
+ * "now all the long format video boxes are showing slideshows instead
+ * they should be playing the video from inside the box as if the box was
+ * a video player just like on youtube.com"; the measured truths behind
+ * it: the embed auth-wall moved onto the healthy class from datacenter
+ * egresses — both hosts, "Sign in to confirm you're not a bot" — and the
+ * legacy native lane's fuel was architecturally dead in production: the
+ * client-held googlevideo URL is IP-bound to the playback function's
+ * egress while the stream function's own egress cannot run the playback
+ * chain at all — the P29 regen's 11/11 fast-502s). The ladder inverts:
+ *
+ *   1. the NATIVE lane FIRST — the box IS the video player: the moment
+ *      the (prefetched) playback fetch lands a playable format, the
+ *      muted `<video>` boots against /api/videos/<id>/playback?itag=<n>
+ *      &stream=1 — the playback route's own invocation generates AND
+ *      fetches the googlevideo URL (the one egress that demonstrably
+ *      wins the chain lottery), so the lane's fate is BROWSER-
+ *      INDEPENDENT (no embed wall, no host sensitivity, no iframe API);
+ *      the storyboard keeps them company while it buffers;
+ *   2. the EMBED lane — the FALLBACK now: it boots only when the native
+ *      lane cannot (the fetch settled with no formats — the walled
+ *      class — or the native stream died). The operator's browser may
+ *      still play the walled class's embed (the datacenter cannot);
  *   3. the STORYBOARD frames — the loading companion under BOTH playing
- *      lanes (the crossfade base) and the honest floor when a lane dies;
+ *      lanes (the crossfade base) and the honest floor when both die;
  *   4. ken-burns — LAST resort (no storyboard either).
+ *
  * The P22-A chrome (Preview pill, mute toggle, scrubbable timeline) drives
  * BOTH playing lanes through one lane-agnostic ops adapter (previewOps).
  * Reduced-motion keeps frames-only (the documented device policy — no
@@ -505,7 +524,40 @@ export function VideoHoverPreviewLayer() {
   const draggingRef = useRef(false);
 
   const shownId = video?.id ?? null;
-  const embedLane = mode === "embed" && !embedDead;
+
+  // P26-HPV — the NATIVE lane's stream: a pure pick (nearest-360p — the
+  // preview box renders at thumbnail size) from the SAME playback fetch that
+  // feeds the storyboard lane.
+  const nativeFmt = useMemo(() => pickPreviewStreamFormat(formats), [formats]);
+  // P31-HPV5 — the src rides the playback route's BOX-PLAYER STREAM MODE
+  // (?itag=<n>&stream=1): the route generates AND fetches the googlevideo
+  // URL in its own invocation — the egress that demonstrably wins the
+  // playback-chain lottery (measured 2026-10-20: the legacy /api/stream
+  // function's egress cannot run the chain at all, and any URL generated
+  // by a different function's egress is IP-bound dead on arrival). No
+  // client-held `url` parameter anymore — the server's own chain is the
+  // only fuel, so the lane's fate is browser-independent.
+  const nativeSrc = useMemo(
+    () =>
+      nativeFmt && shownId
+        ? `/api/videos/${encodeURIComponent(shownId)}/playback?itag=${nativeFmt.itag}&stream=1`
+        : null,
+    [nativeFmt, shownId]
+  );
+  // P31-HPV5 — NATIVE-FIRST: the native lane arms the moment the playback
+  // fetch lands a playable format (the prefetch queue usually has the DTO
+  // warm before the dwell even fires). While the fetch is in flight the
+  // storyboard/loading companion holds the box (neither lane is decidable
+  // yet — never a wasted iframe boot on the healthy class). Reduced-motion
+  // (mode "storyboard") never plays video — the design lane, untouched.
+  const nativeLane = mode === "embed" && !!nativeFmt && !nativeDead;
+  // P31-HPV5 — the EMBED lane is the FALLBACK: it boots only when the
+  // native lane cannot — the fetch settled with NO formats (the walled
+  // class) or the native stream died mid-preview. The fetchDone gate keeps
+  // the embed from booting speculatively during the in-flight window (the
+  // old first-rung position is gone: the operator's own browser class now
+  // sits behind the same auth wall the datacenter measured).
+  const embedLane = mode === "embed" && !embedDead && !nativeLane && fetchDone;
 
   // Reset the animation + controls when the shown video changes — the
   // sanctioned adjust-during-render pattern (setState synchronously in an
@@ -574,9 +626,16 @@ export function VideoHoverPreviewLayer() {
   // last RETRIES on the next host rather than declaring the lane dead —
   // the host axis is the one degree of freedom the datacenter matrix
   // could not measure for the operator's browser. Only the LAST boot's
-  // death sets embedDead (arming the native lane / the honest floor).
+  // death sets embedDead (arming the honest floor).
+  //
+  // P31-HPV5 — the lane runs only when embedLane (the FALLBACK position:
+  // the fetch settled with no formats, or the native lane died). Keyed on
+  // embedLane itself so the boot follows the mount: the div renders in the
+  // same commit that flips the lane, this effect re-runs on the dep, and a
+  // lane flip AWAY (the native lane arming, or the ladder's death) runs
+  // the cleanup — destroying any boot in flight. Never two players.
   useEffect(() => {
-    if (shownId === null || mode !== "embed") return;
+    if (shownId === null || !embedLane) return;
     const mount = embedMountRef.current;
     if (!mount) return;
     // a fresh embed means a fresh scrub (an interrupted drag must not leak
@@ -732,53 +791,33 @@ export function VideoHoverPreviewLayer() {
       if (embedRef.current === embed) embedRef.current = null;
       host.remove();
     };
-  }, [shownId, mode, embedAttempt]);
+    // P31-HPV5 — embedLane keyed: the boot follows the mount (the lane
+    // flips after the fetch settles / the native lane dies), and a flip
+    // away destroys any boot in flight. mode is carried inside embedLane.
+  }, [shownId, embedLane, embedAttempt]);
 
-  // P26-HPV — the NATIVE lane's stream: a pure pick (nearest-360p — the
-  // preview box renders at thumbnail size) from the SAME playback fetch that
-  // feeds the storyboard lane; the URL is proxied through the server-side
-  // googlevideo proxy exactly like the watch page's PlayerFallback swap.
-  const nativeFmt = useMemo(() => pickPreviewStreamFormat(formats), [formats]);
-  // P29-STREAM-REGEN — the src carries the video id + the picked itag so
-  // the proxy can heal an IP-bound 403 by re-running the playback chain
-  // from ITS OWN egress (serverless deploys: the playback API and the
-  // stream proxy are separate functions whose egresses differ — the
-  // client-held URL is dead on arrival there; measured 2026-10-20).
-  const nativeSrc = useMemo(
-    () =>
-      nativeFmt && shownId
-        ? `/api/stream?url=${encodeURIComponent(nativeFmt.url)}&video=${encodeURIComponent(shownId)}&itag=${nativeFmt.itag}`
-        : null,
-    [nativeFmt, shownId]
-  );
-  // The native lane arms only on EMBED DEATH (the operator's bug: the
-  // embed-disabled videos degrading to a slideshow) — the embed lane itself
-  // is untouched, and reduced-motion (mode "storyboard") never plays video.
-  const nativeLane = mode === "embed" && embedDead && !!nativeFmt && !nativeDead;
-
-  // The effective phase — the 2026-10-16 operator pass (hover speed):
-  // while the embed boots (embedLane, not yet alive) the STORYBOARD now
-  // animates immediately whenever its data is in hand (prefetched at card
-  // mount) — the preview starts moving the moment the dwell fires, exactly
-  // like youtube.com's instant previews, and the real video crossfades in
-  // over the moving frames when the embed reports playback. The spinner+
-  // ken-burns "loading" chrome only shows when there is genuinely no
-  // storyboard data yet (fetch still in flight).
+  // The effective phase — the 2026-10-16 operator pass (hover speed): the
+  // STORYBOARD animates immediately whenever its data is in hand
+  // (prefetched at card mount) — the preview starts moving the moment the
+  // dwell fires, exactly like youtube.com's instant previews, and the real
+  // video crossfades in over the moving frames when a playing lane reports
+  // playback. The spinner + ken-burns "loading" chrome only shows when
+  // there is genuinely no storyboard data yet (fetch still in flight).
   //
-  // P26-HPV — the native rung sits BETWEEN embed and storyboard: embed death
-  // with a playable stream boots the native <video> (the storyboard stays
-  // the companion while it buffers — the same crossfade law); native death
-  // (onError / the NATIVE_NO_PLAY_MS zombie guard) falls to the storyboard,
-  // and a walled payload (no streamFormats) never leaves the pre-fix floor.
-  const phase: Phase = embedLane
-    ? embedAlive
-      ? "embed"
+  // P31-HPV5 — NATIVE-FIRST: the native rung owns the box whenever a
+  // playable format exists (the storyboard stays the companion while it
+  // buffers — the same crossfade law); the EMBED rung covers the walled
+  // class (no formats) and the native-death class; both dead → the honest
+  // floor (storyboard unmounted + the pill, per the P28 law).
+  const phase: Phase = nativeLane
+    ? nativeAlive
+      ? "native"
       : level
         ? "storyboard"
         : "loading"
-    : nativeLane
-      ? nativeAlive
-        ? "native"
+    : embedLane
+      ? embedAlive
+        ? "embed"
         : level
           ? "storyboard"
           : "loading"
@@ -788,11 +827,12 @@ export function VideoHoverPreviewLayer() {
           ? "degraded"
           : "loading";
 
-  // P26B-HPV3 — the walled floor is FINAL when the embed lane is dead, the
-  // native lane cannot arm (no format / died) and the playback fetch has
-  // settled: no playing lane can still arrive. This is the pill's gate —
-  // strictly narrower than `phase === "storyboard"`, which also covers the
-  // loading companion while a lane boots.
+  // P26B-HPV3 — the walled floor is FINAL when both playing lanes are dead
+  // (P31: the embed ladder exhausted AND the native lane cannot arm — no
+  // format / died) and the playback fetch has settled: no playing lane can
+  // still arrive. This is the pill's gate — strictly narrower than
+  // `phase === "storyboard"`, which also covers the loading companion
+  // while a lane boots.
   const walledFloor =
     mode === "embed" &&
     embedDead &&
@@ -1053,15 +1093,16 @@ export function VideoHoverPreviewLayer() {
               )}
             />
           )}
-          {/* P26-HPV — the NATIVE lane: embed death swaps in a declarative
-              muted-autoplaying <video> fed by the server-side googlevideo
-              proxy (React renders a plain video element fine — only the YT
+          {/* P31-HPV5 — the NATIVE lane, FIRST: a declarative muted-
+              autoplaying <video> — THE BOX IS THE VIDEO PLAYER — fed by the
+              playback route's own stream mode (generate + fetch on one
+              egress; React renders a plain video element fine — only the YT
               embed needs its imperative host). NO controls: our own P22-A
               chrome drives it through the ops adapter; aria-hidden because
               the LAYER carries the preview's aria (a muted decorative
               video needs no second announcement). The storyboard frames
               stay mounted underneath as the crossfade companion while it
-              boots — the same law the embed lane follows. */}
+              buffers — the same law the embed lane follows. */}
           {nativeLane && nativeFmt ? (
             <video
               ref={nativeVideoRef}

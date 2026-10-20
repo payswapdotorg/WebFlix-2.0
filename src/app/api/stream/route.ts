@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
-import { getPlayback } from "@/lib/youtube/streams";
-import type { StreamFormatDto } from "@/lib/watch/types";
+import { getPlayback, pickProxyStreamFormat } from "@/lib/youtube/streams";
+import {
+  fetchUpstream,
+  isAllowedStreamUrl,
+  isUsable,
+  streamOut,
+} from "@/lib/youtube/stream-proxy";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -38,30 +43,18 @@ export const maxDuration = 60;
  * chain per request. The regen fetches only URLs from our own getPlayback
  * output — never client input — and still passes them through the same
  * allowlist. No `video` param: the old behavior (an honest 502).
+ *
+ * P31-HPV5 — the shared proxy helpers (allowlist / plain-fetch /
+ * passthrough headers / streamOut) moved to @/lib/youtube/stream-proxy
+ * (byte-identical laws, imported above); pickProxyStreamFormat's canonical
+ * home is now @/lib/youtube/streams. This legacy route is kept verbatim —
+ * the app's own clients (the hover preview + the watch page's fallback
+ * player) have moved to the playback route's stream mode
+ * (/api/videos/[id]/playback?itag=<n>&stream=1 — generate-and-fetch in the
+ * playback function's own invocation, the egress that demonstrably wins
+ * the chain lottery; measured 2026-10-20: THIS function's egress cannot
+ * run the chain at all — the regen's 11/11 fast-502s on production).
  */
-const ALLOWED_HOST_SUFFIX = ".googlevideo.com";
-
-function isAllowedStreamUrl(raw: string): URL | null {
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    return null;
-  }
-  if (url.protocol !== "https:") return null;
-  const host = url.hostname.toLowerCase();
-  if (!host.endsWith(ALLOWED_HOST_SUFFIX) && host !== "googlevideo.com") return null;
-  return url;
-}
-
-const PASSTHROUGH_HEADERS = [
-  "content-type",
-  "content-length",
-  "content-range",
-  "accept-ranges",
-  "cache-control",
-] as const;
-
 /* ------------------------------------------------------------------ */
 /* P29-STREAM-REGEN — the regen machinery                              */
 /* ------------------------------------------------------------------ */
@@ -83,59 +76,6 @@ const regenCache = new Map<string, { url: string; itag: number; at: number }>();
 /** Test seam (the setUpstream/clearCache convention) — resets the regen cache. */
 export function resetProxyRegenCache(): void {
   regenCache.clear();
-}
-
-/**
- * The server twin of the client's pickPreviewStreamFormat
- * (src/lib/watch/playback-client.ts): prefer the EXACT itag the client
- * picked (a Range resume must ride the same stream), else the
- * nearest-360p law — muxed (hasAudio) entries preferred so a watch-page
- * fallback never lands on a silent stream, any entry as the last resort.
- */
-function pickProxyStreamFormat(
-  formats: StreamFormatDto[],
-  preferItag: number | null
-): StreamFormatDto | null {
-  if (formats.length === 0) return null;
-  if (preferItag !== null) {
-    const exact = formats.find((f) => f.itag === preferItag);
-    if (exact) return exact;
-  }
-  const score = (f: StreamFormatDto): number =>
-    -Math.abs((f.height ?? 0) - 360) * 1000 + (f.hasAudio ? 500 : 0) - (f.bitrate ?? 0) / 1e9;
-  const withAudio = formats.filter((f) => f.hasAudio);
-  const pool = withAudio.length > 0 ? withAudio : formats;
-  return pool.reduce((best, f) => (score(f) > score(best) ? f : best));
-}
-
-/** One upstream attempt — the plain-fetch law googlevideo expects. */
-async function fetchUpstream(upstreamUrl: URL, range: string | null): Promise<Response> {
-  return fetch(upstreamUrl, {
-    redirect: "follow",
-    headers: {
-      // googlevideo requires noReferer-ish plain fetches; a Range when present
-      ...(range ? { Range: range } : {}),
-      Accept: "*/*",
-    },
-    signal: AbortSignal.timeout(60_000),
-    cache: "no-store",
-  });
-}
-
-function isUsable(upstream: Response): boolean {
-  return upstream.ok || upstream.status === 206;
-}
-
-function streamOut(upstream: Response): Response {
-  const headers = new Headers();
-  for (const name of PASSTHROUGH_HEADERS) {
-    const value = upstream.headers.get(name);
-    if (value !== null) headers.set(name, value);
-  }
-  // a same-origin proxy must never let the browser sniff something else
-  headers.set("content-security-policy", "default-src 'none'; media-src 'self'");
-  headers.set("x-content-type-options", "nosniff");
-  return new Response(upstream.body, { status: upstream.status, headers });
 }
 
 /**

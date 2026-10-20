@@ -342,3 +342,61 @@ describe("raw JSON ops + peek", () => {
     expect(rest.commands.length).toBe(2); // 1 GET (miss) + 1 SET — peek added nothing
   });
 });
+
+// ---------------------------------------------------------------------------
+// P31-HPV5 — the force option (the playback stream mode's dead-URL cure)
+// ---------------------------------------------------------------------------
+
+describe("P31 force: skip every read path, compute + write through", () => {
+  test("a forced call on a FRESH L1 entry re-computes (never serves the cached value) and the write-through updates the entry", async () => {
+    let calls = 0;
+    const fn = async () => {
+      calls += 1;
+      return `gen-${calls}`;
+    };
+    const first = await cachedResilient("force:k", 60_000, fn);
+    expect(first).toBe("gen-1");
+    // a normal call reads the fresh L1 — no compute
+    const cached = await cachedResilient("force:k", 60_000, fn);
+    expect(cached).toBe("gen-1");
+    expect(calls).toBe(1);
+    // the forced call ignores the fresh entry entirely
+    const forced = await cachedResilient("force:k", 60_000, fn, { force: true });
+    expect(forced).toBe("gen-2");
+    expect(calls).toBe(2);
+    // and the write-through replaced the entry — a normal read now sees gen-2
+    const after = await cachedResilient("force:k", 60_000, fn);
+    expect(after).toBe("gen-2");
+    expect(calls).toBe(2);
+  });
+
+  test("a forced call does not dedupe onto an in-flight compute (the caller already measured the cached value dead)", async () => {
+    let calls = 0;
+    const fn = async () => {
+      calls += 1;
+      await sleep(30);
+      return `v-${calls}`;
+    };
+    const slow = cachedResilient("force:inflight", 60_000, fn); // starts computing
+    await sleep(5); // the slow compute is on the stack
+    const forced = await cachedResilient("force:inflight", 60_000, fn, { force: true });
+    await slow;
+    expect(calls).toBe(2); // the forced run did NOT piggyback on the in-flight one
+    expect(forced).toBe("v-2");
+  });
+
+  test("the isEmpty guard still applies on the forced path (an unhealthy fresh answer never poisons; the last-good keeps serving)", async () => {
+    let calls = 0;
+    const fn = async () => {
+      calls += 1;
+      return calls === 1 ? "healthy" : "";
+    };
+    const isEmpty = (v: unknown) => v === "";
+    const first = await cachedResilient("force:empty", 60_000, fn, { isEmpty });
+    expect(first).toBe("healthy");
+    // the forced re-run answers unhealthy → never written, last-good serves
+    const forced = await cachedResilient("force:empty", 60_000, fn, { isEmpty, force: true });
+    expect(forced).toBe("healthy");
+    expect(calls).toBe(2);
+  });
+});

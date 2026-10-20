@@ -772,3 +772,60 @@ Stage Summary:
 - P30-HOME-GRID-MUSIC merged: the home page reads EXACTLY the operator's row pattern (long, long, shorts, long, shorts, long, long, continue-watching, then the endless long grid at the bottom) with 3 bigger boxes per row; the music page is the dedicated /music destination mirroring youtube.com's own Music surface (the channel-style header + the square-lockup shelf family, real per-seed shelves).
 - Gates 1948/0, lint 0e/1 pre-existing, tsc clean, PAT scan clean; live-verified end-to-end on the dev ladder (the pattern + density + disjoint shelves + the append-below golden path + the music destination).
 - The merge rides the vercel auto-deploy; the station's post-merge production re-probe is the standing next step.
+
+---
+
+## Task ID: P31-HPV5-BOXPLAYER (Task 46)
+
+**The operator's 2026-10-20 dispatch (verbatim):** "now all the long format
+video boxes are showing slideshows instead they should be playing the video
+from inside the box as if the box was a video player just like on
+youtube.com" — the fourth slideshow re-file, and this time the measured
+cause was architectural, not per-video.
+
+**The fresh measurements (2026-10-20, all live):** (1) the embed auth wall
+MOVED — both hosts (nocookie + youtube.com) answer "Sign in to confirm
+you're not a bot" on the HEALTHY class from datacenter egresses (the
+production hover probe's qoe stats; P28's 2026-10-19 matrix had every
+shape playing) — so the embed lane is dead for the datacenter AND (per the
+operator's ALL-boxes report) their browser class too; (2) the native lane's
+production fuel was dead by construction — the client-held googlevideo URL
+is IP-bound to the playback function's egress, and the P29 self-heal regen
+NEVER worked (11/11 probes → 502 "regen unavailable" in 0.3s — too fast
+for a chain run: the stream function's egress cannot run the playback
+chain at all); (3) the playback function's egress wins fresh chains TODAY
+(4/4 never-cached obscure videos → itag-18 via watch-page; dQw4 → 22
+formats via player).
+
+**The deliverables:** (1) THE BOX-PLAYER STREAM MODE —
+`/api/videos/[id]/playback?itag=<n>&stream=1`: the playback route itself
+streams the bytes (cache-first getPlayback → the itag-preferred pick →
+Range-forwarded upstream fetch → on a dead URL ONE fresh retry via the
+cache engine's new `force` option — generate + fetch in the SAME
+invocation, the egress that demonstrably wins the chain lottery, with the
+write-through making seek storms ride the fresh URL with zero chain runs;
+no usable format → the honest 502; never client input through the
+allowlist); (2) NATIVE-FIRST hover ladder — the native <video> arms the
+moment the playback fetch lands a format (the box IS the video player,
+browser-independent), the embed lane demotes to the no-formats/native-dead
+fallback (keyed on embedLane — the boot follows the mount, a lane flip
+destroys boots in flight), the storyboard stays the companion + the honest
+floor (P28 laws untouched), the P22-A chrome unchanged through the ops
+adapter; (3) the watch page's PlayerFallback re-points at the same stream
+mode; (4) the shared proxy surface (stream-proxy.ts) — the legacy
+/api/stream route kept byte-identical (its P29 battery pins it).
+
+**Gates:** 1959/0 (base 1948 + 11 — the stream-mode battery +8, the cache
+force pins +3, the hover battery's 40 pins re-pointed at native-first, the
+watch fallback src re-pinned); lint 0e/1 pre-existing; tsc clean; PAT scan
+clean.
+
+**Live verification (dev ladder :3105):** the stream mode 206 with
+1,048,576 real video bytes (Range forwarded); the hover golden path on the
+dQw4 card — phase "native", src
+`/api/videos/dQw4w9WgXcQ/playback?itag=243&stream=1`, PLAYING (26.8s →
+30.8s live), the timeline fill tracking, ZERO embed iframes booted; the
+walled class → the honest 502 + the static floor + the pill (never a
+cycling slideshow); the watch embed plays from the sandbox so the fallback
+correctly never armed (its new src pinned by the component battery); zero
+page/console errors — evidence/wfx2p31/.
