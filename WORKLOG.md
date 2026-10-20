@@ -829,3 +829,51 @@ walled class → the honest 502 + the static floor + the pill (never a
 cycling slideshow); the watch embed plays from the sandbox so the fallback
 correctly never armed (its new src pinned by the component battery); zero
 page/console errors — evidence/wfx2p31/.
+
+---
+
+## 2026-10-21 — P32-HPV6-STRICTLAW (the fifth slideshow re-file: the strict youtube.com preview law + the parallel embed head-start)
+
+**Dispatch (verbatim):** "the shorts preview boxes are playing correctly as
+opposed to the long format video preview boxes that are showing slideshows
+instead of the video"
+
+**Diagnosis (the fresh 2026-10-21 measurements, the stale-brief law):**
+ALL 12 production shorts tiles' stream modes 502 (1.5–4.4s each) — the
+operator's playing shorts ride THEIR browser's embed lane, so the pipeline
+is healthy and the class decides the lane; P31's companion law banned the
+cycling storyboard under the embed boot and on the floor, but the
+formats-land class (the popular feed: watch-page formats land, the
+googlevideo fetches die) still cycled the frames under the whole doomed
+native boot — the last "slideshow" window; the healthy class proves life
+in ~1–2.5s (TTFB 0.3–0.8s + first buffer); the wall is per-format too
+(one format's URL dead while a sibling host serves).
+
+**The fix:** (1) THE STRICT YOUTUBE.COM PREVIEW LAW — the frames animate
+ONLY on the reduced-motion design lane; every video-capable lane shows the
+card's own static thumbnail until a lane plays (the playing lane
+crossfades in over the static thumbnail); NEVER cycling pictures under a
+booting native, a probing embed, or a settled floor. (2) THE PARALLEL
+EMBED HEAD-START (EMBED_HEADSTART_MS 1500) — a silent armed native past
+the window boots the embed INVISIBLE in parallel; whichever lane proves
+playback first owns the box (the native's life destroys the parallel boot
+— never two players; the parallel embed's playback folds the silent
+native's lane through a DERIVED concession term — no state, no effect);
+the operator's embed-class handoff arrives 2–4s earlier on exactly the
+shorts' measured path. (3) THE MULTI-FORMAT TICKET LOOP
+(attemptChainStream, MAX_STREAM_TICKETS 3) — the fresh chain's stream
+attempt tries the preferred itag then the next-best distinct-itag
+candidates (dead answers cost one fast request; the cached attempt stays
+the single pick — cached generations die together).
+
+**Gates:** 1965/0 (base 1959 + 6: the P32 battery +4 — strict law, head
+start, concession, native-wins; the stream-mode battery +2 — the ticket
+loop + its bounded 502); the two P31 companion pins re-pointed; lint 0e/1
+pre-existing; tsc clean.
+
+**Live verification (dev ladder :3105):** dQw4's box PLAYING (phase
+native, currentTime advancing live, the chrome up, storyboard-frame NEVER
+present); the walled class static + the pill from the first second; the
+shorts tiles' embed lane boots a real iframe (the operator's egress plays
+it; the sandbox's answers the honest floor); zero page/console errors —
+evidence/wfx2p32/.
