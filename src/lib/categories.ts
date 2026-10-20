@@ -80,7 +80,7 @@ export function normalizeCategory(value: string | null | undefined): string {
  * The real destination for a sidebar EXPLORE / explore-hub category link
  * (WFX2-B-W; WFX2-P19-EXPL): every link lands on a real-data page with the
  * category pre-applied —
- *  - the 13 browse categories → the category's own browse page
+ *  - the 12 browse categories → the category's own browse page
  *    (/explore/category/<key> — the ranked grid composed from per-category
  *    seed searches, infinite scroll through live search continuations);
  *  - Live → the Live surface (/explore/live — the Features→Live filter
@@ -90,11 +90,18 @@ export function normalizeCategory(value: string | null | undefined): string {
  *    FEpodcasts_destination surface, measured live 2026-10-19 — the
  *    explore-category compose stays reachable but is no longer the
  *    Podcasts destination; the home chip row keeps its own family
- *    (/?category=Podcasts — youtube.com's home chip stays on home)).
+ *    (/?category=Podcasts — youtube.com's home chip stays on home));
+ *  - Music → the dedicated music destination (/music — P30: youtube.com's
+ *    own Music page is the channel-style destination with the square-lockup
+ *    shelf family, measured live 2026-10-20 — the same dedicated-destination
+ *    law as Podcasts; the explore-category compose stays reachable at
+ *    /explore/category/Music and the home chip keeps filtering home
+ *    (/?category=Music — youtube.com's home chip stays on home)).
  */
 export function categoryDestination(category: string): string {
   if (category === "Live") return "/explore/live";
   if (category === "Podcasts") return "/podcasts";
+  if (category === "Music") return "/music";
   return `/explore/category/${encodeURIComponent(category)}`;
 }
 

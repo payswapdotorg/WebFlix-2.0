@@ -826,8 +826,11 @@ describe("GET /api/playlist/[id] — the public playlist page", () => {
 // ---------------------------------------------------------------------------
 
 describe("categoryDestination — sidebar EXPLORE links land on real-data pages", () => {
-  test("the browse categories → their own category browse pages (P19); Podcasts → its dedicated destination (P25 G13)", () => {
-    expect(categoryDestination("Music")).toBe("/explore/category/Music");
+  test("the browse categories → their own category browse pages (P19); Music + Podcasts → their dedicated destinations (P30 / P25 G13)", () => {
+    // P30 — youtube.com's own Music page is the channel-style destination
+    // (measured live 2026-10-20); the composed /explore/category/Music grid
+    // stays reachable but is no longer the destination.
+    expect(categoryDestination("Music")).toBe("/music");
     expect(categoryDestination("Gaming")).toBe("/explore/category/Gaming");
     expect(categoryDestination("News")).toBe("/explore/category/News");
     // P25 G13 — youtube.com's own Podcasts card routes to the dedicated

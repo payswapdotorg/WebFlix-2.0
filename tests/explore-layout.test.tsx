@@ -208,7 +208,12 @@ describe("the category page — the chip row (All + the 14, URL-synced)", () => 
 
     const chipHrefs = hrefs('[data-testid="category-chip"]');
     expect(chipHrefs[0]).toBe("/explore"); // All → the explore hub
-    expect(chipHrefs[CATEGORY_CHIPS.indexOf("Music")]).toBe("/explore/category/Music");
+    // P30 — Music is a DESTINATION now: youtube.com's own Music page routes
+    // to the dedicated /music surface (measured live 2026-10-20), so the
+    // chip row (categoryDestination) routes there too — the composed grid
+    // stays reachable at /explore/category/Music but is no longer the
+    // destination.
+    expect(chipHrefs[CATEGORY_CHIPS.indexOf("Music")]).toBe("/music");
     expect(chipHrefs[CATEGORY_CHIPS.indexOf("Gaming")]).toBe("/explore/category/Gaming");
     // P25 G13 — Podcasts is a DESTINATION now: youtube.com's own card routes
     // to the dedicated /podcasts surface (measured live 2026-10-19), so the
@@ -320,7 +325,7 @@ describe("the category page — infinite scroll (the search-view sentinel patter
 });
 
 describe("the explore hub — every card lands on a real-data destination", () => {
-  test("Live keeps /explore/live; the 12 browse categories → their own pages; Podcasts → /podcasts (P25 G13)", async () => {
+  test("Live keeps /explore/live; the 11 browse categories → their own pages; Music + Podcasts → their destinations (P30 / P25 G13)", async () => {
     await render(createElement(ExploreHub));
 
     // REA-3 — the hub's cards are the 14 CATEGORIES (the browse ladder);
@@ -328,23 +333,31 @@ describe("the explore hub — every card lands on a real-data destination", () =
     // P25 G13 — the Podcasts card is a DESTINATION card now (youtube.com's
     // own Podcasts browse surface, measured): it links /podcasts, not the
     // composed /explore/category/Podcasts grid.
+    // P30 — the Music card is a DESTINATION card too (youtube.com's own
+    // Music page, measured 2026-10-20): it links /music, not the composed
+    // /explore/category/Music grid.
     const cardLinks = all("a").filter((a) => a.getAttribute("href")?.startsWith("/explore"));
     expect(cardLinks.map((a) => a.getAttribute("href"))).toContain("/explore/live");
     for (const category of CATEGORY_CHIPS.filter(
-      (c) => c !== "All" && c !== "Live" && c !== "Podcasts"
+      (c) => c !== "All" && c !== "Live" && c !== "Podcasts" && c !== "Music"
     )) {
       expect(cardLinks.map((a) => a.getAttribute("href"))).toContain(
         `/explore/category/${category}`
       );
     }
-    // 12 category cards + the Live card = 13 explore links (the Podcasts
-    // card left the /explore family for its own destination)
-    expect(cardLinks).toHaveLength(13);
+    // 11 category cards + the Live card = 12 explore links (the Podcasts
+    // and Music cards left the /explore family for their own destinations)
+    expect(cardLinks).toHaveLength(12);
     // …and the Podcasts destination card itself is present with its own copy
     const podcastsCard = all("a").find((a) => a.getAttribute("href") === "/podcasts");
     expect(podcastsCard?.textContent).toContain("Podcasts");
     expect(podcastsCard?.textContent).toContain("podcasts destination");
     expect(podcastsCard?.textContent).not.toContain("from YouTube search");
+    // …and the Music destination card too
+    const musicCard = all("a").find((a) => a.getAttribute("href") === "/music");
+    expect(musicCard?.textContent).toContain("Music");
+    expect(musicCard?.textContent).toContain("music destination");
+    expect(musicCard?.textContent).not.toContain("from YouTube search");
   });
 });
 

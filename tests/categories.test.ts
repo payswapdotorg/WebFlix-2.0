@@ -109,14 +109,18 @@ describe("chips filter behavior (filterVideosByCategory)", () => {
   });
 });
 
-describe("categoryDestination (P25 G13 — the Podcasts destination re-routed, measured)", () => {
+describe("categoryDestination (P25 G13 + P30 — the dedicated destinations, measured)", () => {
   test("Podcasts → the dedicated podcasts destination /podcasts (youtube.com's own FEpodcasts_destination)", () => {
     expect(categoryDestination("Podcasts")).toBe("/podcasts");
   });
 
+  test("Music → the dedicated music destination /music (P30: youtube.com's own Music page — the channel-style header + square-lockup shelf family, measured 2026-10-20)", () => {
+    expect(categoryDestination("Music")).toBe("/music");
+  });
+
   test("Live keeps its own surface; every OTHER category keeps the composed grid", () => {
     expect(categoryDestination("Live")).toBe("/explore/live");
-    for (const c of CATEGORIES.filter((c) => c !== "Podcasts" && c !== "Live")) {
+    for (const c of CATEGORIES.filter((c) => c !== "Podcasts" && c !== "Live" && c !== "Music")) {
       expect(categoryDestination(c)).toBe(`/explore/category/${encodeURIComponent(c)}`);
     }
   });
