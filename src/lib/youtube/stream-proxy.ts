@@ -87,22 +87,43 @@ export function streamOut(upstream: Response): Response {
  * production truth: the client-held URL is IP-bound to a different
  * function's egress, and the legacy stream route's own egress cannot run
  * the playback chain at all — the regen's 11/11 fast-502s).
+ *
+ * P32-HPV6 — THE MULTI-FORMAT TICKET LOOP: the first ticket is still the
+ * picker's own answer (the same-itag Range-resume law — a resume must ride
+ * the same stream), but a dead answer no longer ends the attempt: up to
+ * MAX_STREAM_TICKETS distinct-itag candidates run in the picker's own
+ * preference order (each pick re-applied to the remaining pool, so ticket 2
+ * is the next-best nearest-360p law answer, not an arbitrary leftover).
+ * The wall is a per-(video, client, egress, FORMAT) lottery — the moving
+ * wall measured 2026-10-20/21 can kill one googlevideo URL while a sibling
+ * format's URL (often a different CDN host) still serves; a dead answer
+ * costs one FAST request, so extra tickets are cheap lottery seats in the
+ * chain's own idiom. The route rides this loop only on the FRESH chain
+ * (attempt 2) — a cached generation's URLs are dead TOGETHER (same egress,
+ * same instant), so the cached attempt stays the single pick it was.
  */
+export const MAX_STREAM_TICKETS = 3;
+
 export async function attemptChainStream(
   formats: StreamFormatDto[],
   preferItag: number | null,
   range: string | null,
   pick: (formats: StreamFormatDto[], preferItag: number | null) => StreamFormatDto | null
 ): Promise<Response | null> {
-  const fmt = pick(formats, preferItag);
-  if (!fmt) return null; // the walled class — no honest stream to serve
-  const url = isAllowedStreamUrl(fmt.url);
-  if (!url) return null; // structurally impossible (our own chain) — belt and braces
-  try {
-    const res = await fetchUpstream(url, range);
-    if (isUsable(res)) return res;
-  } catch {
-    /* honest fall-through */
+  if (formats.length === 0) return null; // the walled class — no honest stream to serve
+  const pool = [...formats];
+  for (let ticket = 0; ticket < MAX_STREAM_TICKETS && pool.length > 0; ticket++) {
+    const fmt = pick(pool, ticket === 0 ? preferItag : null);
+    if (!fmt) break;
+    pool.splice(pool.indexOf(fmt), 1);
+    const url = isAllowedStreamUrl(fmt.url);
+    if (!url) continue; // structurally impossible (our own chain) — the next ticket
+    try {
+      const res = await fetchUpstream(url, range);
+      if (isUsable(res)) return res;
+    } catch {
+      /* dead — the next ticket */
+    }
   }
   return null;
 }
