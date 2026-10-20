@@ -877,3 +877,15 @@ present); the walled class static + the pill from the first second; the
 shorts tiles' embed lane boots a real iframe (the operator's egress plays
 it; the sandbox's answers the honest floor); zero page/console errors —
 evidence/wfx2p32/.
+
+**Post-merge production re-probe (2026-10-21):** the strict law is LIVE on
+the deployed build — the search-page hover on dQw4: phase "native" from the
+first poll, currentTime advancing live (5→8.7s), the chrome up,
+`storyboard-frame` NEVER present at any polled instant (the box plays the
+video or shows the static thumbnail — nothing in between); the home-page
+walled card (the Despacito class): the static thumbnail under the honest
+pill across a 10s dwell, frames false at every poll; the shorts tile: the
+honest floor fast from the datacenter egress (the operator's residential
+egress rides the head-started embed lane — the exact path their playing
+shorts measured). Zero page/console errors — evidence/wfx2p32/
+(prod-dqw4-native-playing.png, prod-walled-static-pill.png).
