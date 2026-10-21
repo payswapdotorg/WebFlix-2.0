@@ -8,15 +8,16 @@ import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/comments/[id]/pin — LIVE Tier-2 write: creator pin/unpin toggle
- * (broker comment-pin — the ⋮ → Pin / Unpin DOM path; top-level comments
- * only, exactly YouTube's constraint).
+ * POST /api/comments/[id]/pin — WFX2-P36: the HONEST UNSUPPORTED lane.
+ * Pinning comments has no official end-user API (channel moderation lives in
+ * YouTube's own creator surfaces), and the pre-P36 broker DOM drive is
+ * retired with the shared operator identity — the proxy answers the honest
+ * 501 (kind "youtube-unsupported"), rendered verbatim by errorResponse.
  *
- * Creator-mode guard: only the operator session that IS the video's channel
- * may pin; otherwise 403, honestly. Request: {videoId, commentText?}
- * (commentText = the comment's CURRENT text — the broker's DOM locator).
+ * Request: {videoId, commentText?} (kept for the request contract; the
+ * creator-mode guard below stays the honest 403 for non-creators).
  *
- * Response: {ok, effect, pinned, path?}.
+ * Response: 501 { error, kind: "youtube-unsupported" } — pin on YouTube.
  */
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   if (!(await getSessionUser(req))) return authRequiredResponse();

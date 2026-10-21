@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { rateLimit } from "@/lib/youtube/cache";
+import { isSpecialPlaylistId } from "@/lib/youtube/playlists";
 import { getWatchQueue, isMixListId, type WatchQueueDto } from "@/lib/youtube/watch-queue";
 import { parseShuffleSeedParam, seededShuffle } from "@/lib/playlist/shuffle";
 
@@ -11,9 +12,15 @@ export const dynamic = "force-dynamic";
  * The watch-page playlist queue (youtube.com's own seam, measured live
  * 2026-10-17): `next {videoId, playlistId}` builds the queue panel for
  * regular playlists (list order) AND mixes (RD… — YouTube's own shuffled
- * order, isInfinite); the special lists (WL/LL) ride the session read with
- * the honest P22-B states. The deterministic seeded shuffle is applied HERE,
+ * order, isInfinite). The deterministic seeded shuffle is applied HERE,
  * over the fetched page — local playback-order logic, no YouTube write.
+ *
+ * WFX2-P36: the special lists (WL/LL) answer the honest NO-QUEUE verdict —
+ * the pre-P36 branch read the OPERATOR's Watch Later / Liked list through
+ * the session seam and served it to every signed-in user (the cross-user
+ * leak the P36 work order closes), and neither list has an official
+ * per-user read API. The watch page treats the 404 exactly like any other
+ * list YouTube will not queue: no panel, the autoplay chain unchanged.
  *
  * `cursor` pages the infinite autoload (continuation items append AFTER the
  * possibly-shuffled first page — the seed never re-applies, exactly the
@@ -35,6 +42,17 @@ export async function GET(req: Request) {
 
     if (!(await rateLimit(`watch-queue:${req.headers.get("x-forwarded-for") ?? "local"}`))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    }
+
+    // WFX2-P36 — the special lists get no queue: never the operator's list
+    if (isSpecialPlaylistId(listId)) {
+      return NextResponse.json(
+        {
+          error:
+            "Watch Later / Liked lists have no official API — the WebFlix save button keeps your Watch later; YouTube's own page has the rest",
+        },
+        { status: 404 }
+      );
     }
 
     const queue = await getWatchQueue(videoId, listId, cursor ?? undefined);

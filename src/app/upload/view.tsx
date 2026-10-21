@@ -166,9 +166,9 @@ function DropTarget(props: { onFiles: (files: FileList | File[]) => void }) {
           Drag and drop video files to upload
         </h1>
         <p className="max-w-md text-sm text-muted-foreground">
-          Your videos will stay private on WebFlix until you publish them — the upload to
-          YouTube runs through the connected operator session, with the honest hand-off
-          bundle when it is offline.
+          Your videos stay private on WebFlix until you publish them — publishing through WebFlix
+          isn&apos;t supported yet, so the honest hand-off bundle carries each upload to YouTube&apos;s
+          own upload page.
         </p>
         <Button
           type="button"
@@ -313,8 +313,7 @@ function DetailsStep(props: {
           data-testid="upload-description-input"
         />
         <p className="text-xs text-muted-foreground">
-          The description rides the publish drive — and the hand-off bundle when the broker
-          is offline.
+          The description rides the hand-off bundle into YouTube&apos;s upload form.
         </p>
       </div>
     </section>
@@ -381,7 +380,7 @@ function ElementsStep(props: {
           data-testid="upload-tags-input"
         />
         <p id="tags-hint" className="text-xs text-muted-foreground">
-          Tags ride the publish payload and the hand-off bundle.
+          Tags ride the hand-off bundle into YouTube&apos;s upload form.
         </p>
       </div>
       <div className="space-y-2">
@@ -541,7 +540,7 @@ function VisibilityStep(props: {
           premiere toggle in the studio dialog); those studio scheduling
           controls were NEVER measured from this egress — the invented-shape
           law forbids guessing a drive, and a local date-picker that cannot
-          schedule anything would be a fake affordance. The publish drive
+          schedule anything would be a fake affordance. The hand-off upload
           sets public/unlisted/private; the premiere schedule is set on
           YouTube (the studio's own controls) after publishing. Parity-debt:
           a logged-in studio capture of the Visibility step's scheduling
@@ -551,10 +550,9 @@ function VisibilityStep(props: {
         data-testid="visibility-premiere-note"
         className="text-xs text-muted-foreground"
       >
-        Visibility is applied when the video is published through the connected YouTube
-        session — the same three levels YouTube&apos;s upload dialog uses. Premieres are
-        scheduled on YouTube: set the premiere date and time in YouTube Studio after
-        publishing.
+        Visibility is applied in YouTube&apos;s upload form when you publish there — the same three
+        levels YouTube&apos;s upload dialog uses. Premieres are scheduled on YouTube: set the premiere
+        date and time in YouTube Studio after publishing.
       </p>
     </section>
   );
@@ -595,8 +593,8 @@ function VideoPreview(props: { url: string; fileName: string; sizeBytes: number 
         {durationText ? ` · ${durationText}` : ""}
       </p>
       <p className="text-xs text-muted-foreground">
-        The preview plays locally from the picked file — it reaches YouTube only through
-        the publish drive or the hand-off bundle.
+        The preview plays locally from the picked file — it reaches YouTube only through the
+        hand-off bundle.
       </p>
     </aside>
   );
@@ -607,14 +605,15 @@ function VideoPreview(props: { url: string; fileName: string; sizeBytes: number 
  * step 0 the big drag-and-drop target, then a left-content / right-preview
  * dialog with a header progress bar and the 4 steps — Details → Video
  * elements → Checks → Visibility — Back/Next bottom-right, Discard (with
- * confirm) top-left. The MECHANICS are the P3-UP flow verbatim: the file
+ * confirm) top-left. The MECHANICS are the P3-UP staging verbatim: the file
  * stages through /api/upload/stage (XHR-with-progress when the browser
- * offers it), the publish drives the operator's logged-in YouTube tab
- * through /api/upload/execute, and when the broker is offline or refuses
- * the honest hand-off rung carries the user — the metadata bundle +
- * youtube.com/upload, rendered INSIDE the dialog. Nothing is ever claimed
- * that YouTube did not confirm; the header bar never shows a number the
- * browser did not report.
+ * offers it); the publish itself is WFX2-P36's honest unsupported lane (the
+ * pre-P36 broker drive on the operator's tab is retired; the official
+ * per-user videos.insert upload lane is future work), so /api/upload/execute
+ * answers the honest 501 and the hand-off rung — the metadata bundle +
+ * youtube.com/upload, rendered INSIDE the dialog — carries the user.
+ * Nothing is ever claimed that YouTube did not confirm; the header bar never
+ * shows a number the browser did not report.
  */
 export default function UploadPage() {
   const { data: context, loading } = useApi<UploadContextDTO>("/api/upload");
@@ -736,7 +735,9 @@ export default function UploadPage() {
     }
   }
 
-  /** The real drive: stage the file → execute the broker publish → settle. */
+  /** The publish attempt: stage the file → ask the publish route (the
+   * WFX2-P36 honest-501 lane — the answer surfaces the unsupported verdict
+   * and the hand-off rung carries the video) → settle. */
   async function save() {
     if (!file || !canPublish(flow, form.title) || sizeOverCap) return;
     dispatch({ type: "publish-started" });
@@ -771,7 +772,9 @@ export default function UploadPage() {
             : "Publish clicked — confirmation not observed (the video may still be processing)."
         );
       } else if (result.outcome === "fallback") {
-        toast.info("The session broker is offline — the hand-off bundle is ready below.");
+        // WFX2-P36 — unreachable from the honest-501 route (kept for the
+        // DTO contract): the honest wording never names the retired broker
+        toast.info("Publishing isn't available right now — the hand-off bundle is ready below.");
       } else {
         toast.error(result.message ?? "The publish was refused.");
       }
@@ -841,14 +844,17 @@ export default function UploadPage() {
           <Skeleton className="h-4 w-64" />
         ) : context?.channel ? (
           <p>
-            Uploading videos as{" "}
-            <span className="font-medium text-foreground">{context.channel.name}</span> —
-            the upload itself happens on YouTube.
+            WebFlix&apos;s server session reads YouTube as{" "}
+            <span className="font-medium text-foreground">{context.channel.name}</span> for public
+            pages — it never uploads for you. Publishing through WebFlix isn&apos;t supported yet: the
+            hand-off bundle carries this upload to YouTube&apos;s own form, which publishes under the
+            account you are signed in with there.
           </p>
         ) : (
           <p>
-            Gathering video metadata for YouTube — the upload itself happens on YouTube
-            {context ? " (public mode: the operator channel is not connected)" : ""}.
+            Publishing through WebFlix isn&apos;t supported yet — the hand-off bundle carries this
+            upload to YouTube&apos;s own form, which publishes under the account you are signed in
+            with there.
           </p>
         )}
       </div>
@@ -879,7 +885,7 @@ export default function UploadPage() {
                   : staging
                     ? "Uploading…"
                     : flow.phase === "executing"
-                      ? "Publishing through the session broker…"
+                      ? "Publishing…"
                       : formatBytes(file.size)}
               </span>
             </div>
@@ -891,7 +897,7 @@ export default function UploadPage() {
                   <Progress value={stagePct} className="h-1" />
                 ) : (
                   // the honest INDETERMINATE pulse — no number exists yet
-                  // (fetch fallback, or the broker publish hold)
+                  // (fetch fallback, or the publish request hold)
                   <div className="h-1 w-full overflow-hidden rounded-full bg-secondary">
                     <div className="h-full w-1/3 animate-pulse rounded-full bg-primary/70" />
                   </div>

@@ -2,23 +2,30 @@ import { NextRequest } from "next/server";
 import { json, errorResponse } from "@/lib/watch/api";
 import { proxyPostLike } from "@/lib/community/action-proxy";
 import { rateLimit } from "@/lib/youtube/cache";
+import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/posts/[postId]/like — LIVE Tier-2 write (broker post-like: the
- * real vote toggle on youtube.com/post/<postId>, aria-pressed verified).
+ * POST /api/posts/[postId]/like — WFX2-P36: the HONEST UNSUPPORTED lane.
+ * Rating community posts has no official end-user YouTube API, and the
+ * pre-P36 broker drive (the real vote toggle on the operator's tab) is
+ * retired — the proxy answers the honest 501 (kind "youtube-unsupported"),
+ * rendered verbatim by errorResponse (never a fake likes delta).
+ *
+ * WFX2-P2-AU added: the route is now gated on the WebFlix session — a guest
+ * gets the uniform 401 before anything runs (it was rate-limit-only before
+ * P36).
  *
  * Request (the comment-like shapes, kept):
  *   { action: "like" | "dislike" | "none" }   canonical — set semantics
  *   { value: "like" | "dislike" }             legacy — toggle semantics
  *   { baseline?: { likes, yourLike } }
  *
- * Response: { ok, effect, likes, yourLike } — the PostLikeResult contract
- * the post cards consume. Broker offline → the honest 502 shape the UI
- * degrades on (toast + state rollback), never a fake success.
+ * Response: 501 { error, kind: "youtube-unsupported" } — vote on YouTube.
  */
 export async function POST(req: NextRequest, ctx: { params: Promise<{ postId: string }> }) {
+  if (!(await getSessionUser(req))) return authRequiredResponse();
   try {
     if (!(await rateLimit(`post-like:${req.headers.get("x-forwarded-for") ?? "local"}`, { limit: 60 }))) {
       return json({ error: "Too many requests" }, { status: 429 });

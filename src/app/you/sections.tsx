@@ -36,6 +36,11 @@ export type YouHistoryPayload = {
   searchHistoryPaused: boolean | null;
   total: number;
   session: boolean;
+  /** WFX2-P36: the per-user truth — false → the connect link in the notice */
+  connected?: boolean;
+  /** WFX2-P36: the honest per-user notice (no official history API — the
+   *  handoff to youtube.com/feed/history) */
+  notice?: string;
 };
 
 export type YouPlaylistsPayload = {
@@ -44,6 +49,10 @@ export type YouPlaylistsPayload = {
   /** P22-B: a session IS configured but the read was not served */
   unavailable?: boolean;
   session: boolean;
+  /** WFX2-P36: the per-user truth — false → the connect link in the notice */
+  connected?: boolean;
+  /** WFX2-P36: the honest per-user notice (connect ask / failed read / disclosure) */
+  notice?: string;
 };
 
 /** /api/studio?enrich=0 — the channel + public uploads, no enrichment. */
@@ -186,21 +195,27 @@ export function HistorySection({ state }: { state: ApiState<YouHistoryPayload> }
           {state.error}
         </p>
       )}
-      {state.data && state.data.loginRequired && (
+      {state.data?.notice && (
         <SectionNote>
-          {state.data.session
-            ? "The YouTube session is connected but didn't serve your watch history — open it on youtube.com to check. Your WebFlix sign-in is fine; the operator session (YT_COOKIES) is what reads it."
-            : "History is personal to the YouTube account this WebFlix deployment rides (single-tenant live mode). No YouTube session is connected yet — your WebFlix sign-in is fine; the operator session (YT_COOKIES) needs to be connected."}
+          {state.data.notice}{" "}
+          {state.data.connected === false && (
+            <Link
+              href="/settings"
+              className="font-medium text-foreground underline underline-offset-2"
+            >
+              Connect your YouTube account
+            </Link>
+          )}
         </SectionNote>
       )}
-      {state.data && !state.data.loginRequired && recent.length === 0 && (
+      {state.data && !state.data.notice && recent.length === 0 && (
         <EmptyNote
           text="Videos you watch will show up here."
           linkHref="/"
           linkLabel="Find something to watch"
         />
       )}
-      {state.data && !state.data.loginRequired && recent.length > 0 && (
+      {state.data && !state.data.notice && recent.length > 0 && (
         <>
           {total > 0 && (
             <p
@@ -317,21 +332,20 @@ export function PlaylistsSection({ state }: { state: ApiState<YouPlaylistsPayloa
           {state.error}
         </p>
       )}
-      {state.data && state.data.unavailable && (
+      {state.data?.notice && (
         <SectionNote>
-          The YouTube session is connected, but it didn&apos;t return your playlists — they may
-          be empty on YouTube, or YouTube didn&apos;t serve them to WebFlix. Open them on
-          youtube.com to check.
+          {state.data.notice}{" "}
+          {state.data.connected === false && (
+            <Link
+              href="/settings"
+              className="font-medium text-foreground underline underline-offset-2"
+            >
+              Connect your YouTube account
+            </Link>
+          )}
         </SectionNote>
       )}
-      {state.data && !state.data.unavailable && state.data.loginRequired && (
-        <SectionNote>
-          Playlists are personal to the YouTube account this WebFlix deployment rides
-          (single-tenant live mode). No YouTube session is connected yet — your WebFlix
-          sign-in is fine; the operator session (YT_COOKIES) needs to be connected.
-        </SectionNote>
-      )}
-      {state.data && !state.data.loginRequired && !state.data.unavailable && created.length === 0 && (
+      {state.data && !state.data.notice && created.length === 0 && (
         <EmptyNote
           text="Playlists you create will show up here."
           linkHref="/playlists"

@@ -12,16 +12,36 @@ import { errorResponse } from "@/lib/watch/api";
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/playlists/[id]?cursor= — one page of the playlist's REAL items
- * (browse `VL<playlistId>` — public playlists work without auth; YouTube's
- * special lists WL/LL are auth-gated and answer the honest login-required
- * state in public mode). `cursor` pages via browse continuations.
+ * GET /api/playlists/[id]?cursor= — one page of the playlist's items.
+ * WFX2-P36: the PUBLIC PL… reads (browse VL<playlistId>) stay exactly as
+ * they are — public content, no identity involved. YouTube's special lists
+ * WL/LL are the honest per-user notice envelope instead: the pre-P36 branch
+ * login-gated on the OPERATOR session (one person's Watch Later / Liked list
+ * served to every signed-in user — the exact cross-user leak the P36 work
+ * order closes), and neither list has an official per-user read API.
+ *
+ * Response (special): { loginRequired: false, special: true, videos: [],
+ * notice } — the notice hands Watch later off to the WebFlix-local save
+ * button and the rest to YouTube's own pages.
  */
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
     if (!id || !/^[\w-]{2,64}$/.test(id)) {
       return NextResponse.json({ error: "invalid playlist id" }, { status: 400 });
+    }
+    if (isSpecialPlaylistId(id)) {
+      // WFX2-P36 — the honest per-user notice (never the operator's list)
+      return NextResponse.json({
+        playlist: null,
+        videos: [],
+        nextCursor: null,
+        loginRequired: false,
+        unavailable: false,
+        special: true,
+        notice:
+          "YouTube's Watch Later / Liked lists have no official API — your WebFlix Watch later lives in the save button (local), and YouTube's own page has the rest",
+      });
     }
     if (!(await rateLimit(`playlist:${id}:${req.headers.get("x-forwarded-for") ?? "local"}`))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });

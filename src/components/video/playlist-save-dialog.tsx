@@ -17,8 +17,11 @@ import { useWebFlixSession } from "@/hooks/use-webflix-session";
 import { signInHref } from "@/lib/auth/client";
 import type { PlaylistDTO } from "@/lib/types";
 
-/** "Save to playlist" — the operator's real YouTube playlists + create-new
- * (list via the live /api/playlists read; adds via the broker write lane).
+/** "Save to playlist" — YOUR OWN YouTube playlists + create-new, read and
+ * written through your connected account (WFX2-P36: the list rides the
+ * per-user official /api/playlists read; adds + creates ride the official
+ * playlistItems / playlists lanes — the operator-session reads and the
+ * broker write lane are retired).
  * WFX2-P2-AU: WebFlix guests see the honest account gate — saving is a
  * personal write, so the dialog links /signin instead of a 401 toast. */
 export function PlaylistSaveDialog({
@@ -34,9 +37,14 @@ export function PlaylistSaveDialog({
 }) {
   const session = useWebFlixSession();
   const authed = session.status === "authenticated";
-  const { data, reload } = useApi<{ playlists: PlaylistDTO[]; loginRequired: boolean }>(
-    open && authed ? "/api/playlists" : null
-  );
+  const { data, reload } = useApi<{
+    playlists: PlaylistDTO[];
+    loginRequired: boolean;
+    /** WFX2-P36: false → the connect prompt replaces the rows */
+    connected?: boolean;
+    /** WFX2-P36: the honest per-user notice (the connect ask) */
+    notice?: string;
+  }>(open && authed ? "/api/playlists" : null);
   const playlists = data?.playlists ?? null;
   const [newTitle, setNewTitle] = useState("");
   const [creating, setCreating] = useState(false);
@@ -59,7 +67,10 @@ export function PlaylistSaveDialog({
     if (!title) return;
     setCreating(true);
     try {
-      const created = await postJson<{ playlist: PlaylistDTO; note?: string }>('/api/playlists', {
+      // WFX2-P36 — the official playlists.insert lane on the user's OWN
+      // connected account (a failure answers the honest connect/re-auth
+      // message; no broker, no local mirror fallback)
+      const created = await postJson<{ playlist: PlaylistDTO }>('/api/playlists', {
         title,
         visibility: "private",
       });
@@ -67,7 +78,7 @@ export function PlaylistSaveDialog({
       if (newPlaylist?.id) {
         await addTo(newPlaylist.id, title);
       } else {
-        toast.info(`${title} created${created.note ? " (mirror — broker offline)" : ""}`);
+        toast.info(`${title} created — add it from the dialog after a refresh.`);
       }
       setNewTitle("");
       reload();
@@ -96,35 +107,48 @@ export function PlaylistSaveDialog({
               </Button>
             </div>
           )}
-          {(playlists ?? []).map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => addTo(p.id, p.title)}
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors hover:bg-accent/60"
-            >
-              {p.isWatchLater ? (
-                <Check className="size-4 text-muted-foreground" />
-              ) : (
-                <span className="size-4" />
+          {data?.connected === false ? (
+            // WFX2-P36 — no connected YouTube account: the honest connect
+            // prompt replaces the rows (never the operator's playlists)
+            <div className="px-3 py-6 text-center" data-testid="playlist-save-connect-prompt">
+              <p className="text-sm text-muted-foreground">
+                {data.notice ??
+                  "Connect your YouTube account to save to your YouTube playlists"}
+              </p>
+              <Button
+                asChild
+                className="mt-3 rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                <a href="/api/connection/youtube/oauth/start">Connect your YouTube account</a>
+              </Button>
+            </div>
+          ) : (
+            <>
+              {(playlists ?? []).map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => addTo(p.id, p.title)}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors hover:bg-accent/60"
+                >
+                  {p.isWatchLater ? (
+                    <Check className="size-4 text-muted-foreground" />
+                  ) : (
+                    <span className="size-4" />
+                  )}
+                  <span className="flex-1 truncate">{p.title}</span>
+                  <span className="text-xs text-muted-foreground">{p.videoCount}</span>
+                </button>
+              ))}
+              {playlists && playlists.length === 0 && (
+                <p className="px-3 py-4 text-center text-sm text-muted-foreground">
+                  No playlists yet — create one below.
+                </p>
               )}
-              <span className="flex-1 truncate">{p.title}</span>
-              <span className="text-xs text-muted-foreground">{p.videoCount}</span>
-            </button>
-          ))}
-          {playlists && playlists.length === 0 && !data?.loginRequired && (
-            <p className="px-3 py-4 text-center text-sm text-muted-foreground">
-              No playlists yet — create one below.
-            </p>
-          )}
-          {data?.loginRequired && (
-            <p className="px-3 py-4 text-center text-sm text-muted-foreground">
-              Sign in to see the account&apos;s playlists — saving still works through the
-              action broker for Watch later.
-            </p>
+            </>
           )}
         </div>
-        {authed && (
+        {authed && data?.connected !== false && (
           <form
             className="flex gap-2 border-t border-border pt-4"
             onSubmit={(e) => {

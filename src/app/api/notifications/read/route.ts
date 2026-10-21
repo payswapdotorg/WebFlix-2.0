@@ -1,43 +1,30 @@
-import { NextRequest, NextResponse } from "next/server";
-import { brokerAction, brokerOk, BrokerError } from "@/lib/broker";
+import { NextRequest } from "next/server";
+import { ApiError, errorResponse } from "@/lib/watch/api";
 import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/notifications/read — mark the operator's notifications as read
- * on the REAL account (Tier-2). The mark-read write is broker-tier: the
- * executor opens the bell menu in the logged-in tab (the real client marks
- * seen on open) and re-reads the unseen count. No direct InnerTube replay
- * path is verified for mark-read (record_web_notifications_seen 404s —
- * probed live from this sandbox) — the broker is the honest mechanism.
+ * POST /api/notifications/read — WFX2-P36: the HONEST UNSUPPORTED lane.
+ * Marking notifications read on YouTube has no official end-user API (the
+ * pre-P36 lane opened the bell menu in the OPERATOR's logged-in browser tab
+ * through the broker — a shared-identity write the P36 work order retires),
+ * so this route answers the honest 501 (kind "youtube-unsupported", the
+ * machine-stable taxonomy) with the handoff to YouTube. The local-only
+ * branch (the client's session-local "seen" view state) is untouched client
+ * side — nothing upstream is ever claimed.
+ *
+ * Response: 501 { error, kind: "youtube-unsupported" }.
  */
 export async function POST(req: NextRequest) {
   if (!(await getSessionUser(req))) return authRequiredResponse();
   try {
-    const result = await brokerAction("notifications-mark-read", {});
-    if (!brokerOk(result)) {
-      const err = result as BrokerError;
-      if (err.kind === "bad-request") {
-        return NextResponse.json({ error: err.message }, { status: 400 });
-      }
-      return NextResponse.json({ error: err.message }, { status: 502 });
-    }
-    const r = result as {
-      ok: true;
-      verified?: boolean;
-      path?: string;
-      detail?: Record<string, unknown>;
-    };
-    return NextResponse.json({
-      ok: true,
-      effect: "marked-read",
-      verified: r.verified ?? false,
-      path: r.path ?? null,
-      detail: r.detail ?? null,
-    });
+    throw new ApiError(
+      501,
+      "Marking your YouTube notifications read isn't supported by the official API — open the bell on youtube.com",
+      "youtube-unsupported",
+    );
   } catch (err) {
-    console.error("POST /api/notifications/read failed", err);
-    return NextResponse.json({ error: "Failed to mark notifications read" }, { status: 500 });
+    return errorResponse(err);
   }
 }

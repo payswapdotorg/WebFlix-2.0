@@ -5,7 +5,7 @@
  * avatar row + autogrowing textarea ("Comment..." placeholder), char counter
  * "N/10000" (YouTube's limit), Cancel/Comment buttons disabled until
  * non-empty, emoji picker; posts via the canonical `/api/comments` route
- * (direct-first, broker fallback — the server tier owns the routing).
+ * (the honest LOCAL lane — the server tier owns the routing).
  *
  * Signed-out states, two honest layers (WFX2-P2-AU):
  *  - WebFlix GUEST (no account session) → youtube.com's watch-page
@@ -17,9 +17,13 @@
  *
  * WFX2-P6-CR: `viewer` is nullable (anonymous viewers still read); the
  * submit forwards the parent's live replyParams + the watch payload's
- * video snapshot (the direct + local rungs' parameters); a local:true
- * response (the honest WebFlix store — never claims a YouTube write) gets
- * the disclosed "posted on WebFlix" success toast.
+ * video snapshot (the local rung's parameters); a local:true response (the
+ * honest WebFlix store — never claims a YouTube write) gets the disclosed
+ * "posted on WebFlix" success toast.
+ *
+ * WFX2-P36: the composer carries the honest standing disclosure — viewer
+ * comments are stored on WebFlix (the official API doesn't support viewer
+ * comments on other channels' videos), matching the local:true toast.
  */
 import { useRef, useState } from "react";
 import Link from "next/link";
@@ -276,6 +280,18 @@ export function CommentComposer({
             </Button>
           </div>
         </div>
+        {/* WFX2-P36 — the honest standing disclosure: viewer comments are
+            stored on WebFlix (the official API doesn't support viewer
+            comments on other channels' videos) — matches the local:true
+            success toast below. */}
+        <p
+          role="note"
+          className="mt-1.5 px-1 text-[11px] leading-snug text-muted-foreground"
+          data-testid="comment-composer-local-note"
+        >
+          Stored on WebFlix — YouTube&apos;s API doesn&apos;t support viewer comments on other
+          channels&apos; videos.
+        </p>
       </div>
     </div>
   );

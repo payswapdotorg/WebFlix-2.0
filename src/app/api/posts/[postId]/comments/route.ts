@@ -4,6 +4,7 @@ import { resolveViewer } from "@/lib/watch/session";
 import { proxyPostCommentCreate } from "@/lib/community/action-proxy";
 import { getPostComments, getPostCommentReplies } from "@/lib/youtube/community";
 import { rateLimit } from "@/lib/youtube/cache";
+import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -51,13 +52,23 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ postId: str
 }
 
 /**
- * POST /api/posts/[postId]/comments {body | text} — LIVE Tier-2 write
- * (broker post-comment-create: the real comments composer on
- * youtube.com/post/<postId>). The response keeps the CommentDto contract the
- * composer expects (synthesized — the comment's real id/author arrive on the
- * next live read).
+ * POST /api/posts/[postId]/comments {body | text} — WFX2-P36: the HONEST
+ * UNSUPPORTED lane. Commenting on community posts has no official end-user
+ * YouTube API, and the pre-P36 broker drive (the real composer on the
+ * operator's tab) is retired — the proxy answers the honest 501 (kind
+ * "youtube-unsupported"), rendered verbatim by errorResponse. (The watch-page
+ * comment lane is different: THAT one is the honest WebFlix-local store —
+ * post comments have no local rung, so the handoff to YouTube is the only
+ * honest answer here.)
+ *
+ * WFX2-P2-AU added: the route is now gated on the WebFlix session — a guest
+ * gets the uniform 401 before anything runs (it was rate-limit-only before
+ * P36). The GET (the read lane) stays public as it was.
+ *
+ * Response: 501 { error, kind: "youtube-unsupported" } — comment on YouTube.
  */
 export async function POST(req: NextRequest, ctx: { params: Promise<{ postId: string }> }) {
+  if (!(await getSessionUser(req))) return authRequiredResponse();
   try {
     const { postId } = await ctx.params;
     if (!postId) return json({ error: "postId is required" }, 400);

@@ -10,18 +10,17 @@ export const dynamic = "force-dynamic";
  * (WFX2-P4-NC), implemented as THE MENU RE-READ — the choice documented
  * honestly:
  *
- *  - No per-item upstream WRITE is verified (research §12: only the two
- *    notification READ endpoints answer; record_web_notifications_seen
- *    404s — probed live from the sandbox). The broker's
- *    `notifications-mark-read` opens the bell menu in the operator's tab,
- *    which clears ALL unseen at once — the wrong granularity for a single
- *    item, so it stays reserved for the existing mark-ALL route
- *    (POST /api/notifications/read).
- *  - This route therefore re-reads the menu (cache-bypassed, the
- *    §12-verified endpoint) and answers the item's CURRENT upstream read
- *    state — the honest source. The opened item's read state in the UI is
- *    the client's session-local view state until the account's own
- *    menu-open clears it upstream.
+ *  - No per-item upstream WRITE exists: the official YouTube Data API has no
+ *    end-user mark-read (WFX2-P36 — the pre-P36 broker drive that opened the
+ *    bell menu in the OPERATOR's tab is retired with the shared operator
+ *    identity; the sibling POST /api/notifications/read now answers the
+ *    honest 501 "youtube-unsupported"). The wrong-granularity concern is
+ *    gone with it: nothing is ever written upstream from this route.
+ *  - This route therefore re-reads the menu (cache-bypassed, the verified
+ *    read endpoint) and answers the item's CURRENT upstream read state — the
+ *    honest source. The opened item's read state in the UI is the client's
+ *    session-local view state (the local-only branch) until the account's
+ *    own menu-open clears it upstream.
  *
  * Response: { ok, id, read, loginRequired, upstreamWrite: false, note } —
  * `upstreamWrite: false` is the disclosure: nothing was written upstream.

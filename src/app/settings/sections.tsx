@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, PlugZap, RotateCw } from "lucide-react";
+import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,7 +21,7 @@ import { useWebFlixSession } from "@/hooks/use-webflix-session";
 import { useYouTubeConnection } from "@/hooks/use-youtube-connection";
 import { relativeTime } from "@/lib/watch/format";
 import {
-  parseConnectionTimestamp,
+  YOUTUBE_OAUTH_CONNECT_HREF,
   type YouTubeConnectionState,
 } from "@/lib/watch/connection-client";
 import { useAutoplayPreference } from "./use-autoplay-pref";
@@ -29,17 +30,20 @@ import { useAutoplayPreference } from "./use-autoplay-pref";
  * WFX2-P5-SS — youtube.com's settings sections, wired honestly. Every section
  * carries a visible scope label (the honesty law):
  *   LOCAL (this browser)                    — a preference this browser owns
- *   MANAGED ON YOUTUBE.COM (the operator)   — the operator account owns it
+ *   MANAGED ON YOUTUBE.COM                  — the setting lives on
+ *                                            youtube.com (WFX2-P36: the
+ *                                            per-user truth — your own
+ *                                            account, not an operator's)
  * Where no write exists, the row says so (read-only / not-available) — never
  * a fake toggle.
  */
 
 export const SCOPE_LOCAL_LABEL = "LOCAL (this browser)";
-export const SCOPE_MANAGED_LABEL = "MANAGED ON YOUTUBE.COM (the operator account)";
+export const SCOPE_MANAGED_LABEL = "MANAGED ON YOUTUBE.COM";
 
 export const SECTIONS = [
   { id: "account", label: "Account" },
-  { id: "youtube-connection", label: "YouTube connection" },
+  { id: "youtube-connection", label: "YouTube account" },
   { id: "notifications", label: "Notifications" },
   { id: "playback", label: "Playback and performance" },
   { id: "appearance", label: "Appearance" },
@@ -47,13 +51,15 @@ export const SECTIONS = [
   { id: "advanced", label: "Advanced" },
 ] as const;
 
-/** The account page's operator-session wording law, verbatim. */
+/** The account page's operator-session wording law, reworded for P36: the
+ * server session READS public pages; every user WRITE acts on the user's
+ * own connected account (or is honestly local / unsupported). */
 const OPERATOR_SESSION_CONNECTED =
-  "Operator session connected — comment writes, likes, reports and creator tools act on the operator's real YouTube account.";
+  "Operator read session connected — WebFlix's server uses it to read public YouTube pages. It never performs your actions: your likes, subscribes and playlists act on your own connected YouTube account (see YouTube account below).";
 const OPERATOR_SESSION_PUBLIC =
-  "No operator session is configured (public mode). Reads stay fully live; write surfaces (comments, likes, reports, heart/pin) honestly show their signed-out states until the session is connected.";
+  "No operator read session is configured (public mode). Reads stay fully live; your own actions run through your connected YouTube account (see YouTube account below).";
 const OPERATOR_SESSION_FRONTING =
-  "Your WebFlix account fronts that session — it is not a YouTube account, and WebFlix never fabricates YouTube-account data.";
+  "Your WebFlix account is local to WebFlix — it is not a YouTube account, and WebFlix never fabricates YouTube-account data.";
 
 const LANGUAGE_KEY = "wfx2-language";
 const LOCATION_KEY = "wfx2-location";
@@ -227,45 +233,85 @@ export function AccountSection() {
   );
 }
 
-/** Coarse, channel-safe context for the connected tab (never a raw URL —
- * only the KIND of YouTube page the shared session's tab is on). */
-function tabContextLabel(tabUrl: string | null): string {
-  if (!tabUrl) return "Session active";
-  if (tabUrl.includes("/watch")) return "Session active — the connected tab is on a watch page";
-  if (tabUrl.includes("/@") || tabUrl.includes("/channel/")) {
-    return "Session active — the connected tab is on a channel page";
-  }
-  if (tabUrl.includes("youtube.com")) return "Session active — the connected tab is on youtube.com";
-  return "Session active";
-}
-
-/** WFX2 Task 4-b → P33-DIRECT-ACTIONS — the live YouTube connection card:
- * can WebFlix perform YouTube actions right now, and through which tier?
- * P33 (the operator's main-interface doctrine) makes the DIRECT tier the
- * headline: the app's own server-side YouTube session performing like /
- * subscribe / comment / watch-later — no separate browser, no youtube.com
- * tab, nothing to go back to. The connected browser (the old shared
- * session) is the FALLBACK tier: mode "broker" when no session is
- * configured, plus the honest note that a few actions (dislike, bell
- * preferences — no captured wire) still ride it when present. */
+/**
+ * WFX2-P36 — the per-user YouTube ACCOUNT card (the OAuth connection the
+ * whole action lane rides on). The pre-P33/P35 five-state card (checking /
+ * direct-connected / needs-attention / broker / none — the deployment-wide
+ * operator session and the shared browser tab) is RETIRED: no user action
+ * may ride those identities anymore. What this card shows instead, from the
+ * honest /api/connection/youtube envelope:
+ *  - checking            — the probe is in flight;
+ *  - not-configured      — the deployment lacks GOOGLE_CLIENT_ID/SECRET (the
+ *                          exact missing vars + the redirect URI to register);
+ *  - not-connected       — the Connect button (a plain same-origin GET link
+ *                          carrying the session cookie) + the honest
+ *                          capability lines;
+ *  - connected           — the account identity + Disconnect (POST) + the
+ *                          same capability lines;
+ *  - needs-reauth        — Google expired/revoked the grant — re-connect.
+ * The OAuth callback redirects back here with ?ytc=<code>; the outcome
+ * banner renders the honest copy for each code.
+ */
 export function YouTubeConnectionSection() {
   const { state, loading, reload } = useYouTubeConnection();
+
+  // the OAuth callback's outcome banner (?ytc=… — the callback redirects
+  // here with the honest outcome code; read client-side, the house pattern)
+  const [ytcOutcome, setYtcOutcome] = useState<string | null>(null);
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get("ytc");
+    if (!code) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- hydration of the URL param (SSR renders no banner) — the watch-page idiom
+    setYtcOutcome(code);
+    if (code === "connected") reload(); // the connection just changed — re-probe
+  }, [reload]);
 
   return (
     <SettingsSection
       id="youtube-connection"
-      title="YouTube connection"
+      title="YouTube account"
       scope="managed"
-      description="Like, subscribe, comment and watch-later actions run through WebFlix's server-side YouTube session — the same signed-in session the app reads with, so you never have to go back to youtube.com to act. A few actions (dislike, bell preferences) can also use an optional connected-browser session. This card shows whether actions can run right now."
+      description="Your own YouTube account, connected with Google — your likes, subscribes and playlists act on it through the official YouTube API."
     >
+      {ytcOutcome && <ConnectOutcomeBanner code={ytcOutcome} />}
       <div role="status" aria-live="polite" data-connection-loading={loading || undefined}>
         {loading || !state ? (
           <ConnectionCheckingCard />
         ) : (
-          <ConnectionCard state={state} onRetry={reload} />
+          <AccountConnectionCard state={state} onRecheck={reload} />
         )}
       </div>
     </SettingsSection>
+  );
+}
+
+/** The /settings?ytc=<code> outcome banner (the OAuth callback's verdict). */
+function ConnectOutcomeBanner({ code }: { code: string }) {
+  const tone =
+    code === "connected"
+      ? "border-emerald-500/40 bg-emerald-500/5 text-foreground"
+      : code === "denied" || code === "signin" || code === "state"
+        ? "border-border bg-secondary/40 text-foreground"
+        : "border-amber-500/40 bg-amber-500/5 text-foreground";
+  const copy =
+    code === "connected"
+      ? "Your YouTube account is connected."
+      : code === "denied"
+        ? "The connect was cancelled."
+        : code === "signin"
+          ? "Sign in again to finish connecting."
+          : code === "state"
+            ? "The connect request expired — try again."
+            : "Google refused the connect — try again in a moment.";
+  return (
+    <p
+      role="status"
+      data-testid="youtube-connect-outcome"
+      data-ytc={code}
+      className={`rounded-xl border px-4 py-3 text-sm ${tone}`}
+    >
+      {copy}
+    </p>
   );
 }
 
@@ -275,115 +321,71 @@ function ConnectionCheckingCard() {
       <CardHeader className="px-5">
         <CardTitle className="flex items-center gap-2 text-base">
           <PlugZap className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
-          Checking the YouTube connection…
+          Checking your YouTube account…
         </CardTitle>
-        <CardDescription>Asking the WebFlix connected session for its current state.</CardDescription>
+        <CardDescription>Asking the server for your account connection state.</CardDescription>
       </CardHeader>
     </Card>
   );
 }
 
-function ConnectionCard({
+/** The honest capability lines — the same disclosure on every actionable
+ * state (what runs on your account, what is WebFlix-local, what has no
+ * official API). */
+function CapabilityLines() {
+  return (
+    <ul className="flex flex-col gap-1 text-sm text-muted-foreground">
+      <li>Runs on your account: like, dislike, subscribe, playlists.</li>
+      <li>On WebFlix only: watch later, comments, feed feedback.</li>
+      <li>
+        Not API-supported: bell preferences, history writes — hand off to YouTube.
+      </li>
+    </ul>
+  );
+}
+
+/** The plain same-origin Connect affordance (a GET redirect carrying the
+ * session cookie — never an XHR, so the consent page navigates properly). */
+function ConnectButton({ href, label }: { href: string; label: string }) {
+  return (
+    <a
+      href={href}
+      className="inline-flex h-9 items-center justify-center rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 active:scale-[0.97]"
+    >
+      {label}
+    </a>
+  );
+}
+
+function AccountConnectionCard({
   state,
-  onRetry,
+  onRecheck,
 }: {
   state: YouTubeConnectionState;
-  onRetry: () => void;
+  onRecheck: () => void;
 }) {
   const checkedAgo = relativeTime(state.checkedAt) || "just now";
-  const lastActionAgo = relativeTime(parseConnectionTimestamp(state.lastActionAt));
+  const connectUrl = state.oauth.connectUrl ?? YOUTUBE_OAUTH_CONNECT_HREF;
 
-  // P33 — the DIRECT tier: the app's own server-side session performs the
-  // everyday actions (the main-interface doctrine — no browser, no tab).
-  if (state.mode === "direct") {
-    if (state.connected) {
-      return (
-        <Card className="gap-3 rounded-xl py-5" data-connection-state="connected">
-          <CardHeader className="px-5">
-            <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-              <CheckCircle2 className="size-5 shrink-0 text-emerald-500" aria-hidden="true" />
-              Connected — actions are available
-            </CardTitle>
-            <CardDescription>
-              Actions run through WebFlix&apos;s server-side YouTube session.
-            </CardDescription>
-            <CardAction>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onRetry}
-                aria-label="Recheck the YouTube connection"
-              >
-                <RotateCw className="size-4" aria-hidden="true" />
-                Recheck
-              </Button>
-            </CardAction>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2 px-5 text-sm text-muted-foreground">
-            <p data-connection-mode="direct">
-              Like, subscribe, comment and watch later run right from WebFlix — no separate
-              browser or YouTube tab needed.
-            </p>
-            {state.broker ? (
-              <p>
-                {state.broker.connected
-                  ? "The optional connected browser is also available (dislike and bell preferences ride it)."
-                  : "A few actions (dislike, bell preferences) still ride the optional connected browser — offline right now; everything else works without it."}
-              </p>
-            ) : null}
-            <p className="text-xs">Checked {checkedAgo}.</p>
-          </CardContent>
-        </Card>
-      );
-    }
+  // ---- not-configured: the deployment's honest setup state ----
+  if (state.status === "not-configured") {
     return (
-      <Card className="gap-3 rounded-xl py-5" data-connection-state="disconnected">
+      <Card className="gap-3 rounded-xl py-5" data-connection-state="not-configured">
         <CardHeader className="px-5">
           <CardTitle className="flex flex-wrap items-center gap-2 text-base">
             <AlertTriangle className="size-5 shrink-0 text-amber-500" aria-hidden="true" />
-            YouTube session needs attention
+            YouTube account connection isn&apos;t configured
           </CardTitle>
           <CardDescription>
-            Like, subscribe and comment actions are unavailable right now.
-          </CardDescription>
-          <CardAction>
-            <Button size="sm" onClick={onRetry} aria-label="Retry the YouTube connection check">
-              <RotateCw className="size-4" aria-hidden="true" />
-              Retry
-            </Button>
-          </CardAction>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-2 px-5 text-sm text-muted-foreground">
-          <p>
-            A YouTube session is configured, but YouTube didn&apos;t serve it just now — actions
-            may fail until the session is refreshed. Retry to re-check; the reads you see are
-            unaffected.
-          </p>
-          <p className="text-xs">Checked {checkedAgo}.</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (state.connected) {
-    // mode "broker" — the Task 4-b card (the fallback tier): the connected
-    // browser holds a youtube.com tab; the tab context + last action ride it
-    return (
-      <Card className="gap-3 rounded-xl py-5" data-connection-state="connected">
-        <CardHeader className="px-5">
-          <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-            <CheckCircle2 className="size-5 shrink-0 text-emerald-500" aria-hidden="true" />
-            Connected — actions are available
-          </CardTitle>
-          <CardDescription>
-            Actions are performed through the WebFlix connected session.
+            Users can&apos;t connect their own YouTube accounts yet — the deployment is missing
+            its Google OAuth credentials.
           </CardDescription>
           <CardAction>
             <Button
               variant="outline"
               size="sm"
-              onClick={onRetry}
-              aria-label="Recheck the YouTube connection"
+              onClick={onRecheck}
+              aria-label="Recheck the YouTube account connection"
             >
               <RotateCw className="size-4" aria-hidden="true" />
               Recheck
@@ -391,10 +393,26 @@ function ConnectionCard({
           </CardAction>
         </CardHeader>
         <CardContent className="flex flex-col gap-2 px-5 text-sm text-muted-foreground">
+          {state.oauth.missingEnv.length > 0 && (
+            <p>
+              Missing environment variables:{" "}
+              <code className="rounded bg-secondary px-1.5 py-0.5 font-mono text-xs text-foreground">
+                {state.oauth.missingEnv.join(", ")}
+              </code>
+            </p>
+          )}
+          {state.oauth.redirectUri && (
+            <p>
+              Register this redirect URI in the Google Cloud console:{" "}
+              <code className="rounded bg-secondary px-1.5 py-0.5 font-mono text-xs break-all text-foreground">
+                {state.oauth.redirectUri}
+              </code>
+            </p>
+          )}
           <p>
-            {tabContextLabel(state.tabUrl)}
-            {lastActionAgo ? ` — last action ${lastActionAgo}` : " — no action performed through this session yet"}
-            .
+            Set <code className="font-mono text-xs">GOOGLE_CLIENT_ID</code> and{" "}
+            <code className="font-mono text-xs">GOOGLE_CLIENT_SECRET</code> in the deployment env
+            to let users connect their own accounts.
           </p>
           <p className="text-xs">Checked {checkedAgo}.</p>
         </CardContent>
@@ -402,30 +420,146 @@ function ConnectionCard({
     );
   }
 
-  // mode "none" — neither tier answers
+  // ---- needs-reauth: Google expired or revoked the grant ----
+  if (state.status === "needs-reauth") {
+    return (
+      <Card className="gap-3 rounded-xl py-5" data-connection-state="needs-reauth">
+        <CardHeader className="px-5">
+          <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+            <AlertTriangle className="size-5 shrink-0 text-amber-500" aria-hidden="true" />
+            Re-connect your YouTube account
+          </CardTitle>
+          <CardDescription>
+            Google expired or revoked the authorization — your actions pause until you
+            re-connect.
+          </CardDescription>
+          <CardAction>
+            <ConnectButton href={connectUrl} label="Connect your YouTube account" />
+          </CardAction>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2 px-5 text-sm text-muted-foreground">
+          <p className="text-xs">Checked {checkedAgo}.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // ---- connected: the account identity + Disconnect ----
+  if (state.status === "connected") {
+    return <ConnectedAccountCard state={state} checkedAgo={checkedAgo} onRecheck={onRecheck} />;
+  }
+
+  // ---- not-connected (and the degraded probe-failure state) ----
   return (
-    <Card className="gap-3 rounded-xl py-5" data-connection-state="disconnected">
+    <Card className="gap-3 rounded-xl py-5" data-connection-state="not-connected">
       <CardHeader className="px-5">
         <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-          <AlertTriangle className="size-5 shrink-0 text-amber-500" aria-hidden="true" />
-          Disconnected — actions are unavailable
+          <PlugZap className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          Connect your YouTube account
         </CardTitle>
         <CardDescription>
-          Like, subscribe and comment actions are unavailable right now.
+          Your likes, subscribes and playlists act on your own YouTube account, through the
+          official YouTube API — WebFlix never acts as someone else.
         </CardDescription>
         <CardAction>
-          <Button size="sm" onClick={onRetry} aria-label="Retry the YouTube connection check">
-            <RotateCw className="size-4" aria-hidden="true" />
-            Retry
-          </Button>
+          <ConnectButton href={connectUrl} label="Connect your YouTube account" />
         </CardAction>
       </CardHeader>
-      <CardContent className="flex flex-col gap-2 px-5 text-sm text-muted-foreground">
-        <p>
-          No server-side YouTube session is configured for actions, and the optional connected
-          browser isn&apos;t reachable. Configure the YouTube session to enable like, subscribe
-          and comment right from WebFlix — no youtube.com tab needed.
-        </p>
+      <CardContent className="flex flex-col gap-3 px-5 text-sm text-muted-foreground">
+        <CapabilityLines />
+        <p className="text-xs">Checked {checkedAgo}.</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ConnectedAccountCard({
+  state,
+  checkedAgo,
+  onRecheck,
+}: {
+  state: YouTubeConnectionState;
+  checkedAgo: string;
+  onRecheck: () => void;
+}) {
+  const [disconnecting, setDisconnecting] = useState(false);
+  const account = state.account;
+  const connectedAt =
+    account?.connectedAt && relativeTime(account.connectedAt)
+      ? relativeTime(account.connectedAt)
+      : null;
+
+  async function disconnect() {
+    if (disconnecting) return;
+    setDisconnecting(true);
+    try {
+      const res = await fetch(
+        state.oauth.disconnectUrl ?? "/api/connection/youtube/disconnect",
+        { method: "POST" },
+      );
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        toast.error(body.error ?? `Disconnect failed (HTTP ${res.status})`);
+      }
+    } catch {
+      toast.error("Disconnect failed — try again");
+    } finally {
+      setDisconnecting(false);
+      onRecheck(); // force a fresh probe whatever happened
+    }
+  }
+
+  return (
+    <Card className="gap-3 rounded-xl py-5" data-connection-state="connected">
+      <CardHeader className="px-5">
+        <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+          {account?.channelThumbUrl ? (
+            <img
+              src={account.channelThumbUrl}
+              alt=""
+              className="size-6 shrink-0 rounded-full object-cover"
+            />
+          ) : (
+            <CheckCircle2 className="size-5 shrink-0 text-emerald-500" aria-hidden="true" />
+          )}
+          Connected as {account?.channelTitle ?? "your YouTube account"}
+        </CardTitle>
+        <CardDescription>
+          Actions run on your own account through the official YouTube API.
+          {connectedAt ? ` Connected ${connectedAt}.` : ""}
+        </CardDescription>
+        <CardAction>
+          <span className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRecheck}
+              aria-label="Recheck the YouTube account connection"
+            >
+              <RotateCw className="size-4" aria-hidden="true" />
+              Recheck
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void disconnect()}
+              disabled={disconnecting}
+              aria-label="Disconnect your YouTube account"
+              className="text-destructive hover:text-destructive"
+            >
+              {disconnecting ? "Disconnecting…" : "Disconnect"}
+            </Button>
+          </span>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 px-5 text-sm text-muted-foreground">
+        <CapabilityLines />
+        {state.serverReadSession?.configured && (
+          <p className="text-xs">
+            WebFlix&apos;s server keeps a separate read-only YouTube session for public pages —
+            it is never used for your actions.
+          </p>
+        )}
         <p className="text-xs">Checked {checkedAgo}.</p>
       </CardContent>
     </Card>

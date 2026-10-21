@@ -2,20 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { isSpecialPlaylistId } from "@/lib/youtube/playlists";
 import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 import { proxyPlaylistReorder } from "@/lib/watch/action-proxy";
-import { ApiError } from "@/lib/watch/api";
+import { errorResponse } from "@/lib/watch/api";
 
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/playlists/[id]/reorder { fromIndex, toIndex, videoId? } — move a
- * video in the operator's real YouTube playlist (broker kind
- * `playlist-reorder`, Tier-2 — the playlist page's real drag handle: a
- * stepped pointer-event ladder). The special lists WL/LL cannot be reordered
- * (YouTube's own lists) — honest 400.
+ * POST /api/playlists/[id]/reorder { fromIndex, toIndex, videoId? } — WFX2-P36:
+ * the HONEST UNSUPPORTED lane. Playlist reordering has no safe official
+ * YouTube Data API path (playlistItems.update position swaps are unreliable
+ * and policy-uncertain), and the pre-P36 broker drive (reordering the
+ * operator's tab) is retired with every other shared-identity write — so the
+ * proxy throws the honest 501 (kind "youtube-unsupported", the handoff to
+ * YouTube) and this route renders it verbatim. The special lists WL/LL keep
+ * their own honest 400 (YouTube's own lists, not reorderable at all).
  *
- * Response: {ok, effect, verified, fromIndex, toIndex, videoId?, path?};
- * verified:false when the drop fired but the list did not re-render the new
- * order within the deadline (honest unverified).
+ * Response: 501 { error, kind: "youtube-unsupported" } — reorder on
+ * youtube.com's own playlist page.
  */
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   if (!(await getSessionUser(req))) return authRequiredResponse();
@@ -63,10 +65,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const result = await proxyPlaylistReorder(id, fromIndex, toIndex, videoId);
     return NextResponse.json(result);
   } catch (err) {
-    if (err instanceof ApiError) {
-      return NextResponse.json({ error: err.message }, { status: err.status });
-    }
-    console.error("POST /api/playlists/[id]/reorder failed", err);
-    return NextResponse.json({ error: "Failed to reorder playlist" }, { status: 500 });
+    return errorResponse(err);
   }
 }

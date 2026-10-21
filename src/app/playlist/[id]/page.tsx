@@ -19,7 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useApi, postJson } from "@/hooks/use-api";
+import { useApi } from "@/hooks/use-api";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { PersonalSurfaceGate } from "@/components/auth/personal-surface-gate";
@@ -33,6 +33,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { PlaylistPageDTO, VideoDTO } from "@/lib/types";
 
+/** WFX2-P36 — the page's fetch payload: the route's PlaylistPageDTO, with
+ * `playlist: null` + `notice` on the special-list (WL/LL) honest envelope. */
+type PlaylistPagePayload = PlaylistPageDTO & {
+  playlist: PlaylistPageDTO["playlist"] | null;
+  /** the honest per-user notice (the WL/LL no-API handoff) */
+  notice?: string;
+};
+
 /**
  * The playlist page (WFX2-B-W) — youtube.com's own /playlist layout
  * (2026-10-16 operator pass, the Watch later UX report):
@@ -42,18 +50,17 @@ import type { PlaylistPageDTO, VideoDTO } from "@/lib/types";
  *    and the compact ROW LIST on the right (index · 160px thumbnail ·
  *    title/channel text block — exactly youtube.com's playlist rows, never
  *    the wide home-grid cards);
- *  - the special lists (WL watch later / LL liked) ride the same layout
- *    (youtube.com links its own guide "Watch later" to exactly this page
- *    shape) with the honest unavailable/no-session/empty states in the
- *    list column;
+ *  - WFX2-P36: the special lists (WL watch later / LL liked) render the
+ *    HONEST per-user notice instead — YouTube's own lists have no official
+ *    read API, and the pre-P36 session read served the OPERATOR's list to
+ *    every signed-in user (the cross-user leak the P36 work order closes);
+ *    the WebFlix-local save button owns Watch later, YouTube's own page has
+ *    the rest;
  *  - reorder (Move up/down) stays public-playlist-only; Load more pages
  *    the browse continuation;
- *  - REA-3 F3: the special-list rows carry youtube.com's own per-row
- *    Action menu — "Remove from Watch later" (WL) / "Remove from Liked
- *    videos" (LL) through the EXISTING write seams (the watch-later
- *    remove + the remove-rating like write), plus Save to playlist and
- *    Share. Download is honestly absent (no seam — the parity-debt
- *    ledger). Reorder is still never offered: YouTube's own lists cannot
+ *  - REA-3 F3 (pre-P36): the special-list row actions are retired with the
+ *    special-list rows themselves — Download is honestly absent either way
+ *    (no seam — the parity-debt ledger), and YouTube's own lists can never
  *    be reordered (the route honestly 400s).
  */
 function isSpecialListId(id: string | undefined): id is "WL" | "LL" {
@@ -78,54 +85,38 @@ export default function PlaylistPage() {
   return <PlaylistContent id={raw} special={false} />;
 }
 
-/** The honest unavailable state (P22-B): a session IS configured but the
- *  read was not served — NEVER a login ask (the viewer is signed in; the
- *  WebFlix session cannot fix the YouTube session's read). */
-function SpecialListUnavailableNote({ list }: { list: "WL" | "LL" }) {
+/** WFX2-P36 — the special lists' honest notice state: no official read API
+ * for YouTube's own Watch Later / Liked lists, and the pre-P36 session read
+ * served the OPERATOR's list to every signed-in user (the cross-user leak
+ * the P36 work order closes). The notice hands Watch later off to the
+ * WebFlix-local save button and the rest to YouTube's own pages — never the
+ * operator's rows, never a fake empty that implies a read happened. */
+function SpecialListNotice({ list }: { list: "WL" | "LL" }) {
   const label = list === "WL" ? "Watch later" : "Liked videos";
   return (
-    <div className="py-16 text-center" role="status" data-testid="playlist-special-unavailable">
-      <p className="text-lg font-medium">{label} is unavailable right now</p>
+    <div className="py-16 text-center" role="status" data-testid="playlist-special-notice">
+      <p className="text-lg font-medium">{label} lives outside WebFlix&apos;s reach</p>
       <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-        The YouTube session is connected, but it didn&apos;t return your {label.toLowerCase()} list — it may
-        be empty on YouTube, or YouTube didn&apos;t serve it to WebFlix. Open it on youtube.com to check.
+        YouTube&apos;s Watch Later / Liked lists have no official API — your WebFlix Watch later lives
+        in the save button (local), and YouTube&apos;s own page has the rest.
       </p>
-    </div>
-  );
-}
-
-/** The honest no-session state (P22-B): no login ask — the WebFlix sign-in
- *  is fine; what's missing is the deployment's YouTube session, which no
- *  WebFlix sign-in can fix. */
-function SpecialListNoSessionNote({ list }: { list: "WL" | "LL" }) {
-  const label = list === "WL" ? "Watch later" : "Liked videos";
-  return (
-    <div className="py-16 text-center" role="status" data-testid="playlist-special-no-session">
-      <p className="text-lg font-medium">{label} is unavailable right now</p>
-      <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-        {label} is personal to the YouTube account this WebFlix deployment rides (single-tenant live
-        mode). No YouTube session is connected to this deployment yet — your WebFlix sign-in is fine;
-        the operator session (YT_COOKIES) needs to be connected.
-      </p>
-    </div>
-  );
-}
-
-/** The honest served-empty state — the read came back; the list is empty. */
-function SpecialListEmptyNote({ list }: { list: "WL" | "LL" }) {
-  return (
-    <div className="py-16 text-center" data-testid="playlist-special-empty">
-      <p className="text-lg font-medium">
-        {list === "WL" ? "No videos in Watch later yet" : "No liked videos here yet"}
-      </p>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {list === "WL"
-          ? "Videos you save with the Save button on a watch page show up here."
-          : "Videos you like on YouTube show up here — this page reads the same list as /liked."}
-      </p>
-      <Button asChild className="mt-4 gap-2 rounded-full">
-        <Link href="/">Find videos to watch</Link>
-      </Button>
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+        <Button asChild className="gap-2 rounded-full" data-testid="playlist-special-find">
+          <Link href="/">Find videos to watch</Link>
+        </Button>
+        <a
+          href={
+            list === "WL"
+              ? "https://www.youtube.com/feed/playlists"
+              : "https://www.youtube.com/feed/liked"
+          }
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm font-medium text-foreground underline underline-offset-2"
+        >
+          Open {label.toLowerCase()} on YouTube
+        </a>
+      </div>
     </div>
   );
 }
@@ -159,28 +150,21 @@ function MixUnviewableNote({ listId, seedVideoId }: { listId: string; seedVideoI
 
 function PlaylistContent({ id, special }: { id: string; special: boolean }) {
   const router = useRouter();
-  const { data, loading, error, reload } = useApi<PlaylistPageDTO>(
+  const { data, loading, error, reload } = useApi<PlaylistPagePayload>(
     id ? `/api/playlist/${encodeURIComponent(id)}` : null
   );
 
-  // optimistic local reorder (the broker's intended effect)
+  // optimistic local reorder (the intended server effect)
   const [order, setOrder] = useState<VideoDTO[] | null>(null);
   const [reordering, setReordering] = useState<number | null>(null);
-  // REA-3 F3 — optimistic special-list removals (youtube.com's own row
-  // action: the row leaves the list the moment the write is in flight;
-  // failure reverts honestly)
-  const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
   // cursor pagination (youtube.com's playlist page grows the list on demand)
   const [extraVideos, setExtraVideos] = useState<VideoDTO[]>([]);
   const [moreCursor, setMoreCursor] = useState<string | null>(null);
   const [pagingMore, setPagingMore] = useState(false);
 
-  const listedVideos = (order ?? [...(data?.videos ?? []), ...extraVideos]).filter(
-    (v) => !removedIds.has(v.id)
-  );
-  // the special lists cannot be reordered (YouTube's own lists — the reorder
-  // route honestly 400s); the ⋯ menu carries the platform's own row actions
-  // instead (remove-from-list — REA-3 F3)
+  const listedVideos = order ?? [...(data?.videos ?? []), ...extraVideos];
+  // the special lists render the honest P36 notice (no rows, no reordering);
+  // public playlists keep the reorder affordance
   const canReorder = !special;
 
   async function loadMore() {
@@ -191,7 +175,7 @@ function PlaylistContent({ id, special }: { id: string; special: boolean }) {
       const res = await fetch(
         `/api/playlist/${encodeURIComponent(id)}?cursor=${encodeURIComponent(cursor)}`
       );
-      const body = (await res.json().catch(() => ({}))) as PlaylistPageDTO & { error?: string };
+      const body = (await res.json().catch(() => ({}))) as PlaylistPagePayload & { error?: string };
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
       setExtraVideos((prev) => {
         const seen = new Set([...listedVideos.map((v) => v.id), ...prev.map((v) => v.id)]);
@@ -264,16 +248,11 @@ function PlaylistContent({ id, special }: { id: string; special: boolean }) {
   }
 
   const specialList = id === "WL" || id === "LL" ? (id as "WL" | "LL") : null;
-  const unavailable = specialList ? data?.unavailable === true : false;
-  const noSession = specialList ? data?.loginRequired === true && !unavailable : false;
-  const servedEmpty =
-    specialList !== null && data && !unavailable && !noSession && listedVideos.length === 0;
   const hasMore = Boolean(moreCursor ?? data?.nextCursor);
   const mixUnviewable = data?.mixUnviewable === true;
 
   // REA-1 G16 — youtube.com's Play all (measured): /watch?v=<first>&list=<id>
-  // — the watch page's queue panel follows the list. Special lists ride the
-  // same context (their queue is the session read).
+  // — the watch page's queue panel follows the list.
   const playAllHref =
     !mixUnviewable && listedVideos.length > 0
       ? `/watch/${listedVideos[0].id}?list=${encodeURIComponent(id)}`
@@ -291,37 +270,6 @@ function PlaylistContent({ id, special }: { id: string; special: boolean }) {
     const first = shuffled[0];
     if (!first) return;
     router.push(`/watch/${first.id}?list=${encodeURIComponent(id)}&shuffle=${seed}`);
-  }
-
-  // REA-3 F3 — youtube.com's per-row action on its own lists: WL removes
-  // ride the existing watch-later write (add:false); LL removes ride the
-  // existing remove-rating like write (action:"none"). Optimistic removal,
-  // honest revert on failure — never a fake success.
-  async function removeFromSpecialList(video: VideoDTO) {
-    const list = id === "LL" ? "LL" : "WL";
-    const label = list === "WL" ? "Watch later" : "Liked videos";
-    setRemovedIds((prev) => {
-      const next = new Set(prev);
-      next.add(video.id);
-      return next;
-    });
-    try {
-      if (list === "WL") {
-        await postJson("/api/playlists/watch-later", { videoId: video.id, add: false });
-      } else {
-        await postJson(`/api/videos/${encodeURIComponent(video.id)}/like`, { action: "none" });
-      }
-      toast.success(`Removed from ${label}`);
-    } catch (err) {
-      setRemovedIds((prev) => {
-        const next = new Set(prev);
-        next.delete(video.id);
-        return next;
-      });
-      toast.error(
-        err instanceof Error ? err.message : `Failed to remove from ${label.toLowerCase()}`
-      );
-    }
   }
 
   return (
@@ -348,7 +296,11 @@ function PlaylistContent({ id, special }: { id: string; special: boolean }) {
           </div>
         </div>
       )}
-      {data && (
+      {/* WFX2-P36 — the special lists answer the honest notice envelope
+          (playlist: null, no rows): the notice replaces the two-column
+          layout entirely — never the operator's list, never a fake read */}
+      {data && specialList && <SpecialListNotice list={specialList} />}
+      {data && !specialList && data.playlist && (
         <div className="grid gap-6 px-4 py-5 sm:px-6 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
           {/* -------- the playlist card panel (youtube.com's left column) ---- */}
           <aside
@@ -455,9 +407,6 @@ function PlaylistContent({ id, special }: { id: string; special: boolean }) {
           {/* -------- the row list (youtube.com's right column) -------------- */}
           <div className="min-w-0">
             {mixUnviewable && <MixUnviewableNote listId={id} seedVideoId={data.mixSeedVideoId ?? null} />}
-            {specialList && unavailable && <SpecialListUnavailableNote list={specialList} />}
-            {specialList && noSession && <SpecialListNoSessionNote list={specialList} />}
-            {servedEmpty && specialList && <SpecialListEmptyNote list={specialList} />}
             <ol className="space-y-1">
               {listedVideos.map((video, i) => (
                 <PlaylistRow
@@ -471,11 +420,11 @@ function PlaylistContent({ id, special }: { id: string; special: boolean }) {
                   disableDown={i === listedVideos.length - 1 || reordering !== null}
                   onMoveUp={() => moveItem(i, i - 1)}
                   onMoveDown={() => moveItem(i, i + 1)}
-                  onRemove={specialList ? () => removeFromSpecialList(video) : null}
+                  onRemove={null}
                 />
               ))}
             </ol>
-            {hasMore && !unavailable && !noSession && (
+            {hasMore && (
               <div className="flex justify-center py-6">
                 <Button
                   variant="secondary"

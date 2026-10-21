@@ -267,6 +267,10 @@ export interface PlaylistDto {
   visibility: string;
   itemCount: number;
   containsVideo: boolean;
+  /** WFX2-P36 — true when the row is the WebFlix-LOCAL list (the Save
+   * dialog's Watch-later row): it toggles through /api/playlists/watch-later,
+   * never a YouTube-side write. */
+  local?: boolean;
 }
 
 export interface ViewerDto {

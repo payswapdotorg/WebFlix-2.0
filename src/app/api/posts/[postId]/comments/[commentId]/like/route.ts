@@ -2,28 +2,33 @@ import { NextRequest } from "next/server";
 import { json, errorResponse } from "@/lib/watch/api";
 import { proxyPostCommentLike } from "@/lib/community/action-proxy";
 import { rateLimit } from "@/lib/youtube/cache";
+import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/posts/[postId]/comments/[commentId]/like — LIVE Tier-2 write
- * (broker post-comment-like: the comment located by text in the post page's
- * comments DOM, its real like button clicked, aria-pressed verified).
+ * POST /api/posts/[postId]/comments/[commentId]/like — WFX2-P36: the HONEST
+ * UNSUPPORTED lane. Liking comments on community posts has no official
+ * end-user YouTube API, and the pre-P36 broker DOM drive is retired with the
+ * shared operator identity — the proxy answers the honest 501 (kind
+ * "youtube-unsupported"), rendered verbatim by errorResponse.
+ *
+ * WFX2-P2-AU added: the route is now gated on the WebFlix session — a guest
+ * gets the uniform 401 before anything runs (it was rate-limit-only before
+ * P36).
  *
  * Request (the comment-like shapes, kept):
  *   { action: "like" | "dislike" | "none" }   canonical — set semantics
  *   { value: "like" }                         legacy — toggle semantics
- *   { baseline?: { likes, yourLike }, commentText? }
- *     commentText lets the broker locate the comment in the post page DOM
- *     (the verified UI path).
+ *   { baseline?: { likes, yourLike }, commentText? } (kept for the contract)
  *
- * Response: { ok, effect, likes, yourLike } — the PostCommentLikeResult
- * contract the post comment rows consume.
+ * Response: 501 { error, kind: "youtube-unsupported" } — like on YouTube.
  */
 export async function POST(
   req: NextRequest,
   ctx: { params: Promise<{ postId: string; commentId: string }> }
 ) {
+  if (!(await getSessionUser(req))) return authRequiredResponse();
   try {
     if (!(await rateLimit(`post-comment-like:${req.headers.get("x-forwarded-for") ?? "local"}`, { limit: 60 }))) {
       return json({ error: "Too many requests" }, { status: 429 });

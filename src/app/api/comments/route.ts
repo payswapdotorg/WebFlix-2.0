@@ -27,26 +27,25 @@ function parseVideoSnapshot(raw: unknown): CommentVideoSnapshotDto | undefined {
 }
 
 /**
- * POST /api/comments — comment create/reply through the three-rung chain
- * (WFX2-P6-CR): direct-first (InnerTube `comment/create_comment` + the
- * operator session's SAPISIDHASH — replies carry the live payload's
- * createCommentParams), broker fallback (the watch page's DOM paths), then
- * the honest LOCAL rung — the WebFlix store, disclosed as `local: true`
- * (never claims a YouTube write).
+ * POST /api/comments — WFX2-P36: comment create/reply on the honest LOCAL
+ * lane. The official Data API only lets channels comment on their own
+ * videos, so a viewer comment lives in the WebFlix store, disclosed as
+ * `local: true` — never a YouTube-side write claimed (the pre-P36
+ * direct-SAPISIDHASH/broker rungs are retired with the shared operator
+ * identity itself).
  *
  * Request (UI shapes kept, additive):
  *   { videoId, body | text, parentId?, parentText?, replyParams?, video? }
  *     — `body` is the composer's field; `text` is the canonical alias.
  *     — parentId + parentText make this a reply.
- *     — replyParams: the parent comment's live replyParams (the direct reply
- *       rung's parameter — the composer forwards it from the parent row).
+ *     — replyParams: the parent comment's live replyParams (kept for the
+ *       composer's forwarding contract; the local lane needs no locator).
  *     — video: { title, channelId?, channelHandle?, channelName?,
  *       channelAvatarUrl? } — the watch payload's snapshot so the local rung
  *       can mirror the real video/channel as shadow rows.
  *
  * Response: the CommentDto (+ok/effect/path, +local for local writes) with
- * 201 — for YouTube-path writes the real id/author come from YouTube on the
- * next live read; for local writes the row IS the store row.
+ * 201 — for local writes the row IS the store row.
  */
 export async function POST(req: NextRequest) {
   const sessionUser = await getSessionUser(req);

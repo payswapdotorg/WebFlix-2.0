@@ -36,6 +36,11 @@ type HistoryPayload = {
   searchHistoryPaused: boolean | null;
   total: number;
   session: boolean;
+  /** WFX2-P36: the per-user truth — false → the connect link in the notice */
+  connected?: boolean;
+  /** WFX2-P36: the honest per-user notice (YouTube's history has no official
+   *  API — WebFlix never reads one person's history for another) */
+  notice?: string;
 };
 
 /**
@@ -56,30 +61,36 @@ const HISTORY_TABS: { id: HistoryTab; label: string }[] = [
   { id: "videos", label: "Videos" },
 ];
 
-/**
- * The honest no-session state (P22-B): NEVER a "Sign in to …" ask — the
- * viewer is already signed in to WebFlix (the gate passed); what's missing
- * is the deployment's YouTube session, which no WebFlix sign-in can fix.
- * youtube.com never asks a signed-in viewer to sign in again.
- */
-function HistoryUnavailableNote({ session }: { session: boolean }) {
+/** WFX2-P36 — the honest per-user notice banner: the route's notice text,
+ * plus the connect link when the acting user has no connected account. */
+function HistoryNoticeBanner({ payload }: { payload: HistoryPayload }) {
+  if (!payload.notice) return null;
   return (
-    <div className="px-4 py-16 text-center sm:px-6" role="status">
-      <p className="text-lg font-medium">Watch history is unavailable right now</p>
-      <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-        History is personal to the YouTube account this WebFlix deployment rides (single-tenant
-        live mode).{" "}
-        {session
-          ? "The YouTube session is connected but didn't serve your watch history — open it on youtube.com to check."
-          : "No YouTube session is connected to this deployment yet — your WebFlix sign-in is fine; the operator session (YT_COOKIES) needs to be connected."}
-      </p>
+    <div
+      className="mx-4 mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-secondary/40 px-4 py-3 sm:mx-6"
+      role="status"
+      data-testid="history-notice"
+    >
+      <p className="min-w-0 flex-1 text-sm text-muted-foreground">{payload.notice}</p>
+      {payload.connected === false && (
+        <Link
+          href="/settings"
+          className="shrink-0 text-sm font-medium text-foreground underline underline-offset-2"
+        >
+          Connect your YouTube account
+        </Link>
+      )}
     </div>
   );
 }
 
 /**
- * History — the operator's REAL YouTube watch history (SSR /feed/history),
- * in youtube.com's own history-page layout (2026-10-16 operator pass):
+ * History — WFX2-P36: the honest per-user surface. YouTube's watch history
+ * has no official API, so WebFlix renders the notice banner (the handoff to
+ * youtube.com/feed/history) and never one person's history as another's
+ * (the pre-P36 operator-session read is retired). The page keeps
+ * youtube.com's own history-page layout (2026-10-16 operator pass) for the
+ * day an official lane lands:
  *
  *  - TWO COLUMNS on desktop — the day-grouped ROW LIST (compact horizontal
  *    lockups: fixed 246px 16:9 thumbnail + title/channel/meta text block,
@@ -341,16 +352,27 @@ function HistoryContent() {
               {error}
             </p>
           )}
-          {data && data.loginRequired && <HistoryUnavailableNote session={data.session} />}
+          {data && <HistoryNoticeBanner payload={data} />}
+          {data && data.loginRequired && !data.notice && (
+            <p className="py-10 text-center text-sm text-muted-foreground" role="status">
+              Your watch history could not be read just now — try again shortly.
+            </p>
+          )}
           {data && !data.loginRequired && total === 0 && (
             <div className="py-16 text-center">
-              <p className="text-lg font-medium">No watch history yet</p>
+              <p className="text-lg font-medium">Your watch history lives on YouTube</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Videos you watch are recorded by YouTube itself — watch something from{" "}
-                <Link href="/" className="text-foreground underline underline-offset-2">
-                  the home feed
-                </Link>{" "}
-                and it lands here.
+                YouTube&apos;s watch history has no official API — WebFlix never reads one
+                person&apos;s history for another. Open{" "}
+                <a
+                  href="https://www.youtube.com/feed/history"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-foreground underline underline-offset-2"
+                >
+                  youtube.com/feed/history
+                </a>{" "}
+                for yours.
               </p>
             </div>
           )}

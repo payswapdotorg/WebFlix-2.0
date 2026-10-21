@@ -1,107 +1,170 @@
 /**
- * WFX2 Task 4-b → P33-DIRECT-ACTIONS — the YouTube connection client
- * (browser side).
+ * WFX2-P36-ACTION-PERSISTENCE — the YouTube connection client (browser side).
  *
- * P33: the connection truth is DIRECT-FIRST — the app's own server-side
- * YouTube session performs the everyday writes (like / subscribe /
- * comment / watch-later); the connected-browser broker is the FALLBACK
- * tier (mode "broker") for deployments without a session and for the few
- * no-captured-wire actions (dislike, bell). The state comes from
- * GET /api/connection/youtube (the server-side probe; the broker URL and
- * shared secret never reach the browser).
+ * P36: the connection truth is PER-USER OAuth. GET /api/connection/youtube
+ * answers the new envelope — status connected | needs-reauth | not-connected |
+ * not-configured, the connected account, the honest actions capability map
+ * (official | local | unsupported), and the OAuth wiring (connect /
+ * disconnect URLs, the redirect URI to register, the exact missing env
+ * vars). The pre-P33/P35 truths (mode "direct"/"broker", the deployment-wide
+ * operator session, the shared browser tab) are RETIRED — no surface may
+ * render them again.
  *
  * This module owns the client side of that surface:
  *  - the typed state + an SWR-style ~30s cache (one probe per TTL window no
- *    matter how many surfaces ask; `force` re-probes for the Retry button)
- *  - isBrokerOfflineError — recognize the API's broker-offline error shape
- *  - toastActionError — the write-action error surfacing: the offline kind
- *    gets the "check the connection in Settings" toast with a Settings
- *    action; every other error keeps its existing per-surface message
+ *    matter how many surfaces ask; `force` re-probes for the card's Recheck)
+ *  - toastActionError — the write-action error surfacing: a failure body
+ *    {error, kind} with the P36 kinds youtube-not-connected /
+ *    youtube-needs-reauth renders the connect / re-connect prompt (message +
+ *    a Settings action); every other failure keeps its honest per-surface
+ *    message
  */
 import { toast } from "sonner";
+import { ApiClientError } from "./client";
 
-/** P33 — which tier answers actions right now (the route's own enum). */
-export type YouTubeConnectionMode = "direct" | "broker" | "none";
+/** P36 — the per-user connection status (the route's own enum). */
+export type YouTubeConnectionStatus =
+  | "connected"
+  | "needs-reauth"
+  | "not-connected"
+  | "not-configured";
+
+/** The connected account (the route's account block; null when absent). */
+export interface YouTubeConnectionAccount {
+  channelId: string | null;
+  channelTitle: string | null;
+  channelThumbUrl: string | null;
+  scope: string | null;
+  /** ISO — when the user connected the account */
+  connectedAt: string | null;
+}
+
+/** The OAuth wiring the settings card renders (nulls when unknown). */
+export interface YouTubeConnectionOauth {
+  configured: boolean | null;
+  /** the exact env vars missing (not-configured only) */
+  missingEnv: string[];
+  /** the redirect URI to register in the Google Cloud console */
+  redirectUri: string | null;
+  connectUrl: string | null;
+  disconnectUrl: string | null;
+}
 
 export interface YouTubeConnectionState {
-  /** the answering tier performs actions — see mode for which one */
+  status: YouTubeConnectionStatus;
+  /** true only for status "connected" (the action tier answers) */
   connected: boolean;
-  /** P33 — the answering tier: "direct" (the app's server-side session),
-   * "broker" (the connected browser), "none" (neither) */
-  mode: YouTubeConnectionMode;
-  /** direct mode: the account_menu probe served the signed-in menu — the
-   * live verdict that the session performs actions (absent otherwise) */
-  sessionServed?: boolean;
-  /** broker mode: the broker's operator tab is on youtube.com right now */
-  tabFound: boolean;
-  /** broker mode: the operator tab's current URL (coarse context; null when unknown) */
-  tabUrl: string | null;
-  /** when the session last performed an action (epoch ms / epoch s / ISO —
-   * the broker's wire format; null when never or unknown) */
-  lastActionAt: string | number | null;
-  /** P33 — the optional connected browser's reachability (the card's honest
-   * note about the few broker-tier actions left; null when no broker) */
-  broker?: { connected: boolean; tabFound: boolean } | null;
+  account: YouTubeConnectionAccount | null;
+  /** the honest capability map: official | local | unsupported (per action) */
+  actions: Record<string, string> | null;
+  oauth: YouTubeConnectionOauth;
+  /** the deployment-wide READ session disclosure (never used for actions) */
+  serverReadSession: { configured: boolean } | null;
   /** when the server performed this check (ISO) */
   checkedAt: string;
 }
 
-/** The toast copy for the broker-offline failure shape (Task 4-b). */
-export const ACTIONS_DISCONNECTED_MESSAGE =
-  "YouTube actions are disconnected — check the connection in Settings";
-
-/** The settings anchor the offline toast's action opens. */
+/** The settings anchor the connect/re-auth toast's action opens. */
 export const YOUTUBE_CONNECTION_SETTINGS_HREF = "/settings#youtube-connection";
+
+/** The OAuth start path — the fallback when a degraded envelope omits it. */
+export const YOUTUBE_OAUTH_CONNECT_HREF = "/api/connection/youtube/oauth/start";
 
 /** How long a connection answer stays fresh (the SWR-style TTL). */
 export const CONNECTION_TTL_MS = 30_000;
 
+/** The honest probe-failure state: nothing is known, nothing is claimed. */
 function disconnectedState(): YouTubeConnectionState {
   return {
+    status: "not-connected",
     connected: false,
-    mode: "none",
-    tabFound: false,
-    tabUrl: null,
-    lastActionAt: null,
+    account: null,
+    actions: null,
+    oauth: {
+      configured: null,
+      missingEnv: [],
+      redirectUri: null,
+      connectUrl: null,
+      disconnectUrl: null,
+    },
+    serverReadSession: null,
     checkedAt: new Date().toISOString(),
   };
 }
 
+/** A string field → its trimmed truthy value, else null (never a throw). */
+function strOrNull(v: unknown): string | null {
+  return typeof v === "string" && v ? v : null;
+}
+
 /** Narrow whatever /api/connection/youtube answered into the typed state —
- * a missing/garbled field degrades to its falsy shape, never a throw.
- * P33: mode/sessionServed/broker ride through; a pre-P33 route answer (no
- * mode field) degrades to "broker" — the old truth — when its tab fields
- * answer, else "none". */
+ * a missing/garbled field degrades to its falsy shape, never a throw. An
+ * unrecognized status degrades to "not-connected" (the honest can't-act
+ * verdict — never a claimed connection). */
 function normalizeState(body: unknown): YouTubeConnectionState {
   if (typeof body !== "object" || body === null) return disconnectedState();
   const b = body as Record<string, unknown>;
-  const tabFound = b.tabFound === true;
-  const tabUrl = typeof b.tabUrl === "string" && b.tabUrl ? b.tabUrl : null;
-  const lastActionAt =
-    typeof b.lastActionAt === "number" && Number.isFinite(b.lastActionAt)
-      ? b.lastActionAt
-      : typeof b.lastActionAt === "string" && b.lastActionAt
-        ? b.lastActionAt
-        : null;
+  const status: YouTubeConnectionStatus =
+    b.status === "connected" ||
+    b.status === "needs-reauth" ||
+    b.status === "not-connected" ||
+    b.status === "not-configured"
+      ? b.status
+      : "not-connected";
   const checkedAt =
     typeof b.checkedAt === "string" && b.checkedAt ? b.checkedAt : new Date().toISOString();
-  const mode: YouTubeConnectionMode =
-    b.mode === "direct" || b.mode === "broker" || b.mode === "none"
-      ? b.mode
-      : tabFound
-        ? "broker"
-        : "none";
-  const sessionServed = b.sessionServed === true ? true : undefined;
-  const brokerRaw = b.broker;
-  const broker =
-    typeof brokerRaw === "object" && brokerRaw !== null && "connected" in brokerRaw
-      ? {
-          connected: (brokerRaw as Record<string, unknown>).connected === true,
-          tabFound: (brokerRaw as Record<string, unknown>).tabFound === true,
-        }
+
+  const accountRaw = typeof b.account === "object" && b.account !== null ? b.account : null;
+  const account: YouTubeConnectionAccount | null = accountRaw
+    ? {
+        channelId: strOrNull((accountRaw as Record<string, unknown>).channelId),
+        channelTitle: strOrNull((accountRaw as Record<string, unknown>).channelTitle),
+        channelThumbUrl: strOrNull((accountRaw as Record<string, unknown>).channelThumbUrl),
+        scope: strOrNull((accountRaw as Record<string, unknown>).scope),
+        connectedAt: strOrNull((accountRaw as Record<string, unknown>).connectedAt),
+      }
+    : null;
+
+  const actionsRaw = typeof b.actions === "object" && b.actions !== null ? b.actions : null;
+  const actions: Record<string, string> | null = actionsRaw
+    ? Object.fromEntries(
+        Object.entries(actionsRaw as Record<string, unknown>).filter(
+          (entry): entry is [string, string] => typeof entry[1] === "string",
+        ),
+      )
+    : null;
+
+  const oauthRaw = typeof b.oauth === "object" && b.oauth !== null ? b.oauth : null;
+  const o = (oauthRaw ?? {}) as Record<string, unknown>;
+  const missingEnv = Array.isArray(o.missingEnv)
+    ? o.missingEnv.filter((v): v is string => typeof v === "string")
+    : [];
+  const oauth: YouTubeConnectionOauth = {
+    configured: typeof o.configured === "boolean" ? o.configured : null,
+    missingEnv,
+    redirectUri: strOrNull(o.redirectUri),
+    connectUrl: strOrNull(o.connectUrl),
+    disconnectUrl: strOrNull(o.disconnectUrl),
+  };
+
+  const srsRaw =
+    typeof b.serverReadSession === "object" && b.serverReadSession !== null
+      ? b.serverReadSession
       : null;
-  const connected = mode === "direct" ? sessionServed === true : b.connected === true && tabFound;
-  return { connected, mode, sessionServed, tabFound, tabUrl, lastActionAt, broker, checkedAt };
+  const serverReadSession =
+    srsRaw && typeof (srsRaw as Record<string, unknown>).configured === "boolean"
+      ? { configured: (srsRaw as Record<string, unknown>).configured === true }
+      : null;
+
+  return {
+    status,
+    connected: status === "connected" || b.connected === true,
+    account,
+    actions,
+    oauth,
+    serverReadSession,
+    checkedAt,
+  };
 }
 
 let cache: { state: YouTubeConnectionState; at: number } | null = null;
@@ -109,7 +172,7 @@ let inflight: Promise<YouTubeConnectionState> | null = null;
 
 /**
  * Fetch the YouTube connection state through the ~30s cache. `force`
- * re-probes (the settings card's Retry button); concurrent callers share one
+ * re-probes (the settings card's Recheck button); concurrent callers share one
  * probe. NEVER rejects — an unreachable route or bad payload is the honest
  * disconnected state, cached like any other answer.
  */
@@ -140,37 +203,36 @@ export async function fetchYouTubeConnection(
   }
 }
 
-/** Drop the SWR cache — the test isolation hook for the surfaces battery. */
+/** Drop the SWR cache — the test isolation hook. */
 export function resetYouTubeConnectionCache(): void {
   cache = null;
   inflight = null;
 }
 
-/** The offline marker every broker-offline error message carries (the typed
- * offline kind in src/lib/broker.ts, incl. the comments tier's "…and the
- * WebFlix store is unreachable" variant). */
-const BROKER_OFFLINE_MARKER = "action backend offline";
-
 /**
- * Recognize the broker-offline failure shape: the write routes surface the
- * broker's typed offline kind as a 502 whose error string the API client
- * re-throws verbatim — message-shape matching (not instanceof), because the
- * client throws plain ApiClientErrors carrying the route's error string.
- */
-export function isBrokerOfflineError(e: unknown): boolean {
-  return e instanceof Error && e.message.toLowerCase().includes(BROKER_OFFLINE_MARKER);
-}
-
-/**
- * The write-action error toast (Task 4-b) — extends the existing sonner
- * surfacing, rebuilds nothing. The broker-offline shape becomes the
- * connection prompt (title + a Settings action that opens the YouTube
- * connection card); any other error keeps its existing per-surface message.
+ * The write-action error toast (the P36 law): a failure body {error, kind}
+ * with kind youtube-not-connected / youtube-needs-reauth renders the
+ * connect / re-connect prompt (message + a Settings action that opens the
+ * YouTube account card); every other error — quota, provider, store,
+ * unsupported — keeps its honest per-surface message.
  */
 export function toastActionError(e: unknown, fallback: string): void {
-  if (isBrokerOfflineError(e)) {
-    toast.error(ACTIONS_DISCONNECTED_MESSAGE, {
-      description: "Like, subscribe and comment actions are unavailable right now.",
+  const kind = e instanceof ApiClientError ? e.kind : undefined;
+  if (kind === "youtube-not-connected") {
+    toast.error("Connect your YouTube account to act", {
+      description:
+        "Your likes, subscribes and playlists act on your own YouTube account — connect it in Settings.",
+      action: {
+        label: "Settings",
+        onClick: () => window.location.assign(YOUTUBE_CONNECTION_SETTINGS_HREF),
+      },
+    });
+    return;
+  }
+  if (kind === "youtube-needs-reauth") {
+    toast.error("Re-connect your YouTube account", {
+      description:
+        "Google expired or revoked the authorization — your actions pause until you re-connect in Settings.",
       action: {
         label: "Settings",
         onClick: () => window.location.assign(YOUTUBE_CONNECTION_SETTINGS_HREF),
@@ -181,23 +243,21 @@ export function toastActionError(e: unknown, fallback: string): void {
   toast.error(e instanceof Error ? e.message : fallback);
 }
 
-/**
- * Parse the broker's lastActionAt (epoch ms, epoch seconds, or ISO string)
- * into a Date — null when absent or unparseable (defensive: the broker's
- * wire format for the field is not pinned).
- */
-export function parseConnectionTimestamp(value: string | number | null): Date | null {
-  if (value === null) return null;
-  if (typeof value === "number") {
-    if (!Number.isFinite(value) || value <= 0) return null;
-    return new Date(value > 1e12 ? value : value * 1000);
-  }
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const asNumber = Number(trimmed);
-  if (Number.isFinite(asNumber) && asNumber > 0) {
-    return new Date(asNumber > 1e12 ? asNumber : asNumber * 1000);
-  }
-  const parsed = new Date(trimmed);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+/* ------------------------------------------------------------------ */
+/* @deprecated WFX2-P36 compat seams (the broker lane is retired) —     */
+/* kept ONLY so the lane's pending test re-point type-checks; no        */
+/* surface may render them again.                                      */
+/* ------------------------------------------------------------------ */
+
+/** @deprecated — the pre-P36 disconnected toast copy, kept for the test
+ * re-point (the live copy is the connect/re-auth prompt in toastActionError). */
+export const ACTIONS_DISCONNECTED_MESSAGE =
+  "YouTube actions are disconnected — check the connection in Settings";
+
+/** @deprecated — the pre-P36 broker-offline error matcher, kept for the
+ * test re-point (message-shape matching, no broker import). */
+export function isBrokerOfflineError(e: unknown): boolean {
+  return (
+    e instanceof Error && e.message.toLowerCase().includes("action backend offline")
+  );
 }

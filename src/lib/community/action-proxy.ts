@@ -1,35 +1,30 @@
 /**
- * WFX2-P2-SO — the community-post write proxies (the comment-lane pattern:
- * the broker kinds mapped onto the UI's request/response contracts, honest
- * 502s when the broker is offline — the routes degrade, never lie).
+ * WFX2-P36-ACTION-PERSISTENCE — the community-post write proxies, on the
+ * HONEST UNSUPPORTED lane.
  *
- * All post interactions act on the REAL youtube.com through the logged-in
- * browser (the Tier-2 broker channel): post likes click the real vote
- * buttons on the post page, post comments ride the real comments composer,
- * and post-create executes youtube.com's own backstage create flow.
+ * THE P36 LAW (docs/work-items/P36-ACTION-PERSISTENCE.md): production
+ * mutations must never depend on one deployment-wide operator cookie
+ * (YT_COOKIES) or one shared logged-in broker tab. Community posts
+ * (post create, post like/dislike, post comments, post-comment likes) have
+ * NO official YouTube Data API for end users — so every proxy here throws
+ * the honest ApiError(501, …, "youtube-unsupported") with the handoff to
+ * YouTube, and this module imports NEITHER @/lib/broker NOR
+ * @/lib/youtube-direct: no shared-operator path can serve a user write.
+ *
+ * The request/response contracts the routes and UI consume are kept verbatim
+ * (shapes, validation, the parseCompactCount helper) — only the execution
+ * lane changed: the pre-P36 broker drives are retired.
  */
 import { ApiError } from "@/lib/watch/api";
 import type { CommentDto } from "@/lib/watch/types";
-import {
-  BROKER_OFFLINE_MESSAGE,
-  BrokerError,
-  brokerAction,
-  type BrokerActionSuccess,
-} from "@/lib/broker";
 
-export { BROKER_OFFLINE_MESSAGE };
-
-const OFFLINE = () => new ApiError(502, BROKER_OFFLINE_MESSAGE);
-
-/** Map a broker failure to an honest ApiError for the routes. */
-function fail(err: BrokerError): ApiError {
-  if (err.kind === "offline") return OFFLINE();
-  if (err.kind === "bad-request") return new ApiError(400, err.message);
-  return new ApiError(502, err.message);
-}
-
-function ok(result: BrokerActionSuccess | BrokerError): result is BrokerActionSuccess {
-  return !(result instanceof BrokerError);
+/** The honest unsupported handoff (machine-stable kind, the P36 taxonomy). */
+function unsupported(what: string): ApiError {
+  return new ApiError(
+    501,
+    `${what} isn't supported by the official YouTube API — community posts live on YouTube`,
+    "youtube-unsupported",
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -66,46 +61,15 @@ export function parseCompactCount(label: string | undefined | null): number | nu
 }
 
 /**
- * Post like/dislike — broker post-like (the real vote toggle on the post
- * page, aria-pressed verified). YouTube community posts expose like +
- * dislike; same-value clicks toggle off (the legacy value shape).
+ * Post like/dislike — the HONEST UNSUPPORTED lane: no official API for
+ * rating community posts, so never a fake likes delta. The request shape
+ * (canonical action / legacy value) is still validated before the 501.
  */
 export async function proxyPostLike(postId: string, req: PostLikeRequest): Promise<PostLikeResult> {
+  void postId;
   const action = req.action ?? req.value;
   if (!action) throw new ApiError(400, "action (like|dislike|none) is required");
-  const baseLikes = Math.max(0, req.baseline?.likes ?? 0);
-  const prior = req.baseline?.yourLike ?? null;
-
-  // legacy toggle semantics: same value again → remove the rating
-  const desired: "like" | "dislike" | "remove" =
-    action === "none"
-      ? "remove"
-      : req.value && !req.action && prior === action
-        ? "remove"
-        : action;
-
-  const r = await brokerAction("post-like", { postId }, { action: desired });
-  if (!ok(r)) throw fail(r);
-
-  const domLikes = parseCompactCount(r.detail?.["likesText"] as string | undefined);
-  const yourLike: "like" | "dislike" | null =
-    desired === "remove"
-      ? null
-      : ((r.detail?.["rating"] as "like" | "dislike" | undefined) ?? desired);
-  const effect =
-    desired === "remove"
-      ? "post-rating-removed"
-      : yourLike === "like"
-        ? "post-liked"
-        : "post-disliked";
-  const likes =
-    domLikes ??
-    (yourLike === "like" && prior !== "like"
-      ? baseLikes + 1
-      : yourLike !== "like" && prior === "like"
-        ? Math.max(0, baseLikes - 1)
-        : baseLikes);
-  return { ok: true, effect, likes, yourLike, already: r.already, path: r.path };
+  throw unsupported("Liking YouTube community posts");
 }
 
 // ---------------------------------------------------------------------------
@@ -119,58 +83,23 @@ export interface PostCommentViewer {
   avatarUrl: string;
 }
 
-/** Synthesize the CommentDto the composer UI expects from a broker post. */
-function synthPostComment(
-  postId: string,
-  text: string,
-  viewer: PostCommentViewer
-): CommentDto & { ok: true; effect: string; path?: string } {
-  return {
-    id: `yt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-    parentId: null,
-    body: text,
-    likes: 0,
-    heartedByCreator: false,
-    pinned: false,
-    edited: false,
-    moderation: "approved",
-    createdAt: new Date().toISOString(),
-    publishedText: "just now",
-    author: {
-      id: viewer.id,
-      handle: viewer.handle,
-      name: viewer.name,
-      avatarUrl: viewer.avatarUrl,
-      isMember: false,
-      isCreator: false,
-    },
-    yourLike: null,
-    isOwn: true,
-    replyCount: 0,
-    totalReplyCount: 0,
-    ok: true,
-    effect: "post-comment-created",
-    path: "ui",
-  };
-}
-
-/** Create a comment on a post — broker post-comment-create (UI DOM path). */
+/** Create a comment on a post — the HONEST UNSUPPORTED lane. */
 export async function proxyPostCommentCreate(
   postId: string,
   text: string,
-  viewer: PostCommentViewer
+  viewer: PostCommentViewer,
 ): Promise<CommentDto & { ok: true; effect: string; path?: string }> {
-  const r = await brokerAction("post-comment-create", { postId }, { text });
-  if (!ok(r)) throw fail(r);
-  const comment = synthPostComment(postId, text, viewer);
-  return { ...comment, path: r.path ?? "ui" };
+  void postId;
+  void text;
+  void viewer;
+  throw unsupported("Commenting on YouTube community posts");
 }
 
 export interface PostCommentLikeRequest {
   value?: "like" | "dislike";
   action?: "like" | "dislike" | "none";
   baseline?: { likes?: number; yourLike?: "like" | "dislike" | null };
-  /** the comment's text — the broker's DOM locator on the post page */
+  /** the comment's text (kept for the request contract) */
   commentText?: string;
 }
 
@@ -182,52 +111,19 @@ export interface PostCommentLikeResult {
 }
 
 /**
- * Like a post comment — broker post-comment-like (the comment located by
- * text in the post page's comments DOM; single like control, toggle
- * semantics like YouTube's).
+ * Like a post comment — the HONEST UNSUPPORTED lane. The request shape is
+ * still validated before the 501.
  */
 export async function proxyPostCommentLike(
   postId: string,
   commentId: string,
-  req: PostCommentLikeRequest
+  req: PostCommentLikeRequest,
 ): Promise<PostCommentLikeResult> {
+  void postId;
+  void commentId;
   const action = req.action ?? req.value;
   if (!action) throw new ApiError(400, "action (like|dislike|none) is required");
-  const baseLikes = Math.max(0, req.baseline?.likes ?? 0);
-  const prior = req.baseline?.yourLike ?? null;
-
-  const mode =
-    action === "none" || action === "dislike"
-      ? "remove"
-      : req.value && !req.action
-        ? "toggle"
-        : "set";
-  const r = await brokerAction(
-    "post-comment-like",
-    { postId, commentId },
-    { mode, ...(req.commentText ? { commentText: req.commentText } : {}) }
-  );
-  if (!ok(r)) throw fail(r);
-  const liked =
-    typeof r.detail?.["liked"] === "boolean"
-      ? r.detail.liked
-      : mode === "remove"
-        ? false
-        : mode === "set"
-          ? true
-          : prior !== "like";
-  const likes =
-    liked && prior !== "like"
-      ? baseLikes + 1
-      : !liked && prior === "like"
-        ? Math.max(0, baseLikes - 1)
-        : baseLikes;
-  return {
-    ok: true,
-    effect: liked ? "post-comment-liked" : "post-comment-like-removed",
-    likes,
-    yourLike: liked ? "like" : null,
-  };
+  throw unsupported("Liking comments on YouTube community posts");
 }
 
 // ---------------------------------------------------------------------------
@@ -237,17 +133,17 @@ export async function proxyPostCommentLike(
 export interface PostCreateResult {
   ok: true;
   effect: string;
-  /** the broker's verification state (the new post rendered in the feed) */
+  /** the write's verification state (never reached on the unsupported lane) */
   verified?: boolean;
   path?: string;
   note?: string;
 }
 
 /**
- * Create a community post on the operator's OWN channel — broker
- * post-create (youtube.com's real backstage composer: the create box → the
- * post dialog → text/image/poll → POST). The post's real id/author arrive
- * on the next ladder read; the UI reloads the Community tab.
+ * Create a community post — the HONEST UNSUPPORTED lane. The composer's
+ * request validation (text/image/poll presence, the 2-5 poll option law) is
+ * kept so the route's 400s stay honest; the write itself has no official
+ * end-user API, so it never happens here.
  */
 export async function proxyPostCreate(input: {
   handle: string;
@@ -256,6 +152,8 @@ export async function proxyPostCreate(input: {
   imageUrl?: string;
   pollOptions?: string[];
 }): Promise<PostCreateResult> {
+  void input.handle;
+  void input.channelId;
   const text = input.text.trim();
   const imageUrl =
     input.imageUrl && /^https?:\/\//.test(input.imageUrl) ? input.imageUrl : undefined;
@@ -269,23 +167,5 @@ export async function proxyPostCreate(input: {
   if (pollOptions && (pollOptions.length < 2 || pollOptions.length > 5)) {
     throw new ApiError(400, "pollOptions must carry 2-5 non-empty options");
   }
-  const r = await brokerAction(
-    "post-create",
-    { ...(input.channelId ? { channelId: input.channelId } : {}) },
-    {
-      handle: input.handle.replace(/^@/, ""),
-      text,
-      ...(imageUrl ? { imageUrl } : {}),
-      ...(pollOptions ? { pollOptions } : {}),
-    }
-  );
-  if (!ok(r)) throw fail(r);
-  const note = typeof r.detail?.["note"] === "string" ? r.detail.note : undefined;
-  return {
-    ok: true,
-    effect: "post-created",
-    verified: r.verified,
-    path: r.path,
-    ...(note ? { note } : {}),
-  };
+  throw unsupported("Creating YouTube community posts");
 }

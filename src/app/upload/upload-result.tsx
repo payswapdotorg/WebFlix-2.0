@@ -8,10 +8,13 @@ import type { UploadExecuteResponseDTO } from "@/lib/upload/flow";
  * WFX2-P3-UP — the upload flow's terminal result card (pure presentational;
  * the view feeds it the /api/upload/execute outcome, the tests render it under
  * happy-dom). Honest by construction: the published card only appears for a
- * broker-confirmed publish (deep-linking the REAL video), the unverified
- * publish says exactly that, the fallback card carries the CURRENT hand-off
- * rung, and the error card shows the broker's stage-accurate message —
- * never a fake success.
+ * confirmed publish (deep-linking the REAL video), the unverified publish
+ * says exactly that, the fallback card carries the CURRENT hand-off rung,
+ * and the error card shows the route's honest message — never a fake
+ * success. WFX2-P36: the live route answers the honest 501 (unsupported —
+ * the official per-user upload lane is future work), so the error card is
+ * the reachable terminal state; the published/fallback shapes stay for the
+ * DTO contract.
  */
 
 const STAGE_LABELS: Record<string, string> = {
@@ -98,8 +101,8 @@ export default function UploadResultCard(props: {
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
           {unverified
-            ? (result.note ?? "The publish button was clicked; the confirmation was not observed in the operator tab — the video may still be processing.")
-            : "The upload was published and verified in the operator's logged-in YouTube tab."}
+            ? (result.note ?? "The publish button was clicked; the confirmation was not observed — the video may still be processing.")
+            : "The upload was published and verified on YouTube."}
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <Button
@@ -124,8 +127,7 @@ export default function UploadResultCard(props: {
           ) : null}
         </div>
         <p className="mt-3 text-xs text-muted-foreground">
-          Tags, thumbnail and the Short flag are hand-off fields — the broker drive fills title,
-          description and visibility; add the rest in YouTube Studio.
+          Tags, thumbnail and the Short flag are hand-off fields — add them in YouTube Studio.
         </p>
       </section>
     );
@@ -139,11 +141,11 @@ export default function UploadResultCard(props: {
       >
         <h2 className="flex items-center gap-2 text-base font-semibold">
           <CloudOff className="size-5 text-amber-500" aria-hidden="true" />
-          The session broker is offline — handing off instead
+          Publishing isn&apos;t available — handing off instead
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
           {result.message ??
-            "The broker could not be reached; nothing was uploaded. The hand-off below is the honest path."}
+            "Publishing through WebFlix isn't available; nothing was uploaded. The hand-off below is the honest path."}
         </p>
         {result.handoff ? (
           <HandoffBundle
@@ -168,7 +170,7 @@ export default function UploadResultCard(props: {
         The publish was not completed
       </h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        {result.message ?? "The broker refused the publish — nothing is claimed."}
+        {result.message ?? "The publish was refused — nothing is claimed."}
         {stageText ? (
           <span className="block mt-1">
             The drive stopped while {stageText} (stage: <code className="font-mono text-xs">{result.stage}</code>).

@@ -5,7 +5,7 @@ import { proxyCommentCreate, proxyCommentReply } from "@/lib/watch/action-proxy"
 import { listLiveComments, attachInlineReplies } from "@/lib/youtube/comments";
 import { mergeLocalComments, listLocalReplies, shadowUserId } from "@/lib/watch/local-comments";
 import { rateLimit } from "@/lib/youtube/cache";
-import { getSessionUser } from "@/lib/auth/session";
+import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 import type { CommentVideoSnapshotDto } from "@/lib/watch/types";
 
 export const dynamic = "force-dynamic";
@@ -87,20 +87,24 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
 /**
  * POST /api/videos/[id]/comments {body, parentId?, parentText?, replyParams?,
- * video?} — comment create/reply through the three-rung chain (WFX2-P6-CR:
- * direct SAPISIDHASH → broker → the honest local WebFlix store, disclosed
- * as local:true). The composer's canonical route is /api/comments; this is
- * the watch-page shape kept for the existing UI (it forwards the same
- * additive extras when the client provides them).
+ * video?} — WFX2-P36: comment create/reply on the honest LOCAL lane (the
+ * official Data API only lets channels comment on their own videos, so a
+ * viewer comment is stored on WebFlix and disclosed as local:true — never a
+ * YouTube-side write claimed). The composer's canonical route is
+ * /api/comments; this is the watch-page shape kept for the existing UI (it
+ * forwards the same additive extras when the client provides them).
+ *
+ * WFX2-P2-AU kept: the route is gated on the WebFlix session — a guest gets
+ * the uniform 401 before anything runs.
  *
  * Response: the CommentDto (+ok/effect/path, +local for local writes) with
- * 201 — the comment's real id/author come from YouTube on the next live
- * read; for local writes the row IS the store row.
+ * 201 — for local writes the row IS the store row.
  */
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const sessionUser = await getSessionUser(req);
+  if (!sessionUser) return authRequiredResponse();
   try {
     const { id } = await ctx.params;
-    const sessionUser = await getSessionUser(req);
     let body: Record<string, unknown> = {};
     try {
       body = (await req.json()) as Record<string, unknown>;
@@ -121,11 +125,11 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const comment = parentId
       ? await proxyCommentReply(id, parentId, text, viewer, parentText, {
           ...(replyParams ? { replyParams } : {}),
-          ...(sessionUser ? { sessionUser } : {}),
+          sessionUser,
           ...(video ? { video } : {}),
         })
       : await proxyCommentCreate(id, text, viewer, {
-          ...(sessionUser ? { sessionUser } : {}),
+          sessionUser,
           ...(video ? { video } : {}),
         });
     return json(comment, { status: 201 });

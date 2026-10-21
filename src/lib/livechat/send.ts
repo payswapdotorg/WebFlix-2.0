@@ -1,52 +1,41 @@
 /**
- * WFX2-P3-LC — the live-chat send client + the optimistic-echo state.
+ * WFX2-P36 — the live-chat send client + the optimistic-echo state, on the
+ * HONEST UNSUPPORTED lane.
  *
- * The panel's WRITE path: sendLiveChatMessage() calls the app-side broker
- * client (brokerLiveChatSend — the one additive helper in src/lib/broker.ts)
- * which POSTs the `live-chat-send` action to the Session Broker; the broker
- * types the message into the REAL live-chat composer on youtube.com (see
- * mini-services/youtube-broker/kinds/livechat.ts), presses Enter, and
- * verifies the message landed in the chat stream.
+ * THE P36 LAW (docs/work-items/P36-ACTION-PERSISTENCE.md): production
+ * mutations must never depend on one deployment-wide operator cookie
+ * (YT_COOKIES) or one shared logged-in broker tab. Posting to a live chat
+ * has NO official end-user YouTube API — the pre-P36 path typed the message
+ * into the REAL composer on youtube.com through the broker, which required
+ * BROKER_SECRET in the BROWSER bundle (it could never legitimately live
+ * client-side, which is why the path always failed "offline"). This module
+ * imports NEITHER @/lib/broker nor anything server-secret: sendLiveChatMessage
+ * answers the honest typed unsupported result — the panel clears the pending
+ * echo, restores the draft, and shows the handoff copy (chat on youtube.com),
+ * never a fake "sent".
  *
- * Optimistic echo (youtube.com parity): the caller appends the message to
- * the panel immediately (buildLiveChatEcho — marked "pending"), then
- * reconciles with the broker verdict:
- *   - ok        → the echo flips to "sent" (the pending mark clears);
- *   - failure   → the echo is removed and the honest error state carries
- *                 youtube.com's own chat copy (members-only / slow mode /
- *                 chat disabled) — never an invented message.
- * A "sent" echo whose body has since arrived in the polled stream is DROPPED
- * (reconcileEchoes) — the real youtube.com message (posted by the operator
- * session the broker drives) replaces the local placeholder. Never a fake
- * write, never a duplicate.
+ * The optimistic-echo helpers (buildLiveChatEcho / reconcileEchoes) keep
+ * their contracts: the echo is still appended optimistically and reconciled
+ * against the polled stream, so a message that somehow arrives in the READ
+ * stream is never duplicated. A send now always fails honestly, so a pending
+ * echo is removed again on the verdict — the same reconcile path.
  */
 
-import {
-  BROKER_OFFLINE_MESSAGE,
-  BrokerError,
-  brokerLiveChatSend,
-} from "@/lib/broker";
 import type { LiveChatMessageDTO } from "@/lib/youtube/livechat";
-
-/** youtube.com's own chat-state copy (the honest states, verbatim family). */
-export const LIVE_CHAT_ERROR_COPY = {
-  membersOnly: "Chat is available to members only",
-  slowMode: "Slow mode is on — you can send messages again in a few seconds",
-  chatDisabled: "Chat is disabled for this live stream",
-} as const;
 
 /** The honest send-failure states the panel renders. */
 export type LiveChatSendErrorState =
   | { kind: "members-only"; copy: string }
   | { kind: "slow-mode"; copy: string }
   | { kind: "chat-disabled"; copy: string }
+  | { kind: "unsupported"; copy: string }
   | { kind: "offline"; copy: string }
   | { kind: "failed"; copy: string };
 
 export type LiveChatSendResult =
   | {
       ok: true;
-      /** the effect was re-read from the chat stream by the broker */
+      /** the effect was re-read from the chat stream (never claimed here) */
       verified?: boolean;
       /** the youtube.com chat message id, when verification saw the row */
       messageId: string | null;
@@ -54,16 +43,47 @@ export type LiveChatSendResult =
     }
   | { ok: false; error: LiveChatSendErrorState };
 
+/** The honest unsupported verdict (the one answer the P36 lane gives). */
+const UNSUPPORTED: LiveChatSendErrorState = {
+  kind: "unsupported",
+  copy: "Live chat posting isn't supported through the official API — chat on youtube.com",
+};
+
 /**
- * Map the broker's honest error strings onto the UI's honest states.
- * The executor's error taxonomy (kinds/livechat.ts): chat-members-only,
- * chat-slow-mode, chat-disabled, live-chat-composer-not-found,
- * live-chat-send-button-not-found, live-chat-typing-failed,
- * live-chat-send-failed — unknown strings surface verbatim (honest detail,
- * never swallowed).
+ * Send one live-chat message — the HONEST UNSUPPORTED lane: no official API,
+ * no operator-session replay, never a fake "sent". Never throws.
  */
-export function classifyLiveChatSendError(err: BrokerError): LiveChatSendErrorState {
-  if (err.kind === "offline") return { kind: "offline", copy: BROKER_OFFLINE_MESSAGE };
+export async function sendLiveChatMessage(
+  videoId: string,
+  message: string
+): Promise<LiveChatSendResult> {
+  void videoId;
+  void message;
+  return { ok: false, error: UNSUPPORTED };
+}
+
+/* ------------------------------------------------------------------ */
+/* @deprecated WFX2-P36 compat seams (the broker lane is retired) —     */
+/* kept ONLY so the lane's pending test re-point type-checks; the       */
+/* module itself never calls the broker.                               */
+/* ------------------------------------------------------------------ */
+
+/** @deprecated — the pre-P36 broker error copy, kept for the test re-point. */
+export const LIVE_CHAT_ERROR_COPY = {
+  membersOnly: "Chat is available to members only",
+  slowMode: "Slow mode is on — you can send messages again in a few seconds",
+  chatDisabled: "Chat is disabled for this live stream",
+} as const;
+
+/** @deprecated — the pre-P36 classifier, kept for the test re-point (its
+ * parameter is the BrokerError's structural shape — no broker import). */
+export function classifyLiveChatSendError(err: {
+  kind?: string;
+  message?: string;
+}): LiveChatSendErrorState {
+  if (err.kind === "offline") {
+    return { kind: "offline", copy: "action backend offline — the lead's broker must be running" };
+  }
   const raw = err.message ?? "";
   if (raw.includes("chat-members-only")) {
     return { kind: "members-only", copy: LIVE_CHAT_ERROR_COPY.membersOnly };
@@ -75,28 +95,6 @@ export function classifyLiveChatSendError(err: BrokerError): LiveChatSendErrorSt
     return { kind: "chat-disabled", copy: LIVE_CHAT_ERROR_COPY.chatDisabled };
   }
   return { kind: "failed", copy: `Message not sent (${raw})` };
-}
-
-/**
- * Send one live-chat message through the broker (the real composer path on
- * youtube.com). Never throws — failures come back as the honest error state.
- */
-export async function sendLiveChatMessage(
-  videoId: string,
-  message: string
-): Promise<LiveChatSendResult> {
-  const result = await brokerLiveChatSend(videoId, message);
-  if (result instanceof BrokerError) {
-    return { ok: false, error: classifyLiveChatSendError(result) };
-  }
-  const detail = (result.detail ?? {}) as { messageId?: unknown; note?: unknown };
-  return {
-    ok: true,
-    verified: result.verified,
-    messageId:
-      typeof detail.messageId === "string" && detail.messageId ? detail.messageId : null,
-    note: typeof detail.note === "string" ? detail.note : undefined,
-  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -123,11 +121,10 @@ export function buildLiveChatEcho(body: string): LiveChatEcho {
 
 /**
  * Reconcile the echoes against the polled stream: a SENT echo whose body has
- * now arrived in the streamed messages is dropped — the real youtube.com
- * message replaces the local placeholder (the stream row carries the real
- * author + id). PENDING echoes always stay (the broker verdict has not
- * landed yet); sent echoes whose body has not streamed yet stay too (render
- * lag — the broker verified the send).
+ * now arrived in the streamed messages is dropped — the real youtube.com row
+ * replaces the local placeholder (the stream row carries the real author +
+ * id). PENDING echoes always stay (the verdict has not landed yet); sent
+ * echoes whose body has not streamed yet stay too (render lag).
  */
 export function reconcileEchoes(
   echoes: readonly LiveChatEcho[],

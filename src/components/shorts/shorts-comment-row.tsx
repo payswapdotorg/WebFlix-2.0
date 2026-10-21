@@ -519,14 +519,16 @@ export function ShortsCommentRow({
         )}
       </div>
 
-      {/* public-mode write gate — YouTube's "Sign in to continue" parity */}
+      {/* WFX2-P36 — the public-mode action gate: comment likes/reports have
+          no official YouTube API, so the honest dialog says so (the pre-P36
+          copy claimed the operator's session — retired with the lane) */}
       <Dialog open={signInOpen} onOpenChange={setSignInOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Sign in to continue</DialogTitle>
+            <DialogTitle>Not available through WebFlix</DialogTitle>
             <DialogDescription>
-              This action acts on the operator&apos;s YouTube session. No session is configured
-              right now (public mode).
+              This action isn&apos;t supported by the official YouTube API — open the video on
+              YouTube to do it there. (Comments you write on WebFlix are stored on WebFlix.)
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -535,10 +537,16 @@ export function ShortsCommentRow({
               onClick={() => setSignInOpen(false)}
               className="rounded-full"
             >
-              Cancel
+              Close
             </Button>
             <Button asChild className="rounded-full">
-              <a href="/account">Sign in</a>
+              <a
+                href={`https://www.youtube.com/watch?v=${videoId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Open on YouTube
+              </a>
             </Button>
           </DialogFooter>
         </DialogContent>

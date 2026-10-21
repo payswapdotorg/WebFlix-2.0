@@ -7,17 +7,18 @@ import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/comments/[id]/like — LIVE Tier-2 write (broker comment-like).
+ * POST /api/comments/[id]/like — WFX2-P36: the HONEST UNSUPPORTED lane.
+ * Liking YouTube comments has no official end-user API, and the pre-P36
+ * broker DOM drive is retired with the shared operator identity — the proxy
+ * answers the honest 501 (kind "youtube-unsupported"), rendered verbatim by
+ * errorResponse (never a fake likes delta).
  *
  * Request (UI shapes kept):
  *   { value: "like" | "dislike" }               legacy — toggle semantics
  *   { action: "like" | "dislike" | "none" }     canonical — set semantics
  *   { baseline?: { likes, yourLike }, commentText?, videoId? }
- *     commentText lets the broker locate the comment in the watch-page DOM
- *     (the verified UI path); videoId scopes the search.
  *
- * Response: { ok, effect, likes, yourLike } — the CommentLikeResultDto
- * contract the comment rows consume.
+ * Response: 501 { error, kind: "youtube-unsupported" } — like on YouTube.
  */
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   if (!(await getSessionUser(req))) return authRequiredResponse();

@@ -1,16 +1,22 @@
 import { NextResponse } from "next/server";
-import { getPlaylistItems } from "@/lib/youtube/playlists";
 import { hasSession } from "@/lib/youtube/session";
 import { rateLimit } from "@/lib/youtube/cache";
+import { resolveReadTier } from "@/lib/watch/action-proxy";
 import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/liked?cursor= — the operator's Liked Videos (YouTube's own `LL`
- * playlist, read via browse `VLLL` — auth-gated). Public mode answers the
- * upstream's own "The playlist does not exist." alert honestly →
- * { videos: [], loginRequired: true }. No fake rows.
+ * GET /api/liked?cursor= — WFX2-P36: the HONEST per-user notice envelope.
+ * The list of videos you liked on YouTube has NO official Data API (YouTube's
+ * own `LL` playlist is a system list the API neither reads nor serves per
+ * user), and the pre-P36 read served the OPERATOR's browse `VLLL` to every
+ * signed-in user — one person's liked list rendered as another's, the exact
+ * cross-user leak the P36 work order closes. So this route never reads
+ * anyone's liked list anymore: it answers the honest empty + notice (the view
+ * renders it as the notice banner), with `connected` disclosing whether the
+ * acting user's own YouTube account is connected. The LIKE BUTTON still acts
+ * on your own account — through the official videos.rate lane.
  */
 export async function GET(req: Request) {
   if (!(await getSessionUser(req))) return authRequiredResponse();
@@ -18,21 +24,17 @@ export async function GET(req: Request) {
     if (!(await rateLimit(`liked:${req.headers.get("x-forwarded-for") ?? "local"}`))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
-    const cursor = new URL(req.url).searchParams.get("cursor") ?? undefined;
-    const page = await getPlaylistItems("LL", { cursor: cursor || undefined });
-    if (page.notFound) {
-      return NextResponse.json({ error: "Playlist not found" }, { status: 404 });
-    }
+    const tier = await resolveReadTier(req);
     return NextResponse.json({
-      videos: page.videos,
-      playlist: page.playlist,
-      nextCursor: page.nextCursor,
-      loginRequired: page.loginRequired,
-      /** P22-B: the honest unavailable state (session configured, read not
-       *  served) — the client renders the honest degradation, never a login
-       *  ask for a signed-in user. */
-      unavailable: page.unavailable,
+      videos: [],
+      playlist: null,
+      nextCursor: null,
+      loginRequired: false,
+      unavailable: false,
       session: hasSession(),
+      connected: tier !== null,
+      notice:
+        "The list of videos you liked on YouTube has no official API — your likes still act on your account (the like button); the list lives on youtube.com/feed/liked",
     });
   } catch (err) {
     console.error("GET /api/liked failed", err);

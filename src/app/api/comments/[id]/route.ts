@@ -9,11 +9,11 @@ export const dynamic = "force-dynamic";
 
 /**
  * POST /api/comments/[id] {text, videoId?, parentText?, replyParams?, video?}
- * — LIVE Tier-2 write: reply to comment [id] through the three-rung chain
- * (WFX2-P6-CR: direct replyParams → broker → the honest local rung). The
- * canonical broker-API route; the composer path (/api/videos/[id]/comments
- * with parentId) maps here internally. parentText enables the broker's
- * DOM-locator UI path; replyParams + video feed the direct + local rungs.
+ * — WFX2-P36: reply to comment [id] on the honest LOCAL lane (the official
+ * Data API only lets channels comment on their own videos — the reply is
+ * stored on WebFlix and disclosed as local:true, never a YouTube write
+ * claimed). The canonical composer route; the watch-page path
+ * (/api/videos/[id]/comments with parentId) forwards the same contract.
  *
  * Response: the CommentDto (+ok/effect, +local for local writes) with 201.
  */
@@ -48,15 +48,16 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 }
 
 /**
- * PATCH /api/comments/[id] — LIVE Tier-2 write: edit own comment (broker
- * comment-edit — the ⋮ → Edit → inline editor DOM path on the watch page).
+ * PATCH /api/comments/[id] — WFX2-P36: the HONEST UNSUPPORTED lane. Editing
+ * YouTube comments has no official end-user API (commentThreads is
+ * channel-moderation scoped), and the pre-P36 broker DOM drive is retired
+ * with the shared operator identity — the proxy answers the honest 501
+ * (kind "youtube-unsupported"), rendered verbatim by errorResponse.
  *
- * Request: {body, videoId, commentText?} — commentText is the comment's
- * CURRENT text (the broker's DOM locator). Ownership is enforced by YouTube
- * itself (Edit only exists on the operator's own comments).
+ * Request: {body, videoId, commentText?} (commentText kept for the request
+ * contract; ownership on YouTube is enforced by YouTube itself).
  *
- * Response: {ok, effect, body, edited: true, path?} — the UI merges the new
- * body into the row it already holds (the row's id/author stay).
+ * Response: 501 { error, kind: "youtube-unsupported" } — edit on YouTube.
  */
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   if (!(await getSessionUser(req))) return authRequiredResponse();
@@ -83,12 +84,17 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 }
 
 /**
- * DELETE /api/comments/[id] — LIVE Tier-2 write: delete own comment (broker
- * comment-delete — the ⋮ → Delete → confirm-dialog DOM path, YouTube's exact
- * flow).
+ * DELETE /api/comments/[id] — WFX2-P36: the HONEST UNSUPPORTED lane.
+ * Deleting YouTube comments has no official end-user API, and the pre-P36
+ * broker DOM drive is retired — the proxy answers the honest 501 (kind
+ * "youtube-unsupported"), rendered verbatim by errorResponse. (Deleting a
+ * LOCAL WebFlix comment has its own route — the restore/delete family in
+ * comment-service.)
  *
- * Request: {videoId, commentText?} (commentText = the CURRENT text locator).
- * Response: {ok, deleted: true, effect, path?}.
+ * Request: {videoId, commentText?} (commentText kept for the request
+ * contract).
+ *
+ * Response: 501 { error, kind: "youtube-unsupported" } — delete on YouTube.
  */
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   if (!(await getSessionUser(req))) return authRequiredResponse();
