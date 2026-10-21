@@ -198,5 +198,15 @@ export interface JournalEntry {
   ts: string;
   kind: string;
   target: BrokerTarget;
-  result: { ok: boolean; verified?: boolean; already?: boolean; path?: string; error?: string };
+  result: {
+    ok: boolean;
+    verified?: boolean;
+    already?: boolean;
+    path?: string;
+    error?: string;
+    /** P34 — wires captured during this action's execution window (the
+     * recorder's byproduct count; absent when no window ran, e.g. CDP was
+     * down before the recorder could arm). */
+    captures?: number;
+  };
 }

@@ -1,0 +1,58 @@
+== promote CLI smoke — the like-family path (a real-shaped dislike capture: jNQXAC9IVRw, URL-encoded padding) ==
+captured wire — like/like (dislike) @ 2026-10-21T03:11:00Z
+  target: {"videoId":"jNQXAC9IVRw"}  status: 200
+  params: Cg0KC2pOUVhBQzlJVlJ3IAAyDAiH6OzVBhCG4ZOCAg==
+  hex: 0a 0d 0a 0b 6a 4e 51 58 41 43 39 49 56 52 77 20 00 32 0c 08 87 e8 ec d5 06 10 86 e1 93 82 02
+  field 1 (wire 2) @0: len 13 [..jNQXAC9IVRw]
+    field 1 (wire 2) @2: len 11 [jNQXAC9IVRw]
+  field 4 (wire 0) @15: varint 0
+  field 6 (wire 2) @17: len 12 [............]
+    field 1 (wire 0) @19: varint 1790653447
+    field 2 (wire 0) @25: varint 541388934
+  id runs: "jNQXAC9IVRw" @4 (len 11)
+  unix-sec varints: 1790653447 @20 (len 5, path 6.1)
+  like-family layout: YES
+
+  const LIKE_LIKE_TPL = Buffer.from("Cg0KC2pOUVhBQzlJVlJ3IAAyDAiH6OzVBhCG4ZOCAg==", "base64");
+  // hex: 0a 0d 0a 0b 6a 4e 51 58 41 43 39 49 56 52 77 20 00 32 0c 08 87 e8 ec d5 06 10 86 e1 93 82 02
+  // protobuf walk: field tree below; id slot at byte 4 (len 11),
+  // unix-sec varint at byte 20 (len 5, path 6.1)
+  function buildLIKE_LIKEParams(videoId: string, now?: number): string | null {
+    if (videoId.length !== 11) return null;
+    const buf = Buffer.from(LIKE_LIKE_TPL);
+    buf.write(videoId, 4, "latin1");
+    const ts = Math.floor((now ?? Date.now()) / 1000);
+    buf[20] = ((ts >>> 0) & 0x7f) | 0x80;
+    buf[21] = ((ts >>> 7) & 0x7f) | 0x80;
+    buf[22] = ((ts >>> 14) & 0x7f) | 0x80;
+    buf[23] = ((ts >>> 21) & 0x7f) | 0x80;
+    buf[24] = (ts >>> 28) & 0x7f;
+    return buf.toString("base64").replace(/=/g, "%3D");
+  }
+
+  · the captured wire URL-encodes its base64 padding (%3D) — normalized to padded base64 for the fixture (the P33 template form)
+
+  · verification plan before any direct lane ships: (1) the deterministic-401 probe from the real egress (wire validity — a 401 'You must be signed in' answer, the P33 law), then (2) ONE authenticated round-trip observed live (semantics — the action's effect re-read). Never ship on the 401 alone.
+
+== the non-like path (a bell wire: TPL constant + honest manual-review notes) ==
+captured wire — subscription/subscription (bell) @ 2026-10-21T03:12:00Z
+  target: {"channelId":"UCuAXFkgcl1y6PYeZpxKQjgA"}  status: 200
+  params: 4qmFshKAew==
+  hex: e2 a9 85 b2 12 80 7b
+  like-family layout: no
+
+  const SUBSCRIPTION_SUBSCRIPTION_TPL = Buffer.from("4qmFshKAew==", "base64");
+
+  · the captured wire URL-encodes its base64 padding (%3D) — normalized to padded base64 for the fixture (the P33 template form)
+
+  · params did not parse as a clean protobuf — manual byte review required
+
+  · no embedded id run detected — the wire may key on context fields instead
+
+  · layout is NOT the like family (needs exactly one 11-char id run + one 5-byte unix-sec varint) — the TPL constant above plus this walk is the review input; the builder is authored by hand
+
+  · verification plan before any direct lane ships: (1) the deterministic-401 probe from the real egress (wire validity — a 401 'You must be signed in' answer, the P33 law), then (2) ONE authenticated round-trip observed live (semantics — the action's effect re-read). Never ship on the 401 alone.
+
+== the no-match path (exit 1 + journal inventory) ==
+no capture matched (endpoint=bell, index=-1). journal holds: like/like, subscription/subscription
+error: script "promote" exited with code 1

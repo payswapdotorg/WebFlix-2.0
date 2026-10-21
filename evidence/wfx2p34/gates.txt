@@ -1,0 +1,4 @@
+tsc --noEmit: exit 0 (clean)
+eslint .: 0 errors / 1 pre-existing warning (the tests/search-layout.test.tsx:52 unused eslint-disable — the standing baseline)
+broker battery (mini-services/youtube-broker, bun test): 156 pass / 0 fail (base 122 + 34 new)
+root 7-suite battery: 1995 pass / 0 fail (845+676+150+111+138+34+41 — the P33 parity held, the lane touches only the broker mini-service)

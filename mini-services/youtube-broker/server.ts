@@ -1,8 +1,11 @@
 /**
  * WFX2-A-W Session Broker — HTTP server.
  *
- * GET  /healthz        → {ok, tabFound, tabUrl, lastActionAt} (no auth — health contract)
- * POST /broker/action  → header `x-broker-secret`; body {kind, target, payload?}
+ * GET  /healthz          → {ok, tabFound, tabUrl, lastActionAt} (no auth — health contract)
+ * POST /broker/action    → header `x-broker-secret`; body {kind, target, payload?}
+ * GET  /broker/captures  → header `x-broker-secret`; P34 — the captured-wire
+ *                          journal tail (?tail=N&endpoint=substr) — the evidence
+ *                          store for the next direct-action fixtures
  *
  * Shared-secret auth on every /broker/* route (constant-time compare).
  * Fail-closed: when BROKER_SECRET is not configured, actions are refused.
@@ -12,6 +15,8 @@ import { secretMatches } from "./auth";
 import { CdpConnection, ensureYoutubeTab, listPages } from "./cdp";
 import { executeAction } from "./executor";
 import { Journal } from "./journal";
+import { CaptureJournal } from "./captures";
+import { WireRecorder } from "./recorder";
 import { ACTION_KINDS, type BrokerActionRequest, type HealthResponse } from "./types";
 
 const CORS = {
@@ -191,6 +196,7 @@ export function validateActionRequest(body: unknown): { error: string } | { req:
 /** Build the broker server (exported for tests; index.ts starts it). */
 export function createBrokerServer(opts: BrokerOptions): Bun.Server {
   const journal = new Journal(opts.journalPath);
+  const captureJournal = new CaptureJournal(opts.capturesPath);
 
   const fetchHandler = async (req: Request): Promise<Response> => {
     const url = new URL(req.url);
@@ -222,8 +228,30 @@ export function createBrokerServer(opts: BrokerOptions): Bun.Server {
     if (url.pathname === "/") {
       return json({
         service: "webflix-youtube-broker",
-        endpoints: { health: "GET /healthz", action: "POST /broker/action (x-broker-secret)" },
+        endpoints: {
+          health: "GET /healthz",
+          action: "POST /broker/action (x-broker-secret)",
+          captures: "GET /broker/captures?tail=20&endpoint=like (x-broker-secret)",
+        },
       });
+    }
+
+    // P34 — the captured-wire journal tail (the evidence store for the next
+    // direct-action fixtures; same secret law as /broker/action).
+    if (url.pathname === "/broker/captures") {
+      if (req.method !== "GET") return json({ error: "method not allowed" }, 405);
+      if (!opts.secret) {
+        return json({ error: "broker is not configured (BROKER_SECRET missing)" }, 503);
+      }
+      const provided = req.headers.get("x-broker-secret");
+      if (!secretMatches(provided, opts.secret)) {
+        return json({ error: "unauthorized" }, 401);
+      }
+      const tailRaw = parseInt(url.searchParams.get("tail") ?? "20", 10);
+      const tailN = Number.isFinite(tailRaw) ? Math.min(Math.max(tailRaw, 1), 200) : 20;
+      const endpointFilter = url.searchParams.get("endpoint")?.trim() || undefined;
+      const captures = captureJournal.tail(tailN, endpointFilter);
+      return json({ ok: true, total: captureJournal.count(), returned: captures.length, captures });
     }
 
     if (url.pathname === "/broker/action") {
@@ -246,14 +274,24 @@ export function createBrokerServer(opts: BrokerOptions): Bun.Server {
 
       const actionReq = validated.req;
       let result: { ok: boolean; verified?: boolean; already?: boolean; path?: string; error?: string };
+      let captures: number | undefined;
       try {
         const tab = await ensureYoutubeTab(opts.cdpHttp);
         const conn = await CdpConnection.connect(tab.target.webSocketDebuggerUrl);
+        // P34 — the wire recorder rides the action window: armed before the
+        // action, flushed after; its failures are swallowed (the action
+        // result is the product, the capture is the byproduct).
+        const recorder = new WireRecorder(conn, captureJournal, {
+          kind: actionReq.kind,
+          target: actionReq.target,
+        });
         try {
           if (tab.created) await new Promise((r) => setTimeout(r, 2500)); // cold tab load
+          await recorder.start().catch(() => {});
           const response = await executeAction(conn, actionReq);
           result = response;
         } finally {
+          captures = await recorder.flush().catch(() => 0);
           conn.close();
         }
       } catch (e) {
@@ -272,6 +310,7 @@ export function createBrokerServer(opts: BrokerOptions): Bun.Server {
           already: result.already,
           path: result.path,
           error: result.error,
+          ...(captures !== undefined ? { captures } : {}),
         },
       });
       return json(result, result.ok ? 200 : 502);
