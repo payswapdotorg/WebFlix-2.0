@@ -1,0 +1,17 @@
+P33-DIRECT-ACTIONS — the post-merge production re-probe (2026-10-21, ~4 min post-push)
+
+- origin/main @ ada6ea4 pushed; Vercel auto-deploy picked it up.
+- https://webflix-2-0-one.vercel.app/ → 200; /settings → 200 (no build break).
+- DEPLOY-FRESHNESS PROOF: the settings page's deployed client bundle
+  /_next/static/chunks/b2ca7e3be291de7a.js carries the NEW doctrine copy
+  ("…never have to go back to youtube.com…") and the OLD copy ("one shared
+  logged-in session") is absent from every referenced chunk — the P33 build
+  is the served build.
+- The guest gates fire exactly as gated: GET /api/connection/youtube → 401
+  {"error":"unauthenticated"}; POST /api/videos/<id>/like → 401 (the action
+  routes sit behind the WebFlix session gate, before any tier runs).
+- THE STANDING LIVE PROOF: the operator's own authenticated next action — a
+  like, a comment, a subscribe, a watch-later — rides the direct tier on
+  exactly this build (the same SAPISIDHASH law the subscribe lane verified
+  live, §16/§17). Their settings card now answers the direct-first truth:
+  Connected — actions run through WebFlix's server-side YouTube session.

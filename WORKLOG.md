@@ -983,3 +983,10 @@ battery +3 card states re-pinned + the route's 3 direct-tier pins); lint
   itself (no session material) — the auth'd proof is the operator's own
   next like/comment/subscribe on the deployed build, which rides the exact
   same SAPISIDHASH law the subscribe lane verified live in the §16/§17 era.
+
+**Post-merge production re-probe (2026-10-21):** the deploy is LIVE — the
+served bundle (chunks/b2ca7e3be291de7a.js) carries the new doctrine copy
+with the old shared-session copy absent from every referenced chunk; `/` and
+`/settings` 200; the guest gates fire on the connection + like routes. The
+auth'd proof of the direct tier is the operator's own next like/comment/
+subscribe on this build — evidence/wfx2p33/prod-reprobe.txt.
