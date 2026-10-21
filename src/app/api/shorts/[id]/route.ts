@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { rateLimit } from "@/lib/youtube/livechat";
 import { cachedResilient, TTL } from "@/lib/youtube/cache";
 import { getShortMeta, type ShortMetaDTO } from "@/lib/youtube/shorts";
+import { resolveReadTier } from "@/lib/watch/action-proxy";
+import { officialGetRating } from "@/lib/youtube/official-actions";
 
 /**
  * WFX2-A-S — per-short engagement metadata.
@@ -14,6 +16,11 @@ import { getShortMeta, type ShortMetaDTO } from "@/lib/youtube/shorts";
  * WFX2-C-W: cached through the Upstash adapter (10-minute soft TTL,
  * stale-while-revalidate, last-good). A null meta (unavailable short) is
  * never cached over a good one; with no last-good the honest 404 stands.
+ *
+ * WFX2-P36 — the per-user state overlay: the CACHED meta carries no
+ * per-user state; when the requesting user has their OWN connected account,
+ * `yourLike` overlays from videos.getRating (their truth, 1 quota unit —
+ * never the operator session's).
  */
 
 export const dynamic = "force-dynamic";
@@ -36,17 +43,30 @@ export async function GET(
 
   const headers = { "Cache-Control": "private, max-age=120" } as const;
   try {
-    const meta = await cachedResilient<ShortMetaDTO | null>(
-      `shorts:meta:${id}`,
-      TTL.SHORTS_META_MS,
-      () => getShortMeta(id),
-      { isEmpty: (m) => m === null },
-    );
+    const [meta, tier] = await Promise.all([
+      cachedResilient<ShortMetaDTO | null>(
+        `shorts:meta:${id}`,
+        TTL.SHORTS_META_MS,
+        () => getShortMeta(id),
+        { isEmpty: (m) => m === null },
+      ),
+      resolveReadTier(req),
+    ]);
     if (!meta) {
       return NextResponse.json(
         { error: "Short metadata unavailable" },
         { status: 404 },
       );
+    }
+    if (tier) {
+      const rating = await officialGetRating(tier.accessToken, id);
+      meta.yourLike = rating.ok
+        ? rating.data.rating === "like"
+          ? "like"
+          : rating.data.rating === "dislike"
+            ? "dislike"
+            : null
+        : null;
     }
     return NextResponse.json(meta, { headers });
   } catch {
