@@ -66,10 +66,15 @@ export async function POST(req: NextRequest) {
       typeof body.subscriberCount === "number" && Number.isFinite(body.subscriberCount)
         ? body.subscriberCount
         : null;
+    // P35 — the watch page passes the video it's on so a successful write
+    // also drops the cached `next` response (the subscribeButton state
+    // survives a reload); other callers simply omit it
+    const videoId = typeof body.videoId === "string" && body.videoId ? body.videoId : null;
     const result = await proxySubscriptionStateMachine(
       channelId,
       bellRaw as "all" | "personalized" | "none" | "off" | undefined,
-      countBaseline
+      countBaseline,
+      { videoId },
     );
     return json(result);
   } catch (e) {

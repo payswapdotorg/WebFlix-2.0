@@ -212,6 +212,30 @@ export async function cachePeek<T>(
   return null;
 }
 
+/**
+ * P35 — targeted invalidation: drop the key from BOTH layers (L1 delete +
+ * best-effort L2 DEL). The write paths call this after a successful
+ * server-side YouTube action so the next read re-fetches the truth instead
+ * of serving a stale cached copy (e.g. `yt:watch:<id>` after a like — the
+ * cached `next` response carries the viewer's likeStatusEntity). Never
+ * throws: the cache must never break the write it observes.
+ */
+export async function cacheInvalidate(key: string): Promise<void> {
+  l1.delete(key);
+  inflight.delete(key);
+  revalidating.delete(key);
+  if (l2Active()) {
+    const rest = activeRest();
+    if (rest) {
+      try {
+        await rest([["DEL", key]]);
+      } catch {
+        /* best-effort; the L1 copy is already gone on this instance */
+      }
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // The resilient cache engine — L1 + L2 + SWR + last-good + in-flight dedupe
 // ---------------------------------------------------------------------------

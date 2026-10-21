@@ -80,7 +80,9 @@ describe("subscribeChannel (direct, mocked fetch)", () => {
     expect(r.ok).toBe(true);
     expect(calls).toHaveLength(1);
     const { url, init } = calls[0];
-    expect(url).toBe("https://www.youtube.com/youtubei/v1/subscription/subscribe?prettyPrint=false");
+    expect(url).toBe(
+      "https://www.youtube.com/youtubei/v1/subscription/subscribe?prettyPrint=false",
+    );
     const headers = init.headers as Record<string, string>;
     const expected = sapisidhash("fake-sapisid-xyz", Math.floor(now / 1000));
     expect(headers["Authorization"]).toBe(`SAPISIDHASH ${expected}`);
@@ -108,7 +110,8 @@ describe("subscribeChannel (direct, mocked fetch)", () => {
   });
 
   test("non-2xx → ok:false with the status", async () => {
-    globalThis.fetch = (async () => new Response("nope", { status: 403 })) as unknown as typeof fetch;
+    globalThis.fetch = (async () =>
+      new Response("nope", { status: 403 })) as unknown as typeof fetch;
     const r = await subscribeChannel("UC1", true);
     expect(r.ok).toBe(false);
     expect(r.status).toBe(403);
@@ -128,7 +131,8 @@ describe("getSubscribedState (SSR truth, mocked fetch)", () => {
     expect(await getSubscribedState("UC1")).toBe(false);
   });
   test("null when the marker is absent or the fetch fails", async () => {
-    globalThis.fetch = (async () => new Response("<html>no data</html>")) as unknown as typeof fetch;
+    globalThis.fetch = (async () =>
+      new Response("<html>no data</html>")) as unknown as typeof fetch;
     expect(await getSubscribedState("UC1")).toBeNull();
     globalThis.fetch = (async () => {
       throw new TypeError("fetch failed");
@@ -160,8 +164,11 @@ describe("P33 buildLikeParams (the captured templates, byte-exact)", () => {
     // the timestamp varint slot (bytes 20-24) refreshed to the fixed clock
     const ts = Math.floor(fixedNow / 1000);
     const decoded =
-      (buf[20] & 0x7f) | ((buf[21] & 0x7f) << 7) | ((buf[22] & 0x7f) << 14) |
-      ((buf[23] & 0x7f) << 21) | (buf[24] << 28);
+      (buf[20] & 0x7f) |
+      ((buf[21] & 0x7f) << 7) |
+      ((buf[22] & 0x7f) << 14) |
+      ((buf[23] & 0x7f) << 21) |
+      (buf[24] << 28);
     expect(decoded).toBe(ts);
   });
 
@@ -231,12 +238,95 @@ describe("P33 rateVideo (direct, mocked fetch)", () => {
   });
 });
 
+describe("P35 rateVideo hardening — the cold-start 400 retry + the transient network catch", () => {
+  test("the cold-start 400: first attempt 400, retry 200 → ok (ONE retry, the wire-probe law)", async () => {
+    let attempt = 0;
+    globalThis.fetch = (async () => {
+      attempt += 1;
+      return new Response("{}", {
+        status: attempt === 1 ? 400 : 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+    const r = await rateVideo("dQw4w9WgXcQ", "like");
+    expect(r.ok).toBe(true);
+    expect(attempt).toBe(2); // exactly one retry — never a storm
+  });
+
+  test("400 on BOTH attempts → ok:false with status 400 (honest exhaustion)", async () => {
+    let attempt = 0;
+    globalThis.fetch = (async () => {
+      attempt += 1;
+      return new Response("{}", { status: 400 });
+    }) as unknown as typeof fetch;
+    const r = await rateVideo("dQw4w9WgXcQ", "like");
+    expect(r.ok).toBe(false);
+    expect(r.status).toBe(400);
+    expect(r.error).toContain("400");
+    expect(attempt).toBe(2);
+  });
+
+  test("401 (the session class) NEVER retries — immediate honest failure", async () => {
+    let attempt = 0;
+    globalThis.fetch = (async () => {
+      attempt += 1;
+      return new Response("{}", { status: 401 });
+    }) as unknown as typeof fetch;
+    const r = await rateVideo("dQw4w9WgXcQ", "like");
+    expect(r.ok).toBe(false);
+    expect(r.status).toBe(401);
+    expect(attempt).toBe(1);
+  });
+
+  test("a transient network throw on attempt 1 → one retry, then 200 → ok", async () => {
+    let attempt = 0;
+    globalThis.fetch = (async () => {
+      attempt += 1;
+      if (attempt === 1) throw new Error("ECONNRESET transient");
+      return new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
+    }) as unknown as typeof fetch;
+    const r = await rateVideo("dQw4w9WgXcQ", "like");
+    expect(r.ok).toBe(true);
+    expect(attempt).toBe(2);
+  });
+
+  test("network throws on BOTH attempts → ok:false with the network-error class (never a raw exception)", async () => {
+    let attempt = 0;
+    globalThis.fetch = (async () => {
+      attempt += 1;
+      throw new Error("socket hang up");
+    }) as unknown as typeof fetch;
+    const r = await rateVideo("dQw4w9WgXcQ", "like");
+    expect(r.ok).toBe(false);
+    expect(r.status).toBe(0);
+    expect(r.error).toContain("network error");
+    expect(attempt).toBe(2);
+  });
+
+  test("the retry refreshes the SAPISIDHASH timestamp (a stale ts could itself 400)", async () => {
+    const statuses = [400, 200];
+    const seenAuth: string[] = [];
+    globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(_url), init: init ?? {} });
+      seenAuth.push((init?.headers as Record<string, string>).Authorization);
+      return new Response("{}", {
+        status: statuses.shift() ?? 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+    const r = await rateVideo("dQw4w9WgXcQ", "like");
+    expect(r.ok).toBe(true);
+    expect(seenAuth).toHaveLength(2);
+    expect(seenAuth[0]).not.toBe(seenAuth[1]); // the ts moved between attempts
+  });
+});
+
 describe("P33 editPlaylistMembership (direct, mocked fetch)", () => {
   test("add: browse/edit_playlist with ACTION_ADD_VIDEO + addedVideoId + videoId (the broker's verified wire)", async () => {
     const r = await editPlaylistMembership("WL", "dQw4w9WgXcQ", true, { now: 1_761_000_000_000 });
     expect(r.ok).toBe(true);
     expect(String(calls[0].url)).toBe(
-      "https://www.youtube.com/youtubei/v1/browse/edit_playlist?prettyPrint=false"
+      "https://www.youtube.com/youtubei/v1/browse/edit_playlist?prettyPrint=false",
     );
     const headers = calls[0].init.headers as Record<string, string>;
     expect(headers.Authorization).toMatch(/^SAPISIDHASH /);

@@ -36,6 +36,12 @@ const CLIENT_VERSION = "2.20260925.00.00";
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
+// P35 — the viewer's like state rides the same `next` entity mutations the
+// watch page parses (likeStatusEntity in frameworkUpdates; verified live
+// 2026-10-21). Reusing the watch mapper's verified parser — no duplication.
+import { likeStatusFromResponse } from "./watch";
+import type { LikeValue } from "@/lib/watch/types";
+
 function cookieHeader(): string | undefined {
   const raw = process.env.YT_COOKIES;
   if (!raw) return undefined;
@@ -91,10 +97,7 @@ async function postInnerTube(
     cache: "no-store",
   });
   if (!res.ok) {
-    throw new InnerTubeReelError(
-      `InnerTube ${path} → HTTP ${res.status}`,
-      res.status,
-    );
+    throw new InnerTubeReelError(`InnerTube ${path} → HTTP ${res.status}`, res.status);
   }
   return (await res.json()) as Record<string, unknown>;
 }
@@ -149,6 +152,12 @@ export type ShortDTO = {
   likesText: string | null;
   commentsCountText: string | null;
   thumbnailUrl: string | null;
+  /**
+   * P35 — the viewer's rating from the per-short `next` response
+   * (likeStatusEntity; session-gated). Absent on wall tiles (sequence
+   * entries carry no entity mutations) → the rail keeps its null default.
+   */
+  yourLike?: LikeValue | null;
   /**
    * 2026-10-16 operator pass — LIVE shorts. youtube.com's shorts surfaces
    * mix live vertical streams into the feed (the mobile app's "browse
@@ -208,9 +217,7 @@ export type ShortsFeedDTO = {
 type Json = Record<string, unknown>;
 
 function asObj(v: unknown): Json | null {
-  return typeof v === "object" && v !== null && !Array.isArray(v)
-    ? (v as Json)
-    : null;
+  return typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Json) : null;
 }
 
 function arr(v: unknown): unknown[] {
@@ -236,9 +243,10 @@ export function runsToText(v: unknown): string {
  * "🎧 Lofi Hip-Hop Radio 🌙 24/7 Live | Chill Beats, 816 views - play Short"
  * → { title: "🎧 Lofi … Beats", viewsText: "816 views" }
  */
-export function splitAccessibilityText(
-  accessibilityText: string,
-): { title: string; viewsText: string | null } {
+export function splitAccessibilityText(accessibilityText: string): {
+  title: string;
+  viewsText: string | null;
+} {
   const text = accessibilityText.trim();
   const m = text.match(/^(.*),\s*([\d.,]+\s*(?:views|view|watching now))\s*-\s*play Short$/i);
   if (m) return { title: m[1].trim(), viewsText: m[2].trim() };
@@ -255,9 +263,7 @@ export function mapShortsLockup(lockup: unknown): ShortDTO | null {
   const vm = asObj(asObj(lockup)?.shortsLockupViewModel);
   if (!vm) return null;
   const entityId = typeof vm.entityId === "string" ? vm.entityId : "";
-  const onTap = asObj(
-    asObj(asObj(vm.onTap)?.innertubeCommand)?.reelWatchEndpoint,
-  );
+  const onTap = asObj(asObj(asObj(vm.onTap)?.innertubeCommand)?.reelWatchEndpoint);
   const videoId =
     (typeof onTap?.videoId === "string" ? onTap.videoId : "") ||
     entityId.replace(/^shorts-shelf-item-/, "");
@@ -265,9 +271,7 @@ export function mapShortsLockup(lockup: unknown): ShortDTO | null {
 
   // overlayMetadata: {primaryText: {content: title}, secondaryText: {content: views}}
   const overlay = asObj(vm.overlayMetadata);
-  const title =
-    asObj(overlay?.primaryText)?.content ??
-    asObj(overlay?.overlayText)?.primaryText;
+  const title = asObj(overlay?.primaryText)?.content ?? asObj(overlay?.overlayText)?.primaryText;
   let viewsText: string | null =
     (asObj(overlay?.secondaryText)?.content as string | undefined) ?? null;
 
@@ -288,8 +292,7 @@ export function mapShortsLockup(lockup: unknown): ShortDTO | null {
   // = { thumbnailViewModel: { image: { sources: […] } } }
   let thumbnailUrl: string | null = null;
   const sources = arr(
-    asObj(asObj(asObj(vm.thumbnailViewModel)?.thumbnailViewModel)?.image)
-      ?.sources,
+    asObj(asObj(asObj(vm.thumbnailViewModel)?.thumbnailViewModel)?.image)?.sources,
   );
   for (const s of sources) {
     const u = asObj(s)?.url;
@@ -323,19 +326,18 @@ export function mapShortsLockup(lockup: unknown): ShortDTO | null {
  * gridShelfViewModels inside itemSectionRenderers). Returns the mapped
  * DTOs and the first reelWatchEndpoint sequenceParams token found.
  */
-export function extractShortsFromSearch(
-  searchResponse: unknown,
-): { items: ShortDTO[]; sequenceParams: string | null } {
+export function extractShortsFromSearch(searchResponse: unknown): {
+  items: ShortDTO[];
+  sequenceParams: string | null;
+} {
   const root = asObj(searchResponse);
   const items: ShortDTO[] = [];
   let sequenceParams: string | null = null;
 
   const sections = arr(
     asObj(
-      asObj(
-        asObj(asObj(root?.contents)?.twoColumnSearchResultsRenderer)
-          ?.primaryContents,
-      )?.sectionListRenderer,
+      asObj(asObj(asObj(root?.contents)?.twoColumnSearchResultsRenderer)?.primaryContents)
+        ?.sectionListRenderer,
     )?.contents,
   );
   for (const sec of sections) {
@@ -350,10 +352,8 @@ export function extractShortsFromSearch(
         items.push(dto);
         if (!sequenceParams) {
           const ep = asObj(
-            asObj(
-              asObj(asObj(asObj(raw)?.shortsLockupViewModel)?.onTap)
-                ?.innertubeCommand,
-            )?.reelWatchEndpoint,
+            asObj(asObj(asObj(asObj(raw)?.shortsLockupViewModel)?.onTap)?.innertubeCommand)
+              ?.reelWatchEndpoint,
           );
           const sp = ep?.sequenceParams;
           if (typeof sp === "string" && sp) sequenceParams = sp;
@@ -395,19 +395,14 @@ export function extractSoundFromReelEntry(
   entry: unknown,
 ): { soundId: string; soundTitle: string; soundImageUrl: string | null } | null {
   const rwe = asObj(asObj(asObj(entry)?.command)?.reelWatchEndpoint);
-  const riw = asObj(
-    asObj(rwe?.unserializedPrefetchData)?.reelItemWatchResponse,
-  );
+  const riw = asObj(asObj(rwe?.unserializedPrefetchData)?.reelItemWatchResponse);
   if (!riw) return null;
 
   const overlayVm = asObj(
-    asObj(
-      asObj(asObj(riw.overlay)?.reelPlayerOverlayRenderer)?.playerOverlay,
-    )?.reelPlayerOverlayViewModel,
+    asObj(asObj(asObj(riw.overlay)?.reelPlayerOverlayRenderer)?.playerOverlay)
+      ?.reelPlayerOverlayViewModel,
   );
-  const actionBar = asObj(
-    asObj(overlayVm?.actionBar)?.reelActionBarViewModel,
-  );
+  const actionBar = asObj(asObj(overlayVm?.actionBar)?.reelActionBarViewModel);
   const pivotRaw = arr(actionBar?.buttonViewModels).find((b) =>
     asObj(asObj(b)?.pivotButtonViewModel),
   );
@@ -433,9 +428,7 @@ export function extractSoundFromReelEntry(
     const grid = asObj(asObj(panel?.content)?.richGridRenderer);
     for (const c of arr(grid?.contents)) {
       const cir = asObj(asObj(c)?.continuationItemRenderer);
-      const token = asObj(
-        asObj(cir?.continuationEndpoint)?.continuationCommand,
-      )?.token;
+      const token = asObj(asObj(cir?.continuationEndpoint)?.continuationCommand)?.token;
       if (typeof token === "string" && token) {
         soundId = token;
         break;
@@ -458,9 +451,7 @@ export function extractSoundFromReelEntry(
  * LIVE signal — REEL_PLAYER_OVERLAY_STYLE_LIVE entries are live shorts (the
  * mobile feed's mechanism); anything else is a recorded short.
  */
-export function mapReelSequence(
-  sequenceResponse: unknown,
-): ShortsFeedDTO {
+export function mapReelSequence(sequenceResponse: unknown): ShortsFeedDTO {
   const root = asObj(sequenceResponse);
   const items: ShortDTO[] = [];
   for (const e of arr(root?.entries)) {
@@ -492,9 +483,7 @@ export function mapReelSequence(
       ...(sound ?? {}),
     });
   }
-  const token = asObj(
-    asObj(root?.continuationEndpoint)?.continuationCommand,
-  )?.token;
+  const token = asObj(asObj(root?.continuationEndpoint)?.continuationCommand)?.token;
   return {
     items,
     nextCursor: typeof token === "string" && token ? token : null,
@@ -512,16 +501,12 @@ export function reelSequenceBody(sequenceParams: string): Record<string, unknown
 
 function commentsTokenFromNext(nextResponse: unknown): string | null {
   const root = asObj(nextResponse);
-  const results = asObj(
-    asObj(asObj(root?.contents)?.twoColumnWatchNextResults)?.results,
-  );
+  const results = asObj(asObj(asObj(root?.contents)?.twoColumnWatchNextResults)?.results);
   for (const c of arr(asObj(results?.results)?.contents)) {
     const isr = asObj(asObj(c)?.itemSectionRenderer);
     if (!isr || isr.sectionIdentifier !== "comment-item-section") continue;
     const cir = asObj(asObj(arr(isr.contents)[0])?.continuationItemRenderer);
-    const token = asObj(
-      asObj(cir?.continuationEndpoint)?.continuationCommand,
-    )?.token;
+    const token = asObj(asObj(cir?.continuationEndpoint)?.continuationCommand)?.token;
     if (typeof token === "string" && token) return token;
   }
   return null;
@@ -535,9 +520,7 @@ function commentsTokenFromNext(nextResponse: unknown): string | null {
  * (commentViewModel + entity payloads in frameworkUpdates) /
  * continuationItemRenderer (next page token).
  */
-export function mapCommentsPage(
-  commentsResponse: unknown,
-): {
+export function mapCommentsPage(commentsResponse: unknown): {
   comments: ShortCommentDTO[];
   commentsCountText: string | null;
   nextToken: string | null;
@@ -549,9 +532,7 @@ export function mapCommentsPage(
 
   // entity payloads by key (commentEntityPayload / toolbar states)
   const entities = new Map<string, Json>();
-  for (const m of arr(
-    asObj(asObj(root?.frameworkUpdates)?.entityBatchUpdate)?.mutations,
-  )) {
+  for (const m of arr(asObj(asObj(root?.frameworkUpdates)?.entityBatchUpdate)?.mutations)) {
     const payload = asObj(asObj(m)?.payload);
     for (const key of Object.keys(payload ?? {})) {
       const entity = asObj(payload?.[key]);
@@ -600,40 +581,34 @@ export function mapCommentsPage(
 
         comments.push({
           id: commentId,
-          body: asObj(props?.content)?.content as string | undefined ?? "",
+          body: (asObj(props?.content)?.content as string | undefined) ?? "",
           authorName:
             (author?.displayName as string | undefined) ??
             (props?.authorButtonA11y as string | undefined) ??
             "unknown",
           authorHandle:
-            typeof props?.authorButtonA11y === "string" &&
-            props.authorButtonA11y.startsWith("@")
+            typeof props?.authorButtonA11y === "string" && props.authorButtonA11y.startsWith("@")
               ? props.authorButtonA11y
               : null,
-          authorAvatarUrl:
-            (author?.avatarThumbnailUrl as string | undefined) ?? null,
-          authorChannelId:
-            (author?.channelId as string | undefined) ?? null,
+          authorAvatarUrl: (author?.avatarThumbnailUrl as string | undefined) ?? null,
+          authorChannelId: (author?.channelId as string | undefined) ?? null,
           isVerified: author?.isVerified === true,
-          publishedTime:
-            (props?.publishedTime as string | undefined) ?? null,
+          publishedTime: (props?.publishedTime as string | undefined) ?? null,
           likesText:
-            (asObj(asObj(toolbarState?.likeCountIfIndifferent)?.likeCountButton)
-              ?.content as string | undefined) ??
+            (asObj(asObj(toolbarState?.likeCountIfIndifferent)?.likeCountButton)?.content as
+              | string
+              | undefined) ??
             (toolbarState?.likeCountIfIndifferentText as string | undefined) ??
             null,
           replyCount: replyMatch ? Number(replyMatch[1].replace(/,/g, "")) : 0,
-          heartedByCreator:
-            toolbarState?.heartState === "TOOLBAR_HEART_STATE_HEARTED",
+          heartedByCreator: toolbarState?.heartState === "TOOLBAR_HEART_STATE_HEARTED",
           pinned: typeof cvm?.pinnedText === "string",
         });
         continue;
       }
       const cir = asObj(asObj(item)?.continuationItemRenderer);
       if (cir) {
-        const token = asObj(
-          asObj(cir.continuationEndpoint)?.continuationCommand,
-        )?.token;
+        const token = asObj(asObj(cir.continuationEndpoint)?.continuationCommand)?.token;
         if (typeof token === "string" && token) nextToken = token;
       }
     }
@@ -658,9 +633,7 @@ export async function getShortMeta(
   }
 
   const root = asObj(nextRes);
-  const results = asObj(
-    asObj(asObj(root?.contents)?.twoColumnWatchNextResults)?.results,
-  );
+  const results = asObj(asObj(asObj(root?.contents)?.twoColumnWatchNextResults)?.results);
   const list = arr(asObj(results?.results)?.contents);
 
   let title = "";
@@ -704,10 +677,11 @@ export async function getShortMeta(
           "";
         const url =
           (typeof ownerUrl === "string" ? ownerUrl : undefined) ??
-          ((asObj(asObj(run0?.navigationEndpoint)?.commandMetadata)
-            ?.webCommandMetadata as Json | undefined)?.url as
-            | string
-            | undefined);
+          ((
+            asObj(asObj(run0?.navigationEndpoint)?.commandMetadata)?.webCommandMetadata as
+              | Json
+              | undefined
+          )?.url as string | undefined);
         if (typeof url === "string" && url.startsWith("/@")) {
           // "/@RickAstleyYT" → "RickAstleyYT" (app convention: bare handles,
           // links /channel/<handle> — matches the demo seed + ChannelLite)
@@ -721,9 +695,7 @@ export async function getShortMeta(
   }
 
   // likeCountEntity mutations (verified: likeCountIfLiked.content "768K")
-  const mutations = arr(
-    asObj(asObj(root?.frameworkUpdates)?.entityBatchUpdate)?.mutations,
-  );
+  const mutations = arr(asObj(asObj(root?.frameworkUpdates)?.entityBatchUpdate)?.mutations);
   for (const mRaw of mutations) {
     const payload = asObj(asObj(mRaw)?.payload);
     const likeEntity = asObj(payload?.likeCountEntity);
@@ -748,10 +720,7 @@ export async function getShortMeta(
   let commentsNextToken: string | null = null;
   if (commentsToken) {
     try {
-      const commentsRes = await callNextForShort(
-        { continuation: commentsToken },
-        fetcher,
-      );
+      const commentsRes = await callNextForShort({ continuation: commentsToken }, fetcher);
       const page = mapCommentsPage(commentsRes);
       comments = page.comments;
       commentsCountText = page.commentsCountText;
@@ -777,6 +746,9 @@ export async function getShortMeta(
     likesText,
     commentsCountText,
     thumbnailUrl: `https://i.ytimg.com/vi/${videoId}/oardefault.jpg`,
+    // P35 — the viewer's rating from the SAME `next` response the meta comes
+    // from (likeStatusEntity; session-gated — public mode honestly null)
+    yourLike: cookieHeader() ? likeStatusFromResponse(root, videoId) : null,
     dateText,
     comments,
     commentsNextToken,
@@ -794,19 +766,13 @@ const SHORTS_SEED_QUERY = process.env.SHORTS_SEED_QUERY ?? "viral shorts";
  * Seed page: search → shorts shelf lockups (with title/views) + kick the
  * sequence for the next cursor. Cached 5 minutes (architecture: feeds 5m).
  */
-export async function getShortsSeed(
-  fetcher: typeof fetch = fetch,
-): Promise<ShortsFeedDTO> {
+export async function getShortsSeed(fetcher: typeof fetch = fetch): Promise<ShortsFeedDTO> {
   const searchRes = await callSearchForShorts(SHORTS_SEED_QUERY, fetcher);
   const { items, sequenceParams } = extractShortsFromSearch(searchRes);
   let nextCursor: string | null = null;
   if (sequenceParams) {
     try {
-      const seq = await callReel(
-        "reel_watch_sequence",
-        reelSequenceBody(sequenceParams),
-        fetcher,
-      );
+      const seq = await callReel("reel_watch_sequence", reelSequenceBody(sequenceParams), fetcher);
       nextCursor = mapReelSequence(seq).nextCursor;
     } catch {
       nextCursor = sequenceParams; // sequence token still usable as cursor
@@ -831,10 +797,6 @@ export async function getShortsPage(
   cursor: string,
   fetcher: typeof fetch = fetch,
 ): Promise<ShortsFeedDTO> {
-  const seq = await callReel(
-    "reel_watch_sequence",
-    reelSequenceBody(cursor),
-    fetcher,
-  );
+  const seq = await callReel("reel_watch_sequence", reelSequenceBody(cursor), fetcher);
   return mapReelSequence(seq);
 }

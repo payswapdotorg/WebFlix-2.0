@@ -26,6 +26,7 @@ export function SubscribeButton({
   initialBell,
   subscriberCount,
   guest = false,
+  videoId,
   onCountChange,
 }: {
   channelId: string;
@@ -37,6 +38,9 @@ export function SubscribeButton({
   subscriberCount?: number;
   /** WFX2-P2-AU: no WebFlix account → the click routes to the sign-in prompt */
   guest?: boolean;
+  /** P35 — the watch page's video: threads the post-write watch-cache
+   * invalidation so the subscribeButton state survives a reload */
+  videoId?: string;
   onCountChange?: (n: number) => void;
 }) {
   const [subscribed, setSubscribed] = useState(initialSubscribed);
@@ -59,6 +63,7 @@ export function SubscribeButton({
         channelId,
         bell: bellValue,
         ...(typeof subscriberCount === "number" ? { subscriberCount } : {}),
+        ...(videoId ? { videoId } : {}),
       });
       setSubscribed(result.subscribed);
       setBell(result.bell);
@@ -125,7 +130,11 @@ export function SubscribeButton({
 
       {menuOpen && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} aria-hidden="true" />
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setMenuOpen(false)}
+            aria-hidden="true"
+          />
           <div
             role="menu"
             aria-label="Notifications"
@@ -149,7 +158,13 @@ export function SubscribeButton({
                 onClick={() => apply(value)}
                 className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm hover:bg-accent"
               >
-                <Icon className={cn("size-4", bell === value ? "text-foreground" : "text-muted-foreground")} aria-hidden="true" />
+                <Icon
+                  className={cn(
+                    "size-4",
+                    bell === value ? "text-foreground" : "text-muted-foreground",
+                  )}
+                  aria-hidden="true"
+                />
                 {label}
                 {bell === value && <Check className="ml-auto size-4" aria-hidden="true" />}
               </button>
@@ -160,7 +175,11 @@ export function SubscribeButton({
 
       {confirmOpen && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setConfirmOpen(false)} aria-hidden="true" />
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setConfirmOpen(false)}
+            aria-hidden="true"
+          />
           <div
             role="dialog"
             aria-label="Unsubscribe"

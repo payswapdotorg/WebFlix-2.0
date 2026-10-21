@@ -11,7 +11,7 @@
  * - tests/fixtures/yt/next_dQw4.json + comments_dQw4.json — REAL watch-next
  *   + comments captures (per-short metadata + first comments page).
  */
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import {
   extractShortsFromSearch,
   getShortMeta,
@@ -23,13 +23,9 @@ import {
 } from "@/lib/youtube/shorts";
 
 const searchLofi = await Bun.file("tests/fixtures/yt/search_lofi.json").json();
-const reelSeq = await Bun.file(
-  "tests/fixtures/yt/reel_sequence_synth.json",
-).json();
+const reelSeq = await Bun.file("tests/fixtures/yt/reel_sequence_synth.json").json();
 const nextDQw4 = await Bun.file("tests/fixtures/yt/next_dQw4.json").json();
-const commentsDQw4 = await Bun.file(
-  "tests/fixtures/yt/comments_dQw4.json",
-).json();
+const commentsDQw4 = await Bun.file("tests/fixtures/yt/comments_dQw4.json").json();
 
 describe("shorts seed extraction — REAL search_lofi fixture", () => {
   const { items, sequenceParams } = extractShortsFromSearch(searchLofi);
@@ -186,8 +182,7 @@ describe("getShortMeta — REAL next_dQw4 + comments_dQw4 via stubbed fetcher", 
   });
 
   test("returns null when next() fails", async () => {
-    const fetcher = (async () =>
-      new Response("{}", { status: 500 })) as unknown as typeof fetch;
+    const fetcher = (async () => new Response("{}", { status: 500 })) as unknown as typeof fetch;
     expect(await getShortMeta("dQw4w9WgXcQ", fetcher)).toBeNull();
   });
 
@@ -206,5 +201,83 @@ describe("getShortMeta — REAL next_dQw4 + comments_dQw4 via stubbed fetcher", 
     expect(meta).not.toBeNull();
     expect(meta!.title).toContain("Never Gonna Give You Up");
     expect(meta!.comments).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P35 — the shorts rail's like state (yourLike from likeStatusEntity)
+// ---------------------------------------------------------------------------
+
+describe("P35 getShortMeta — yourLike bootstraps from the next entity mutations", () => {
+  afterEach(() => {
+    delete process.env.YT_COOKIES;
+  });
+
+  const likedNext = () => {
+    const base = structuredClone(nextDQw4);
+    for (const m of base.frameworkUpdates?.entityBatchUpdate?.mutations ?? []) {
+      if (m?.payload?.likeStatusEntity) m.payload.likeStatusEntity.likeStatus = "LIKE";
+    }
+    return base;
+  };
+
+  test("public mode: yourLike null (never a fabricated rating)", async () => {
+    delete process.env.YT_COOKIES;
+    const fetcher = (async () =>
+      new Response(JSON.stringify(nextDQw4), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })) as unknown as typeof fetch;
+    const meta = await getShortMeta("dQw4w9WgXcQ", fetcher);
+    expect(meta!.yourLike).toBeNull();
+  });
+
+  test("session + LIKE entity → yourLike 'like' (the reload-persistence read)", async () => {
+    process.env.YT_COOKIES = "SAPISID=fake_sapisid; VISITOR_INFO1_LIVE=x";
+    const next = likedNext();
+    let nextCall = 0;
+    const fetcher = (async (url: string | URL | Request) => {
+      const u = String(url);
+      if (u.includes("/next")) {
+        nextCall += 1;
+        if (nextCall === 1) {
+          return new Response(JSON.stringify(next), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify(commentsDQw4), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response("{}", { status: 500 });
+    }) as unknown as typeof fetch;
+    const meta = await getShortMeta("dQw4w9WgXcQ", fetcher);
+    expect(meta!.yourLike).toBe("like");
+  });
+
+  test("session + INDIFFERENT (the real captured fixture) → yourLike null", async () => {
+    process.env.YT_COOKIES = "SAPISID=fake_sapisid; VISITOR_INFO1_LIVE=x";
+    let nextCall = 0;
+    const fetcher = (async (url: string | URL | Request) => {
+      const u = String(url);
+      if (u.includes("/next")) {
+        nextCall += 1;
+        if (nextCall === 1) {
+          return new Response(JSON.stringify(nextDQw4), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify(commentsDQw4), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response("{}", { status: 500 });
+    }) as unknown as typeof fetch;
+    const meta = await getShortMeta("dQw4w9WgXcQ", fetcher);
+    expect(meta!.yourLike).toBeNull();
   });
 });

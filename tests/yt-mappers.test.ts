@@ -3,7 +3,7 @@
  * WFX2-A-B mapper tests — pure functions against the recorded fixtures in
  * tests/fixtures/yt/ (real youtube.com responses; never the network).
  */
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, afterEach } from "bun:test";
 import { readFileSync } from "node:fs";
 
 import {
@@ -31,7 +31,16 @@ import {
 import { mapRelatedPage } from "@/lib/youtube/related";
 import { mapAutoplay } from "@/lib/youtube/autoplay";
 import { commentsTokenFromWatchResponse, mapCommentsPage } from "@/lib/youtube/comments";
-import { mapWatchMetadata } from "@/lib/youtube/watch";
+import {
+  mapWatchMetadata,
+  likeStatusFromResponse,
+  getVideoDetail,
+  invalidateWatchCache,
+  WATCH_CACHE_KEY,
+} from "@/lib/youtube/watch";
+import { setUpstream } from "@/lib/youtube/innertube";
+import { clearCache } from "@/lib/youtube/cache";
+import { cacheJsonSet, cachePeek } from "@/lib/youtube/upstash-cache";
 import { mapHomeShelves } from "@/lib/youtube/feeds";
 import { extractYtInitialData } from "@/lib/youtube/ssr";
 import { parseAutocomplete } from "@/lib/youtube/suggest";
@@ -173,9 +182,7 @@ describe("search_lofi fixture → VideoDTOs", () => {
   });
 
   test("raw videoRenderer mapper (title via runs, owner badges → verified)", () => {
-    const raw = walkTree(response, "videoRenderer").find(
-      (r: any) => r.videoId === "BYTxPFj44uo"
-    )!;
+    const raw = walkTree(response, "videoRenderer").find((r: any) => r.videoId === "BYTxPFj44uo")!;
     const dto = mapVideoRenderer(raw)!;
     expect(dto.title).toContain("Why the rush?");
     expect(dto.channel.verified).toBe(true); // BADGE_STYLE_TYPE_VERIFIED_ARTIST
@@ -193,7 +200,7 @@ describe("next_dQw4 fixture → watch metadata", () => {
 
   test("title / views / likes / dates come from the real response", () => {
     expect(meta.video.title).toBe(
-      "Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)"
+      "Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)",
     );
     expect(meta.video.views).toBe(1_821_187_782);
     expect(meta.video.viewsText).toBe("1,821,187,782 views");
@@ -350,9 +357,10 @@ describe("appendContinuationItemsAction — top-level page 2+ shape (thread enve
     // as appendContinuationItemsAction (targetId "comments-section"), still
     // with commentThreadRenderer envelopes — reusing the real fixture's rows
     const real = load("comments_dQw4");
-    const threads = real.onResponseReceivedEndpoints[1].reloadContinuationItemsCommand.continuationItems.filter(
-      (it: any) => it.commentThreadRenderer,
-    );
+    const threads =
+      real.onResponseReceivedEndpoints[1].reloadContinuationItemsCommand.continuationItems.filter(
+        (it: any) => it.commentThreadRenderer,
+      );
     const synthetic = {
       frameworkUpdates: real.frameworkUpdates,
       onResponseReceivedEndpoints: [
@@ -412,7 +420,7 @@ describe("ssr_trending fixture → rail", () => {
 
   test("raw lockup mapper", () => {
     const raw = walkTree(response, "lockupViewModel").find(
-      (l: any) => l.contentId === "h_D3VFfhvs4"
+      (l: any) => l.contentId === "h_D3VFfhvs4",
     )!;
     const dto = mapLockupViewModel(raw)!;
     expect(dto.id).toBe("h_D3VFfhvs4");
@@ -483,7 +491,7 @@ describe("SSR ytInitialData extraction", () => {
   test("the verified regex pulls the JSON out of page HTML", () => {
     const data = { contents: { hello: "world" }, deep: [1, 2, 3] };
     const html = `<!doctype html><html><script>var ytInitialData = ${JSON.stringify(
-      data
+      data,
     )};</script><script>other stuff</script></html>`;
     expect(extractYtInitialData(html)).toEqual(data);
   });
@@ -543,7 +551,7 @@ describe("search filter params (base64 protobuf)", () => {
 
   test("loose query params: unknown values are ignored", () => {
     expect(
-      parseSearchFilters({ sort: "bogus", uploadDate: "today", duration: "x", type: "video" })
+      parseSearchFilters({ sort: "bogus", uploadDate: "today", duration: "x", type: "video" }),
     ).toEqual({ uploadDate: "today", type: "video" });
   });
 });
@@ -577,7 +585,9 @@ describe("premiere scheduled-start parsing (scheduledStartToDate)", () => {
 describe("upcoming renderer detection (isUpcomingFromRenderer)", () => {
   const UPCOMING_RENDERER = {
     thumbnailOverlays: [
-      { thumbnailOverlayTimeStatusRenderer: { style: "UPCOMING", text: { simpleText: "Upcoming" } } },
+      {
+        thumbnailOverlayTimeStatusRenderer: { style: "UPCOMING", text: { simpleText: "Upcoming" } },
+      },
     ],
   };
   test("the UPCOMING thumbnail overlay style marks an upcoming stream", () => {
@@ -587,7 +597,7 @@ describe("upcoming renderer detection (isUpcomingFromRenderer)", () => {
     expect(
       isUpcomingFromRenderer({
         thumbnailOverlays: [{ thumbnailOverlayTimeStatusRenderer: { style: "LIVE" } }],
-      })
+      }),
     ).toBe(false);
     expect(isUpcomingFromRenderer({ thumbnailOverlays: [] })).toBe(false);
     expect(isUpcomingFromRenderer(null)).toBe(false);
@@ -630,8 +640,8 @@ describe("P21: search renderers → premieredAt (search_premiere fixture)", () =
     const upcoming = videos.find((v) => v.id === "JWvUZX_RXKY")!;
     const again = mapVideoRenderer(
       walkTree(load("search_premiere"), "videoRenderer").find(
-        (r: any) => r.videoId === upcoming.id
-      )
+        (r: any) => r.videoId === upcoming.id,
+      ),
     );
     expect(again?.premieredAt).toBe(upcoming.premieredAt);
     expect(again?.isLive).toBe(false);
@@ -653,5 +663,260 @@ describe("P21: watch `next` → premieredAt (next_premiere fixture)", () => {
     expect(meta.video.premieredAt).toBeNull();
     expect(meta.video.publishedText).toBe("16 years ago");
     expect(meta.video.createdAt).toBe("2009-10-25T00:00:00.000Z");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P35 — the like-state read (likeStatusEntity) + the watch-later bootstrap
+// ---------------------------------------------------------------------------
+
+describe("P35 likeStatusFromResponse — the viewer's rating from the next entity mutations", () => {
+  test("the REAL captured fixture: INDIFFERENT for dQw4 (public-mode capture)", () => {
+    expect(likeStatusFromResponse(load("next_dQw4"), "dQw4w9WgXcQ")).toBeNull();
+  });
+
+  test("the live-probed key shape (jNQXAC9IVRw, 2026-10-21) decodes and matches", () => {
+    // the exact key the live probe returned: URL-encoded base64 embedding the id
+    const response = {
+      frameworkUpdates: {
+        entityBatchUpdate: {
+          mutations: [
+            {
+              payload: {
+                likeStatusEntity: { key: "EgtqTlFYQUM5SVZSdyA-KAE%3D", likeStatus: "INDIFFERENT" },
+              },
+            },
+          ],
+        },
+      },
+    };
+    expect(likeStatusFromResponse(response, "jNQXAC9IVRw")).toBeNull();
+    // the same entity with LIKE → the rating
+    response.frameworkUpdates.entityBatchUpdate.mutations[0].payload.likeStatusEntity.likeStatus =
+      "LIKE";
+    expect(likeStatusFromResponse(response, "jNQXAC9IVRw")).toBe("like");
+    // and DISLIKE
+    response.frameworkUpdates.entityBatchUpdate.mutations[0].payload.likeStatusEntity.likeStatus =
+      "DISLIKE";
+    expect(likeStatusFromResponse(response, "jNQXAC9IVRw")).toBe("dislike");
+  });
+
+  test("LIKE → like, DISLIKE → dislike (mutated real fixture)", () => {
+    const base = load("next_dQw4");
+    const withLike = structuredClone(base);
+    for (const m of withLike.frameworkUpdates.entityBatchUpdate.mutations) {
+      if (m?.payload?.likeStatusEntity) m.payload.likeStatusEntity.likeStatus = "LIKE";
+    }
+    expect(likeStatusFromResponse(withLike, "dQw4w9WgXcQ")).toBe("like");
+    const withDislike = structuredClone(base);
+    for (const m of withDislike.frameworkUpdates.entityBatchUpdate.mutations) {
+      if (m?.payload?.likeStatusEntity) m.payload.likeStatusEntity.likeStatus = "DISLIKE";
+    }
+    expect(likeStatusFromResponse(withDislike, "dQw4w9WgXcQ")).toBe("dislike");
+  });
+
+  test("no frameworkUpdates / no mutations → null (never a guess)", () => {
+    expect(likeStatusFromResponse({}, "dQw4w9WgXcQ")).toBeNull();
+    expect(likeStatusFromResponse({ frameworkUpdates: {} }, "dQw4w9WgXcQ")).toBeNull();
+    expect(
+      likeStatusFromResponse(
+        { frameworkUpdates: { entityBatchUpdate: { mutations: [] } } },
+        "dQw4w9WgXcQ",
+      ),
+    ).toBeNull();
+  });
+
+  test("an entity keyed to a DIFFERENT video never answers for this one", () => {
+    const response = {
+      frameworkUpdates: {
+        entityBatchUpdate: {
+          mutations: [
+            // key embeds jNQXAC9IVRw, LIKE — but we asked about dQw4
+            {
+              payload: {
+                likeStatusEntity: { key: "EgtqTlFYQUM5SVZSdyA-KAE%3D", likeStatus: "LIKE" },
+              },
+            },
+          ],
+        },
+      },
+    };
+    expect(likeStatusFromResponse(response, "dQw4w9WgXcQ")).toBeNull();
+  });
+
+  test("a corrupt key degrades to null (decode failure, never a throw)", () => {
+    const response = {
+      frameworkUpdates: {
+        entityBatchUpdate: {
+          mutations: [
+            { payload: { likeStatusEntity: { key: "!!!not-base64!!!%", likeStatus: "LIKE" } } },
+          ],
+        },
+      },
+    };
+    expect(likeStatusFromResponse(response, "dQw4w9WgXcQ")).toBeNull();
+  });
+});
+
+describe("P35 mapWatchMetadata — state.like is session-gated, wired from the entity", () => {
+  const withLike = () => {
+    const base = structuredClone(load("next_dQw4"));
+    for (const m of base.frameworkUpdates.entityBatchUpdate.mutations) {
+      if (m?.payload?.likeStatusEntity) m.payload.likeStatusEntity.likeStatus = "LIKE";
+    }
+    return base;
+  };
+
+  afterEach(() => {
+    delete process.env.YT_COOKIES;
+  });
+
+  test("public mode (no YT_COOKIES): like stays null even when the entity says LIKE — never a fabricated state", () => {
+    delete process.env.YT_COOKIES;
+    const meta = mapWatchMetadata("dQw4w9WgXcQ", withLike());
+    expect(meta.state.like).toBeNull();
+  });
+
+  test("session configured: the entity's LIKE surfaces as state.like", () => {
+    process.env.YT_COOKIES = "SAPISID=fake_sapisid; VISITOR_INFO1_LIVE=x";
+    const meta = mapWatchMetadata("dQw4w9WgXcQ", withLike());
+    expect(meta.state.like).toBe("like");
+  });
+
+  test("session configured + INDIFFERENT (the real fixture) → null", () => {
+    process.env.YT_COOKIES = "SAPISID=fake_sapisid; VISITOR_INFO1_LIVE=x";
+    const meta = mapWatchMetadata("dQw4w9WgXcQ", load("next_dQw4"));
+    expect(meta.state.like).toBeNull();
+  });
+});
+
+describe("P35 getVideoDetail — the watch-later bootstrap + the cache invalidation seam", () => {
+  afterEach(() => {
+    setUpstream(null);
+    delete process.env.YT_COOKIES;
+    clearCache();
+  });
+
+  /** next → the real dQw4 fixture; browse VL… → a playlist page whose items we control. */
+  const makeUpstream = (playlistItems: Array<{ videoId: string }>) => {
+    const recorded: Array<{ url: string; body: any }> = [];
+    const next = load("next_dQw4");
+    // the lockupViewModel shape mapPlaylistItemsPage walks (the modern
+    // playlist page — same as the recorded playlist_browse fixtures)
+    const playlist = {
+      contents: {
+        twoColumnBrowseResultsRenderer: {
+          tabs: [
+            {
+              tabRenderer: {
+                selected: true,
+                content: {
+                  sectionListRenderer: {
+                    contents: [
+                      {
+                        itemSectionRenderer: {
+                          contents: [
+                            {
+                              playlistVideoListRenderer: {
+                                contents: playlistItems.map((it) => ({
+                                  lockupViewModel: {
+                                    contentId: it.videoId,
+                                    metadata: {
+                                      lockupMetadataViewModel: {
+                                        title: { content: "playlist item" },
+                                      },
+                                    },
+                                  },
+                                })),
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    };
+    const impl = async (url: string, init?: RequestInit): Promise<Response> => {
+      const body = init?.body ? JSON.parse(String(init.body)) : null;
+      recorded.push({ url, body });
+      if (url.includes("/youtubei/v1/next")) {
+        return new Response(JSON.stringify(next), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("/youtubei/v1/browse")) {
+        return new Response(JSON.stringify(playlist), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response("not found", { status: 404 });
+    };
+    return { impl, recorded };
+  };
+
+  test("public mode: savedWatchLater false and NO browse call (the env gate)", async () => {
+    delete process.env.YT_COOKIES;
+    const up = makeUpstream([{ videoId: "dQw4w9WgXcQ" }]);
+    setUpstream(up.impl);
+    const detail = await getVideoDetail("dQw4w9WgXcQ");
+    expect(detail).not.toBeNull();
+    expect(detail!.state.savedWatchLater).toBe(false);
+    // the WL read never fired — only the next() call
+    expect(up.recorded.filter((r) => r.url.includes("/browse"))).toHaveLength(0);
+  });
+
+  test("session + WL contains the video → savedWatchLater true", async () => {
+    process.env.YT_COOKIES = "SAPISID=fake_sapisid; VISITOR_INFO1_LIVE=x";
+    const up = makeUpstream([{ videoId: "someOtherVideo" }, { videoId: "dQw4w9WgXcQ" }]);
+    setUpstream(up.impl);
+    const detail = await getVideoDetail("dQw4w9WgXcQ");
+    expect(detail!.state.savedWatchLater).toBe(true);
+    // the WL read fired exactly once with the VLWL browseId
+    const browses = up.recorded.filter((r) => r.url.includes("/browse"));
+    expect(browses).toHaveLength(1);
+    expect(browses[0].body.browseId).toBe("VLWL");
+  });
+
+  test("session + WL without the video → savedWatchLater false", async () => {
+    process.env.YT_COOKIES = "SAPISID=fake_sapisid; VISITOR_INFO1_LIVE=x";
+    const up = makeUpstream([{ videoId: "someOtherVideo" }]);
+    setUpstream(up.impl);
+    const detail = await getVideoDetail("dQw4w9WgXcQ");
+    expect(detail!.state.savedWatchLater).toBe(false);
+  });
+
+  test("session + the WL read fails → honest false (the degrade)", async () => {
+    process.env.YT_COOKIES = "SAPISID=fake_sapisid; VISITOR_INFO1_LIVE=x";
+    const impl = async (url: string): Promise<Response> => {
+      if (url.includes("/youtubei/v1/next")) {
+        return new Response(JSON.stringify(load("next_dQw4")), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response("broken", { status: 500 });
+    };
+    setUpstream(impl);
+    const detail = await getVideoDetail("dQw4w9WgXcQ");
+    expect(detail).not.toBeNull();
+    expect(detail!.state.savedWatchLater).toBe(false);
+  });
+
+  test("invalidateWatchCache drops the primed entry (both the key law and the engine law)", async () => {
+    clearCache();
+    const key = WATCH_CACHE_KEY("dQw4w9WgXcQ");
+    expect(key).toBe("yt:watch:dQw4w9WgXcQ");
+    await cacheJsonSet(key, { marker: "stale-next" }, 60_000);
+    expect(await cachePeek<any>(key)).not.toBeNull();
+    await invalidateWatchCache("dQw4w9WgXcQ");
+    expect(await cachePeek<any>(key)).toBeNull();
   });
 });

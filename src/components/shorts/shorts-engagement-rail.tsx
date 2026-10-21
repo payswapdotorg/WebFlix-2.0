@@ -152,8 +152,7 @@ function parseCountLabel(text: string | null): number | null {
   if (!m) return null;
   const n = Number(m[1]);
   if (!Number.isFinite(n)) return null;
-  const mult =
-    { K: 1e3, M: 1e6, B: 1e9 }[(m[2] ?? "").toUpperCase() as "K" | "M" | "B"] ?? 1;
+  const mult = { K: 1e3, M: 1e6, B: 1e9 }[(m[2] ?? "").toUpperCase() as "K" | "M" | "B"] ?? 1;
   return Math.round(n * mult);
 }
 
@@ -171,11 +170,7 @@ function compactCount(text: string | null): string {
 }
 
 /** The ActionRow's optimistic like-count delta (likes only — dislikes never display). */
-function optimisticCount(
-  prev: LikeValue | null,
-  next: LikeValue | null,
-  n: number,
-): number {
+function optimisticCount(prev: LikeValue | null, next: LikeValue | null, n: number): number {
   if (prev === next) return n;
   if (next === "like") return n + 1; // none→like, dislike→like (swap)
   if (prev === "like") return Math.max(0, n - 1); // like→dislike (swap), like→none (unset)
@@ -234,16 +229,10 @@ function RailAction({
           className="mt-1 flex h-[18px] w-12 items-center justify-center text-center text-xs font-normal leading-[18px] text-white/90"
           aria-hidden="true"
         >
-          {showSkeleton ? (
-            <Skeleton className="h-2.5 w-8 rounded bg-white/25" />
-          ) : (
-            count
-          )}
+          {showSkeleton ? <Skeleton className="h-2.5 w-8 rounded bg-white/25" /> : count}
         </span>
       ) : null}
-      <span className="sr-only">
-        {count && !showSkeleton ? `${label} (${count})` : label}
-      </span>
+      <span className="sr-only">{count && !showSkeleton ? `${label} (${count})` : label}</span>
     </div>
   );
 }
@@ -270,10 +259,20 @@ export function ShortsEngagementRail({
   onShare: () => void;
   onReport: () => void;
 }) {
-  // ---- session-local rating state (no per-user rating READ for shorts) ----
-  const [yourLike, setYourLike] = useState<LikeValue | null>(null);
+  // ---- rating state (P35: bootstrapped from the meta's likeStatusEntity,
+  // session-gated server-side; the pre-P35 comment "no per-user rating READ
+  // for shorts" is retired — the same `next` response carries it) ----
+  const metaLike = meta?.yourLike ?? null;
+  const [yourLike, setYourLike] = useState<LikeValue | null>(metaLike);
+  const [syncedLike, setSyncedLike] = useState<LikeValue | null>(metaLike);
   const [busy, setBusy] = useState(false);
   const [interacted, setInteracted] = useState(false);
+  // reconcile while meta hydrates — the ActionRow adjust-during-render
+  // pattern; once YOU'VE acted, your state is the freshest truth
+  if (!busy && !interacted && syncedLike !== metaLike) {
+    setSyncedLike(metaLike);
+    setYourLike(metaLike);
+  }
 
   // ---- like-count label: the real likesText; ±1 only while parseable ------
   const likesText = meta?.likesText ?? null;
@@ -367,10 +366,7 @@ export function ShortsEngagementRail({
       await post(undoUrl);
       toast.success("Recommendations restored");
     } catch (e) {
-      toastActionError(
-        e,
-        "Undo is no longer available — YouTube's undo window has closed",
-      );
+      toastActionError(e, "Undo is no longer available — YouTube's undo window has closed");
     }
   };
 
@@ -415,11 +411,8 @@ export function ShortsEngagementRail({
     }
   };
 
-  const likeLabel =
-    count !== null ? formatCount(count) : likesText ? compactCount(likesText) : "";
-  const commentsLabel = meta?.commentsCountText
-    ? compactCount(meta.commentsCountText)
-    : "";
+  const likeLabel = count !== null ? formatCount(count) : likesText ? compactCount(likesText) : "";
+  const commentsLabel = meta?.commentsCountText ? compactCount(meta.commentsCountText) : "";
 
   return (
     <div className="absolute bottom-16 right-3 z-20 flex flex-col items-center gap-2">
@@ -443,10 +436,7 @@ export function ShortsEngagementRail({
         label="Dislike this short"
         icon={
           <ThumbsDown
-            className={cn(
-              "size-6",
-              yourLike === "dislike" && "fill-current text-[#f03]",
-            )}
+            className={cn("size-6", yourLike === "dislike" && "fill-current text-[#f03]")}
             aria-hidden="true"
           />
         }

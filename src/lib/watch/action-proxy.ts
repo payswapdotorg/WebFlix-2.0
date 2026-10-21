@@ -32,6 +32,7 @@ import {
   playlistContains,
 } from "@/lib/youtube-direct";
 import { writeLocalComment } from "./local-comments";
+import { invalidateWatchCache } from "@/lib/youtube/watch";
 
 export { BROKER_OFFLINE_MESSAGE };
 
@@ -100,15 +101,19 @@ export async function proxyVideoLike(videoId: string, req: LikeRequest): Promise
   };
 
   // P33 direct tier — the like/remove family (dislike-SET excluded: no wire)
-  const legacyToggleOff =
-    !!(req.value && !req.action && base.yourLike === req.value);
-  const directCovers =
-    action === "none" || action === "like" || legacyToggleOff;
+  const legacyToggleOff = !!(req.value && !req.action && base.yourLike === req.value);
+  const directCovers = action === "none" || action === "like" || legacyToggleOff;
   if (directCovers && directAuthConfigured()) {
-    const direct = await rateVideo(videoId, action === "like" && !legacyToggleOff ? "like" : "none");
+    const direct = await rateVideo(
+      videoId,
+      action === "like" && !legacyToggleOff ? "like" : "none",
+    );
     if (direct.ok) {
-      const yourLike: LikeValue | null =
-        action === "like" && !legacyToggleOff ? "like" : null;
+      // P35 — the write changed YouTube-side state; drop the cached `next`
+      // response so the next bootstrap re-reads the fresh likeStatusEntity
+      // (the button state survives a reload instead of reverting)
+      await invalidateWatchCache(videoId).catch(() => {});
+      const yourLike: LikeValue | null = action === "like" && !legacyToggleOff ? "like" : null;
       const effect = yourLike ? "liked" : "rating-removed";
       const likes =
         yourLike === "like" && base.yourLike !== "like"
@@ -130,6 +135,8 @@ export async function proxyVideoLike(videoId: string, req: LikeRequest): Promise
   if (action === "none") {
     const r = await brokerAction("remove-rating", { videoId });
     if (!ok(r)) throw fail(r);
+    // P35 — the broker tab changed YouTube-side state too
+    await invalidateWatchCache(videoId).catch(() => {});
     return {
       ok: true,
       effect: "rating-removed",
@@ -144,6 +151,8 @@ export async function proxyVideoLike(videoId: string, req: LikeRequest): Promise
   // set (and detect the toggle-off case via the broker's pre-click state check)
   const r = await brokerAction(action, { videoId });
   if (!ok(r)) throw fail(r);
+  // P35 — the broker tab changed YouTube-side state too
+  await invalidateWatchCache(videoId).catch(() => {});
   const domLikes = parseCompactCount(r.detail?.["likesLabel"] as string | undefined);
   const baseYour = base.yourLike;
   let yourLike: LikeValue | null = action;
@@ -185,17 +194,33 @@ export interface SubscribeResult {
 /**
  * Subscribe/unsubscribe — direct-first (verified §16/§17), broker fallback.
  * `on === null` → toggle (state read, then direct; broker toggle fallback).
+ * P35: the optional ctx.videoId (the watch page's video) threads the
+ * watch-cache invalidation so the subscribeButton state survives a reload.
  */
+/** P35 — optional context for the subscribe write's cache coherence. */
+export interface SubscribeContext {
+  /** the watch page's video — when present, a successful write also drops
+   * the cached `next` response so the subscribeButton state survives a
+   * reload (the same P35 law as the like family). */
+  videoId?: string | null;
+}
+
 export async function proxySubscribe(
   channelId: string,
-  on: boolean | null
+  on: boolean | null,
+  ctx: SubscribeContext = {},
 ): Promise<SubscribeResult> {
   const doDirect = async (want: boolean): Promise<SubscribeResult | null> => {
     if (!directAuthConfigured()) return null;
     const r = await subscribeChannel(channelId, want);
-    return r.ok
-      ? { ok: true, effect: want ? "subscribed" : "unsubscribed", subscribed: want, path: "direct" }
-      : null;
+    if (!r.ok) return null;
+    if (ctx.videoId) await invalidateWatchCache(ctx.videoId).catch(() => {});
+    return {
+      ok: true,
+      effect: want ? "subscribed" : "unsubscribed",
+      subscribed: want,
+      path: "direct",
+    };
   };
 
   if (on === true || on === false) {
@@ -203,6 +228,7 @@ export async function proxySubscribe(
     if (direct) return direct;
     const r = await brokerAction(on ? "subscribe" : "unsubscribe", { channelId });
     if (!ok(r)) throw fail(r);
+    if (ctx.videoId) await invalidateWatchCache(ctx.videoId).catch(() => {});
     return {
       ok: true,
       effect: on ? "subscribed" : "unsubscribed",
@@ -220,6 +246,7 @@ export async function proxySubscribe(
   }
   const r = await brokerAction("subscribe", { channelId }, { mode: "toggle" });
   if (!ok(r)) throw fail(r);
+  if (ctx.videoId) await invalidateWatchCache(ctx.videoId).catch(() => {});
   const subscribed = typeof r.detail?.["subscribed"] === "boolean" ? r.detail.subscribed : true;
   return {
     ok: true,
@@ -232,7 +259,7 @@ export async function proxySubscribe(
 /** Bell preference — broker tier (UI state machine: off = unsubscribe). */
 export async function proxyBell(
   channelId: string,
-  pref: "all" | "personalized" | "none" | "off"
+  pref: "all" | "personalized" | "none" | "off",
 ): Promise<{ ok: true; effect: string; bell: "all" | "personalized" | "none" | null }> {
   if (pref === "off") {
     const r = await proxySubscribe(channelId, false);
@@ -252,7 +279,8 @@ export async function proxyBell(
 export async function proxySubscriptionStateMachine(
   channelId: string,
   bell: "all" | "personalized" | "none" | "off" | undefined,
-  subscriberCountBaseline: number | null
+  subscriberCountBaseline: number | null,
+  ctx: SubscribeContext = {},
 ): Promise<{
   subscribed: boolean;
   bell: "all" | "personalized" | "none" | null;
@@ -262,7 +290,7 @@ export async function proxySubscriptionStateMachine(
   path: string;
 }> {
   if (!bell || bell === "off") {
-    const r = await proxySubscribe(channelId, false);
+    const r = await proxySubscribe(channelId, false, ctx);
     return {
       subscribed: false,
       bell: null,
@@ -273,7 +301,7 @@ export async function proxySubscriptionStateMachine(
       path: r.path,
     };
   }
-  const sub = await proxySubscribe(channelId, true);
+  const sub = await proxySubscribe(channelId, true, ctx);
   let effect = sub.effect;
   let path = sub.path;
   // apply the bell pref (broker tier). A failed bell update does not undo
@@ -336,7 +364,7 @@ function synthComment(
   viewer: CommentViewer,
   parentId: string | null,
   /** the execution path honestly reported by the tier (ui | fetch | none | direct) */
-  path: "ui" | "fetch" | "none" | "direct" = "ui"
+  path: "ui" | "fetch" | "none" | "direct" = "ui",
 ): CommentWriteResult {
   const author: CommentAuthorDto = {
     id: viewer.id,
@@ -394,7 +422,7 @@ async function localRung(args: {
     if (e instanceof ApiError) throw e; // honest validation (e.g. wrong-video parent)
     throw new ApiError(
       502,
-      "action backend offline and the WebFlix store is unreachable — comment not posted"
+      "action backend offline and the WebFlix store is unreachable — comment not posted",
     );
   }
 }
@@ -416,7 +444,7 @@ export async function proxyCommentCreate(
   videoId: string,
   text: string,
   viewer: CommentViewer,
-  opts: CommentWriteOpts = {}
+  opts: CommentWriteOpts = {},
 ): Promise<CommentWriteResult> {
   if (directAuthConfigured()) {
     const direct = await createComment(videoId, text);
@@ -447,7 +475,7 @@ export async function proxyCommentReply(
   text: string,
   viewer: CommentViewer,
   parentText?: string,
-  opts: CommentWriteOpts = {}
+  opts: CommentWriteOpts = {},
 ): Promise<CommentWriteResult> {
   if (opts.replyParams && directAuthConfigured()) {
     const direct = await createReply(videoId, opts.replyParams, text);
@@ -458,7 +486,7 @@ export async function proxyCommentReply(
   const r = await brokerAction(
     "comment-reply",
     { commentId: parentId, videoId },
-    { text, ...(parentText ? { commentText: parentText } : {}) }
+    { text, ...(parentText ? { commentText: parentText } : {}) },
   );
   if (ok(r)) return synthComment(videoId, text, viewer, parentId, r.path ?? "ui");
   // both YouTube tiers refused → the honest local rung
@@ -489,7 +517,7 @@ export interface CommentLikeResult {
  */
 export async function proxyCommentLike(
   commentId: string,
-  req: CommentLikeRequest
+  req: CommentLikeRequest,
 ): Promise<CommentLikeResult> {
   const action = req.action ?? req.value;
   if (!action) throw new ApiError(400, "action (like|dislike|none) is required");
@@ -507,7 +535,7 @@ export async function proxyCommentLike(
   const r = await brokerAction(
     "comment-like",
     { commentId, ...(req.videoId ? { videoId: req.videoId } : {}) },
-    { mode, ...(req.commentText ? { commentText: req.commentText } : {}) }
+    { mode, ...(req.commentText ? { commentText: req.commentText } : {}) },
   );
   if (!ok(r)) throw fail(r);
   const liked =
@@ -552,7 +580,7 @@ export interface PlaylistAddResult {
 export async function proxyPlaylistAdd(
   playlistId: string,
   videoId: string,
-  opts: { mode?: "add" | "remove" | "toggle"; title?: string } = {}
+  opts: { mode?: "add" | "remove" | "toggle"; title?: string } = {},
 ): Promise<PlaylistAddResult> {
   const mode = opts.mode ?? "add";
 
@@ -583,7 +611,7 @@ export async function proxyPlaylistAdd(
   const r = await brokerAction(
     "playlist-add",
     { playlistId },
-    { videoId, mode, ...(opts.title ? { title: opts.title } : {}) }
+    { videoId, mode, ...(opts.title ? { title: opts.title } : {}) },
   );
   if (!ok(r)) throw fail(r);
   const added = typeof r.detail?.["added"] === "boolean" ? r.detail.added : mode !== "remove";
@@ -614,7 +642,7 @@ export interface WatchLaterResult {
  */
 export async function proxyWatchLater(
   videoId: string,
-  add: boolean | undefined
+  add: boolean | undefined,
 ): Promise<WatchLaterResult> {
   const mode = add === undefined ? "toggle" : add ? "add" : "remove";
 
@@ -700,7 +728,7 @@ export interface DontRecommendChannelResult {
  * youtube.com's toast (see proxyFeedbackUndo).
  */
 export async function proxyDontRecommendChannel(
-  videoId: string
+  videoId: string,
 ): Promise<DontRecommendChannelResult> {
   const r = await brokerAction("dont-recommend-channel", { videoId });
   if (!ok(r)) throw fail(r);
@@ -767,12 +795,12 @@ export interface CommentEditResult {
 export async function proxyCommentEdit(
   commentId: string,
   text: string,
-  locator: CommentLocator
+  locator: CommentLocator,
 ): Promise<CommentEditResult> {
   const r = await brokerAction(
     "comment-edit",
     { commentId, videoId: locator.videoId },
-    { text, ...(locator.commentText ? { commentText: locator.commentText } : {}) }
+    { text, ...(locator.commentText ? { commentText: locator.commentText } : {}) },
   );
   if (!ok(r)) throw fail(r);
   return { ok: true, effect: "comment-edited", body: text, edited: true, path: r.path };
@@ -788,12 +816,12 @@ export interface CommentDeleteResult {
 /** Delete own comment — broker comment-delete (⋮ → Delete → confirm). */
 export async function proxyCommentDelete(
   commentId: string,
-  locator: CommentLocator
+  locator: CommentLocator,
 ): Promise<CommentDeleteResult> {
   const r = await brokerAction(
     "comment-delete",
     { commentId, videoId: locator.videoId },
-    locator.commentText ? { commentText: locator.commentText } : {}
+    locator.commentText ? { commentText: locator.commentText } : {},
   );
   if (!ok(r)) throw fail(r);
   return { ok: true, effect: "comment-deleted", deleted: true, path: r.path };
@@ -809,16 +837,15 @@ export interface CommentHeartResult {
 /** Creator heart toggle — broker comment-heart (⋮ → Heart / Remove heart). */
 export async function proxyCommentHeart(
   commentId: string,
-  locator: CommentLocator
+  locator: CommentLocator,
 ): Promise<CommentHeartResult> {
   const r = await brokerAction(
     "comment-heart",
     { commentId, videoId: locator.videoId },
-    locator.commentText ? { commentText: locator.commentText } : {}
+    locator.commentText ? { commentText: locator.commentText } : {},
   );
   if (!ok(r)) throw fail(r);
-  const hearted =
-    typeof r.detail?.["hearted"] === "boolean" ? r.detail.hearted : true;
+  const hearted = typeof r.detail?.["hearted"] === "boolean" ? r.detail.hearted : true;
   return {
     ok: true,
     effect: hearted ? "comment-hearted" : "comment-heart-removed",
@@ -837,12 +864,12 @@ export interface CommentPinResult {
 /** Creator pin toggle — broker comment-pin (⋮ → Pin / Unpin). */
 export async function proxyCommentPin(
   commentId: string,
-  locator: CommentLocator
+  locator: CommentLocator,
 ): Promise<CommentPinResult> {
   const r = await brokerAction(
     "comment-pin",
     { commentId, videoId: locator.videoId },
-    locator.commentText ? { commentText: locator.commentText } : {}
+    locator.commentText ? { commentText: locator.commentText } : {},
   );
   if (!ok(r)) throw fail(r);
   const pinned = typeof r.detail?.["pinned"] === "boolean" ? r.detail.pinned : true;
@@ -865,7 +892,7 @@ export interface CommentReportResult {
 /** Report a comment — broker comment-report (⋮ → Report → reasons dialog). */
 export async function proxyCommentReport(
   commentId: string,
-  locator: CommentLocator & { reason?: string }
+  locator: CommentLocator & { reason?: string },
 ): Promise<CommentReportResult> {
   const r = await brokerAction(
     "comment-report",
@@ -873,7 +900,7 @@ export async function proxyCommentReport(
     {
       ...(locator.commentText ? { commentText: locator.commentText } : {}),
       ...(locator.reason ? { reason: locator.reason } : {}),
-    }
+    },
   );
   if (!ok(r)) throw fail(r);
   const reason = typeof r.detail?.["reason"] === "string" ? r.detail.reason : undefined;
@@ -920,7 +947,7 @@ export interface PlaylistUpdateResult {
  */
 export async function proxyPlaylistUpdate(
   playlistId: string,
-  req: PlaylistUpdateRequest
+  req: PlaylistUpdateRequest,
 ): Promise<PlaylistUpdateResult> {
   const payload: Record<string, string> = {};
   if (typeof req.title === "string") payload.title = req.title;
@@ -931,11 +958,7 @@ export async function proxyPlaylistUpdate(
   // lane and not in this lane's file ownership, so the cast rides the wire
   // (the broker's ACTION_KINDS registry has both kinds pre-seeded — the
   // string is the same; only the TS union needs the cast).
-  const r = await brokerAction(
-    "playlist-update" as never,
-    { playlistId },
-    payload as never
-  );
+  const r = await brokerAction("playlist-update" as never, { playlistId }, payload as never);
   if (!ok(r)) throw fail(r);
   const fields = {
     title: typeof req.title === "string",
@@ -979,15 +1002,11 @@ export async function proxyPlaylistReorder(
   playlistId: string,
   fromIndex: number,
   toIndex: number,
-  videoId?: string
+  videoId?: string,
 ): Promise<PlaylistReorderResult> {
   const payload: Record<string, unknown> = { fromIndex, toIndex };
   if (typeof videoId === "string" && videoId.length > 0) payload.videoId = videoId;
-  const r = await brokerAction(
-    "playlist-reorder" as never,
-    { playlistId },
-    payload as never
-  );
+  const r = await brokerAction("playlist-reorder" as never, { playlistId }, payload as never);
   if (!ok(r)) throw fail(r);
   const detail = (r.detail ?? {}) as Record<string, unknown>;
   const note = typeof detail.note === "string" ? detail.note : undefined;

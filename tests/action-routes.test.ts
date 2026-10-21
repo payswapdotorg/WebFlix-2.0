@@ -106,6 +106,8 @@ mock.module("@/lib/youtube-direct", () => ({
 
 /* routes (imported after the mocks) */
 import { POST as postLike } from "@/app/api/videos/[id]/like/route";
+import { clearCache } from "@/lib/youtube/cache";
+import { cacheJsonSet, cachePeek } from "@/lib/youtube/upstash-cache";
 import { POST as postSubscribe } from "@/app/api/subscribe/route";
 import { POST as postWatchLater } from "@/app/api/playlists/watch-later/route";
 import { POST as postDontRecommendChannel } from "@/app/api/dont-recommend-channel/route";
@@ -158,7 +160,7 @@ describe("POST /api/videos/[id]/like (direct-first, broker fallback)", () => {
   test("P33 direct like: the server-side session answers — ZERO broker calls, path direct, honest counts", async () => {
     const res = await postLike(
       req({ value: "like", baseline: { likes: 5, dislikes: 0, yourLike: null } }),
-      ctx
+      ctx,
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
@@ -179,12 +181,35 @@ describe("POST /api/videos/[id]/like (direct-first, broker fallback)", () => {
     expect(brokerCalls).toEqual([]); // the main-interface doctrine: no broker needed
   });
 
+  test("P35: a successful direct like DROPS the cached watch response (the reload-persistence law)", async () => {
+    clearCache();
+    const key = "yt:watch:dQw4w9WgXcQ";
+    await cacheJsonSet(key, { marker: "stale-next" }, 60_000);
+    expect(await cachePeek<any>(key)).not.toBeNull();
+    const res = await postLike(req({ value: "like" }), ctx);
+    expect(res.status).toBe(200);
+    expect(await cachePeek<any>(key)).toBeNull(); // invalidated — the next bootstrap re-fetches with the session
+  });
+
+  test("P35: a broker-tier like success ALSO drops the cached watch response (the broker tab changed YouTube state too)", async () => {
+    clearCache();
+    const key = "yt:watch:dQw4w9WgXcQ";
+    await cacheJsonSet(key, { marker: "stale-next" }, 60_000);
+    directRateResponse = { ok: false, status: 403, error: "direct like/like returned 403" };
+    brokerResponse = { ok: true, verified: true, path: "ui" };
+    const res = await postLike(req({ value: "like" }), ctx);
+    expect(res.status).toBe(200);
+    expect(await cachePeek<any>(key)).toBeNull(); // the broker write changed YouTube-side state
+  });
+
   test("P33 direct fail → the honest broker fallback (kind like)", async () => {
     directRateResponse = { ok: false, status: 403, error: "direct like/like returned 403" };
     const res = await postLike(req({ value: "like" }), ctx);
     expect(res.status).toBe(200);
     expect(directRateCalls.length).toBe(1);
-    expect(brokerCalls).toEqual([{ kind: "like", target: { videoId: "dQw4w9WgXcQ" }, payload: undefined }]);
+    expect(brokerCalls).toEqual([
+      { kind: "like", target: { videoId: "dQw4w9WgXcQ" }, payload: undefined },
+    ]);
     const body = (await res.json()) as { path?: string };
     expect(body.path).toBe("ui");
   });
@@ -200,7 +225,7 @@ describe("POST /api/videos/[id]/like (direct-first, broker fallback)", () => {
   test("P33 toggle-off: the UI's own baseline resolves the direct remove — one none call, no second trip", async () => {
     const res = await postLike(
       req({ value: "like", baseline: { likes: 5, dislikes: 0, yourLike: "like" } }),
-      ctx
+      ctx,
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { yourLike: string | null; likes: number; effect: string };
@@ -224,7 +249,7 @@ describe("POST /api/videos/[id]/like (direct-first, broker fallback)", () => {
   test("P33 dislike: NO captured wire → the direct tier is never called (the no-guess law), broker serves it", async () => {
     const res = await postLike(
       req({ value: "dislike", baseline: { likes: 5, dislikes: 2, yourLike: "like" } }),
-      ctx
+      ctx,
     );
     const body = (await res.json()) as { likes: number; dislikes: number; yourLike: string };
     expect(directRateCalls).toEqual([]); // never a guessed like/dislike wire
@@ -266,7 +291,7 @@ describe("POST /api/videos/[id]/like (direct-first, broker fallback)", () => {
     brokerResponse = { ok: true, verified: true, path: "ui", detail: { likesLabel: "2.4M" } };
     const res = await postLike(
       req({ value: "like", baseline: { likes: 5, dislikes: 0, yourLike: null } }),
-      ctx
+      ctx,
     );
     const body = (await res.json()) as { likes: number };
     expect(body.likes).toBe(2400000);
@@ -351,7 +376,12 @@ describe("POST /api/playlists/watch-later (direct-first, broker fallback)", () =
       { playlistId: "WL", videoId: "dQw4w9WgXcQ", want: false },
     ]);
     expect(brokerCalls).toEqual([]);
-    const body = (await res.json()) as { ok: boolean; added: boolean; effect: string; path?: string };
+    const body = (await res.json()) as {
+      ok: boolean;
+      added: boolean;
+      effect: string;
+      path?: string;
+    };
     expect(body.added).toBe(false);
     expect(body.effect).toBe("watch-later-removed");
     expect(body.path).toBe("direct");
@@ -360,9 +390,7 @@ describe("POST /api/playlists/watch-later (direct-first, broker fallback)", () =
   test("P33 direct ensure: add:true → the server-side edit_playlist ADD", async () => {
     const res = await postWatchLater(req({ videoId: "dQw4w9WgXcQ", add: true }));
     expect(res.status).toBe(200);
-    expect(directPlaylistCalls).toEqual([
-      { playlistId: "WL", videoId: "dQw4w9WgXcQ", want: true },
-    ]);
+    expect(directPlaylistCalls).toEqual([{ playlistId: "WL", videoId: "dQw4w9WgXcQ", want: true }]);
     expect(brokerCalls).toEqual([]);
     const body = (await res.json()) as { added: boolean; effect: string };
     expect(body.added).toBe(true);
@@ -373,9 +401,7 @@ describe("POST /api/playlists/watch-later (direct-first, broker fallback)", () =
     playlistMembership = false;
     const res = await postWatchLater(req({ videoId: "dQw4w9WgXcQ" }));
     expect(res.status).toBe(200);
-    expect(directPlaylistCalls).toEqual([
-      { playlistId: "WL", videoId: "dQw4w9WgXcQ", want: true },
-    ]);
+    expect(directPlaylistCalls).toEqual([{ playlistId: "WL", videoId: "dQw4w9WgXcQ", want: true }]);
     expect(brokerCalls).toEqual([]);
   });
 
@@ -457,7 +483,7 @@ describe("POST /api/dont-recommend-channel (broker — the not-interested siblin
     brokerResponse = new MockBrokerError(
       "action-failed",
       "dont-recommend-channel-menu-item-not-found",
-      502
+      502,
     );
     const res = await postDontRecommendChannel(req({ videoId: "dQw4w9WgXcQ" }));
     expect(res.status).toBe(502);
@@ -473,7 +499,7 @@ describe("POST /api/dont-recommend-channel (broker — the not-interested siblin
         method: "POST",
         headers: { "Content-Type": "text/plain", cookie: AUTH_COOKIE },
         body: "not json",
-      }) as unknown as NextRequest
+      }) as unknown as NextRequest,
     );
     expect(res2.status).toBe(400);
   });

@@ -1,0 +1,25 @@
+P35-LIKE-STATE — the live verification log (2026-10-21)
+
+1) THE LIKE-STATE WIRE (unauthenticated next probe, the P33 methodology — a served entity = a valid parse surface):
+   POST /youtubei/v1/next {context, videoId: jNQXAC9IVRw} → HTTP 200, 409336 bytes
+   frameworkUpdates.entityBatchUpdate.mutations: 5
+   likeStatusEntity: { key: "EgtqTlFYQUM5SVZSdyA-KAE%3D", likeStatus: "INDIFFERENT" }
+   → the PUBLIC mode answers INDIFFERENT; the key is URL-encoded base64 embedding the
+     videoId (Buffer.from(decodeURIComponent(key), 'base64') contains jNQXAC9IVRw — verified
+     in the fixture tests against the REAL captured dQw4 entity
+     key "EgtkUXc0dzlXZ1hjUSA-KAE%3D").
+
+2) THE ENDPOINT DISCRIMINATION (the negative control):
+   POST /youtubei/v1/like/get_like_endpoint → HTTP 404 (the guessed read endpoint does NOT
+   exist — the entity mutation path is the real youtube.com mechanism, so the parse is
+   anchored to the verified wire, never a guessed endpoint).
+
+3) THE ROOT CAUSES (code-verified):
+   src/lib/youtube/watch.ts (pre-P35): state = { like: null /* broker-tier */, savedWatchLater: false }
+   → the read-back never existed; the reload reverted every successful write.
+   rateVideo (pre-P35): no 400-retry, no fetch catch — the P33 wire-probe's own round-1
+   400 class (cold-start transient) failed the direct tier on every fresh lambda.
+
+4) THE BATTERY (station-run, 2026-10-21):
+   boot 859/0 · watch 684/0 · liveshorts 153/0 · cutover 111/0 · auth 138/0 · community 34/0
+   · notifications 41/0 = 2020/0 (base 1995 + 25 P35 tests) · tsc clean · lint 0e/1 pre-existing

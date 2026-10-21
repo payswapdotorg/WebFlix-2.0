@@ -46,10 +46,7 @@ import { compactCount } from "@/lib/watch/format";
 import { parseChapters } from "@/lib/watch/chapters";
 import { readProgress } from "@/components/watch/youtube-player";
 import { playerHost, usePlayerHost } from "@/lib/player/player-host";
-import {
-  countdownReducer,
-  initialCountdown,
-} from "@/lib/watch/autoplay-countdown";
+import { countdownReducer, initialCountdown } from "@/lib/watch/autoplay-countdown";
 import type {
   RelatedVideoDto,
   TranscriptCueDto,
@@ -296,9 +293,13 @@ export function WatchPage({
   }, [detail]);
 
   // playhead mirror for transcript/share reads (no re-render)
-  useEffect(() => playerHost.onProgress((sec) => {
-    timeRef.current = sec;
-  }), []);
+  useEffect(
+    () =>
+      playerHost.onProgress((sec) => {
+        timeRef.current = sec;
+      }),
+    [],
+  );
 
   // server-side resume fallback: only when neither ?t= nor the local
   // progress memory applies (the player itself seeks on startSec). The
@@ -515,7 +516,7 @@ export function WatchPage({
 
   const chapters = useMemo(
     () => (detail ? parseChapters(detail.video.description, detail.video.durationSec) : []),
-    [detail]
+    [detail],
   );
 
   if (error) {
@@ -563,8 +564,7 @@ export function WatchPage({
   // the premiere stage, the engagement row renders its disabled state, and
   // the chat panel shows YouTube's pre-premiere state. Live videos
   // (premieredAt past + isLive) keep the existing live behavior.
-  const premiereStartsAt =
-    !premiereStarted && isUpcomingPremiere(video) ? video.premieredAt : null;
+  const premiereStartsAt = !premiereStarted && isUpcomingPremiere(video) ? video.premieredAt : null;
 
   // REA-1 G16/G19: the countdown's next-preview — the playlist queue's next
   // wins (the queue follows the list), then the WL queue, then related.
@@ -637,7 +637,7 @@ export function WatchPage({
                 ref={anchorRef}
                 className={cn(
                   "w-full",
-                  !docked && "sticky top-0 z-30 bg-black sm:static sm:rounded-xl"
+                  !docked && "sticky top-0 z-30 bg-black sm:static sm:rounded-xl",
                 )}
               >
                 <div className="relative">
@@ -778,7 +778,10 @@ export function WatchPage({
                   >
                     <span className="truncate">{video.channel.name}</span>
                     {video.channel.verified && (
-                      <BadgeCheck className="size-4 shrink-0 text-muted-foreground" aria-label="Verified" />
+                      <BadgeCheck
+                        className="size-4 shrink-0 text-muted-foreground"
+                        aria-label="Verified"
+                      />
                     )}
                   </Link>
                   <p className="text-xs text-muted-foreground">
@@ -792,6 +795,7 @@ export function WatchPage({
                   initialBell={state.bell}
                   subscriberCount={subCount ?? video.channel.subscriberCount}
                   guest={guest}
+                  videoId={videoId}
                   onCountChange={setSubCount}
                 />
               </div>
@@ -817,7 +821,7 @@ export function WatchPage({
                           },
                           state: { ...d.state, like: r.yourLike },
                         }
-                      : d
+                      : d,
                   );
                 }}
                 onShare={() => {
@@ -965,7 +969,9 @@ export function WatchPage({
           onOpenChange={setSaveOpen}
           videoId={videoId}
           onSavedChange={(watchLater) => {
-            setDetail((d) => (d ? { ...d, state: { ...d.state, savedWatchLater: watchLater } } : d));
+            setDetail((d) =>
+              d ? { ...d, state: { ...d.state, savedWatchLater: watchLater } } : d,
+            );
           }}
         />
       )}

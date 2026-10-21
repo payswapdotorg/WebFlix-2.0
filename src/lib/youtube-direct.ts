@@ -152,7 +152,7 @@ export interface CreateCommentOptions extends DirectCallOptions {
 export async function createComment(
   videoId: string,
   text: string,
-  opts: CreateCommentOptions = {}
+  opts: CreateCommentOptions = {},
 ): Promise<DirectActionResult> {
   const rawCookies = opts.cookies ?? process.env.YT_COOKIES?.trim() ?? "";
   const sapisid = parseCookies(rawCookies)["SAPISID"];
@@ -202,7 +202,7 @@ export async function createReply(
   videoId: string,
   createCommentParams: string,
   text: string,
-  opts: DirectCallOptions = {}
+  opts: DirectCallOptions = {},
 ): Promise<DirectActionResult> {
   return createComment(videoId, text, { ...opts, createCommentParams });
 }
@@ -216,7 +216,7 @@ export async function createReply(
 export async function subscribeChannel(
   channelId: string,
   on: boolean,
-  opts: DirectCallOptions = {}
+  opts: DirectCallOptions = {},
 ): Promise<DirectActionResult> {
   const rawCookies = opts.cookies ?? process.env.YT_COOKIES?.trim() ?? "";
   const sapisid = parseCookies(rawCookies)["SAPISID"];
@@ -261,7 +261,7 @@ export async function subscribeChannel(
  */
 export async function getSubscribedState(
   channelId: string,
-  opts: { fetchImpl?: DirectFetch; cookies?: string } = {}
+  opts: { fetchImpl?: DirectFetch; cookies?: string } = {},
 ): Promise<boolean | null> {
   const rawCookies = opts.cookies ?? process.env.YT_COOKIES?.trim() ?? "";
   if (!rawCookies) return null;
@@ -290,7 +290,11 @@ export async function getSubscribedState(
 // ---------------------------------------------------------------------------
 
 /** The shared header set for the direct write POSTs (the subscribe-lane law). */
-function directWriteHeaders(sapisid: string, timeSec: number, rawCookies: string): Record<string, string> {
+function directWriteHeaders(
+  sapisid: string,
+  timeSec: number,
+  rawCookies: string,
+): Record<string, string> {
   return {
     "Content-Type": "application/json",
     Authorization: `SAPISIDHASH ${sapisidhash(sapisid, timeSec)}`,
@@ -315,6 +319,16 @@ export interface RateVideoOptions extends DirectCallOptions {
  * SAPISIDHASH (the subscribe-lane pattern) and the CAPTURED params
  * templates (buildLikeParams). action "none" removes the rating.
  *
+ * P35 hardening (the operator's "like still doesn't work" — the intermittent
+ * first-click failure): the like endpoints answer a TRANSIENT 400 on the
+ * first request after a cold start (the P33 wire-probe evidence itself —
+ * round 1 valid-templated params → 400 "Request contains an invalid
+ * argument", rounds 2-3 identical requests → deterministic; on serverless
+ * every fresh lambda pays it) and transient network throws surface as raw
+ * exceptions. ONE retry on exactly those two classes — like/removelike are
+ * idempotent set semantics, a retry can never double-apply — while 401/403
+ * (the session class) and other 4xx fail immediately and honestly.
+ *
  * NOT implemented: "dislike" — like/dislike has no captured wire template
  * (the fixture never captured one; guessing the protobuf is against the
  * house law) — the caller keeps dislike on the broker tier and falls back
@@ -326,7 +340,7 @@ export interface RateVideoOptions extends DirectCallOptions {
 export async function rateVideo(
   videoId: string,
   action: "like" | "none",
-  opts: RateVideoOptions = {}
+  opts: RateVideoOptions = {},
 ): Promise<DirectActionResult> {
   const rawCookies = opts.cookies ?? process.env.YT_COOKIES?.trim() ?? "";
   const sapisid = parseCookies(rawCookies)["SAPISID"];
@@ -337,23 +351,49 @@ export async function rateVideo(
   if (!params) {
     return { ok: false, error: "direct-like-unavailable (videoId not 11 chars)" };
   }
-  const timeSec = Math.floor((opts.now ?? Date.now()) / 1000);
   const doFetch = opts.fetchImpl ?? ((input: string, init: RequestInit) => fetch(input, init));
   const endpoint = action === "none" ? "like/removelike" : "like/like";
-  const res = await doFetch(`${ORIGIN}/youtubei/v1/${endpoint}?prettyPrint=false`, {
-    method: "POST",
-    headers: directWriteHeaders(sapisid, timeSec, rawCookies),
-    body: JSON.stringify({
-      context: { client: { clientName: "WEB", clientVersion: CLIENT_VERSION, hl: "en", gl: "US" } },
-      params,
-    }),
-    cache: "no-store",
-  });
-  if (!res.ok) {
+  const url = `${ORIGIN}/youtubei/v1/${endpoint}?prettyPrint=false`;
+
+  // P35: one retry on the cold-start 400 class + transient network throws.
+  // The timestamp refreshes per attempt (a stale ts could itself 400).
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const attemptSec = Math.floor((opts.now ?? Date.now()) / 1000) + attempt;
+    let res: Response;
+    try {
+      res = await doFetch(url, {
+        method: "POST",
+        headers: directWriteHeaders(sapisid, attemptSec, rawCookies),
+        body: JSON.stringify({
+          context: {
+            client: { clientName: "WEB", clientVersion: CLIENT_VERSION, hl: "en", gl: "US" },
+          },
+          params,
+        }),
+        cache: "no-store",
+        signal: AbortSignal.timeout(DIRECT_WRITE_TIMEOUT_MS),
+      });
+    } catch (err) {
+      if (attempt === 0) continue; // transient network throw → one retry
+      return {
+        ok: false,
+        status: 0,
+        error: `direct ${endpoint} network error: ${(err as Error).message}`,
+      };
+    }
+    if (res.ok) return { ok: true, status: res.status };
+    if (res.status === 400 && attempt === 0) continue; // the cold-start transient
     return { ok: false, status: res.status, error: `direct ${endpoint} returned ${res.status}` };
   }
-  return { ok: true, status: res.status };
+  return {
+    ok: false,
+    status: 400,
+    error: `direct ${endpoint} returned 400 (cold-start transient persisted after retry)`,
+  };
 }
+
+/** P35 — the direct write budget (the like-family retry window included). */
+const DIRECT_WRITE_TIMEOUT_MS = 8000;
 
 /** P33 — editPlaylistMembership's options (the DirectCallOptions seam). */
 export type EditPlaylistOptions = DirectCallOptions;
@@ -372,7 +412,7 @@ export async function editPlaylistMembership(
   playlistId: string,
   videoId: string,
   want: boolean,
-  opts: EditPlaylistOptions = {}
+  opts: EditPlaylistOptions = {},
 ): Promise<DirectActionResult> {
   const rawCookies = opts.cookies ?? process.env.YT_COOKIES?.trim() ?? "";
   const sapisid = parseCookies(rawCookies)["SAPISID"];
@@ -430,7 +470,7 @@ export interface PlaylistContainsOptions {
 export async function playlistContains(
   playlistId: string,
   videoId: string,
-  opts: PlaylistContainsOptions = {}
+  opts: PlaylistContainsOptions = {},
 ): Promise<boolean | null> {
   const rawCookies = opts.cookies ?? process.env.YT_COOKIES?.trim() ?? "";
   if (!rawCookies) return null;
@@ -441,7 +481,7 @@ export async function playlistContains(
         ? await innertubeBrowse({ continuation: cursor }, { cookies: rawCookies })
         : await innertubeBrowse(
             { browseId: playlistBrowseId(playlistId) },
-            { cookies: rawCookies }
+            { cookies: rawCookies },
           );
       const mapped = mapPlaylistItemsPage(response, playlistId);
       return { videos: mapped.videos.map((v) => ({ id: v.id })), nextCursor: mapped.nextCursor };
