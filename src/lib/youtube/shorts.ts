@@ -36,10 +36,8 @@ const CLIENT_VERSION = "2.20260925.00.00";
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
-// P35 — the viewer's like state rides the same `next` entity mutations the
-// watch page parses (likeStatusEntity in frameworkUpdates; verified live
-// 2026-10-21). Reusing the watch mapper's verified parser — no duplication.
-import { likeStatusFromResponse } from "./watch";
+// WFX2-P36 — the per-user yourLike overlays at the route (the acting user's
+// own videos.getRating); the shared cached meta carries no per-user state.
 import type { LikeValue } from "@/lib/watch/types";
 
 function cookieHeader(): string | undefined {
@@ -746,9 +744,13 @@ export async function getShortMeta(
     likesText,
     commentsCountText,
     thumbnailUrl: `https://i.ytimg.com/vi/${videoId}/oardefault.jpg`,
-    // P35 — the viewer's rating from the SAME `next` response the meta comes
-    // from (likeStatusEntity; session-gated — public mode honestly null)
-    yourLike: cookieHeader() ? likeStatusFromResponse(root, videoId) : null,
+    // WFX2-P36 — the per-user state law: the SHARED cached shorts meta
+    // carries NO per-user state (the pre-P36 parse baked the operator
+    // session's likeStatusEntity into this cached DTO — one identity's
+    // rating served to every viewer). The acting user's own rating
+    // (videos.getRating with THEIR connected account) overlays per-request
+    // at the route (src/app/api/shorts/[id]/route.ts).
+    yourLike: null,
     dateText,
     comments,
     commentsNextToken,

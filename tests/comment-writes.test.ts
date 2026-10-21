@@ -1,96 +1,33 @@
 /// <reference types="bun-types" />
 /**
- * WFX2-B-S tests — the comment WRITE routes with the broker client, the
- * direct path, the creator-mode guards and the session module MOCKED (no
- * network, no live CDP): the ok paths, direct-first vs broker fallback,
- * honest 502 offline mapping, the needs-session degrade, and the
- * creator-only heart/pin guard.
+ * WFX2-B-S tests → WFX2-P36 re-point — the comment WRITE routes:
  *
- * WFX2-P6-CR adds: the direct REPLY rung (replyParams → createReply with
- * createCommentParams; honest skip when the payload served the sign-in
- * modal), and the LOCAL rung catch (both YouTube tiers offline + a WebFlix
- * session → the honest WebFlix store, local:true — the real test DB backs
- * it via setupTestDb).
+ *  - comment create/reply: the honest LOCAL lane (the official Data API only
+ *    lets channels comment on their own videos) — every write lands in the
+ *    WebFlix store with local:true + path "local", backed by the real test
+ *    DB (setupTestDb). The pre-P36 direct-SAPISIDHASH → broker ladder is
+ *    retired with the shared operator identity itself (these routes import
+ *    neither seam anymore).
+ *  - comment like/edit/delete/heart/pin/report: the honest UNSUPPORTED lane —
+ *    the routes render the proxies' 501 {error, kind:"youtube-unsupported"}
+ *    verbatim (the broker DOM drives are retired; the report public-mode 403
+ *    is retired with them).
  *
- * Same mock pattern as action-routes.test.ts (real modules captured and
- * re-installed in afterAll — bun's mock.module is process-wide).
+ * Mocked modules (no network, no live CDP): the watch-session viewer + the
+ * watch-metadata/operator seams the creator-mode guards consume. Same
+ * capture/restore pattern as action-routes.test.ts (bun's mock.module is
+ * process-wide).
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, test, mock } from "bun:test";
 import type { NextRequest } from "next/server";
 import { setupTestDb, mintSessionCookie } from "./helpers";
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const realBroker = { ...require("@/lib/broker") } as Record<string, unknown>;
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const realDirect = { ...require("@/lib/youtube-direct") } as Record<string, unknown>;
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const realSession = { ...require("@/lib/watch/session") } as Record<string, unknown>;
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const realYtSession = { ...require("@/lib/youtube/session") } as Record<string, unknown>;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const realWatch = { ...require("@/lib/youtube/watch") } as Record<string, unknown>;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const realOperator = { ...require("@/lib/youtube/operator") } as Record<string, unknown>;
-
-class MockBrokerError extends Error {
-  kind: string;
-  status: number;
-  detail?: unknown;
-  constructor(kind: string, message: string, status: number, detail?: unknown) {
-    super(message);
-    this.name = "BrokerError";
-    this.kind = kind;
-    this.status = status;
-    this.detail = detail;
-  }
-}
-
-const brokerCalls: { kind: string; target: unknown; payload: unknown }[] = [];
-let brokerResponse: unknown = { ok: true, verified: true, path: "ui" };
-
-mock.module("@/lib/broker", () => ({
-  BROKER_OFFLINE_MESSAGE: "action backend offline — the lead's broker must be running",
-  BrokerError: MockBrokerError,
-  brokerAction: async (kind: string, target: unknown, payload?: unknown) => {
-    brokerCalls.push({ kind, target, payload });
-    return typeof brokerResponse === "function"
-      ? brokerResponse({ kind, target, payload })
-      : brokerResponse;
-  },
-  brokerOk: (r: unknown) => !(r instanceof MockBrokerError),
-  brokerUrl: () => "http://127.0.0.1:3055",
-  brokerSecret: () => "s3cret",
-  brokerConfigured: () => true,
-  brokerTimeoutMs: () => 15000,
-}));
-
-const directCalls: { videoId: string; text: string; createCommentParams?: string }[] = [];
-let directResponse: unknown = { ok: true };
-let directConfigured = false;
-
-mock.module("@/lib/youtube-direct", () => ({
-  parseCookies: (raw: string) => {
-    const out: Record<string, string> = {};
-    for (const part of raw.split(";")) {
-      const i = part.indexOf("=");
-      if (i > 0) out[part.slice(0, i).trim()] = part.slice(i + 1).trim();
-    }
-    return out;
-  },
-  cookieValue: () => "fake",
-  directAuthConfigured: () => directConfigured,
-  sapisidhash: () => "0_hash",
-  subscribeChannel: async () => ({ ok: true }),
-  getSubscribedState: async () => null,
-  createComment: async (videoId: string, text: string, opts?: { createCommentParams?: string }) => {
-    directCalls.push({ videoId, text, ...(opts?.createCommentParams ? { createCommentParams: opts.createCommentParams } : {}) });
-    return directResponse;
-  },
-  createReply: async (videoId: string, createCommentParams: string, text: string) => {
-    directCalls.push({ videoId, text, createCommentParams });
-    return directResponse;
-  },
-}));
 
 const VIEWER = { id: "u1", handle: "demo", name: "Demo", avatarUrl: "https://example.com/a.png" };
 
@@ -99,12 +36,6 @@ mock.module("@/lib/watch/session", () => ({
   resolveViewerFromHeaders: async () => null,
   VIEWER_COOKIE: "wfx2_uid",
   VIEWER_HEADER: "x-wfx2-user",
-}));
-
-let sessionConfigured = false;
-mock.module("@/lib/youtube/session", () => ({
-  getCookieHeader: () => (sessionConfigured ? "SAPISID=fake; VISITOR_INFO=1" : null),
-  hasSession: () => sessionConfigured,
 }));
 
 const WATCH_META = {
@@ -133,32 +64,22 @@ import { PATCH as patchComment, DELETE as deleteComment } from "@/app/api/commen
 import { POST as postHeart } from "@/app/api/comments/[id]/heart/route";
 import { POST as postPin } from "@/app/api/comments/[id]/pin/route";
 import { POST as postReport } from "@/app/api/comments/[id]/report/route";
-
-const OFFLINE_MSG = "action backend offline — the lead's broker must be running";
+import { db } from "@/lib/db";
 
 let AUTH_COOKIE = "";
 beforeAll(async () => {
-  // WFX2-P2-AU: these write routes sit behind the auth gate — sign in
+  // these write routes sit behind the auth gate — sign in
   AUTH_COOKIE = await mintSessionCookie();
 });
 
 setupTestDb();
 
 beforeEach(() => {
-  brokerCalls.length = 0;
-  directCalls.length = 0;
-  brokerResponse = { ok: true, verified: true, path: "ui" };
-  directResponse = { ok: true };
-  directConfigured = false;
-  sessionConfigured = false;
   operatorChannel = null;
 });
 
 afterAll(() => {
-  mock.module("@/lib/broker", () => realBroker);
-  mock.module("@/lib/youtube-direct", () => realDirect);
   mock.module("@/lib/watch/session", () => realSession);
-  mock.module("@/lib/youtube/session", () => realYtSession);
   mock.module("@/lib/youtube/watch", () => realWatch);
   mock.module("@/lib/youtube/operator", () => realOperator);
 });
@@ -172,127 +93,126 @@ const req = (body: unknown, method = "POST", url = "http://localhost/api/x"): Ne
 
 const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
 
-describe("POST /api/comments — comment create (direct-first, broker fallback)", () => {
-  test("direct path: SAPISIDHASH create_comment ok → path direct, no broker call", async () => {
-    directConfigured = true;
+describe("POST /api/comments — comment create (the honest LOCAL lane)", () => {
+  test("a signed-in comment lands in the WebFlix store: 201, local:true, path local — the direct/broker rungs are retired", async () => {
     const res = await postComment(req({ videoId: "dQw4w9WgXcQ", body: "hello from WebFlix" }));
     expect(res.status).toBe(201);
-    const body = (await res.json()) as { ok: boolean; body: string; path: string; effect: string };
+    const body = (await res.json()) as {
+      ok: boolean;
+      body: string;
+      path: string;
+      local?: boolean;
+      effect: string;
+    };
     expect(body.ok).toBe(true);
     expect(body.body).toBe("hello from WebFlix");
-    expect(body.path).toBe("direct");
+    expect(body.path).toBe("local");
+    expect(body.local).toBe(true); // origin disclosed — never a YouTube write claimed
     expect(body.effect).toBe("comment-created");
-    expect(directCalls).toEqual([{ videoId: "dQw4w9WgXcQ", text: "hello from WebFlix" }]);
-    expect(brokerCalls).toHaveLength(0);
+    expect(await db.comment.count({ where: { videoId: "dQw4w9WgXcQ", body: "hello from WebFlix" } })).toBe(1);
   });
 
-  test("direct unconfigured → broker comment-create (kind + target + text)", async () => {
-    const res = await postComment(req({ videoId: "dQw4w9WgXcQ", body: "via broker" }));
+  test("the author bridge: the row renders as the session's own comment (isOwn + the wf_ shadow author)", async () => {
+    const res = await postComment(req({ videoId: "dQw4w9WgXcQ", body: "via the author bridge" }));
     expect(res.status).toBe(201);
-    const body = (await res.json()) as { ok: boolean; path: string; isOwn: boolean };
+    const body = (await res.json()) as {
+      ok: boolean;
+      isOwn: boolean;
+      author: { id: string; handle: string; name: string };
+    };
     expect(body.ok).toBe(true);
-    expect(body.path).toBe("ui");
-    expect(body.isOwn).toBe(true); // own-comment rendering with the viewer identity
-    expect(brokerCalls).toEqual([
-      { kind: "comment-create", target: { videoId: "dQw4w9WgXcQ" }, payload: { text: "via broker" } },
-    ]);
+    expect(body.isOwn).toBe(true); // own-comment rendering with the session identity
+    expect(body.author.id).toBe("wf-u_wfx2_test");
+    expect(body.author.handle).toMatch(/^wf_/);
+    expect(body.author.name).toBe("Test Operator");
   });
 
-  test("direct fails → broker fallback (honest path switch)", async () => {
-    directConfigured = true;
-    directResponse = { ok: false, status: 403 };
-    const res = await postComment(req({ videoId: "dQw4w9WgXcQ", body: "retry via broker" }));
+  test("the video snapshot creates the shadow Video/Channel rows (the honest mirror of the real video)", async () => {
+    const res = await postComment(
+      req({
+        videoId: "vidShadow1",
+        body: "with a snapshot",
+        video: { title: "The Real Title", channelId: "UCShadowChan1", channelName: "Shadow Channel" },
+      })
+    );
     expect(res.status).toBe(201);
-    expect(brokerCalls[0].kind).toBe("comment-create");
+    const video = await db.video.findUniqueOrThrow({ where: { id: "vidShadow1" } });
+    expect(video.title).toBe("The Real Title");
+    expect(video.channelId).toBe("UCShadowChan1");
+    const channel = await db.channel.findUniqueOrThrow({ where: { id: "UCShadowChan1" } });
+    expect(channel.name).toBe("Shadow Channel");
   });
 
-  test("broker offline + WebFlix session → the LOCAL rung catches honestly (201 local:true)", async () => {
-    brokerResponse = new MockBrokerError("offline", OFFLINE_MSG, 502);
+  test("the local row keeps honest zero engagement (likes 0, moderation approved)", async () => {
     const res = await postComment(
       req({ videoId: "dQw4w9WgXcQ", body: "kept on WebFlix", video: { title: "t" } })
     );
     expect(res.status).toBe(201); // never a dead end — the honest local store
-    const body = (await res.json()) as { local?: boolean; path?: string; effect?: string };
-    expect(body.local).toBe(true); // origin disclosed — NOT a YouTube write
+    const body = (await res.json()) as { local?: boolean; path?: string; effect?: string; likes?: number; moderation?: string };
+    expect(body.local).toBe(true);
     expect(body.path).toBe("local");
     expect(body.effect).toBe("comment-created");
+    expect(body.likes).toBe(0); // honest zero — never fabricated engagement
+    expect(body.moderation).toBe("approved");
   });
 
-  test("reply shape: parentId + parentText → broker comment-reply with commentText locator", async () => {
+  test("reply shape: parentId + parentText → the LOCAL reply with the shadow parent anchor", async () => {
     const res = await postComment(
       req({ videoId: "dQw4w9WgXcQ", body: "a reply", parentId: "Ugx123", parentText: "parent text" })
     );
     expect(res.status).toBe(201);
-    const body = (await res.json()) as { effect: string; parentId: string };
+    const body = (await res.json()) as { effect: string; parentId: string; local?: boolean; path?: string };
     expect(body.effect).toBe("comment-replied");
     expect(body.parentId).toBe("Ugx123");
-    expect(brokerCalls).toEqual([
-      {
-        kind: "comment-reply",
-        target: { commentId: "Ugx123", videoId: "dQw4w9WgXcQ" },
-        payload: { text: "a reply", commentText: "parent text" },
-      },
-    ]);
+    expect(body.local).toBe(true);
+    expect(body.path).toBe("local");
+    // the shadow parent anchors the YouTube thread; the reply persists under it
+    const anchor = await db.comment.findUniqueOrThrow({ where: { id: "Ugx123" } });
+    expect(anchor.body).toBe("parent text");
+    const reply = await db.comment.findFirstOrThrow({ where: { videoId: "dQw4w9WgXcQ", body: "a reply" } });
+    expect(reply.parentId).toBe("Ugx123");
+    expect(reply.moderation).toBe("approved");
   });
 
-  test("WFX2-P6-CR reply rung: replyParams + direct configured → createReply (params on the wire), no broker, no local row", async () => {
-    directConfigured = true;
+  test("replyParams is accepted (the composer's forwarding contract) but the write stays LOCAL — no YouTube claim", async () => {
     const res = await postComment(
       req({
         videoId: "dQw4w9WgXcQ",
-        body: "direct reply",
-        parentId: "Ugx123",
-        parentText: "parent text",
+        body: "reply with params",
+        parentId: "Ugx456",
+        parentText: "p",
         replyParams: "Eh1VZ3pnZTM0MGRCZy1yZXBseXBhcmFtcw==",
       })
     );
     expect(res.status).toBe(201);
     const body = (await res.json()) as { path?: string; local?: boolean; effect?: string };
-    expect(body.path).toBe("direct");
-    expect(body.local).toBeUndefined(); // a YouTube write — never claimed local
-    expect(body.effect).toBe("comment-replied");
-    expect(directCalls).toEqual([
-      { videoId: "dQw4w9WgXcQ", text: "direct reply", createCommentParams: "Eh1VZ3pnZTM0MGRCZy1yZXBseXBhcmFtcw==" },
-    ]);
-    expect(brokerCalls).toHaveLength(0);
-    const db = (await import("../src/lib/db")).db;
-    expect(await db.comment.count({ where: { videoId: "dQw4w9WgXcQ", body: "direct reply" } })).toBe(0);
-  });
-
-  test("WFX2-P6-CR reply rung: no replyParams (sign-in modal) → the direct rung is skipped honestly", async () => {
-    directConfigured = true;
-    const res = await postComment(
-      req({ videoId: "dQw4w9WgXcQ", body: "no params", parentId: "Ugx123", parentText: "p" })
-    );
-    expect(res.status).toBe(201);
-    expect(directCalls).toHaveLength(0); // never attempted without the wire parameter
-    expect(brokerCalls[0].kind).toBe("comment-reply");
-  });
-
-  test("WFX2-P6-CR reply rung: direct fails → broker fails → LOCAL (shadow parent + reply persisted)", async () => {
-    directConfigured = true;
-    directResponse = { ok: false, status: 401 }; // the expired-session reality
-    brokerResponse = new MockBrokerError("offline", OFFLINE_MSG, 502);
-    const res = await postComment(
-      req({
-        videoId: "dQw4w9WgXcQ",
-        body: "honest local reply",
-        parentId: "UgxShadow1",
-        parentText: "the live parent text",
-      })
-    );
-    expect(res.status).toBe(201);
-    const body = (await res.json()) as { local?: boolean; path?: string; parentId?: string | null };
+    expect(body.path).toBe("local"); // the local lane needs no locator — params are forwarded shape only
     expect(body.local).toBe(true);
-    expect(body.path).toBe("local");
-    expect(body.parentId).toBe("UgxShadow1");
-    const db = (await import("../src/lib/db")).db;
-    // the shadow parent anchors the YouTube thread; the reply persists under it
-    const anchor = await db.comment.findUniqueOrThrow({ where: { id: "UgxShadow1" } });
-    expect(anchor.body).toBe("the live parent text");
-    const reply = await db.comment.findFirstOrThrow({ where: { videoId: "dQw4w9WgXcQ", body: "honest local reply" } });
-    expect(reply.parentId).toBe("UgxShadow1");
-    expect(reply.moderation).toBe("approved");
+    expect(body.effect).toBe("comment-replied");
+    expect(
+      await db.comment.count({ where: { videoId: "dQw4w9WgXcQ", body: "reply with params" } }),
+    ).toBe(1);
+  });
+
+  test("no replyParams → still the honest local lane (the params are optional)", async () => {
+    const res = await postComment(
+      req({ videoId: "dQw4w9WgXcQ", body: "no params", parentId: "Ugx789", parentText: "p" })
+    );
+    expect(res.status).toBe(201);
+    expect(((await res.json()) as { path: string }).path).toBe("local");
+    expect(await db.comment.count({ where: { videoId: "dQw4w9WgXcQ", body: "no params" } })).toBe(1);
+  });
+
+  test("guest (no WebFlix session) → 401 — the local lane is identity-bound, never anonymous", async () => {
+    const res = await postComment(
+      new Request("http://localhost/api/comments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videoId: "dQw4w9WgXcQ", body: "guest write" }),
+      }) as unknown as NextRequest
+    );
+    expect(res.status).toBe(401);
+    expect(await db.comment.count({ where: { videoId: "dQw4w9WgXcQ", body: "guest write" } })).toBe(0);
   });
 
   test("empty body / missing videoId / over-limit body → 400", async () => {
@@ -300,37 +220,38 @@ describe("POST /api/comments — comment create (direct-first, broker fallback)"
     expect((await postComment(req({ body: "no video" }))).status).toBe(400);
     const long = "x".repeat(10_001);
     expect((await postComment(req({ videoId: "dQw4w9WgXcQ", body: long }))).status).toBe(400);
-    expect(brokerCalls).toHaveLength(0);
+    expect(await db.comment.count({ where: { body: long } })).toBe(0);
   });
 });
 
-describe("PATCH /api/comments/[id] — comment edit (broker ⋮ → Edit DOM path)", () => {
+describe("PATCH /api/comments/[id] — the honest UNSUPPORTED lane (edit)", () => {
   const id = "Ugzge340dBgB75hWBm54AaABAg";
 
-  test("ok path: broker comment-edit with the locator payload; edited DTO back", async () => {
+  test("the edit answers the honest 501 {error, kind: youtube-unsupported} — the broker DOM drive is retired", async () => {
     const res = await patchComment(
       req({ body: "new text", videoId: "dQw4w9WgXcQ", commentText: "old text" }, "PATCH"),
       ctx(id)
     );
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { ok: boolean; effect: string; body: string; edited: boolean };
-    expect(body.ok).toBe(true);
-    expect(body.effect).toBe("comment-edited");
-    expect(body.body).toBe("new text");
-    expect(body.edited).toBe(true);
-    expect(brokerCalls).toEqual([
-      {
-        kind: "comment-edit",
-        target: { commentId: id, videoId: "dQw4w9WgXcQ" },
-        payload: { text: "new text", commentText: "old text" },
-      },
-    ]);
+    expect(res.status).toBe(501);
+    const body = (await res.json()) as { error: string; kind?: string };
+    expect(body.error).toBe(
+      "Editing YouTube comments isn't supported by the official YouTube API — open the video on YouTube to do it there",
+    );
+    expect(body.kind).toBe("youtube-unsupported");
   });
 
-  test("missing videoId → 400 (the DOM path needs the watch page)", async () => {
+  test("an edit carrying the full locator still answers the same honest 501 (never a broker drive)", async () => {
+    const res = await patchComment(
+      req({ body: "x", videoId: "dQw4w9WgXcQ", commentText: "locator text" }, "PATCH"),
+      ctx(id)
+    );
+    expect(res.status).toBe(501);
+    expect(((await res.json()) as { kind?: string }).kind).toBe("youtube-unsupported");
+  });
+
+  test("missing videoId → 400 (validation precedes the verdict)", async () => {
     const res = await patchComment(req({ body: "x" }, "PATCH"), ctx(id));
     expect(res.status).toBe(400);
-    expect(brokerCalls).toHaveLength(0);
   });
 
   test("empty body → 400 (zod validation)", async () => {
@@ -340,94 +261,67 @@ describe("PATCH /api/comments/[id] — comment edit (broker ⋮ → Edit DOM pat
     );
     expect(res.status).toBe(400);
   });
-
-  test("broker offline → 502 honest", async () => {
-    brokerResponse = new MockBrokerError("offline", OFFLINE_MSG, 502);
-    const res = await patchComment(
-      req({ body: "x", videoId: "dQw4w9WgXcQ" }, "PATCH"),
-      ctx(id)
-    );
-    expect(res.status).toBe(502);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe(OFFLINE_MSG);
-  });
 });
 
-describe("DELETE /api/comments/[id] — comment delete (⋮ → Delete → confirm)", () => {
+describe("DELETE /api/comments/[id] — the honest UNSUPPORTED lane (delete)", () => {
   const id = "Ugzge340dBgB75hWBm54AaABAg";
 
-  test("ok path: broker comment-delete with videoId + commentText locator", async () => {
+  test("the delete answers the honest 501 {error, kind: youtube-unsupported}", async () => {
     const res = await deleteComment(
       req({ videoId: "dQw4w9WgXcQ", commentText: "to delete" }, "DELETE"),
       ctx(id)
     );
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { ok: boolean; deleted: boolean; effect: string };
-    expect(body.ok).toBe(true);
-    expect(body.deleted).toBe(true);
-    expect(body.effect).toBe("comment-deleted");
-    expect(brokerCalls).toEqual([
-      {
-        kind: "comment-delete",
-        target: { commentId: id, videoId: "dQw4w9WgXcQ" },
-        payload: { commentText: "to delete" },
-      },
-    ]);
+    expect(res.status).toBe(501);
+    const body = (await res.json()) as { error: string; kind?: string };
+    expect(body.error).toBe(
+      "Deleting YouTube comments isn't supported by the official YouTube API — open the video on YouTube to do it there",
+    );
+    expect(body.kind).toBe("youtube-unsupported");
+  });
+
+  test("a delete with the commentText locator → the same honest 501 (the DOM-path era is retired)", async () => {
+    const res = await deleteComment(
+      req({ videoId: "dQw4w9WgXcQ", commentText: "located" }, "DELETE"),
+      ctx(id)
+    );
+    expect(res.status).toBe(501);
+    expect(((await res.json()) as { kind?: string }).kind).toBe("youtube-unsupported");
   });
 
   test("missing videoId → 400", async () => {
     const res = await deleteComment(req({}, "DELETE"), ctx(id));
     expect(res.status).toBe(400);
   });
-
-  test("broker offline → 502 honest", async () => {
-    brokerResponse = new MockBrokerError("offline", OFFLINE_MSG, 502);
-    const res = await deleteComment(
-      req({ videoId: "dQw4w9WgXcQ" }, "DELETE"),
-      ctx(id)
-    );
-    expect(res.status).toBe(502);
-  });
 });
 
-describe("POST /api/comments/[id]/heart — creator-mode guard + broker heart", () => {
+describe("POST /api/comments/[id]/heart — creator guard + the honest UNSUPPORTED lane", () => {
   const id = "Ugzge340dBgB75hWBm54AaABAg";
 
-  test("public mode (no operator session) → 403 creator-only, no broker call", async () => {
+  test("public mode (not the video's channel) → 403 creator-only", async () => {
     const res = await postHeart(req({ videoId: "dQw4w9WgXcQ" }), ctx(id));
     expect(res.status).toBe(403);
     const body = (await res.json()) as { error: string };
     expect(body.error).toMatch(/channel owner/i);
-    expect(brokerCalls).toHaveLength(0);
   });
 
-  test("creator mode (operator session IS the channel) → broker comment-heart", async () => {
-    sessionConfigured = true;
+  test("creator mode (the operator session IS the channel) → the honest 501 — creator hearts have no official end-user API", async () => {
     operatorChannel = "UCuAXFkgsw1L7xaCfnd5JJOw";
-    brokerResponse = { ok: true, verified: true, path: "ui", detail: { hearted: true } };
     const res = await postHeart(
       req({ videoId: "dQw4w9WgXcQ", commentText: "nice one" }),
       ctx(id)
     );
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { ok: boolean; heartedByCreator: boolean; effect: string };
-    expect(body.heartedByCreator).toBe(true);
-    expect(body.effect).toBe("comment-hearted");
-    expect(brokerCalls).toEqual([
-      {
-        kind: "comment-heart",
-        target: { commentId: id, videoId: "dQw4w9WgXcQ" },
-        payload: { commentText: "nice one" },
-      },
-    ]);
+    expect(res.status).toBe(501);
+    const body = (await res.json()) as { error: string; kind?: string };
+    expect(body.error).toBe(
+      "Creator hearts isn't supported by the official YouTube API — open the video on YouTube to do it there",
+    );
+    expect(body.kind).toBe("youtube-unsupported");
   });
 
   test("session present but operator is NOT the channel → 403", async () => {
-    sessionConfigured = true;
     operatorChannel = "UCsomeOtherChannel00000000";
     const res = await postHeart(req({ videoId: "dQw4w9WgXcQ" }), ctx(id));
     expect(res.status).toBe(403);
-    expect(brokerCalls).toHaveLength(0);
   });
 
   test("missing videoId → 400", async () => {
@@ -436,79 +330,53 @@ describe("POST /api/comments/[id]/heart — creator-mode guard + broker heart", 
   });
 });
 
-describe("POST /api/comments/[id]/pin — creator-mode guard + broker pin", () => {
+describe("POST /api/comments/[id]/pin — creator guard + the honest UNSUPPORTED lane", () => {
   const id = "Ugzge340dBgB75hWBm54AaABAg";
 
-  test("creator mode → broker comment-pin; pinned flows from the broker detail", async () => {
-    sessionConfigured = true;
+  test("creator mode → the honest 501 — pinning is channel moderation on YouTube's own surface", async () => {
     operatorChannel = "UCuAXFkgsw1L7xaCfnd5JJOw";
-    brokerResponse = { ok: true, verified: true, path: "ui", detail: { pinned: true } };
     const res = await postPin(req({ videoId: "dQw4w9WgXcQ", commentText: "pin me" }), ctx(id));
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { pinned: boolean; effect: string };
-    expect(body.pinned).toBe(true);
-    expect(body.effect).toBe("comment-pinned");
-    expect(brokerCalls).toEqual([
-      {
-        kind: "comment-pin",
-        target: { commentId: id, videoId: "dQw4w9WgXcQ" },
-        payload: { commentText: "pin me" },
-      },
-    ]);
+    expect(res.status).toBe(501);
+    const body = (await res.json()) as { error: string; kind?: string };
+    expect(body.error).toBe(
+      "Pinning comments isn't supported by the official YouTube API — open the video on YouTube to do it there",
+    );
+    expect(body.kind).toBe("youtube-unsupported");
   });
 
   test("public mode → 403 creator-only", async () => {
     const res = await postPin(req({ videoId: "dQw4w9WgXcQ" }), ctx(id));
     expect(res.status).toBe(403);
-    expect(brokerCalls).toHaveLength(0);
+    expect(((await res.json()) as { error: string }).error).toMatch(/channel owner/i);
   });
 });
 
-describe("POST /api/comments/[id]/report — needs-session degrade + broker report", () => {
+describe("POST /api/comments/[id]/report — the honest UNSUPPORTED lane (the public-mode 403 retired)", () => {
   const id = "Ugzge340dBgB75hWBm54AaABAg";
 
-  test("public mode → 403 needsSession (honest, no fake reported state)", async () => {
-    const res = await postReport(req({ videoId: "dQw4w9WgXcQ" }), ctx(id));
-    expect(res.status).toBe(403);
-    const body = (await res.json()) as { error: string; needsSession: boolean };
-    expect(body.needsSession).toBe(true);
-    expect(body.error).toMatch(/operator's YouTube session/i);
-    expect(brokerCalls).toHaveLength(0);
-  });
-
-  test("session present → broker comment-report with the canonical reason label", async () => {
-    sessionConfigured = true;
-    brokerResponse = { ok: true, verified: true, path: "ui", detail: { reason: "Spam or misleading" } };
+  test("a signed-in report answers the honest 501 {error, kind: youtube-unsupported} — the broker DOM drive is retired", async () => {
     const res = await postReport(
       req({ videoId: "dQw4w9WgXcQ", commentText: "spammy", reason: "spam or misleading" }),
       ctx(id)
     );
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { ok: boolean; reported: boolean; reason: string };
-    expect(body.ok).toBe(true);
-    expect(body.reported).toBe(true);
-    expect(body.reason).toBe("Spam or misleading");
-    expect(brokerCalls).toEqual([
-      {
-        kind: "comment-report",
-        target: { commentId: id, videoId: "dQw4w9WgXcQ" },
-        payload: { commentText: "spammy", reason: "Spam or misleading" },
-      },
-    ]);
+    expect(res.status).toBe(501);
+    const body = (await res.json()) as { error: string; kind?: string };
+    expect(body.error).toBe(
+      "Reporting YouTube comments isn't supported by the official YouTube API — open the video on YouTube to do it there",
+    );
+    expect(body.kind).toBe("youtube-unsupported");
   });
 
-  test("unknown reason label → broker still called with no reason (dialog default row)", async () => {
-    sessionConfigured = true;
+  test("an unknown reason label → the same honest 501 (the dialog's default row never reaches a broker)", async () => {
     const res = await postReport(
       req({ videoId: "dQw4w9WgXcQ", reason: "not-a-known-label" }),
       ctx(id)
     );
-    expect(res.status).toBe(200);
-    expect(brokerCalls[0].payload).toEqual({});
+    expect(res.status).toBe(501);
+    expect(((await res.json()) as { kind?: string }).kind).toBe("youtube-unsupported");
   });
 
   test("missing videoId → 400", async () => {
-    sessionConfigured = true;
     const res = await postReport(req({}), ctx(id));
     expect(res.status).toBe(400);
   });

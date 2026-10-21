@@ -758,7 +758,7 @@ describe("P35 likeStatusFromResponse — the viewer's rating from the next entit
   });
 });
 
-describe("P35 mapWatchMetadata — state.like is session-gated, wired from the entity", () => {
+describe("P36 mapWatchMetadata — the shared cached payload carries NO per-user state", () => {
   const withLike = () => {
     const base = structuredClone(load("next_dQw4"));
     for (const m of base.frameworkUpdates.entityBatchUpdate.mutations) {
@@ -777,10 +777,16 @@ describe("P35 mapWatchMetadata — state.like is session-gated, wired from the e
     expect(meta.state.like).toBeNull();
   });
 
-  test("session configured: the entity's LIKE surfaces as state.like", () => {
+  test("session configured: the entity's LIKE NEVER surfaces — the operator-session entity parse is retired from the shared mapper", () => {
     process.env.YT_COOKIES = "SAPISID=fake_sapisid; VISITOR_INFO1_LIVE=x";
     const meta = mapWatchMetadata("dQw4w9WgXcQ", withLike());
-    expect(meta.state.like).toBe("like");
+    // the shared cached `next` payload serves EVERY signed-in user — baking
+    // one deployment-wide identity's rating into it was the cross-user leak
+    // the P36 work order closed. The acting user's own truth (videos.getRating
+    // with their connected account) overlays per-request at the route.
+    expect(meta.state.like).toBeNull();
+    expect(meta.state.subscribed).toBe(false);
+    expect(meta.state.savedWatchLater).toBe(false);
   });
 
   test("session configured + INDIFFERENT (the real fixture) → null", () => {
@@ -790,7 +796,7 @@ describe("P35 mapWatchMetadata — state.like is session-gated, wired from the e
   });
 });
 
-describe("P35 getVideoDetail — the watch-later bootstrap + the cache invalidation seam", () => {
+describe("P36 getVideoDetail — the shared detail carries NO per-user state (the overlay is the route's job)", () => {
   afterEach(() => {
     setUpstream(null);
     delete process.env.YT_COOKIES;
@@ -873,41 +879,18 @@ describe("P35 getVideoDetail — the watch-later bootstrap + the cache invalidat
     expect(up.recorded.filter((r) => r.url.includes("/browse"))).toHaveLength(0);
   });
 
-  test("session + WL contains the video → savedWatchLater true", async () => {
+  test("session + an upstream that WOULD serve a WL containing the video → savedWatchLater stays false and the WL read NEVER fires (the operator bootstrap retired)", async () => {
     process.env.YT_COOKIES = "SAPISID=fake_sapisid; VISITOR_INFO1_LIVE=x";
     const up = makeUpstream([{ videoId: "someOtherVideo" }, { videoId: "dQw4w9WgXcQ" }]);
     setUpstream(up.impl);
     const detail = await getVideoDetail("dQw4w9WgXcQ");
-    expect(detail!.state.savedWatchLater).toBe(true);
-    // the WL read fired exactly once with the VLWL browseId
-    const browses = up.recorded.filter((r) => r.url.includes("/browse"));
-    expect(browses).toHaveLength(1);
-    expect(browses[0].body.browseId).toBe("VLWL");
-  });
-
-  test("session + WL without the video → savedWatchLater false", async () => {
-    process.env.YT_COOKIES = "SAPISID=fake_sapisid; VISITOR_INFO1_LIVE=x";
-    const up = makeUpstream([{ videoId: "someOtherVideo" }]);
-    setUpstream(up.impl);
-    const detail = await getVideoDetail("dQw4w9WgXcQ");
-    expect(detail!.state.savedWatchLater).toBe(false);
-  });
-
-  test("session + the WL read fails → honest false (the degrade)", async () => {
-    process.env.YT_COOKIES = "SAPISID=fake_sapisid; VISITOR_INFO1_LIVE=x";
-    const impl = async (url: string): Promise<Response> => {
-      if (url.includes("/youtubei/v1/next")) {
-        return new Response(JSON.stringify(load("next_dQw4")), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-      return new Response("broken", { status: 500 });
-    };
-    setUpstream(impl);
-    const detail = await getVideoDetail("dQw4w9WgXcQ");
     expect(detail).not.toBeNull();
     expect(detail!.state.savedWatchLater).toBe(false);
+    expect(detail!.state.like).toBeNull();
+    expect(detail!.state.subscribed).toBe(false);
+    // the retired WL read never fired — only the next() call; the acting
+    // user's own watch-later truth overlays at the route (their local list)
+    expect(up.recorded.filter((r) => r.url.includes("/browse"))).toHaveLength(0);
   });
 
   test("invalidateWatchCache drops the primed entry (both the key law and the engine law)", async () => {

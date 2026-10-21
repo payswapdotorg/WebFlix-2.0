@@ -399,9 +399,18 @@ describe("AccountPage — the identity edit (signed-in)", () => {
     };
     await render(<AccountPage />);
     await act(async () => {}); // let useApi settle
-    // the honest operator-session section keeps its wording law
+    // the honest read-session section keeps its WFX2-P36 wording law: the
+    // server session only READS public YouTube pages — every user write acts
+    // on the user's OWN connected YouTube account
     expect(host!.textContent).toContain("YouTube session");
-    expect(host!.textContent).toContain("Operator session connected");
+    expect(host!.textContent).toContain("Operator read session connected");
+    expect(host!.textContent).toContain("uses it to read public YouTube pages");
+    expect(host!.textContent).toContain("It never performs your actions");
+    expect(host!.textContent).toContain(
+      "your likes, subscribes and playlists act on your own connected YouTube account (Settings → YouTube account)"
+    );
+    // the WebFlix-local identity disclosure (never a fabricated YouTube account)
+    expect(host!.textContent).toContain("Your WebFlix account is local to WebFlix");
     // the identity card
     const nameInput = q("#displayName") as unknown as HTMLInputElement;
     expect(nameInput).not.toBeNull();

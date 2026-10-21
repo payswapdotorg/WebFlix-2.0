@@ -55,7 +55,9 @@ export function PlaylistQueuePanel({
   const [open, setOpen] = useState(true);
   const { playlist, items } = queue;
 
-  // the honest special-list states (WL/LL — the P22-B wording family)
+  // the honest special-list states (WL/LL — retired to the notice envelope
+  // by WFX2-P36: the queue route answers the honest no-queue verdict, so
+  // these branches only render for a legacy envelope shape)
   if (queue.loginRequired) {
     return (
       <section
@@ -73,9 +75,8 @@ export function PlaylistQueuePanel({
           onToggle={() => {}}
         />
         <p className="px-3 pb-3 text-xs text-muted-foreground">
-          This queue is personal to the YouTube account this WebFlix deployment rides (single-tenant
-          live mode). No YouTube session is connected yet — your WebFlix sign-in is fine; the
-          operator session (YT_COOKIES) needs to be connected.
+          YouTube&apos;s Watch Later / Liked lists have no official API — WebFlix never reads one
+          person&apos;s list for another. Your WebFlix Watch later lives in the save button (local).
         </p>
       </section>
     );

@@ -6,16 +6,16 @@ import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/videos/[id]/not-interested — LIVE Tier-2 write (broker):
- * the kebab "Not interested" action, executed as the real home-feed
- * action on youtube.com. Response keeps the {notInterested: true} contract
- * (+ok/effect/path).
+ * POST /api/videos/[id]/not-interested — WFX2-P36: the WebFlix-LOCAL
+ * personalization signal (fully disclosed — no YouTube-side write claimed).
+ * Response keeps the {notInterested: true} contract (+ok/effect/local/note).
  */
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  if (!(await getSessionUser(req))) return authRequiredResponse();
+  const sessionUser = await getSessionUser(req);
+  if (!sessionUser) return authRequiredResponse();
   try {
     const { id } = await ctx.params;
-    const result = await proxyNotInterested(id);
+    const result = await proxyNotInterested(id, sessionUser);
     return json(result);
   } catch (e) {
     return errorResponse(e);

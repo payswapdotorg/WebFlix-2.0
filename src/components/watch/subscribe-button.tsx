@@ -6,6 +6,11 @@
  * persisted per channel via POST /api/subscriptions. Clicking "Subscribed"
  * opens the unsubscribe confirm; the bell opens preference modes.
  *
+ * WFX2-P36: the subscribe/unsubscribe write acts on the user's OWN connected
+ * YouTube account (the official lane); the bell PREF itself has no official
+ * API — the route answers bell:null + an honest note, surfaced here as a
+ * one-time toast ONLY when the user actually picked a preference.
+ *
  * WFX2-P2-AU: WebFlix guests never fire a subscription write — the
  * subscribe click routes to /signin (redirect back to this watch page).
  */
@@ -49,7 +54,10 @@ export function SubscribeButton({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const apply = async (bellValue: "all" | "personalized" | "none" | "off") => {
+  const apply = async (
+    bellValue: "all" | "personalized" | "none" | "off",
+    viaBellMenu = false,
+  ) => {
     if (busy) return;
     if (guest) {
       // WFX2-P2-AU: the account gate — never a guest subscription write
@@ -59,7 +67,7 @@ export function SubscribeButton({
     }
     setBusy(true);
     try {
-      const result = await post<SubscriptionResultDto>("/api/subscriptions", {
+      const result = await post<SubscriptionResultDto & { note?: string }>("/api/subscriptions", {
         channelId,
         bell: bellValue,
         ...(typeof subscriberCount === "number" ? { subscriberCount } : {}),
@@ -73,9 +81,16 @@ export function SubscribeButton({
       if (result.subscribed && bellValue !== "off") {
         toast.success(`Subscribed to ${channelName}`);
       }
+      // WFX2-P36: the bell PREF itself has no official API — the response
+      // says so honestly (bell:null + note). Surface it once, and ONLY when
+      // the user actually picked a bell preference (the plain Subscribe
+      // click never claimed one).
+      if (viaBellMenu && result.subscribed && result.note) {
+        toast.info(result.note);
+      }
     } catch (e) {
-      // Task 4-b: the broker-offline shape gets the "check the connection in
-      // Settings" prompt; every other error keeps its existing message
+      // WFX2-P36: the connect / re-connect prompt rides the failure kind;
+      // every other error keeps its honest per-surface message
       toastActionError(e, "Failed to update subscription");
     } finally {
       setBusy(false);
@@ -155,7 +170,7 @@ export function SubscribeButton({
                 type="button"
                 role="menuitemradio"
                 aria-checked={bell === value}
-                onClick={() => apply(value)}
+                onClick={() => apply(value, true)}
                 className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm hover:bg-accent"
               >
                 <Icon

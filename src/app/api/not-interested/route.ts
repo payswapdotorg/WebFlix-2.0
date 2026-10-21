@@ -6,13 +6,15 @@ import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/not-interested {videoId} — LIVE Tier-2 write (broker): hides
- * the video from recommendations — the real home-feed "Not interested"
- * action on youtube.com. Response keeps the {hidden: true} contract the
- * video-card kebab consumes (+ok/effect).
+ * POST /api/not-interested {videoId} — WFX2-P36: the WebFlix-LOCAL
+ * personalization signal (fully disclosed: "Hidden on WebFlix" — YouTube's
+ * own Not-interested has no official API, so no YouTube-side write is
+ * claimed). Response keeps the {hidden: true} contract the video-card
+ * kebab consumes (+ok/effect/local/note).
  */
 export async function POST(req: NextRequest) {
-  if (!(await getSessionUser(req))) return authRequiredResponse();
+  const sessionUser = await getSessionUser(req);
+  if (!sessionUser) return authRequiredResponse();
   try {
     let body: Record<string, unknown> = {};
     try {
@@ -22,7 +24,7 @@ export async function POST(req: NextRequest) {
     }
     const videoId = typeof body.videoId === "string" ? body.videoId : "";
     if (!videoId) return json({ error: "videoId is required" }, 400);
-    const result = await proxyNotInterested(videoId);
+    const result = await proxyNotInterested(videoId, sessionUser);
     return json(result);
   } catch (e) {
     return errorResponse(e);

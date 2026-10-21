@@ -6,15 +6,18 @@ import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/playlists/watch-later {videoId, add?} — LIVE Tier-2 write
- * (broker watch-later: YouTube's own WL playlist).
+ * POST /api/playlists/watch-later {videoId, add?} — WFX2-P36: the honest
+ * WebFlix-LOCAL watch-later list (local:true, the note says why: YouTube's
+ * WL is a system playlist the official Data API cannot write — the
+ * pre-P36 operator-session WL write is retired with the rest of the shared
+ * identity paths).
  *
  * `add` omitted → toggle (the video-card contract); true/false → ensure.
- * Response: {ok, effect, added, playlistId} — the previous contract plus
- * ok/effect.
+ * Response: {ok, effect, added, playlistId, local, note}.
  */
 export async function POST(req: NextRequest) {
-  if (!(await getSessionUser(req))) return authRequiredResponse();
+  const sessionUser = await getSessionUser(req);
+  if (!sessionUser) return authRequiredResponse();
   try {
     let body: Record<string, unknown> = {};
     try {
@@ -26,7 +29,7 @@ export async function POST(req: NextRequest) {
     if (!videoId) return json({ error: "videoId is required" }, 400);
     const add =
       body.add === true ? true : body.add === false ? false : undefined;
-    const result = await proxyWatchLater(videoId, add);
+    const result = await proxyWatchLater(videoId, add, sessionUser);
     return json(result);
   } catch (e) {
     return errorResponse(e);

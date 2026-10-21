@@ -62,8 +62,8 @@ export function SettingsView() {
     <main className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-6">
       <h1 className="text-2xl font-bold">Settings</h1>
       <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-        Preferences saved in this browser are labeled LOCAL. Anything tied to the operator's
-        YouTube account is labeled MANAGED ON YOUTUBE.COM — it is managed there, and WebFlix
+        Preferences saved in this browser are labeled LOCAL. Anything tied to your YouTube
+        account is labeled MANAGED ON YOUTUBE.COM — it is managed there, and WebFlix
         says so instead of faking a control.
       </p>
 

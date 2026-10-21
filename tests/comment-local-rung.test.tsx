@@ -139,11 +139,9 @@ beforeAll(async () => {
 });
 
 const realFetch = globalThis.fetch;
-let directCalls: { url: string; body: any }[] = [];
 
 beforeEach(() => {
   toasts.length = 0;
-  directCalls = [];
   delete process.env.YT_COOKIES;
   delete process.env.BROKER_URL;
   delete process.env.BROKER_SECRET;
@@ -280,31 +278,31 @@ describe("WFX2-P6-CR — the local rung (both YouTube tiers offline, real module
     expect(res.status).toBe(400); // no shadow rows, no silent cross-video write
   });
 
-  test("the [id] route without a WebFlix session skips the local rung → honest 502", async () => {
+  test("the [id] route without a WebFlix session → the uniform 401 gate (no identity → no local write either)", async () => {
     const res = await postVideoComment(
       req({ body: "guest write" }, "POST", `http://localhost/api/videos/${VIDEO_ID}/comments`, ""),
       { params: Promise.resolve({ id: VIDEO_ID }) } as never
     );
-    expect(res.status).toBe(502); // no identity → no honest local write either
+    expect(res.status).toBe(401); // no identity → never an anonymous local write
+    expect(((await res.json()) as { error?: string }).error).toBe("unauthenticated");
+    expect(await db.comment.count({ where: { videoId: VIDEO_ID, body: "guest write" } })).toBe(0);
   });
 });
 
-describe("WFX2-P6-CR — the direct reply rung (replyParams + configured session)", () => {
-  test("replyParams + SAPISID → create_comment with createCommentParams, no local rows", async () => {
-    process.env.YT_COOKIES = "SAPISID=fake-sapisid; SID=x";
-    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+describe("WFX2-P6-CR → P36 — the reply rung (replyParams + configured session → the LOCAL lane's own disclosure)", () => {
+  test("replyParams + a configured session → the LOCAL lane discloses itself (the direct rung is retired by construction)", async () => {
+    process.env.YT_COOKIES = "SAPISID=fake-sapisid; SID=x"; // even a configured operator session must NOT change the lane
+    const fetchCalls: { url: string }[] = [];
+    globalThis.fetch = (async (url: string | URL | Request) => {
       const u = String(url instanceof Request ? url.url : url);
-      if (u.includes("/youtubei/v1/comment/create_comment")) {
-        directCalls.push({ url: u, body: init?.body ? JSON.parse(String(init.body)) : null });
-        return new Response("{}", { status: 200 });
-      }
-      return new Response("not found", { status: 404 });
+      fetchCalls.push({ url: u });
+      return new Response("{}", { status: 200 });
     }) as unknown as typeof fetch;
 
     const res = await postComment(
       req({
         videoId: VIDEO_ID,
-        body: "a real reply through the direct path",
+        body: "a reply through the local lane",
         parentId: LIVE_PARENT_ID,
         parentText: "can confirm: he never gave us up",
         replyParams: "Eh1VZ3pnZTM0MDBG-cmVwbHlwYXJhbXM",
@@ -312,20 +310,23 @@ describe("WFX2-P6-CR — the direct reply rung (replyParams + configured session
     );
     expect(res.status).toBe(201);
     const body = (await res.json()) as any;
-    expect(body.path).toBe("direct");
-    expect(body.local).toBeUndefined(); // a YouTube write — never claimed local
+    expect(body.path).toBe("local"); // the local lane's own disclosure
+    expect(body.local).toBe(true); // never claims a YouTube write
     expect(body.effect).toBe("comment-replied");
-    // the wire: the params ride the body; no bare videoId for a reply
-    expect(directCalls).toHaveLength(1);
-    expect(directCalls[0].body.createCommentParams).toBe("Eh1VZ3pnZTM0MDBG-cmVwbHlwYXJhbXM");
-    expect(directCalls[0].body.commentText).toBe("a real reply through the direct path");
-    expect(directCalls[0].body.videoId).toBeUndefined();
-    // nothing was persisted locally
-    expect(await db.comment.count({ where: { videoId: VIDEO_ID, body: "a real reply through the direct path" } })).toBe(0);
+    expect(body.parentId).toBe(LIVE_PARENT_ID);
+    // ZERO network on the write path — the direct create_comment rung is gone,
+    // and no broker exists to fall to
+    expect(fetchCalls).toHaveLength(0);
+    // the reply persists locally, anchored under the shadow parent
+    const reply = await db.comment.findFirstOrThrow({
+      where: { videoId: VIDEO_ID, body: "a reply through the local lane" },
+    });
+    expect(reply.parentId).toBe(LIVE_PARENT_ID);
+    expect(reply.moderation).toBe("approved");
   });
 
-  test("direct fails → broker offline → falls to the LOCAL rung honestly", async () => {
-    process.env.YT_COOKIES = "SAPISID=fake-sapisid; SID=x";
+  test("a refusing network changes nothing: the LOCAL lane answers (the write is DB-only)", async () => {
+    process.env.YT_COOKIES = "SAPISID=fake-sapisid; SID=x"; // even configured, the operator session is out of the write path
     globalThis.fetch = (async () => new Response("nope", { status: 403 })) as unknown as typeof fetch;
     const res = await postComment(
       req({
@@ -338,11 +339,11 @@ describe("WFX2-P6-CR — the direct reply rung (replyParams + configured session
     );
     expect(res.status).toBe(201);
     const body = (await res.json()) as any;
-    expect(body.local).toBe(true); // honest disclosure after the YouTube tiers refused
+    expect(body.local).toBe(true); // honest disclosure — the store is the lane, not a fallback
     expect(body.path).toBe("local");
   });
 
-  test("replyParams absent (sign-in modal payload) → the direct rung is skipped honestly", async () => {
+  test("replyParams absent → still the local lane, ZERO network (the params are optional)", async () => {
     process.env.YT_COOKIES = "SAPISID=fake-sapisid; SID=x";
     let fetches = 0;
     globalThis.fetch = (async () => {
@@ -350,11 +351,11 @@ describe("WFX2-P6-CR — the direct reply rung (replyParams + configured session
       return new Response("{}", { status: 200 });
     }) as unknown as typeof fetch;
     const res = await postComment(
-      req({ videoId: VIDEO_ID, body: "no params, no direct call", parentId: LIVE_PARENT_ID, parentText: "x" })
+      req({ videoId: VIDEO_ID, body: "no params, no network call", parentId: LIVE_PARENT_ID, parentText: "x" })
     );
     expect(res.status).toBe(201);
-    expect(((await res.json()) as any).path).toBe("local"); // broker offline → local
-    expect(fetches).toBe(0); // never attempted without the wire parameter
+    expect(((await res.json()) as any).path).toBe("local"); // the local lane needs no locator
+    expect(fetches).toBe(0); // the write path never touches the network
   });
 });
 

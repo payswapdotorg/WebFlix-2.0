@@ -1,24 +1,47 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPlaylistItems, isSpecialPlaylistId } from "@/lib/youtube/playlists";
 import { rateLimit } from "@/lib/youtube/cache";
-import { brokerAction, brokerOk, BrokerError } from "@/lib/broker";
 import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
-import { proxyPlaylistUpdate } from "@/lib/watch/action-proxy";
-import { ApiError } from "@/lib/watch/api";
+import {
+  proxyPlaylistDelete,
+  proxyPlaylistUpdate,
+  resolveActionTier,
+} from "@/lib/watch/action-proxy";
+import { errorResponse } from "@/lib/watch/api";
 
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/playlists/[id]?cursor= — one page of the playlist's REAL items
- * (browse `VL<playlistId>` — public playlists work without auth; YouTube's
- * special lists WL/LL are auth-gated and answer the honest login-required
- * state in public mode). `cursor` pages via browse continuations.
+ * GET /api/playlists/[id]?cursor= — one page of the playlist's items.
+ * WFX2-P36: the PUBLIC PL… reads (browse VL<playlistId>) stay exactly as
+ * they are — public content, no identity involved. YouTube's special lists
+ * WL/LL are the honest per-user notice envelope instead: the pre-P36 branch
+ * login-gated on the OPERATOR session (one person's Watch Later / Liked list
+ * served to every signed-in user — the exact cross-user leak the P36 work
+ * order closes), and neither list has an official per-user read API.
+ *
+ * Response (special): { loginRequired: false, special: true, videos: [],
+ * notice } — the notice hands Watch later off to the WebFlix-local save
+ * button and the rest to YouTube's own pages.
  */
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
     if (!id || !/^[\w-]{2,64}$/.test(id)) {
       return NextResponse.json({ error: "invalid playlist id" }, { status: 400 });
+    }
+    if (isSpecialPlaylistId(id)) {
+      // WFX2-P36 — the honest per-user notice (never the operator's list)
+      return NextResponse.json({
+        playlist: null,
+        videos: [],
+        nextCursor: null,
+        loginRequired: false,
+        unavailable: false,
+        special: true,
+        notice:
+          "YouTube's Watch Later / Liked lists have no official API — your WebFlix Watch later lives in the save button (local), and YouTube's own page has the rest",
+      });
     }
     if (!(await rateLimit(`playlist:${id}:${req.headers.get("x-forwarded-for") ?? "local"}`))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
@@ -45,9 +68,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 }
 
 /**
- * DELETE /api/playlists/[id] — delete the playlist from the operator's real
- * account (broker kind `playlist-delete`, Tier-2). The special lists WL/LL
- * cannot be deleted — honest 400.
+ * DELETE /api/playlists/[id] — WFX2-P36: delete the playlist from the
+ * SIGNED-IN user's OWN account (playlists.delete — the official lane). The
+ * special lists WL/LL cannot be deleted — honest 400.
  */
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   if (!(await getSessionUser(req))) return authRequiredResponse();
@@ -62,35 +85,25 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
         { status: 400 }
       );
     }
-    const result = await brokerAction("playlist-delete", { playlistId: id });
-    if (!brokerOk(result)) {
-      const err = result as BrokerError;
-      if (err.kind === "bad-request") {
-        return NextResponse.json({ error: err.message }, { status: 400 });
-      }
-      return NextResponse.json({ error: err.message }, { status: 502 });
-    }
-    const r = result as { ok: true; verified?: boolean; path?: string };
+    const tier = await resolveActionTier(req);
+    const result = await proxyPlaylistDelete(id, tier);
     return NextResponse.json({
       ok: true,
-      effect: "deleted",
-      verified: r.verified ?? false,
-      path: r.path ?? null,
+      effect: result.effect,
+      verified: result.verified,
+      path: result.path,
     });
   } catch (err) {
-    console.error("DELETE /api/playlists/[id] failed", err);
-    return NextResponse.json({ error: "Failed to delete playlist" }, { status: 500 });
+    return errorResponse(err);
   }
 }
 
 /**
- * PATCH /api/playlists/[id] — RENAME / privacy switch / description edit on
- * the operator's real YouTube account (broker kind `playlist-update`,
- * Tier-2). Body: { title?, description?, visibility? } — only the present
- * fields ride the broker payload. The special lists WL/LL cannot be edited
- * (YouTube's own lists) — honest 400. Response: {ok, effect, fields, verified,
- * path?}; verified:false when the broker's dialog closed but the header did
- * not re-render the new title within the deadline (honest unverified).
+ * PATCH /api/playlists/[id] — WFX2-P36: RENAME / privacy switch / description
+ * edit on the SIGNED-IN user's OWN account (playlists.update — the official
+ * lane, partial-safe via fetch-merge-put; the API response itself is the
+ * read-back so verified:true). Body: { title?, description?, visibility? }.
+ * The special lists WL/LL cannot be edited — honest 400.
  */
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   if (!(await getSessionUser(req))) return authRequiredResponse();
@@ -130,13 +143,10 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     if (title !== undefined && title.trim().length === 0) {
       return NextResponse.json({ error: "title cannot be empty" }, { status: 400 });
     }
-    const result = await proxyPlaylistUpdate(id, { title, description, visibility });
+    const tier = await resolveActionTier(req);
+    const result = await proxyPlaylistUpdate(id, { title, description, visibility }, tier);
     return NextResponse.json(result);
   } catch (err) {
-    if (err instanceof ApiError) {
-      return NextResponse.json({ error: err.message }, { status: err.status });
-    }
-    console.error("PATCH /api/playlists/[id] failed", err);
-    return NextResponse.json({ error: "Failed to update playlist" }, { status: 500 });
+    return errorResponse(err);
   }
 }

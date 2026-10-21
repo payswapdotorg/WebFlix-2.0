@@ -1,13 +1,16 @@
 import { NextRequest } from "next/server";
 import { json, errorResponse } from "@/lib/watch/api";
-import { proxyPlaylistAdd } from "@/lib/watch/action-proxy";
+import { proxyPlaylistAdd, resolveActionTier } from "@/lib/watch/action-proxy";
 import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/playlists/[id]/items {videoId} — LIVE Tier-2 write (broker
- * playlist-add, toggle mode — the save dialog's row contract).
+ * POST /api/playlists/[id]/items {videoId} — WFX2-P36: the per-user official
+ * playlistItems lane, toggle mode (the save dialog's row contract). The
+ * membership read resolves the toggle server-side from the user's OWN
+ * playlist truth, and the post-write read-back confirms it (`verified` in
+ * the proxy result).
  *
  * Response: {ok, effect, containsVideo} — the contract SaveDialog consumes
  * (its optimistic UI flips `containsVideo`), plus ok/effect.
@@ -25,7 +28,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const videoId = typeof body.videoId === "string" ? body.videoId : "";
     if (!videoId) return json({ error: "videoId is required" }, 400);
     const title = typeof body.title === "string" ? body.title : undefined;
-    const result = await proxyPlaylistAdd(id, videoId, { mode: "toggle", title });
+    const tier = await resolveActionTier(req);
+    const result = await proxyPlaylistAdd(id, videoId, { mode: "toggle", title }, tier);
     return json({ ok: result.ok, effect: result.effect, containsVideo: result.containsVideo });
   } catch (e) {
     return errorResponse(e);

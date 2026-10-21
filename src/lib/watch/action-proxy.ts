@@ -1,54 +1,62 @@
 /**
- * WFX2-A-W action proxy — maps the UI's action request/response shapes onto
- * the live Tier-2 write paths (direct SAPISIDHASH + broker) while keeping
- * the response contracts the WebFlix UI already consumes.
+ * WFX2-P36-ACTION-PERSISTENCE — the per-user official-API action proxy.
  *
- * Order of execution: P33-DIRECT-ACTIONS (2026-10-21, the operator's
- * main-interface doctrine: "if we aim to become the main interface for
- * youtube.com, we can't require users to go back to youtube.com before
- * they can like, comment, etc.") — DIRECT-FIRST for the everyday family
- * (like / remove-rating, watch-later, playlist membership — the app's own
- * server-side session performing the writes), broker as the FALLBACK for
- * every tier (and the primary for the no-captured-wire kinds: dislike,
- * bell, comment-like — each documented at its proxy).
+ * THE P36 LAW (docs/work-items/P36-ACTION-PERSISTENCE.md, the reviewer's
+ * work order): production mutations must NEVER depend on one deployment-wide
+ * operator cookie (YT_COOKIES) or one shared logged-in broker tab. Every
+ * externally-mutating action acts on the SIGNED-IN WebFlix user's OWN
+ * connected YouTube account through the official YouTube Data API, with an
+ * authenticated read-back confirming the write before success is claimed.
+ *
+ * Execution policy (this file owns it):
+ *  - OFFICIAL LANE (the user's own OAuth connection): like / dislike /
+ *    remove-rating (videos.rate), subscribe / unsubscribe
+ *    (subscriptions.insert/delete), playlist membership + create / update /
+ *    delete (playlistItems.* / playlists.*) — each followed by its
+ *    authenticated read-back (getRating / subscriptions.list /
+ *    playlistItems.list) whose result is reported as `verified`;
+ *  - LOCAL LANE (the honest WebFlix store, fully disclosed): comments
+ *    (local:true — the official API only lets channels comment on their own
+ *    videos), watch-later (a WebFlix-local list — YouTube's WL is a system
+ *    playlist the Data API can't write), not-interested /
+ *    don't-recommend-channel (local personalization signals);
+ *  - UNSUPPORTED LANE (honest 501 + the handoff to YouTube): bell
+ *    preferences, comment like/edit/delete/heart/pin/report, history
+ *    writes, playlist reorder, community posts — no official end-user API
+ *    exists, so WebFlix never pretends one did.
+ *
+ * BY CONSTRUCTION this module imports NEITHER @/lib/broker NOR
+ * @/lib/youtube-direct: no shared-operator path can serve an end-user write.
  */
 import { ApiError } from "./api";
-import type { CommentAuthorDto, CommentDto, CommentVideoSnapshotDto, LikeValue } from "./types";
+import type { CommentDto, CommentVideoSnapshotDto, LikeValue } from "./types";
 import type { WebFlixSessionUser } from "@/lib/auth/types";
+import { getSessionUser } from "@/lib/auth/session";
 import {
-  BROKER_OFFLINE_MESSAGE,
-  BrokerError,
-  brokerAction,
-  type BrokerActionSuccess,
-} from "@/lib/broker";
+  getYouTubeConnection,
+  markYouTubeConnectionNeedsReauth,
+  putYouTubeConnection,
+} from "@/lib/auth/youtube-connection-store";
+import { decryptSecret, encryptSecret, refreshAccessToken } from "@/lib/youtube/oauth";
 import {
-  createComment,
-  createReply,
-  subscribeChannel,
-  getSubscribedState,
-  directAuthConfigured,
-  rateVideo,
-  editPlaylistMembership,
-  playlistContains,
-} from "@/lib/youtube-direct";
-import { writeLocalComment } from "./local-comments";
+  officialCreatePlaylist,
+  officialDeletePlaylist,
+  officialGetRating,
+  officialPlaylistAdd,
+  officialPlaylistMembership,
+  officialPlaylistRemoveById,
+  officialRateVideo,
+  officialSubscribe,
+  officialSubscriptionStatus,
+  officialUnsubscribeById,
+  officialUpdatePlaylist,
+  SYSTEM_PLAYLIST_IDS,
+  type OfficialFailure,
+  type OfficialRating,
+} from "@/lib/youtube/official-actions";
+import { writeLocalComment, ensureShadowUser, ensureShadowVideo } from "./local-comments";
 import { invalidateWatchCache } from "@/lib/youtube/watch";
-
-export { BROKER_OFFLINE_MESSAGE };
-
-const OFFLINE = () => new ApiError(502, BROKER_OFFLINE_MESSAGE);
-
-/** Map a broker failure to an honest ApiError for the routes. */
-function fail(err: BrokerError): ApiError {
-  if (err.kind === "offline") return OFFLINE();
-  if (err.kind === "bad-request") return new ApiError(400, err.message);
-  // unauthorized / action-failed: surface honestly as 502 with detail
-  return new ApiError(502, err.message);
-}
-
-function ok(result: BrokerActionSuccess | BrokerError): result is BrokerActionSuccess {
-  return !(result instanceof BrokerError);
-}
+import { db } from "@/lib/db";
 
 /** Parse a compact count label ("2.4M" / "1,234") into a number. */
 export function parseCompactCount(label: string | undefined | null): number | null {
@@ -60,6 +68,135 @@ export function parseCompactCount(label: string | undefined | null): number | nu
   const mult = { K: 1e3, M: 1e6, B: 1e9 }[(m[2] ?? "").toUpperCase() as "K" | "M" | "B"] ?? 1;
   return Math.round(n * mult);
 }
+
+/* ------------------------------------------------------------------ */
+/* The action tier — the signed-in user's own OAuth connection         */
+/* ------------------------------------------------------------------ */
+
+export type UserActionTier =
+  | { ok: true; user: WebFlixSessionUser; accessToken: string; channelId: string | null }
+  | { ok: false; kind: "not-connected" | "needs-reauth" | "store-error" };
+
+/**
+ * Resolve the acting user's YouTube action tier: the signed-in WebFlix user
+ * + their OWN connected account's fresh access token. Never falls back to
+ * any other identity — the P36 isolation law.
+ */
+export async function resolveActionTier(req: Request): Promise<UserActionTier> {
+  const user = await getSessionUser(req);
+  if (!user) return { ok: false, kind: "not-connected" }; // routes gate 401 first; defensive
+  let connection;
+  try {
+    connection = await getYouTubeConnection(user.id);
+  } catch {
+    return { ok: false, kind: "store-error" };
+  }
+  if (!connection) return { ok: false, kind: "not-connected" };
+  if (connection.status === "needs_reauth") return { ok: false, kind: "needs-reauth" };
+
+  const access = await decryptSecret(connection.accessTokenEnc);
+  if (access === null) return { ok: false, kind: "needs-reauth" }; // key rotated / corrupt blob
+  if (connection.accessExpiresAt > Date.now() + 60_000) {
+    return { ok: true, user, accessToken: access, channelId: connection.channelId };
+  }
+
+  // the transparent refresh (offline access); a refused grant → needs-reauth
+  const refresh = connection.refreshTokenEnc
+    ? await decryptSecret(connection.refreshTokenEnc)
+    : null;
+  if (!refresh) return { ok: false, kind: "needs-reauth" };
+  const refreshed = await refreshAccessToken(refresh);
+  if (!refreshed.ok) {
+    if (refreshed.kind === "invalid-grant") {
+      await markYouTubeConnectionNeedsReauth(user.id).catch(() => {});
+    }
+    return { ok: false, kind: "needs-reauth" };
+  }
+  const updated = {
+    ...connection,
+    accessTokenEnc: await encryptSecret(refreshed.data.accessToken),
+    accessExpiresAt: Date.now() + refreshed.data.expiresIn * 1000,
+    scope: refreshed.data.scope,
+    updatedAt: new Date().toISOString(),
+  };
+  await putYouTubeConnection(updated).catch(() => {
+    /* best-effort: the token serves this request; the next one refreshes again */
+  });
+  return { ok: true, user, accessToken: refreshed.data.accessToken, channelId: connection.channelId };
+}
+
+/**
+ * The read-only tier for state bootstraps (the watch page's like/subscribe
+ * state, the shorts rail's yourLike): the user's token when connected,
+ * null otherwise — NEVER the operator session's state.
+ */
+export async function resolveReadTier(
+  req: Request,
+): Promise<{ accessToken: string; channelId: string | null } | null> {
+  const tier = await resolveActionTier(req);
+  return tier.ok ? { accessToken: tier.accessToken, channelId: tier.channelId } : null;
+}
+
+/** Map a tier failure onto the honest ApiError (machine-stable `kind`). */
+export function tierError(kind: "not-connected" | "needs-reauth" | "store-error"): ApiError {
+  if (kind === "not-connected") {
+    return new ApiError(
+      403,
+      "Connect your YouTube account to act — Settings → YouTube connection",
+      "youtube-not-connected",
+    );
+  }
+  if (kind === "needs-reauth") {
+    return new ApiError(
+      403,
+      "Your YouTube account connection needs re-authorizing — Settings → YouTube connection",
+      "youtube-needs-reauth",
+    );
+  }
+  return new ApiError(502, "The account store is unavailable right now — try again", "store-error");
+}
+
+/** Map an official-API failure onto the honest ApiError. */
+function officialFailure(f: OfficialFailure): ApiError {
+  if (f.kind === "quota") {
+    return new ApiError(502, f.message, "youtube-quota");
+  }
+  if (f.status === 401 || f.status === 403) {
+    return new ApiError(
+      502,
+      `YouTube rejected the action (${f.message}) — re-connect your account in Settings if it persists`,
+      "youtube-provider-rejected",
+    );
+  }
+  return new ApiError(502, f.message, "youtube-provider-error");
+}
+
+/** The honest unsupported-operation error (the handoff to YouTube). */
+function unsupported(what: string): ApiError {
+  return new ApiError(
+    501,
+    `${what} isn't supported by the official YouTube API — open the video on YouTube to do it there`,
+    "youtube-unsupported",
+  );
+}
+
+/** The honest count delta (prior → next for one side of the rating pair). */
+function deltaCount(
+  current: number,
+  prior: LikeValue | null,
+  next: LikeValue | null,
+  which: "like" | "dislike",
+): number {
+  const had = prior === which;
+  const has = next === which;
+  if (has && !had) return current + 1;
+  if (!has && had) return Math.max(0, current - 1);
+  return current;
+}
+
+/* ------------------------------------------------------------------ */
+/* Video like / dislike / remove-rating — videos.rate + getRating      */
+/* ------------------------------------------------------------------ */
 
 export interface LikeRequest {
   /** legacy UI shape: "like"|"dislike" (toggle semantics — same value unsets) */
@@ -78,208 +215,198 @@ export interface LikeResult {
   yourLike: LikeValue | null;
   already?: boolean;
   path?: string;
+  /** P36 — true only when the authenticated read-back confirmed the rating */
+  verified?: boolean;
+  note?: string;
 }
 
 /**
- * Video like/dislike — P33: direct-first for like / remove-rating (the
- * captured-wire templates), broker the fallback.
- * - action: like|dislike|none → set semantics (idempotent)
- * - value: like|dislike → YouTube toggle semantics (same value unsets)
- * The DIRECT tier resolves the legacy toggle from the UI's own baseline
- * (yourLike) — the honest toggle truth without a DOM state check. Dislike
- * stays broker-tier: like/dislike has no captured wire template (the
- * fixture never captured one; guessing the protobuf is against the house
- * law) — the broker path below serves it when the browser session lives.
+ * Video like/dislike — the user's OWN account through videos.rate, confirmed
+ * by videos.getRating (the authenticated read-back). Dislike now rides the
+ * SAME official lane as like (the P33 broker-only gap closed the
+ * policy-aligned way). Legacy `value` keeps YouTube's toggle semantics.
  */
-export async function proxyVideoLike(videoId: string, req: LikeRequest): Promise<LikeResult> {
+export async function proxyVideoLike(
+  videoId: string,
+  req: LikeRequest,
+  tier: UserActionTier,
+): Promise<LikeResult> {
   const action = req.action ?? req.value;
   if (!action) throw new ApiError(400, "action (like|dislike|none) is required");
+  if (!tier.ok) throw tierError(tier.kind);
   const base = {
     likes: Math.max(0, req.baseline?.likes ?? 0),
     dislikes: Math.max(0, req.baseline?.dislikes ?? 0),
     yourLike: req.baseline?.yourLike ?? null,
   };
 
-  // P33 direct tier — the like/remove family (dislike-SET excluded: no wire)
-  const legacyToggleOff = !!(req.value && !req.action && base.yourLike === req.value);
-  const directCovers = action === "none" || action === "like" || legacyToggleOff;
-  if (directCovers && directAuthConfigured()) {
-    const direct = await rateVideo(
-      videoId,
-      action === "like" && !legacyToggleOff ? "like" : "none",
-    );
-    if (direct.ok) {
-      // P35 — the write changed YouTube-side state; drop the cached `next`
-      // response so the next bootstrap re-reads the fresh likeStatusEntity
-      // (the button state survives a reload instead of reverting)
-      await invalidateWatchCache(videoId).catch(() => {});
-      const yourLike: LikeValue | null = action === "like" && !legacyToggleOff ? "like" : null;
-      const effect = yourLike ? "liked" : "rating-removed";
-      const likes =
-        yourLike === "like" && base.yourLike !== "like"
-          ? base.likes + 1
-          : yourLike !== "like" && base.yourLike === "like"
-            ? Math.max(0, base.likes - 1)
-            : base.likes;
-      // the direct remove clears a PRIOR dislike too (the legacy
-      // value=dislike toggle-off) — the only way dislikes move here
-      const dislikes =
-        yourLike === null && base.yourLike === "dislike"
-          ? Math.max(0, base.dislikes - 1)
-          : base.dislikes;
-      return { ok: true, effect, likes, dislikes, yourLike, already: false, path: "direct" };
-    }
-    // direct failed → the broker fallback below (the honest degrade)
+  // resolve the target rating (set semantics + the legacy toggle law)
+  let target: OfficialRating;
+  if (req.action) {
+    target = req.action;
+  } else if (req.value) {
+    target = base.yourLike === req.value ? "none" : req.value;
+  } else {
+    target = "none";
   }
 
-  if (action === "none") {
-    const r = await brokerAction("remove-rating", { videoId });
-    if (!ok(r)) throw fail(r);
-    // P35 — the broker tab changed YouTube-side state too
-    await invalidateWatchCache(videoId).catch(() => {});
-    return {
-      ok: true,
-      effect: "rating-removed",
-      likes: base.likes,
-      dislikes: base.dislikes,
-      yourLike: null,
-      already: r.already,
-      path: r.path,
-    };
-  }
-
-  // set (and detect the toggle-off case via the broker's pre-click state check)
-  const r = await brokerAction(action, { videoId });
-  if (!ok(r)) throw fail(r);
-  // P35 — the broker tab changed YouTube-side state too
+  const write = await officialRateVideo(tier.accessToken, videoId, target);
+  if (!write.ok) throw officialFailure(write);
+  // the P35 cache law kept: the write changed YouTube-side state
   await invalidateWatchCache(videoId).catch(() => {});
-  const domLikes = parseCompactCount(r.detail?.["likesLabel"] as string | undefined);
-  const baseYour = base.yourLike;
-  let yourLike: LikeValue | null = action;
-  let effect = action === "like" ? "liked" : "disliked";
-  let already = r.already;
-  if (r.already && req.value && !req.action) {
-    // legacy toggle semantics: same value again → remove the rating
-    const r2 = await brokerAction("remove-rating", { videoId });
-    if (!ok(r2)) throw fail(r2);
-    yourLike = null;
-    effect = "rating-removed";
-    already = false;
-  }
-  // honest count deltas from (baseYour → yourLike); DOM-observed count wins
-  const likes =
-    domLikes ??
-    (yourLike === "like" && baseYour !== "like"
-      ? base.likes + 1
-      : yourLike !== "like" && baseYour === "like"
-        ? Math.max(0, base.likes - 1)
-        : base.likes);
-  const dislikes =
-    yourLike === "dislike" && baseYour !== "dislike"
-      ? base.dislikes + 1
-      : yourLike !== "dislike" && baseYour === "dislike"
-        ? Math.max(0, base.dislikes - 1)
-        : base.dislikes;
-  return { ok: true, effect, likes, dislikes, yourLike, already, path: r.path };
+
+  // the authenticated read-back — the ONLY success confirmation P36 trusts
+  const read = await officialGetRating(tier.accessToken, videoId);
+  const verified = read.ok && read.data.rating === target;
+  const yourLike: LikeValue | null = read.ok
+    ? read.data.rating === "like"
+      ? "like"
+      : read.data.rating === "dislike"
+        ? "dislike"
+        : null
+    : target === "none"
+      ? null
+      : target;
+  const effect =
+    target === "like" ? "liked" : target === "dislike" ? "disliked" : "rating-removed";
+  return {
+    ok: true,
+    effect,
+    likes: deltaCount(base.likes, base.yourLike, yourLike, "like"),
+    dislikes: deltaCount(base.dislikes, base.yourLike, yourLike, "dislike"),
+    yourLike,
+    already: false,
+    path: "oauth-official",
+    verified,
+    ...(read.ok
+      ? {}
+      : {
+          note: "the rating was written; the read-back was unavailable so the state shows your intended rating",
+        }),
+  };
 }
+
+/* ------------------------------------------------------------------ */
+/* Subscribe / unsubscribe — subscriptions.insert/delete + list        */
+/* ------------------------------------------------------------------ */
 
 export interface SubscribeResult {
   ok: true;
   effect: string;
   subscribed: boolean;
   path: string;
-  bell?: "all" | "personalized" | "none" | null;
+  already?: boolean;
+  /** P36 — true only when the authenticated read-back confirmed the state */
+  verified?: boolean;
+  note?: string;
 }
 
-/**
- * Subscribe/unsubscribe — direct-first (verified §16/§17), broker fallback.
- * `on === null` → toggle (state read, then direct; broker toggle fallback).
- * P35: the optional ctx.videoId (the watch page's video) threads the
- * watch-cache invalidation so the subscribeButton state survives a reload.
- */
-/** P35 — optional context for the subscribe write's cache coherence. */
+/** P35's context kept — a successful write also drops the watch cache. */
 export interface SubscribeContext {
-  /** the watch page's video — when present, a successful write also drops
-   * the cached `next` response so the subscribeButton state survives a
-   * reload (the same P35 law as the like family). */
   videoId?: string | null;
 }
 
 export async function proxySubscribe(
   channelId: string,
   on: boolean | null,
+  tier: UserActionTier,
   ctx: SubscribeContext = {},
 ): Promise<SubscribeResult> {
-  const doDirect = async (want: boolean): Promise<SubscribeResult | null> => {
-    if (!directAuthConfigured()) return null;
-    const r = await subscribeChannel(channelId, want);
-    if (!r.ok) return null;
+  if (!tier.ok) throw tierError(tier.kind);
+
+  // the authenticated current-state read (the toggle's resolver + the
+  // idempotence guard + the unsubscribe's subscription-id source)
+  const status = await officialSubscriptionStatus(tier.accessToken, channelId);
+  if (!status.ok) throw officialFailure(status);
+  const want = on === null ? !status.data.subscribed : on;
+
+  if (want) {
+    if (status.data.subscribed) {
+      return {
+        ok: true,
+        effect: "subscribed",
+        subscribed: true,
+        path: "oauth-official",
+        already: true,
+        verified: true,
+      };
+    }
+    const write = await officialSubscribe(tier.accessToken, channelId);
+    if (!write.ok) throw officialFailure(write);
     if (ctx.videoId) await invalidateWatchCache(ctx.videoId).catch(() => {});
+    const read = await officialSubscriptionStatus(tier.accessToken, channelId);
     return {
       ok: true,
-      effect: want ? "subscribed" : "unsubscribed",
-      subscribed: want,
-      path: "direct",
+      effect: "subscribed",
+      subscribed: true,
+      path: "oauth-official",
+      verified: read.ok ? read.data.subscribed === true : false,
+      ...(read.ok
+        ? {}
+        : { note: "subscribed; the read-back was unavailable so the state is unconfirmed" }),
     };
-  };
+  }
 
-  if (on === true || on === false) {
-    const direct = await doDirect(on);
-    if (direct) return direct;
-    const r = await brokerAction(on ? "subscribe" : "unsubscribe", { channelId });
-    if (!ok(r)) throw fail(r);
-    if (ctx.videoId) await invalidateWatchCache(ctx.videoId).catch(() => {});
+  if (!status.data.subscribed) {
     return {
       ok: true,
-      effect: on ? "subscribed" : "unsubscribed",
-      subscribed: on,
-      path: "broker",
-      already: r.already,
-    } as SubscribeResult;
+      effect: "unsubscribed",
+      subscribed: false,
+      path: "oauth-official",
+      already: true,
+      verified: true,
+    };
   }
-
-  // toggle: need the current state
-  const current = await getSubscribedState(channelId);
-  if (current !== null) {
-    const direct = await doDirect(!current);
-    if (direct) return direct;
+  if (!status.data.subscriptionId) {
+    throw new ApiError(
+      502,
+      "your subscription exists but its id could not be resolved for removal — try again",
+      "youtube-provider-error",
+    );
   }
-  const r = await brokerAction("subscribe", { channelId }, { mode: "toggle" });
-  if (!ok(r)) throw fail(r);
+  const write = await officialUnsubscribeById(tier.accessToken, status.data.subscriptionId);
+  if (!write.ok) throw officialFailure(write);
   if (ctx.videoId) await invalidateWatchCache(ctx.videoId).catch(() => {});
-  const subscribed = typeof r.detail?.["subscribed"] === "boolean" ? r.detail.subscribed : true;
+  const read = await officialSubscriptionStatus(tier.accessToken, channelId);
   return {
     ok: true,
-    effect: subscribed ? "subscribed" : "unsubscribed",
-    subscribed,
-    path: "broker",
+    effect: "unsubscribed",
+    subscribed: false,
+    path: "oauth-official",
+    verified: read.ok ? read.data.subscribed === false : false,
+    ...(read.ok
+      ? {}
+      : { note: "unsubscribed; the read-back was unavailable so the state is unconfirmed" }),
   };
 }
 
-/** Bell preference — broker tier (UI state machine: off = unsubscribe). */
+/* ------------------------------------------------------------------ */
+/* Bell — the honest unsupported lane (off = unsubscribe, supported)    */
+/* ------------------------------------------------------------------ */
+
 export async function proxyBell(
   channelId: string,
   pref: "all" | "personalized" | "none" | "off",
+  tier: UserActionTier,
 ): Promise<{ ok: true; effect: string; bell: "all" | "personalized" | "none" | null }> {
   if (pref === "off") {
-    const r = await proxySubscribe(channelId, false);
+    const r = await proxySubscribe(channelId, false, tier);
     return { ok: true, effect: r.effect, bell: null };
   }
-  const r = await brokerAction("bell", { channelId }, { pref });
-  if (!ok(r)) throw fail(r);
-  return { ok: true, effect: `bell-${pref}`, bell: pref };
+  throw unsupported("Bell preferences");
 }
 
 /**
- * The watch page subscribe state machine (POST /api/subscriptions):
- * bell off → unsubscribe; all|personalized|none → subscribe + bell pref.
- * Keeps the SubscriptionResultDto shape; subscriberCount is the caller's
- * baseline ± 1 (or -1 when unknown — the UI then leaves the count alone).
+ * The watch page subscribe state machine (POST /api/subscriptions).
+ * bell off/omitted → unsubscribe; all|personalized|none → subscribe (the
+ * official lane). The bell PREF itself is API-unsupported — the response
+ * says so honestly instead of pretending it was set.
  */
 export async function proxySubscriptionStateMachine(
   channelId: string,
   bell: "all" | "personalized" | "none" | "off" | undefined,
   subscriberCountBaseline: number | null,
+  tier: UserActionTier,
   ctx: SubscribeContext = {},
 ): Promise<{
   subscribed: boolean;
@@ -288,9 +415,11 @@ export async function proxySubscriptionStateMachine(
   ok: true;
   effect: string;
   path: string;
+  verified?: boolean;
+  note?: string;
 }> {
   if (!bell || bell === "off") {
-    const r = await proxySubscribe(channelId, false, ctx);
+    const r = await proxySubscribe(channelId, false, tier, ctx);
     return {
       subscribed: false,
       bell: null,
@@ -299,43 +428,30 @@ export async function proxySubscriptionStateMachine(
       ok: true,
       effect: r.effect,
       path: r.path,
+      verified: r.verified,
     };
   }
-  const sub = await proxySubscribe(channelId, true, ctx);
-  let effect = sub.effect;
-  let path = sub.path;
-  // apply the bell pref (broker tier). A failed bell update does not undo
-  // the subscription — the effect string says what happened, honestly.
-  try {
-    const b = await proxyBell(channelId, bell);
-    effect = `${sub.effect}; ${b.effect}`;
-    path = `${sub.path}+broker-bell`;
-  } catch (e) {
-    if (e instanceof ApiError && e.status === 502) {
-      effect = `${sub.effect}; bell-update-failed (broker offline)`;
-    } else {
-      throw e;
-    }
-  }
+  const sub = await proxySubscribe(channelId, true, tier, ctx);
   return {
     subscribed: true,
-    bell,
+    // honest: the pref was NOT set (no API) — null, with the note
+    bell: null,
     subscriberCount:
       subscriberCountBaseline === null ? -1 : Math.max(0, subscriberCountBaseline + 1),
     ok: true,
-    effect,
-    path,
+    effect: `${sub.effect}; bell preference not API-supported`,
+    path: `${sub.path}+bell-unsupported`,
+    verified: sub.verified,
+    note:
+      "Subscribed through your connected account. Bell preferences aren't supported by the YouTube Data API — set them on YouTube.",
   };
 }
 
-export interface CommentViewer {
-  id: string;
-  handle: string;
-  name: string;
-  avatarUrl: string;
-}
+/* ------------------------------------------------------------------ */
+/* Comments — the honest LOCAL lane (the official API only lets        */
+/* channels comment on their own videos)                               */
+/* ------------------------------------------------------------------ */
 
-/** The synthesized comment DTO the composer UI expects from a write tier. */
 export type CommentWriteResult = CommentDto & {
   ok: true;
   effect: string;
@@ -344,156 +460,63 @@ export type CommentWriteResult = CommentDto & {
   local?: boolean;
 };
 
-/**
- * WFX2-P6-CR — the write-tier extras the routes pass through:
- *  - replyParams: the parent comment's live replyParams (direct reply rung);
- *  - sessionUser: the WebFlix account — the local rung's author bridge
- *    (absent → the local rung is skipped: no identity, no honest local write);
- *  - video: the watch payload's video snapshot (the local rung's shadow rows).
- */
 export interface CommentWriteOpts {
-  replyParams?: string;
   sessionUser?: WebFlixSessionUser | null;
   video?: CommentVideoSnapshotDto;
 }
 
-/** Synthesize the CommentDto the composer UI expects from a broker/direct post. */
-function synthComment(
-  videoId: string,
-  text: string,
-  viewer: CommentViewer,
-  parentId: string | null,
-  /** the execution path honestly reported by the tier (ui | fetch | none | direct) */
-  path: "ui" | "fetch" | "none" | "direct" = "ui",
-): CommentWriteResult {
-  const author: CommentAuthorDto = {
-    id: viewer.id,
-    handle: viewer.handle,
-    name: viewer.name,
-    avatarUrl: viewer.avatarUrl,
-    isMember: false,
-    isCreator: false,
-  };
-  return {
-    id: `yt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-    parentId,
-    body: text,
-    likes: 0,
-    heartedByCreator: false,
-    pinned: false,
-    edited: false,
-    moderation: "approved",
-    createdAt: new Date().toISOString(),
-    author,
-    yourLike: null,
-    isOwn: true,
-    replyCount: 0,
-    totalReplyCount: 0,
-    ok: true,
-    effect: parentId ? "comment-replied" : "comment-created",
-    path,
-  };
-}
-
 /**
- * The honest LOCAL rung — the third tier, reached only when BOTH YouTube
- * tiers failed (offline/refused, never after a success). Persists in the
- * WebFlix store with full origin disclosure (local:true + path "local");
- * a store failure maps to an honest 502 (nothing was written anywhere).
- */
-async function localRung(args: {
-  videoId: string;
-  text: string;
-  parentId?: string;
-  parentText?: string;
-  opts: CommentWriteOpts;
-}): Promise<CommentWriteResult> {
-  if (!args.opts.sessionUser) throw failOffline();
-  try {
-    return await writeLocalComment({
-      videoId: args.videoId,
-      text: args.text,
-      ...(args.parentId ? { parentId: args.parentId } : {}),
-      ...(args.parentText ? { parentText: args.parentText } : {}),
-      sessionUser: args.opts.sessionUser,
-      ...(args.opts.video ? { videoSnapshot: args.opts.video } : {}),
-    });
-  } catch (e) {
-    if (e instanceof ApiError) throw e; // honest validation (e.g. wrong-video parent)
-    throw new ApiError(
-      502,
-      "action backend offline and the WebFlix store is unreachable — comment not posted",
-    );
-  }
-}
-
-/** The offline ApiError both YouTube tiers failed into. */
-function failOffline(): ApiError {
-  return new ApiError(502, BROKER_OFFLINE_MESSAGE);
-}
-
-/**
- * Create a comment — the three-rung chain (WFX2-P6-CR):
- *   1. direct (InnerTube create_comment + SAPISIDHASH — the subscribe-lane
- *      pattern),
- *   2. broker (the DOM UI path),
- *   3. LOCAL (the honest WebFlix store, local:true — only after BOTH
- *      YouTube tiers failed; never claims a YouTube write).
+ * Create a comment — the LOCAL lane, fully disclosed (local:true, "Stored on
+ * WebFlix — not posted to YouTube"). The official Data API does not support
+ * viewer comments on other channels' videos; WebFlix never pretends it does.
  */
 export async function proxyCommentCreate(
   videoId: string,
   text: string,
-  viewer: CommentViewer,
+  _viewer: unknown,
   opts: CommentWriteOpts = {},
 ): Promise<CommentWriteResult> {
-  if (directAuthConfigured()) {
-    const direct = await createComment(videoId, text);
-    if (direct.ok) {
-      return synthComment(videoId, text, viewer, null, "direct");
-    }
+  if (!opts.sessionUser) {
+    throw new ApiError(401, "sign in to comment", "unauthenticated");
   }
-  const r = await brokerAction("comment-create", { videoId }, { text });
-  if (ok(r)) return synthComment(videoId, text, viewer, null, r.path ?? "ui");
-  // both YouTube tiers refused → the honest local rung
-  if (opts.sessionUser) return localRung({ videoId, text, opts });
-  throw fail(r);
+  try {
+    return await writeLocalComment({
+      videoId,
+      text,
+      sessionUser: opts.sessionUser,
+      ...(opts.video ? { videoSnapshot: opts.video } : {}),
+    });
+  } catch (e) {
+    if (e instanceof ApiError) throw e;
+    throw new ApiError(502, "the WebFlix store is unreachable — comment not posted", "store-error");
+  }
 }
 
-/**
- * Reply to a comment — the three-rung chain (WFX2-P6-CR):
- *   1. direct when the parent's live replyParams exists + the session is
- *      configured (create_comment with createCommentParams — the YouTube.js
- *      reply recipe); honest skip when replyParams is null (YouTube served
- *      the sign-in modal — the session expired),
- *   2. broker (comment-reply; the UI path needs the parent text),
- *   3. LOCAL (the honest WebFlix store — the shadow parent anchors the
- *      YouTube thread; local:true disclosure).
- */
+/** Reply to a comment — the LOCAL lane (same honest disclosure). */
 export async function proxyCommentReply(
   videoId: string,
   parentId: string,
   text: string,
-  viewer: CommentViewer,
+  _viewer: unknown,
   parentText?: string,
   opts: CommentWriteOpts = {},
 ): Promise<CommentWriteResult> {
-  if (opts.replyParams && directAuthConfigured()) {
-    const direct = await createReply(videoId, opts.replyParams, text);
-    if (direct.ok) {
-      return synthComment(videoId, text, viewer, parentId, "direct");
-    }
+  if (!opts.sessionUser) {
+    throw new ApiError(401, "sign in to reply", "unauthenticated");
   }
-  const r = await brokerAction(
-    "comment-reply",
-    { commentId: parentId, videoId },
-    { text, ...(parentText ? { commentText: parentText } : {}) },
-  );
-  if (ok(r)) return synthComment(videoId, text, viewer, parentId, r.path ?? "ui");
-  // both YouTube tiers refused → the honest local rung
-  if (opts.sessionUser) {
-    return localRung({ videoId, text, parentId, parentText, opts });
+  try {
+    return await writeLocalComment({
+      videoId,
+      text,
+      parentId,
+      ...(parentText ? { parentText } : {}),
+      sessionUser: opts.sessionUser,
+      ...(opts.video ? { videoSnapshot: opts.video } : {}),
+    });
+  } catch (e) {
+    if (e instanceof ApiError) throw e;
+    throw new ApiError(502, "the WebFlix store is unreachable — comment not posted", "store-error");
   }
-  throw fail(r);
 }
 
 export interface CommentLikeRequest {
@@ -511,275 +534,17 @@ export interface CommentLikeResult {
   yourLike: LikeValue | null;
 }
 
-/**
- * Comment like (broker comment-like). Toggle semantics for the legacy value
- * shape (a comment has a single like control — click toggles, like YouTube).
- */
+/** Comment like — unsupported (no official end-user API; never broker'd). */
 export async function proxyCommentLike(
-  commentId: string,
-  req: CommentLikeRequest,
+  _commentId: string,
+  _req: CommentLikeRequest,
 ): Promise<CommentLikeResult> {
-  const action = req.action ?? req.value;
-  if (!action) throw new ApiError(400, "action (like|dislike|none) is required");
-  const baseLikes = Math.max(0, req.baseline?.likes ?? 0);
-  const prior = req.baseline?.yourLike ?? null;
-
-  // single like control (like YouTube's comment like button):
-  // like (explicit) → set; like (legacy value) → toggle; dislike/none → remove
-  const mode =
-    action === "none" || action === "dislike"
-      ? "remove"
-      : req.value && !req.action
-        ? "toggle"
-        : "set";
-  const r = await brokerAction(
-    "comment-like",
-    { commentId, ...(req.videoId ? { videoId: req.videoId } : {}) },
-    { mode, ...(req.commentText ? { commentText: req.commentText } : {}) },
-  );
-  if (!ok(r)) throw fail(r);
-  const liked =
-    typeof r.detail?.["liked"] === "boolean"
-      ? r.detail.liked
-      : mode === "remove"
-        ? false
-        : mode === "set"
-          ? true
-          : prior !== "like";
-  const likes =
-    liked && prior !== "like"
-      ? baseLikes + 1
-      : !liked && prior === "like"
-        ? Math.max(0, baseLikes - 1)
-        : baseLikes;
-  return {
-    ok: true,
-    effect: liked ? "comment-liked" : "comment-like-removed",
-    likes,
-    yourLike: liked ? "like" : null,
-  };
+  throw unsupported("Liking YouTube comments");
 }
 
-export interface PlaylistAddResult {
-  ok: true;
-  effect: string;
-  added: boolean;
-  containsVideo: boolean;
-  already?: boolean;
-  path?: string;
-}
-
-/**
- * Add/toggle a video in a playlist — P33: direct-first (browse/edit_playlist
- * — the broker's own verified fetch wire), broker the fallback. `title`
- * enables the Save-dialog row match on the broker's UI path; real YouTube
- * playlist ids (PL…/VL…/WL) work through BOTH tiers. Toggle resolves the
- * membership server-side (playlistContains — the fresh uncached read);
- * an unresolved membership (null) falls to the broker honestly.
- */
-export async function proxyPlaylistAdd(
-  playlistId: string,
-  videoId: string,
-  opts: { mode?: "add" | "remove" | "toggle"; title?: string } = {},
-): Promise<PlaylistAddResult> {
-  const mode = opts.mode ?? "add";
-
-  // P33 direct tier
-  if (directAuthConfigured()) {
-    let want: boolean | null = mode === "add" ? true : mode === "remove" ? false : null;
-    if (want === null) {
-      // toggle: the server-side membership read decides the INVERSE
-      const membership = await playlistContains(playlistId, videoId);
-      want = membership === null ? null : !membership;
-    }
-    if (want !== null) {
-      const direct = await editPlaylistMembership(playlistId, videoId, want);
-      if (direct.ok) {
-        return {
-          ok: true,
-          effect: want ? "playlist-added" : "playlist-removed",
-          added: want,
-          containsVideo: want,
-          already: false,
-          path: "direct",
-        };
-      }
-      // direct failed → the broker fallback below (the honest degrade)
-    }
-  }
-
-  const r = await brokerAction(
-    "playlist-add",
-    { playlistId },
-    { videoId, mode, ...(opts.title ? { title: opts.title } : {}) },
-  );
-  if (!ok(r)) throw fail(r);
-  const added = typeof r.detail?.["added"] === "boolean" ? r.detail.added : mode !== "remove";
-  return {
-    ok: true,
-    effect: added ? "playlist-added" : "playlist-removed",
-    added,
-    containsVideo: added,
-    already: r.already,
-    path: r.path,
-  };
-}
-
-export interface WatchLaterResult {
-  ok: true;
-  effect: string;
-  added: boolean;
-  playlistId: string;
-  already?: boolean;
-  path?: string;
-}
-
-/**
- * Watch later — P33: direct-first (YouTube's own WL playlist through
- * browse/edit_playlist — the broker's verified fetch wire), broker the
- * fallback. Toggle resolves the WL membership server-side (the fresh
- * uncached read); an unresolved membership falls to the broker honestly.
- */
-export async function proxyWatchLater(
-  videoId: string,
-  add: boolean | undefined,
-): Promise<WatchLaterResult> {
-  const mode = add === undefined ? "toggle" : add ? "add" : "remove";
-
-  // P33 direct tier
-  if (directAuthConfigured()) {
-    let want: boolean | null = add ?? null;
-    if (want === null) {
-      // toggle: the server-side membership read decides the INVERSE
-      const membership = await playlistContains("WL", videoId);
-      want = membership === null ? null : !membership;
-    }
-    if (want !== null) {
-      const direct = await editPlaylistMembership("WL", videoId, want);
-      if (direct.ok) {
-        return {
-          ok: true,
-          effect: want ? "watch-later-added" : "watch-later-removed",
-          added: want,
-          playlistId: "WL",
-          already: false,
-          path: "direct",
-        };
-      }
-      // direct failed → the broker fallback below (the honest degrade)
-    }
-  }
-
-  const r = await brokerAction("watch-later", { videoId }, { mode });
-  if (!ok(r)) throw fail(r);
-  const added = typeof r.detail?.["added"] === "boolean" ? r.detail.added : add !== false;
-  return {
-    ok: true,
-    effect: added ? "watch-later-added" : "watch-later-removed",
-    added,
-    playlistId: "WL",
-    already: r.already,
-    path: r.path,
-  };
-}
-
-export interface NotInterestedResult {
-  ok: true;
-  effect: string;
-  notInterested: true;
-  hidden: true;
-  path?: string;
-  note?: string;
-}
-
-/** Not interested (broker — a real home-feed action on youtube.com). */
-export async function proxyNotInterested(videoId: string): Promise<NotInterestedResult> {
-  const r = await brokerAction("not-interested", { videoId });
-  if (!ok(r)) throw fail(r);
-  const note = typeof r.detail?.["note"] === "string" ? r.detail.note : undefined;
-  return {
-    ok: true,
-    effect: "not-interested",
-    notInterested: true,
-    hidden: true,
-    path: r.path,
-    ...(note ? { note } : {}),
-  };
-}
-
-/* ------------------------------------------------------------------ */
-/* P24-SEND (G12) — the feed-feedback family: don't-recommend-channel  */
-/* + the shared undo (youtube.com's own toast Undo button)             */
-/* ------------------------------------------------------------------ */
-
-export interface DontRecommendChannelResult {
-  ok: true;
-  effect: string;
-  dontRecommendChannel: true;
-  hidden: true;
-  path?: string;
-  note?: string;
-}
-
-/**
- * Don't recommend channel (broker — the feed card's own ⋯ menu item, the
- * not-interested drive's sibling). The channel the card carries is the one
- * youtube.com stops recommending; the write's own undo window opens with
- * youtube.com's toast (see proxyFeedbackUndo).
- */
-export async function proxyDontRecommendChannel(
-  videoId: string,
-): Promise<DontRecommendChannelResult> {
-  const r = await brokerAction("dont-recommend-channel", { videoId });
-  if (!ok(r)) throw fail(r);
-  const note = typeof r.detail?.["note"] === "string" ? r.detail.note : undefined;
-  return {
-    ok: true,
-    effect: "dont-recommend-channel",
-    dontRecommendChannel: true,
-    hidden: true,
-    path: r.path,
-    ...(note ? { note } : {}),
-  };
-}
-
-export interface FeedbackUndoResult {
-  ok: true;
-  effect: string;
-  restored: true;
-  path?: string;
-  note?: string;
-}
-
-/**
- * Feedback undo (broker — clicks the VISIBLE Undo button on youtube.com's
- * feedback toast). Shared by the not-interested and dont-recommend-channel
- * families: youtube.com shows one toast with one Undo button for either
- * action, and the window is short — an expired window surfaces as the
- * honest 502 from the drive ('undo-toast-not-found'), never a fake
- * restoration.
- */
-export async function proxyFeedbackUndo(): Promise<FeedbackUndoResult> {
-  const r = await brokerAction("feedback-undo", {});
-  if (!ok(r)) throw fail(r);
-  const note = typeof r.detail?.["note"] === "string" ? r.detail.note : undefined;
-  return {
-    ok: true,
-    effect: "feedback-undo",
-    restored: true,
-    path: r.path,
-    ...(note ? { note } : {}),
-  };
-}
-
-/* ------------------------------------------------------------------ */
-/* WFX2-B-S comment writes (broker ⋮-menu DOM paths)                   */
-/* ------------------------------------------------------------------ */
-
-/** The comment's identity the broker needs to locate it in the DOM. */
+/** The comment's identity (kept for the route signatures). */
 export interface CommentLocator {
   videoId: string;
-  /** the comment's CURRENT text — the DOM locator for the ⋮ menu path */
   commentText?: string;
 }
 
@@ -791,19 +556,12 @@ export interface CommentEditResult {
   path?: string;
 }
 
-/** Edit own comment — broker comment-edit (⋮ → Edit → inline editor). */
 export async function proxyCommentEdit(
-  commentId: string,
-  text: string,
-  locator: CommentLocator,
+  _commentId: string,
+  _text: string,
+  _locator: CommentLocator,
 ): Promise<CommentEditResult> {
-  const r = await brokerAction(
-    "comment-edit",
-    { commentId, videoId: locator.videoId },
-    { text, ...(locator.commentText ? { commentText: locator.commentText } : {}) },
-  );
-  if (!ok(r)) throw fail(r);
-  return { ok: true, effect: "comment-edited", body: text, edited: true, path: r.path };
+  throw unsupported("Editing YouTube comments");
 }
 
 export interface CommentDeleteResult {
@@ -813,18 +571,11 @@ export interface CommentDeleteResult {
   path?: string;
 }
 
-/** Delete own comment — broker comment-delete (⋮ → Delete → confirm). */
 export async function proxyCommentDelete(
-  commentId: string,
-  locator: CommentLocator,
+  _commentId: string,
+  _locator: CommentLocator,
 ): Promise<CommentDeleteResult> {
-  const r = await brokerAction(
-    "comment-delete",
-    { commentId, videoId: locator.videoId },
-    locator.commentText ? { commentText: locator.commentText } : {},
-  );
-  if (!ok(r)) throw fail(r);
-  return { ok: true, effect: "comment-deleted", deleted: true, path: r.path };
+  throw unsupported("Deleting YouTube comments");
 }
 
 export interface CommentHeartResult {
@@ -834,24 +585,11 @@ export interface CommentHeartResult {
   path?: string;
 }
 
-/** Creator heart toggle — broker comment-heart (⋮ → Heart / Remove heart). */
 export async function proxyCommentHeart(
-  commentId: string,
-  locator: CommentLocator,
+  _commentId: string,
+  _locator: CommentLocator,
 ): Promise<CommentHeartResult> {
-  const r = await brokerAction(
-    "comment-heart",
-    { commentId, videoId: locator.videoId },
-    locator.commentText ? { commentText: locator.commentText } : {},
-  );
-  if (!ok(r)) throw fail(r);
-  const hearted = typeof r.detail?.["hearted"] === "boolean" ? r.detail.hearted : true;
-  return {
-    ok: true,
-    effect: hearted ? "comment-hearted" : "comment-heart-removed",
-    heartedByCreator: hearted,
-    path: r.path,
-  };
+  throw unsupported("Creator hearts");
 }
 
 export interface CommentPinResult {
@@ -861,24 +599,11 @@ export interface CommentPinResult {
   path?: string;
 }
 
-/** Creator pin toggle — broker comment-pin (⋮ → Pin / Unpin). */
 export async function proxyCommentPin(
-  commentId: string,
-  locator: CommentLocator,
+  _commentId: string,
+  _locator: CommentLocator,
 ): Promise<CommentPinResult> {
-  const r = await brokerAction(
-    "comment-pin",
-    { commentId, videoId: locator.videoId },
-    locator.commentText ? { commentText: locator.commentText } : {},
-  );
-  if (!ok(r)) throw fail(r);
-  const pinned = typeof r.detail?.["pinned"] === "boolean" ? r.detail.pinned : true;
-  return {
-    ok: true,
-    effect: pinned ? "comment-pinned" : "comment-unpinned",
-    pinned,
-    path: r.path,
-  };
+  throw unsupported("Pinning comments");
 }
 
 export interface CommentReportResult {
@@ -889,102 +614,274 @@ export interface CommentReportResult {
   path?: string;
 }
 
-/** Report a comment — broker comment-report (⋮ → Report → reasons dialog). */
 export async function proxyCommentReport(
-  commentId: string,
-  locator: CommentLocator & { reason?: string },
+  _commentId: string,
+  _locator: CommentLocator & { reason?: string },
 ): Promise<CommentReportResult> {
-  const r = await brokerAction(
-    "comment-report",
-    { commentId, videoId: locator.videoId },
-    {
-      ...(locator.commentText ? { commentText: locator.commentText } : {}),
-      ...(locator.reason ? { reason: locator.reason } : {}),
-    },
-  );
-  if (!ok(r)) throw fail(r);
-  const reason = typeof r.detail?.["reason"] === "string" ? r.detail.reason : undefined;
-  return {
-    ok: true,
-    effect: "comment-reported",
-    reported: true,
-    ...(reason ? { reason } : {}),
-    path: r.path,
-  };
+  throw unsupported("Reporting YouTube comments");
 }
 
 /* ------------------------------------------------------------------ */
-/* WFX2-P4-PE — playlist edit (broker playlist-update + playlist-reorder) */
+/* Watch-later — the honest LOCAL list (YouTube's WL is a system       */
+/* playlist the Data API cannot write)                                 */
 /* ------------------------------------------------------------------ */
 
+export interface WatchLaterResult {
+  ok: true;
+  effect: string;
+  added: boolean;
+  playlistId: string;
+  already?: boolean;
+  path?: string;
+  local?: boolean;
+  note?: string;
+}
+
+/** Find (or create) the user's WebFlix-local Watch-later playlist row. */
+async function localWatchLaterPlaylistId(userId: string): Promise<string> {
+  const existing = await db.playlist.findFirst({
+    where: { userId, isWatchLater: true },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+  const created = await db.playlist.create({
+    data: { userId, title: "Watch later", isWatchLater: true, visibility: "private" },
+    select: { id: true },
+  });
+  return created.id;
+}
+
+/**
+ * Watch later — the WebFlix-local list, fully disclosed. Toggle resolves
+ * server-side from the local truth; the note says exactly why it's local.
+ */
+export async function proxyWatchLater(
+  videoId: string,
+  add: boolean | undefined,
+  sessionUser: WebFlixSessionUser | null,
+): Promise<WatchLaterResult> {
+  if (!sessionUser) throw new ApiError(401, "sign in to save videos", "unauthenticated");
+  try {
+    const user = await ensureShadowUser(sessionUser);
+    await ensureShadowVideo(videoId);
+    const playlistId = await localWatchLaterPlaylistId(user.id);
+    const existing = await db.playlistItem.findUnique({
+      where: { playlistId_videoId: { playlistId, videoId } },
+    });
+    const want = add === undefined ? !existing : add;
+    if (want && !existing) {
+      const position = await db.playlistItem.count({ where: { playlistId } });
+      await db.playlistItem.create({ data: { playlistId, videoId, position } });
+    } else if (!want && existing) {
+      await db.playlistItem.deleteMany({ where: { playlistId, videoId } });
+    }
+    return {
+      ok: true,
+      effect: want ? "watch-later-added" : "watch-later-removed",
+      added: want,
+      playlistId: "WL",
+      already: want === Boolean(existing),
+      path: "local",
+      local: true,
+      note:
+        "Saved on WebFlix — YouTube's own Watch Later isn't writable through the official API",
+    };
+  } catch (e) {
+    if (e instanceof ApiError) throw e;
+    throw new ApiError(502, "the WebFlix store is unreachable — save failed", "store-error");
+  }
+}
+
+/** The watch bootstrap's local WL read (per user; honest false when absent). */
+export async function readLocalSavedWatchLater(
+  videoId: string,
+  sessionUser: WebFlixSessionUser | null,
+): Promise<boolean> {
+  if (!sessionUser) return false;
+  try {
+    const user = await ensureShadowUser(sessionUser);
+    const wl = await db.playlist.findFirst({
+      where: { userId: user.id, isWatchLater: true },
+      select: { id: true },
+    });
+    if (!wl) return false;
+    const item = await db.playlistItem.findUnique({
+      where: { playlistId_videoId: { playlistId: wl.id, videoId } },
+      select: { playlistId: true },
+    });
+    return item !== null;
+  } catch {
+    return false;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Playlist membership + management — the official playlistItems /     */
+/* playlists lanes (the user's OWN playlists)                          */
+/* ------------------------------------------------------------------ */
+
+export interface PlaylistAddResult {
+  ok: true;
+  effect: string;
+  added: boolean;
+  containsVideo: boolean;
+  already?: boolean;
+  path?: string;
+  verified?: boolean;
+  note?: string;
+}
+
+/**
+ * Add/toggle a video in one of the user's OWN playlists — the official
+ * playlistItems lane with the membership read-back. WL/LL system playlists
+ * are rejected up-front (the API cannot write them — the local watch-later
+ * lane serves the WL surface instead).
+ */
+export async function proxyPlaylistAdd(
+  playlistId: string,
+  videoId: string,
+  opts: { mode?: "add" | "remove" | "toggle"; title?: string } = {},
+  tier: UserActionTier,
+): Promise<PlaylistAddResult> {
+  const mode = opts.mode ?? "add";
+  if (SYSTEM_PLAYLIST_IDS.has(playlistId)) {
+    throw new ApiError(
+      501,
+      "Watch Later / Liked videos are YouTube system playlists the Data API can't write — use the WebFlix list or YouTube's own surface",
+      "youtube-system-playlist",
+    );
+  }
+  if (!tier.ok) throw tierError(tier.kind);
+
+  // the membership read (the toggle resolver + the idempotence guard)
+  const membership = await officialPlaylistMembership(tier.accessToken, playlistId, videoId);
+  if (!membership.ok) throw officialFailure(membership);
+  const contains = membership.data.contains;
+  const want = mode === "remove" ? false : mode === "add" ? true : !contains;
+
+  if (want && contains) {
+    return {
+      ok: true,
+      effect: "playlist-added",
+      added: true,
+      containsVideo: true,
+      already: true,
+      path: "oauth-official",
+      verified: true,
+    };
+  }
+  if (!want && !contains) {
+    return {
+      ok: true,
+      effect: "playlist-removed",
+      added: false,
+      containsVideo: false,
+      already: true,
+      path: "oauth-official",
+      verified: true,
+    };
+  }
+
+  if (want) {
+    const write = await officialPlaylistAdd(tier.accessToken, playlistId, videoId);
+    if (!write.ok) throw officialFailure(write);
+    const read = await officialPlaylistMembership(tier.accessToken, playlistId, videoId);
+    return {
+      ok: true,
+      effect: "playlist-added",
+      added: true,
+      containsVideo: read.ok ? read.data.contains : true,
+      path: "oauth-official",
+      verified: read.ok ? read.data.contains === true : false,
+      ...(read.ok
+        ? {}
+        : { note: "added; the membership read-back was unavailable" }),
+    };
+  }
+
+  if (!membership.data.itemId) {
+    throw new ApiError(
+      502,
+      "the playlist item id could not be resolved for removal — try again",
+      "youtube-provider-error",
+    );
+  }
+  const write = await officialPlaylistRemoveById(tier.accessToken, membership.data.itemId);
+  if (!write.ok) throw officialFailure(write);
+  const read = await officialPlaylistMembership(tier.accessToken, playlistId, videoId);
+  return {
+    ok: true,
+    effect: "playlist-removed",
+    added: false,
+    containsVideo: read.ok ? read.data.contains : false,
+    path: "oauth-official",
+    verified: read.ok ? read.data.contains === false : false,
+    ...(read.ok ? {} : { note: "removed; the membership read-back was unavailable" }),
+  };
+}
+
 export interface PlaylistUpdateRequest {
-  /** the new title (omitted = leave unchanged) */
   title?: string;
-  /** the new description (omitted = leave unchanged) */
   description?: string;
-  /** "public" | "unlisted" | "private" (omitted = leave unchanged) */
   visibility?: "public" | "unlisted" | "private";
 }
 
 export interface PlaylistUpdateResult {
   ok: true;
   effect: string;
-  /** the field map the broker drive filled (only the present ones) */
   fields: { title: boolean; description: boolean; visibility: boolean };
   verified: boolean;
-  /** the dialog closed but the header did not re-render the new title */
   unverifiedNote?: string;
-  /** already:true when the payload carried no fields (no-op) */
   already?: boolean;
   path?: string;
 }
 
 /**
- * Update a playlist's title/description/visibility — broker playlist-update
- * (the playlist's own edit dialog: ⋮ → Edit → fill → Save; verified when
- * the header re-renders the new title). Honest verified:false when the
- * dialog closed but the header did not re-render within the deadline.
+ * Update a playlist's title/description/visibility — the official
+ * playlists.update lane (partial-safe: the current resource is fetched and
+ * merged so an omitted field is never cleared). The response IS the updated
+ * resource — the API's own read-back.
  */
 export async function proxyPlaylistUpdate(
   playlistId: string,
   req: PlaylistUpdateRequest,
+  tier: UserActionTier,
 ): Promise<PlaylistUpdateResult> {
-  const payload: Record<string, string> = {};
-  if (typeof req.title === "string") payload.title = req.title;
-  if (typeof req.description === "string") payload.description = req.description;
-  if (typeof req.visibility === "string") payload.visibility = req.visibility;
-  // The lane's kind module accepts "playlist-update" + "playlist-reorder";
-  // the app-side BrokerKind union (src/lib/broker.ts) is owned by the A-W
-  // lane and not in this lane's file ownership, so the cast rides the wire
-  // (the broker's ACTION_KINDS registry has both kinds pre-seeded — the
-  // string is the same; only the TS union needs the cast).
-  const r = await brokerAction("playlist-update" as never, { playlistId }, payload as never);
-  if (!ok(r)) throw fail(r);
+  if (!tier.ok) throw tierError(tier.kind);
   const fields = {
     title: typeof req.title === "string",
     description: typeof req.description === "string",
     visibility: typeof req.visibility === "string",
   };
-  const detail = (r.detail ?? {}) as Record<string, unknown>;
-  const stage = typeof detail.stage === "string" ? detail.stage : undefined;
-  const note = typeof detail.note === "string" ? detail.note : undefined;
+  if (!fields.title && !fields.description && !fields.visibility) {
+    return {
+      ok: true,
+      effect: "playlist-update-noop",
+      fields,
+      verified: true,
+      already: true,
+      path: "oauth-official",
+    };
+  }
+  const r = await officialUpdatePlaylist(tier.accessToken, playlistId, {
+    ...(fields.title ? { title: req.title } : {}),
+    ...(fields.description ? { description: req.description } : {}),
+    ...(fields.visibility ? { visibility: req.visibility } : {}),
+  });
+  if (!r.ok) throw officialFailure(r);
   return {
     ok: true,
-    effect: r.already ? "playlist-update-noop" : "playlist-updated",
+    effect: "playlist-updated",
     fields,
-    verified: r.verified ?? false,
-    ...(note ? { unverifiedNote: note } : {}),
-    ...(r.already ? { already: true } : {}),
-    ...(stage ? { path: r.path ?? stage } : { path: r.path }),
+    verified: true,
+    path: "oauth-official",
   };
 }
 
 export interface PlaylistReorderResult {
   ok: true;
   effect: string;
-  /** the moved videoId sits at toIndex in the re-rendered list (verified) */
   verified: boolean;
-  /** the drop fired but the list did not re-render the new order within the deadline */
   unverifiedNote?: string;
   fromIndex: number;
   toIndex: number;
@@ -992,32 +889,205 @@ export interface PlaylistReorderResult {
   path?: string;
 }
 
-/**
- * Reorder a playlist item — broker playlist-reorder (the playlist page's
- * real drag handle: pointerdown → stepped pointermove ladder → pointerup;
- * verified when the moved videoId sits at toIndex in the re-rendered list).
- * Honest verified:false when the drop fired but the order was not confirmed.
- */
+/** Reorder — the honest unsupported lane (no safe official reorder path). */
 export async function proxyPlaylistReorder(
   playlistId: string,
   fromIndex: number,
   toIndex: number,
   videoId?: string,
 ): Promise<PlaylistReorderResult> {
-  const payload: Record<string, unknown> = { fromIndex, toIndex };
-  if (typeof videoId === "string" && videoId.length > 0) payload.videoId = videoId;
-  const r = await brokerAction("playlist-reorder" as never, { playlistId }, payload as never);
-  if (!ok(r)) throw fail(r);
-  const detail = (r.detail ?? {}) as Record<string, unknown>;
-  const note = typeof detail.note === "string" ? detail.note : undefined;
+  void playlistId;
+  void fromIndex;
+  void toIndex;
+  void videoId;
+  throw unsupported("Reordering playlists");
+}
+
+/* ------------------------------------------------------------------ */
+/* Playlist create / delete — the official playlists.insert/delete lane */
+/* ------------------------------------------------------------------ */
+
+export interface PlaylistCreateResult {
+  ok: true;
+  effect: string;
+  verified: boolean;
+  playlist: {
+    id: string;
+    title: string;
+    visibility: "public" | "unlisted" | "private";
+    itemCount: number;
+    thumbUrl: string | null;
+  };
+  path: string;
+}
+
+/** Create a playlist in the user's OWN account — playlists.insert. */
+export async function proxyPlaylistCreate(
+  title: string,
+  visibility: "public" | "unlisted" | "private",
+  tier: UserActionTier,
+): Promise<PlaylistCreateResult> {
+  if (!tier.ok) throw tierError(tier.kind);
+  const r = await officialCreatePlaylist(tier.accessToken, title, visibility);
+  if (!r.ok) throw officialFailure(r);
   return {
     ok: true,
-    effect: "playlist-reordered",
-    verified: r.verified ?? false,
-    ...(note ? { unverifiedNote: note } : {}),
-    fromIndex,
-    toIndex,
-    ...(typeof videoId === "string" && videoId.length > 0 ? { videoId } : {}),
-    path: r.path,
+    effect: "created",
+    verified: true,
+    playlist: {
+      id: r.data.id,
+      title: r.data.title,
+      visibility: r.data.visibility,
+      itemCount: r.data.itemCount,
+      thumbUrl: r.data.thumbUrl,
+    },
+    path: "oauth-official",
+  };
+}
+
+/** Delete one of the user's OWN playlists — playlists.delete (204). */
+export async function proxyPlaylistDelete(
+  playlistId: string,
+  tier: UserActionTier,
+): Promise<{ ok: true; effect: string; verified: boolean; path: string }> {
+  if (SYSTEM_PLAYLIST_IDS.has(playlistId)) {
+    throw new ApiError(
+      501,
+      "Watch Later / Liked videos are YouTube system playlists the Data API can't delete",
+      "youtube-system-playlist",
+    );
+  }
+  if (!tier.ok) throw tierError(tier.kind);
+  const r = await officialDeletePlaylist(tier.accessToken, playlistId);
+  if (!r.ok) throw officialFailure(r);
+  return { ok: true, effect: "deleted", verified: true, path: "oauth-official" };
+}
+
+/* ------------------------------------------------------------------ */
+/* The feed-feedback family — the honest LOCAL signal lane             */
+/* ------------------------------------------------------------------ */
+
+export interface NotInterestedResult {
+  ok: true;
+  effect: string;
+  notInterested: true;
+  hidden: true;
+  local?: boolean;
+  path?: string;
+  note?: string;
+}
+
+/**
+ * Not interested — a WebFlix-LOCAL personalization signal (the VideoSignal
+ * store), fully disclosed: "Hidden on WebFlix". YouTube's own Not-interested
+ * has no official API, so WebFlix never claims a YouTube-side write.
+ */
+export async function proxyNotInterested(
+  videoId: string,
+  sessionUser: WebFlixSessionUser | null,
+): Promise<NotInterestedResult> {
+  await writeLocalSignal(videoId, "not_interested", sessionUser);
+  return {
+    ok: true,
+    effect: "not-interested",
+    notInterested: true,
+    hidden: true,
+    local: true,
+    path: "local",
+    note: "Hidden on WebFlix — YouTube's own feed feedback isn't available through the official API",
+  };
+}
+
+export interface DontRecommendChannelResult {
+  ok: true;
+  effect: string;
+  dontRecommendChannel: true;
+  hidden: true;
+  local?: boolean;
+  path?: string;
+  note?: string;
+}
+
+export async function proxyDontRecommendChannel(
+  videoId: string,
+  sessionUser: WebFlixSessionUser | null,
+): Promise<DontRecommendChannelResult> {
+  await writeLocalSignal(videoId, "dont_recommend_channel", sessionUser);
+  return {
+    ok: true,
+    effect: "dont-recommend-channel",
+    dontRecommendChannel: true,
+    hidden: true,
+    local: true,
+    path: "local",
+    note: "The channel won't be recommended on WebFlix — YouTube's own feed feedback isn't available through the official API",
+  };
+}
+
+/** Write the WebFlix-local personalization signal (one row per user+video). */
+async function writeLocalSignal(
+  videoId: string,
+  kind: "not_interested" | "dont_recommend_channel",
+  sessionUser: WebFlixSessionUser | null,
+): Promise<void> {
+  if (!sessionUser) throw new ApiError(401, "sign in first", "unauthenticated");
+  try {
+    const user = await ensureShadowUser(sessionUser);
+    await ensureShadowVideo(videoId);
+    // one signal row per user+video (the schema's unique key) — the kind is
+    // the latest verdict; an undo targets its own kind only
+    await db.videoSignal.upsert({
+      where: { videoId_userId: { videoId, userId: user.id } },
+      create: { videoId, userId: user.id, kind },
+      update: { kind },
+    });
+  } catch (e) {
+    if (e instanceof ApiError) throw e;
+    throw new ApiError(502, "the WebFlix store is unreachable — try again", "store-error");
+  }
+}
+
+/** Remove the WebFlix-local personalization signal (the undo). */
+async function removeLocalSignal(
+  videoId: string,
+  kind: "not_interested" | "dont_recommend_channel",
+  sessionUser: WebFlixSessionUser | null,
+): Promise<void> {
+  if (!sessionUser) throw new ApiError(401, "sign in first", "unauthenticated");
+  try {
+    const user = await ensureShadowUser(sessionUser);
+    await db.videoSignal.deleteMany({ where: { videoId, userId: user.id, kind } });
+  } catch (e) {
+    if (e instanceof ApiError) throw e;
+    throw new ApiError(502, "the WebFlix store is unreachable — try again", "store-error");
+  }
+}
+
+export interface FeedbackUndoResult {
+  ok: true;
+  effect: string;
+  restored: true;
+  local?: boolean;
+  path?: string;
+  note?: string;
+}
+
+/**
+ * Feedback undo — removes the LOCAL signal (always available, no YouTube
+ * toast window needed — the signal is ours). Fully disclosed as local.
+ */
+export async function proxyFeedbackUndo(
+  videoId: string,
+  kind: "not_interested" | "dont_recommend_channel",
+  sessionUser: WebFlixSessionUser | null,
+): Promise<FeedbackUndoResult> {
+  await removeLocalSignal(videoId, kind, sessionUser);
+  return {
+    ok: true,
+    effect: "feedback-undo",
+    restored: true,
+    local: true,
+    path: "local",
+    note: "Restored on WebFlix",
   };
 }

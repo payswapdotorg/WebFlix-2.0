@@ -8,15 +8,16 @@
  *   NEVER a fake append; an offline/failed write surfaces the honest error;
  * - continuous play order (the engine advancing the miniplayer through the
  *   queue, the watch-page defer guard, the autoplay preference);
- * - the watch-later route contract the queue rides (add:true → mode "add",
- *   honest 502 when the broker is offline);
+ * - the watch-later route contract the queue rides (WFX2-P36: the honest
+ *   WebFlix-LOCAL list — local:true disclosed, the DB row per user, never an
+ *   operator-session write);
  * - the ActionRow affordance (the Add to queue pill: label, pressed state,
  *   click → the wired handler).
  *
- * Idiom: action-routes (broker mock + capture/restore), miniplayer
- * (happy-dom + createRoot/act). No network, no live CDP.
+ * Idiom: miniplayer (happy-dom + createRoot/act) + the real test DB
+ * (setupTestDb) for the local-lane route contract. No network, no live CDP.
  */
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { Window } from "happy-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { act } from "react";
@@ -70,42 +71,8 @@ globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
   return fetchResponse();
 }) as unknown as typeof fetch;
 
-/* ---- the broker mock for the watch-later route (action-routes pattern:
- * capture the real module, mock, restore in afterAll) ---- */
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const realBroker = { ...require("@/lib/broker") } as Record<string, unknown>;
-
-class MockBrokerError extends Error {
-  kind: string;
-  status: number;
-  constructor(kind: string, message: string, status: number) {
-    super(message);
-    this.name = "BrokerError";
-    this.kind = kind;
-    this.status = status;
-  }
-}
-
-const brokerCalls: { kind: string; target: unknown; payload: unknown }[] = [];
-let brokerResponse: unknown = { ok: true, verified: true, path: "ui" };
-
-mock.module("@/lib/broker", () => ({
-  BROKER_OFFLINE_MESSAGE: "action backend offline — the lead's broker must be running",
-  BrokerError: MockBrokerError,
-  brokerAction: async (kind: string, target: unknown, payload?: unknown) => {
-    brokerCalls.push({ kind, target, payload });
-    return typeof brokerResponse === "function"
-      ? brokerResponse({ kind, target, payload })
-      : brokerResponse;
-  },
-  brokerOk: (r: unknown) => !(r instanceof MockBrokerError),
-  brokerUrl: () => "http://127.0.0.1:3055",
-  brokerSecret: () => "s3cret",
-  brokerConfigured: () => true,
-  brokerTimeoutMs: () => 15000,
-}));
-
-/* ---- modules under test (imported after the mocks, action-routes style) ---- */
+/* ---- modules under test (miniplayer idiom + the real test DB for the
+ * local-lane route contract) ---- */
 import {
   QUEUE_CAP,
   createQueueStore,
@@ -117,7 +84,8 @@ import { addToQueue, removeFromQueue } from "@/lib/queue/queue-actions";
 import { resetQueueEngineForTests, startQueueEngine } from "@/lib/queue/queue-engine";
 import { playerHost, resetPlayerHostForTests, usePlayerHost } from "@/lib/player/player-host";
 import { POST as postWatchLater } from "@/app/api/playlists/watch-later/route";
-import { mintSessionCookie } from "./helpers";
+import { db } from "@/lib/db";
+import { mintSessionCookie, setupTestDb } from "./helpers";
 import { ActionRow } from "@/components/watch/action-row";
 
 const item = (videoId: string): QueueItem => ({
@@ -128,6 +96,8 @@ const item = (videoId: string): QueueItem => ({
   durationSec: 100,
 });
 
+setupTestDb(); // the watch-later route contract writes the real (test) DB
+
 let AUTH_COOKIE = "";
 
 beforeAll(async () => {
@@ -137,13 +107,11 @@ beforeAll(async () => {
 
 beforeEach(() => {
   postCalls.length = 0;
-  brokerCalls.length = 0;
   fetchResponse = () =>
     new Response(JSON.stringify({ ok: true, added: true, playlistId: "WL" }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
-  brokerResponse = { ok: true, verified: true, path: "ui" };
   resetQueueStoreForTests();
   resetQueueEngineForTests();
   resetPlayerHostForTests();
@@ -163,7 +131,6 @@ afterAll(() => {
       writable: true,
     });
   }
-  mock.module("@/lib/broker", () => realBroker);
 });
 
 /* ------------------------------------------------------------------ */
@@ -251,14 +218,14 @@ describe("queue-actions: the WL-backed append/remove", () => {
 
   test("a failed write NEVER appends (never a fake append) — the honest error surfaces", async () => {
     fetchResponse = () =>
-      new Response(JSON.stringify({ error: "action backend offline — the lead's broker must be running" }), {
+      new Response(JSON.stringify({ error: "the WebFlix store is unreachable — try again" }), {
         status: 502,
         headers: { "Content-Type": "application/json" },
       });
     const outcome = await addToQueue(item("V1"));
     expect(outcome.status).toBe("error");
     if (outcome.status === "error") {
-      expect(outcome.message).toContain("broker must be running");
+      expect(outcome.message).toContain("store is unreachable");
     }
     expect(useQueueStore.getState().items).toEqual([]); // the queue gained nothing
   });
@@ -378,8 +345,8 @@ describe("queue engine: continuous play order", () => {
 /* 4. The route the queue rides — POST /api/playlists/watch-later      */
 /* ------------------------------------------------------------------ */
 
-describe("POST /api/playlists/watch-later (the queue's WL seam)", () => {
-  test("the queue append shape: add:true → broker watch-later mode add", async () => {
+describe("POST /api/playlists/watch-later (the queue's WL seam — the WebFlix-LOCAL lane)", () => {
+  test("the queue append shape: add:true → the LOCAL list (local:true, the disclosed note, the DB row)", async () => {
     const res = await postWatchLater(
       new Request("http://localhost/api/playlists/watch-later", {
         method: "POST",
@@ -388,11 +355,31 @@ describe("POST /api/playlists/watch-later (the queue's WL seam)", () => {
       }) as unknown as Parameters<typeof postWatchLater>[0]
     );
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { added: boolean; playlistId: string };
+    const body = (await res.json()) as {
+      added: boolean;
+      playlistId: string;
+      local?: boolean;
+      path?: string;
+      effect?: string;
+      note?: string;
+    };
     expect(body.added).toBe(true);
-    expect(body.playlistId).toBe("WL");
-    expect(brokerCalls[0].kind).toBe("watch-later");
-    expect(brokerCalls[0].payload).toEqual({ mode: "add" });
+    expect(body.playlistId).toBe("WL"); // the queue-actions contract shape kept
+    expect(body.local).toBe(true); // origin disclosed — never a YouTube write claimed
+    expect(body.path).toBe("local");
+    expect(body.effect).toBe("watch-later-added");
+    expect(body.note).toBe(
+      "Saved on WebFlix — YouTube's own Watch Later isn't writable through the official API",
+    );
+    // the row lives in the session's own local list (the real test DB)
+    const wl = await db.playlist.findFirstOrThrow({
+      where: { userId: "wf-u_wfx2_test", isWatchLater: true },
+    });
+    expect(
+      await db.playlistItem.findUnique({
+        where: { playlistId_videoId: { playlistId: wl.id, videoId: "V1" } },
+      })
+    ).not.toBeNull();
   });
 
   test("guest (no session) → 401, never a write", async () => {
@@ -400,29 +387,41 @@ describe("POST /api/playlists/watch-later (the queue's WL seam)", () => {
       new Request("http://localhost/api/playlists/watch-later", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ videoId: "V1", add: true }),
+        body: JSON.stringify({ videoId: "VGuest1", add: true }),
       }) as unknown as Parameters<typeof postWatchLater>[0]
     );
     expect(res.status).toBe(401);
-    expect(brokerCalls).toHaveLength(0);
+    expect(await db.playlistItem.count({ where: { videoId: "VGuest1" } })).toBe(0);
   });
 
-  test("broker offline → the honest 502 (the queue's append degrades honestly)", async () => {
-    brokerResponse = new MockBrokerError(
-      "offline",
-      "action backend offline — the lead's broker must be running",
-      502
+  test("the remove seam (the queue's removeFromQueue): add:false removes the LOCAL row — the queue's honest degrade-free path", async () => {
+    await postWatchLater(
+      new Request("http://localhost/api/playlists/watch-later", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", cookie: AUTH_COOKIE },
+        body: JSON.stringify({ videoId: "V2", add: true }),
+      }) as unknown as Parameters<typeof postWatchLater>[0]
     );
     const res = await postWatchLater(
       new Request("http://localhost/api/playlists/watch-later", {
         method: "POST",
         headers: { "Content-Type": "application/json", cookie: AUTH_COOKIE },
-        body: JSON.stringify({ videoId: "V1", add: true }),
+        body: JSON.stringify({ videoId: "V2", add: false }),
       }) as unknown as Parameters<typeof postWatchLater>[0]
     );
-    expect(res.status).toBe(502);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toContain("broker must be running");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { added: boolean; effect: string; local?: boolean };
+    expect(body.added).toBe(false);
+    expect(body.effect).toBe("watch-later-removed");
+    expect(body.local).toBe(true);
+    const wl = await db.playlist.findFirstOrThrow({
+      where: { userId: "wf-u_wfx2_test", isWatchLater: true },
+    });
+    expect(
+      await db.playlistItem.findUnique({
+        where: { playlistId_videoId: { playlistId: wl.id, videoId: "V2" } },
+      })
+    ).toBeNull();
   });
 });
 

@@ -7,9 +7,10 @@
  * Signed-in →
  *   1. the WebFlix identity card: edit display name + avatar color (the
  *      WebFlix-local identity — never a YouTube account, per the law);
- *   2. the honest operator-session section (unchanged wording law): the
- *      app still acts on the operator's YouTube session — single-tenant
- *      live mode, no fake login, never.
+ *   2. the honest server-session section (the WFX2-P36 wording): the
+ *      deployment's server session only READS public YouTube pages — every
+ *      user write acts on the user's OWN connected YouTube account (see
+ *      Settings → YouTube account), never the session's identity.
  */
 import { useState } from "react";
 import Link from "next/link";
@@ -64,18 +65,11 @@ function AccountContent() {
         <h2 className="text-base font-semibold">YouTube session</h2>
         <p className="mt-2 text-sm text-muted-foreground">
           {operatorSession
-            ? "Operator session connected — comment writes, likes, reports and creator tools act on the operator's real YouTube account."
-            : "No operator session is configured (public mode). Reads stay fully live; write surfaces (comments, likes, reports, heart/pin) honestly show their signed-out states until the session is connected."}
+            ? "Operator read session connected — WebFlix's server uses it to read public YouTube pages. It never performs your actions: your likes, subscribes and playlists act on your own connected YouTube account (Settings → YouTube account)."
+            : "No operator read session is configured (public mode). Reads stay fully live; your own actions run through your connected YouTube account (Settings → YouTube account)."}
         </p>
-        {!operatorSession && (
-          <p className="mt-2 text-sm text-muted-foreground">
-            Connect it by setting <code className="rounded bg-secondary px-1.5 py-0.5 text-xs">YT_COOKIES</code>{" "}
-            in the server environment (see <code className="rounded bg-secondary px-1.5 py-0.5 text-xs">.env.example</code>).
-            The operator account owner manages this — sessions are never stored in the browser.
-          </p>
-        )}
         <p className="mt-2 text-sm text-muted-foreground">
-          Your WebFlix account fronts that session — it is not a YouTube account, and WebFlix never
+          Your WebFlix account is local to WebFlix — it is not a YouTube account, and WebFlix never
           fabricates YouTube-account data.
         </p>
       </section>

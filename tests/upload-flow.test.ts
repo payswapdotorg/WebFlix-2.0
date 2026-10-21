@@ -1,82 +1,33 @@
 /// <reference types="bun-types" />
 /**
- * WFX2-P3-UP tests — the real upload flow, end-to-end at the app layer:
+ * WFX2-P3-UP tests → WFX2-P36 re-point — the real upload flow, end-to-end at
+ * the app layer:
  *
- *  - the staging contract: POST /api/upload/stage (auth gate, video gate,
- *    the synthetic fixture round-trip) + GET /api/upload/stage?id=
- *    (CORS-open bytes for the operator tab's page-context fetch) + 404
- *    honestly on expiry;
- *  - POST /api/upload/execute with the broker MOCKED (no network, no live CDP —
- *    the community-posts pattern): the happy path maps to the published DTO
- *    (deep-linking the real video), the honest 'navigating' intermediate
- *    re-invokes the broker (the script owns its navigation), broker-offline
- *    falls back to the CURRENT hand-off rung, a refused publish renders the
- *    honest error (never a fake success — an ok:true without a video id
- *    claims nothing), and guests never reach the broker;
+ *  - the staging contract (UNCHANGED in P36): POST /api/upload/stage (auth
+ *    gate, video gate, the synthetic fixture round-trip) + GET
+ *    /api/upload/stage?id= (CORS-open bytes for the hand-off rung's
+ *    page-context fetch) + 404 honestly on expiry;
+ *  - POST /api/upload/execute → the HONEST UNSUPPORTED lane: the pre-P36
+ *    broker drive (uploading through the OPERATOR's logged-in tab) is retired
+ *    with the shared operator identity; the official per-user videos.insert
+ *    lane is future work — so the route answers the constant 501
+ *    {error, kind:"youtube-unsupported"} and nothing is uploaded or claimed
+ *    (only request errors are 4xx; the staging lookup no longer gates);
  *  - the flow state machine (idle → staging → executing → published |
- *    fallback | error) — the view's single reducer;
+ *    fallback | error) — the view's single reducer (pure, unchanged);
  *  - the result card's honest rendering (happy-dom + createRoot/act): the
  *    published card deep-links the real video, the unverified publish says
  *    so, the fallback card carries the bundle, the error card shows the
- *    broker's message;
+ *    route's honest message — including the P36 unsupported copy that is the
+ *    REACHABLE terminal state today;
  *  - the synthetic MP4 fixture is a real video file (ftyp box + nonzero
  *    size), provenance-marked SYNTHETIC.
  */
 import { NextRequest } from "next/server";
-import { afterAll, afterEach, beforeEach, describe, expect, test, mock } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-// ---- the broker client MOCK (installed before the route imports) ----
-class MockBrokerError extends Error {
-  kind: string;
-  status: number;
-  detail?: unknown;
-  constructor(kind: string, message: string, status: number, detail?: unknown) {
-    super(message);
-    this.name = "BrokerError";
-    this.kind = kind;
-    this.status = status;
-    this.detail = detail;
-  }
-}
-
-const brokerCalls: {
-  fileUrl: string;
-  fileName: string;
-  title: string;
-  description?: string;
-  visibility: string;
-}[] = [];
-/** per-test broker behavior: an error factory or a success object */
-let brokerBehavior: unknown = { ok: true, verified: true, path: "ui", detail: { stage: "published", videoId: "dQw4h9WgXcQ", watchUrl: "https://www.youtube.com/watch?v=dQw4h9WgXcQ" } };
-
-mock.module("@/lib/broker", () => ({
-  BROKER_OFFLINE_MESSAGE: "action backend offline — the lead's broker must be running",
-  BrokerError: MockBrokerError,
-  brokerAction: async () => new MockBrokerError("offline", "unused in this suite", 502),
-  brokerCommunityRead: async () => new MockBrokerError("offline", "unused in this suite", 502),
-  brokerOk: (r: unknown) => !(r instanceof MockBrokerError),
-  brokerUrl: () => "http://127.0.0.1:3055",
-  brokerSecret: () => "s3cret",
-  brokerConfigured: () => true,
-  brokerTimeoutMs: () => 15000,
-  UPLOAD_EXECUTE_TIMEOUT_MS: 310000,
-  UPLOAD_NAVIGATE_RETRY_MS: 2000,
-  brokerUploadExecute: async (input: {
-    fileUrl: string;
-    fileName: string;
-    title: string;
-    description?: string;
-    visibility: string;
-  }) => {
-    brokerCalls.push({ ...input });
-    return typeof brokerBehavior === "function"
-      ? brokerBehavior({ ...input, call: brokerCalls.length })
-      : brokerBehavior;
-  },
-}));
-
-/* routes + libs (imported after the mocks) */
+/* routes + libs */
 import { GET as stageGET, OPTIONS as stageOPTIONS, POST as stagePOST } from "@/app/api/upload/stage/route";
 import { POST as executePOST } from "@/app/api/upload/execute/route";
 import {
@@ -101,6 +52,10 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { Window } from "happy-dom";
 import UploadResultCard from "@/app/upload/upload-result";
+
+/** The P36 honest-unsupported verdict — the route's exact copy. */
+const UNSUPPORTED_ERROR =
+  "Publishing videos through WebFlix isn't supported yet — the official YouTube upload lane (videos.insert on your own connected account) is future work. Use the hand-off bundle on the Visibility step to upload on YouTube.";
 
 // ---------------------------------------------------------------------------
 // the synthetic fixture (provenance: tests/fixtures/upload/README.md)
@@ -187,13 +142,6 @@ let cookie = "";
 beforeEach(async () => {
   clearCache();
   clearStagedUploads();
-  brokerCalls.length = 0;
-  brokerBehavior = {
-    ok: true,
-    verified: true,
-    path: "ui",
-    detail: { stage: "published", videoId: "dQw4h9WgXcQ", watchUrl: "https://www.youtube.com/watch?v=dQw4h9WgXcQ" },
-  };
   cookie = await mintSessionCookie();
 });
 
@@ -227,13 +175,12 @@ async function executeRequest(payload: Record<string, unknown>): Promise<Respons
 const EXECUTE_BODY = {
   stageId: "staged-below",
   title: "WebFlix staged upload drive",
-  description: "Driven by the session broker through the real upload dialog.",
+  description: "The wizard's metadata, staged for the honest hand-off rung.",
   visibility: "unlisted",
   tags: ["webflix", "staged"],
   thumbnailUrl: null,
   isShort: false,
 };
-
 // ---------------------------------------------------------------------------
 // the synthetic fixture is a real video file
 // ---------------------------------------------------------------------------
@@ -251,7 +198,7 @@ describe("the synthetic MP4 fixture (provenance: SYNTHETIC, README-marked)", () 
 // the staging contract
 // ---------------------------------------------------------------------------
 describe("POST /api/upload/stage — the staged-file carrier", () => {
-  test("guest → 401 (guests never reach the broker path)", async () => {
+  test("guest → 401 (guests never reach the staging path)", async () => {
     const fd = new FormData();
     fd.append("file", new File([fixtureBytes], "x.mp4", { type: "video/mp4" }));
     const res = await stagePOST(
@@ -300,7 +247,7 @@ describe("POST /api/upload/stage — the staged-file carrier", () => {
   });
 });
 
-describe("GET /api/upload/stage?id= — the operator tab's fetch target", () => {
+describe("GET /api/upload/stage?id= — the staged-file fetch target (CORS-open)", () => {
   test("serves the staged bytes CORS-open with the video content type", async () => {
     const staged = await stageFixture();
     const res = await stageGET(
@@ -344,10 +291,10 @@ describe("the staging store's caps (in-memory, honest bounds)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/upload/execute — the broker drive mapping (broker MOCKED)
+// POST /api/upload/execute — the honest UNSUPPORTED lane (WFX2-P36)
 // ---------------------------------------------------------------------------
-describe("POST /api/upload/execute — the honest ladder (broker mocked)", () => {
-  test("guest → 401 before any broker call", async () => {
+describe("POST /api/upload/execute — the honest unsupported lane", () => {
+  test("guest → 401 before the verdict (guests never reach any drive)", async () => {
     const res = await executePOST(
       new NextRequest("http://localhost/api/upload/execute", {
         method: "POST",
@@ -356,157 +303,44 @@ describe("POST /api/upload/execute — the honest ladder (broker mocked)", () =>
       })
     );
     expect(res.status).toBe(401);
-    expect(brokerCalls).toHaveLength(0);
   });
 
-  test("missing title → 400 before any broker call", async () => {
+  test("missing title → 400 (the wizard's field laws stay contract-stable)", async () => {
     const staged = await stageFixture();
     const res = await executeRequest({ stageId: staged.stageId, title: "  " });
     expect(res.status).toBe(400);
-    expect(brokerCalls).toHaveLength(0);
   });
 
-  test("unknown/expired stageId → honest 400 'pick the file again'", async () => {
+  test("an unknown stageId → the honest 501 (the staging lookup no longer gates the execute path; only request errors are 4xx)", async () => {
     const res = await executeRequest({ ...EXECUTE_BODY, stageId: "00000000-0000-4000-8000-000000000000" });
+    expect(res.status).toBe(501);
+    const body = (await res.json()) as { error: string; kind?: string };
+    expect(body.error).toBe(UNSUPPORTED_ERROR);
+    expect(body.kind).toBe("youtube-unsupported");
+  });
+
+  test("a fully valid publish request (staged file + complete metadata) → the honest 501 — nothing uploaded, nothing claimed", async () => {
+    const staged = await stageFixture();
+    const res = await executeRequest({ ...EXECUTE_BODY, stageId: staged.stageId });
+    expect(res.status).toBe(501);
+    const body = (await res.json()) as { error: string; kind?: string };
+    expect(body.error).toBe(UNSUPPORTED_ERROR);
+    expect(body.kind).toBe("youtube-unsupported");
+    // never cached — the verdict is a live policy answer, not stale content
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    // nothing was published: no outcome DTO at all (the broker ladder is retired)
+    expect((body as Record<string, unknown>).outcome).toBeUndefined();
+  });
+
+  test("a non-JSON body → 400 (request errors only)", async () => {
+    const res = await executePOST(
+      new NextRequest("http://localhost/api/upload/execute", {
+        method: "POST",
+        headers: { cookie, "content-type": "text/plain" },
+        body: "not-json",
+      })
+    );
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toContain("staged file not found or expired");
-    expect(brokerCalls).toHaveLength(0);
-  });
-
-  test("happy path → the published DTO deep-links the real video (verified)", async () => {
-    const staged = await stageFixture();
-    const res = await executeRequest({ ...EXECUTE_BODY, stageId: staged.stageId });
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as UploadExecuteResponseDTO;
-    expect(body.outcome).toBe("published");
-    expect(body.verified).toBe(true);
-    expect(body.stage).toBe("published");
-    expect(body.videoId).toBe("dQw4h9WgXcQ");
-    expect(body.watchUrl).toBe("https://www.youtube.com/watch?v=dQw4h9WgXcQ");
-    // the broker received the staged file identity + the metadata the drive fills
-    expect(brokerCalls).toHaveLength(1);
-    expect(brokerCalls[0].fileUrl).toContain("http://localhost/api/upload/stage?id=");
-    expect(brokerCalls[0].fileName).toBe("synthetic-480p-1s-webflix-fixture.mp4");
-    expect(brokerCalls[0].title).toBe(EXECUTE_BODY.title);
-    expect(brokerCalls[0].description).toBe(EXECUTE_BODY.description);
-    expect(brokerCalls[0].visibility).toBe("unlisted");
-  });
-
-  test("the honest 'navigating' intermediate re-invokes the broker (the script owns its navigation)", async () => {
-    const staged = await stageFixture();
-    brokerBehavior = ({ call }: { call: number }) =>
-      call === 1
-        ? new MockBrokerError(
-            "action-failed",
-            "upload-execute: navigating to the upload page — re-invoke to drive the dialog",
-            502,
-            // the real client carries the WHOLE 502 body as detail (the
-            // script's return — no dom on the navigating intermediate)
-            {
-              ok: false,
-              error: "upload-execute: navigating to the upload page — re-invoke to drive the dialog",
-              path: "ui",
-              detail: { stage: "navigating" },
-            }
-          )
-        : {
-            ok: true,
-            verified: true,
-            path: "ui",
-            detail: { stage: "published", videoId: "jNQXAC9IVRw", watchUrl: "https://www.youtube.com/watch?v=jNQXAC9IVRw" },
-          };
-    const res = await executeRequest({ ...EXECUTE_BODY, stageId: staged.stageId });
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as UploadExecuteResponseDTO;
-    expect(body.outcome).toBe("published");
-    expect(body.videoId).toBe("jNQXAC9IVRw");
-    expect(brokerCalls.length).toBe(2); // navigate → re-invoke → drive
-  });
-
-  test("broker OFFLINE → the CURRENT hand-off rung (fallback, never a fake success)", async () => {
-    const staged = await stageFixture();
-    brokerBehavior = new MockBrokerError(
-      "offline",
-      "action backend offline — the lead's broker must be running",
-      502
-    );
-    const res = await executeRequest({ ...EXECUTE_BODY, stageId: staged.stageId });
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as UploadExecuteResponseDTO;
-    expect(body.outcome).toBe("fallback");
-    expect(body.reason).toBe("broker-offline");
-    expect(body.message).toContain("offline");
-    expect(body.handoff?.handoffUrl).toBe("https://www.youtube.com/upload");
-    expect(body.handoff?.bundle).toContain(EXECUTE_BODY.title);
-    expect(body.handoff?.bundle).toContain("Unlisted");
-  });
-
-  test("broker UNAUTHORIZED → the hand-off rung too (refused secret = no drive)", async () => {
-    const staged = await stageFixture();
-    brokerBehavior = new MockBrokerError("unauthorized", "broker rejected the shared secret", 502);
-    const res = await executeRequest({ ...EXECUTE_BODY, stageId: staged.stageId });
-    const body = (await res.json()) as UploadExecuteResponseDTO;
-    expect(body.outcome).toBe("fallback");
-    expect(body.reason).toBe("broker-unauthorized");
-    expect(body.handoff?.bundle).toContain(EXECUTE_BODY.title);
-  });
-
-  test("REFUSED publish → the honest error carries the broker's stage-accurate message + the rung", async () => {
-    const staged = await stageFixture();
-    brokerBehavior = new MockBrokerError(
-      "action-failed",
-      "upload-execute: publish-button-not-ready — the upload was still in progress when the deadline hit (or publishing was blocked)",
-      502,
-      // the real client carries the WHOLE 502 body as detail — the stage
-      // nests in body.detail.stage, the observed DOM in body.dom
-      {
-        ok: false,
-        error: "upload-execute: publish-button-not-ready — the upload was still in progress when the deadline hit (or publishing was blocked)",
-        path: "ui",
-        detail: { stage: "uploading" },
-        dom: { title: "Upload video", url: "https://www.youtube.com/upload" },
-      }
-    );
-    const res = await executeRequest({ ...EXECUTE_BODY, stageId: staged.stageId });
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as UploadExecuteResponseDTO;
-    expect(body.outcome).toBe("error");
-    expect(body.message).toContain("publish-button-not-ready");
-    expect(body.stage).toBe("uploading");
-    expect(body.handoff?.bundle).toContain(EXECUTE_BODY.title);
-  });
-
-  test("ok:true WITHOUT a video id claims nothing (never a fake success)", async () => {
-    const staged = await stageFixture();
-    brokerBehavior = { ok: true, verified: true, path: "ui" };
-    const res = await executeRequest({ ...EXECUTE_BODY, stageId: staged.stageId });
-    const body = (await res.json()) as UploadExecuteResponseDTO;
-    expect(body.outcome).toBe("error");
-    expect(body.message).toContain("without a video id");
-    expect(body.handoff).toBeDefined();
-  });
-
-  test("an UNVERIFIED publish (confirmation not observed) is honestly flagged", async () => {
-    const staged = await stageFixture();
-    brokerBehavior = {
-      ok: true,
-      verified: false,
-      path: "ui",
-      // the script rides the UNVERIFIED note TOP-LEVEL on the wire
-      detail: {
-        stage: "processing",
-        videoId: "jNQXAC9IVRw",
-        watchUrl: "https://www.youtube.com/watch?v=jNQXAC9IVRw",
-      },
-      note: "publish clicked — the confirmation was not observed within the deadline; the video may still be processing",
-    };
-    const res = await executeRequest({ ...EXECUTE_BODY, stageId: staged.stageId });
-    const body = (await res.json()) as UploadExecuteResponseDTO;
-    expect(body.outcome).toBe("published");
-    expect(body.stage).toBe("processing");
-    expect(body.verified).toBe(false);
-    expect(body.note).toContain("not observed");
   });
 });
 
@@ -533,14 +367,14 @@ describe("the upload flow state machine", () => {
     expect(s.result?.videoId).toBe("dQw4h9WgXcQ");
   });
 
-  test("broker-offline settles to the fallback rung", () => {
+  test("a fallback result settles to the fallback rung (the DTO contract's terminal shape)", () => {
     let s = initialUploadFlowState();
     s = uploadFlowNext(s, { type: "file-picked", fileName: "clip.mp4", sizeBytes: 15102 });
     s = uploadFlowNext(s, { type: "publish-started" });
     s = uploadFlowNext(s, { type: "execute-started" });
     s = uploadFlowNext(s, {
       type: "execute-settled",
-      result: { outcome: "fallback", reason: "broker-offline", message: "offline" },
+      result: { outcome: "fallback", reason: "unavailable", message: "unavailable" },
     });
     expect(s.phase).toBe("fallback");
     expect(s.error).toBeNull();
@@ -750,7 +584,7 @@ describe("the result card renders the honest states", () => {
     expect(html).toContain("https://www.youtube.com/watch?v=dQw4h9WgXcQ");
     expect(html).toContain("Open the video");
     expect(html).toContain("dQw4h9WgXcQ");
-    expect(html).toContain("verified in the operator");
+    expect(html).toContain("verified on YouTube"); // the per-user truth — the operator-era copy is retired
   });
 
   test("the unverified publish says exactly that (never a claimed success)", async () => {
@@ -764,14 +598,14 @@ describe("the result card renders the honest states", () => {
     });
     expect(html).toContain("confirmation not observed");
     expect(html).toContain("may still be processing");
-    expect(html).not.toContain("verified in the operator");
+    expect(html).not.toContain("verified on YouTube");
   });
 
-  test("the fallback card carries the CURRENT hand-off rung", async () => {
+  test("the fallback card carries the hand-off rung (the DTO contract's unreachable-in-P36 shape)", async () => {
     const html = await renderCard({
       outcome: "fallback",
-      reason: "broker-offline",
-      message: "the session broker is offline — the hand-off below remains the honest path (YouTube owns the upload)",
+      reason: "unavailable",
+      message: "Publishing through WebFlix isn't available; nothing was uploaded. The hand-off below is the honest path.",
       handoff: {
         handoffUrl: "https://www.youtube.com/upload",
         prefillSupported: false,
@@ -786,18 +620,18 @@ describe("the result card renders the honest states", () => {
         },
       },
     });
-    expect(html).toContain("session broker is offline");
+    expect(html).toContain("Publishing isn't available");
     expect(html).toContain("WebFlix → YouTube upload metadata");
     expect(html).toContain("https://www.youtube.com/upload");
     expect(html).toContain("Copy bundle");
   });
 
-  test("the error card renders the broker's honest message + the observed stage", async () => {
+  test("the error card renders the route's honest message + the observed stage", async () => {
     const html = await renderCard({
       outcome: "error",
-      reason: "action-failed",
+      reason: "refused",
       message:
-        "upload-execute: publish-button-not-ready — the upload was still in progress when the deadline hit (or publishing was blocked)",
+        "publish-button-not-ready — the upload was still in progress when the deadline hit (or publishing was blocked)",
       stage: "uploading",
       handoff: {
         handoffUrl: "https://www.youtube.com/upload",
@@ -817,5 +651,19 @@ describe("the result card renders the honest states", () => {
     expect(html).toContain("publish-button-not-ready");
     expect(html).toContain("uploading");
     expect(html).toContain("Copy bundle"); // the rung is offered, never a dead end
+  });
+
+  test("the error card carries the P36 honest-unsupported copy (the REACHABLE terminal state today)", async () => {
+    const html = await renderCard({
+      outcome: "error",
+      message: UNSUPPORTED_ERROR,
+    });
+    expect(html).toContain("The publish was not completed");
+    expect(html).toContain("isn't supported yet");
+    expect(html).toContain("future work");
+    expect(html).toContain("hand-off bundle");
+    // never a fake success: no published card, no video claim
+    expect(html).not.toContain("Video published");
+    expect(html).not.toContain("data-testid=\"upload-published-card\"");
   });
 });

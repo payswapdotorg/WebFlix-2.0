@@ -14,30 +14,40 @@ type LikedPayload = {
   loginRequired: boolean;
   unavailable: boolean;
   session: boolean;
+  /** WFX2-P36: the per-user truth — false → the connect link in the notice */
+  connected?: boolean;
+  /** WFX2-P36: the honest per-user notice (no official liked-list API) */
+  notice?: string;
 };
 
-/**
- * The honest degradation states (P22-B). NEVER a "Sign in to …" ask: the
- * viewer is signed in to WebFlix (the gate passed); the missing piece is the
- * deployment's YouTube session or the read itself — a WebFlix sign-in can
- * never fix either (measured live: the production deploy answers the
- * "playlist does not exist" alert for LL WITH the operator session
- * configured, while its history read serves real rows).
- */
-function LikedUnavailableNote({ state }: { state: "unavailable" | "no-session" }) {
+/** WFX2-P36 — the honest per-user notice banner: the route's notice text,
+ * plus the connect link when the acting user has no connected account. */
+function LikedNoticeBanner({ payload }: { payload: LikedPayload }) {
+  if (!payload.notice) return null;
   return (
-    <div className="px-4 py-16 text-center sm:px-6" role="status">
-      <p className="text-lg font-medium">Liked videos are unavailable right now</p>
-      <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-        {state === "unavailable"
-          ? "The YouTube session is connected, but it didn't return your liked videos — they may be empty on YouTube, or YouTube didn't serve them to WebFlix. Open your liked list on youtube.com to check."
-          : "Liked videos are personal to the YouTube account this WebFlix deployment rides (single-tenant live mode). No YouTube session is connected to this deployment yet — your WebFlix sign-in is fine; the operator session (YT_COOKIES) needs to be connected."}
-      </p>
+    <div
+      className="mx-4 mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-secondary/40 px-4 py-3 sm:mx-6"
+      role="status"
+      data-testid="liked-notice"
+    >
+      <p className="min-w-0 flex-1 text-sm text-muted-foreground">{payload.notice}</p>
+      {payload.connected === false && (
+        <Link
+          href="/settings"
+          className="shrink-0 text-sm font-medium text-foreground underline underline-offset-2"
+        >
+          Connect your YouTube account
+        </Link>
+      )}
     </div>
   );
 }
 
-/** Liked videos — the operator's REAL Liked playlist (YouTube's own `LL`).
+/** Liked videos — WFX2-P36: the honest per-user surface. The list of videos
+ * you liked on YouTube has no official API (your LIKE BUTTON still acts on
+ * your own account through the official lane) — the notice banner hands the
+ * list off to youtube.com/feed/liked, and no one else's list is ever read
+ * (the pre-P36 operator-session read is retired).
  * WFX2-P2-AU: guests get the youtube.com signed-out screen (the gate). */
 export default function LikedPage() {
   return (
@@ -73,19 +83,31 @@ function LikedContent() {
           {error}
         </p>
       )}
-      {data && data.unavailable && <LikedUnavailableNote state="unavailable" />}
-      {data && !data.unavailable && data.loginRequired && (
-        <LikedUnavailableNote state="no-session" />
+      {data && <LikedNoticeBanner payload={data} />}
+      {data && (data.unavailable || data.loginRequired) && !data.notice && (
+        <div className="px-4 py-16 text-center sm:px-6" role="status">
+          <p className="text-lg font-medium">Liked videos are unavailable right now</p>
+          <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+            Your liked list could not be read just now — try again shortly, or open it on
+            youtube.com.
+          </p>
+        </div>
       )}
       {data && !data.loginRequired && !data.unavailable && videos.length === 0 && (
         <div className="px-4 py-16 text-center sm:px-6">
-          <p className="text-lg font-medium">No liked videos yet</p>
+          <p className="text-lg font-medium">Your liked list lives on YouTube</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Likes live on the YouTube account —{" "}
-            <Link href="/" className="text-foreground underline underline-offset-2">
-              watch something
-            </Link>{" "}
-            and hit the like button.
+            The list of videos you liked has no official API — your likes still act on your
+            account (the like button);{" "}
+            <a
+              href="https://www.youtube.com/feed/liked"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-foreground underline underline-offset-2"
+            >
+              youtube.com/feed/liked
+            </a>{" "}
+            has the list.
           </p>
         </div>
       )}

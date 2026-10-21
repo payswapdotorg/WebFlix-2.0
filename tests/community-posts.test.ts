@@ -10,17 +10,27 @@
  *  - the mapper extensions: poll attachment, image grid, author avatar;
  *  - the post COMMENTS read (the post-detail browse → the same comment
  *    continuation walking, paged + sorted + honest walled degrade);
- *  - the new broker kinds' request shapes at the route layer (post-like,
- *    post-comment-create, post-comment-like, post-create) with the broker
- *    client MOCKED (no network, no live CDP — the comment-writes pattern);
+ *  - WFX2-P36 re-point — the posts WRITE family (post-like, post-comment-
+ *    create, post-comment-like, post-create) is SESSION-GATED (guest → the
+ *    uniform 401) and sits on the pure HONEST UNSUPPORTED lane: no official
+ *    end-user YouTube API exists for community posts, and the pre-P36
+ *    broker drives (youtube.com's composer/vote toggles on the OPERATOR's
+ *    tab) are retired with the shared identity — every write answers the
+ *    honest 501 {error, kind: "youtube-unsupported"} with the handoff to
+ *    YouTube, with the request-shape validation still answering its honest
+ *    400s first. The broker client stays MOCKED for the READ ladder above
+ *    (the community-tab broker READ is operator tooling, still in-repo) —
+ *    and the write tests pin that NO write ever reaches it;
  *  - the composer's gating state machine (canSubmitPost).
  *
  * Fixture bytes via setUpstream() + the Upstash fake via setUpstashRest()
- * (never the network).
+ * (never the network). Signed-in requests ride the real minted NextAuth
+ * session cookie (tests/helpers.ts — the same decode the gate performs).
  */
 import { NextRequest } from "next/server";
-import { afterAll, afterEach, beforeEach, describe, expect, test, mock } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, mock } from "bun:test";
 import { readFileSync } from "node:fs";
+import { mintSessionCookie } from "./helpers";
 
 // ---- the broker client MOCK (installed before the route imports) ----
 class MockBrokerError extends Error {
@@ -226,6 +236,18 @@ const postCtx = (postId: string) => ({ params: Promise.resolve({ postId }) });
 const postCommentCtx = (postId: string, commentId: string) => ({
   params: Promise.resolve({ postId, commentId }),
 });
+
+/** A signed-in request (the real minted NextAuth cookie — the gate decodes it). */
+let AUTH_COOKIE = "";
+beforeAll(async () => {
+  AUTH_COOKIE = await mintSessionCookie();
+});
+const authed = (url: string, init?: { method?: string; body?: string }): NextRequest =>
+  new NextRequest(url, {
+    method: init?.method,
+    body: init?.body,
+    headers: { cookie: AUTH_COOKIE },
+  });
 
 // ---------------------------------------------------------------------------
 // the mapper extensions (poll, image grid, author avatar)
@@ -532,120 +554,164 @@ describe("GET /api/posts/[postId]/comments — the post comments read", () => {
 });
 
 // ---------------------------------------------------------------------------
-// the new broker kinds' request shapes (route layer)
+// WFX2-P36 — the posts WRITE family: session-gated, on the pure honest
+// unsupported lane (501 {error, kind: "youtube-unsupported"}). The broker
+// mock above stays installed for the READ ladder — these pins prove no
+// write ever reaches it.
 // ---------------------------------------------------------------------------
 
-describe("POST /api/posts/* — the Tier-2 write shapes", () => {
-  test("post-like: {action: like} → brokerAction('post-like', {postId}, {action: 'like'})", async () => {
-    const res = await postLikeRoute(
-      new NextRequest("http://localhost/api/posts/UgkxSYNTHETICbrowser01/like", {
-        method: "POST",
-        body: JSON.stringify({ action: "like", baseline: { likes: 4400, yourLike: null } }),
-      }),
-      postCtx("UgkxSYNTHETICbrowser01")
-    );
-    expect(res.status).toBe(200);
-    const data = (await res.json()) as any;
-    expect(data.ok).toBe(true);
-    expect(data.effect).toBe("post-liked");
-    expect(data.yourLike).toBe("like");
-    expect(data.likes).toBe(4401);
-    expect(brokerCalls).toHaveLength(1);
-    expect(brokerCalls[0].kind).toBe("post-like");
-    expect(brokerCalls[0].target).toEqual({ postId: "UgkxSYNTHETICbrowser01" });
-    expect(brokerCalls[0].payload).toEqual({ action: "like" });
-  });
-
-  test("post-like legacy toggle: same value again → action 'remove'", async () => {
-    const res = await postLikeRoute(
-      new NextRequest("http://localhost/api/posts/UgkxSYNTHETICbrowser01/like", {
-        method: "POST",
-        body: JSON.stringify({ value: "like", baseline: { likes: 4400, yourLike: "like" } }),
-      }),
-      postCtx("UgkxSYNTHETICbrowser01")
-    );
-    expect(res.status).toBe(200);
-    expect(((await res.json()) as any).effect).toBe("post-rating-removed");
-    expect(brokerCalls[0].payload).toEqual({ action: "remove" });
-  });
-
-  test("post-like broker offline → the honest 502 the UI degrades on", async () => {
-    brokerResponse = new MockBrokerError("offline", OFFLINE_MSG, 502);
-    const res = await postLikeRoute(
+describe("POST /api/posts/* — the honest unsupported lane (WFX2-P36)", () => {
+  test("guests → the uniform 401 on the whole write family (never any write lane)", async () => {
+    const res1 = await postLikeRoute(
       new NextRequest("http://localhost/api/posts/UgkxSYNTHETICbrowser01/like", {
         method: "POST",
         body: JSON.stringify({ action: "like" }),
       }),
       postCtx("UgkxSYNTHETICbrowser01")
     );
-    expect(res.status).toBe(502);
-    const data = (await res.json()) as any;
-    expect(data.error).toBe(OFFLINE_MSG);
+    expect(res1.status).toBe(401);
+    expect(((await res1.json()) as { error?: string }).error).toBe("unauthenticated");
+    const res2 = await postComment(
+      new NextRequest("http://localhost/api/posts/UgkxSYNTHETICbrowser01/comments", {
+        method: "POST",
+        body: JSON.stringify({ body: "guest write" }),
+      }),
+      postCtx("UgkxSYNTHETICbrowser01")
+    );
+    expect(res2.status).toBe(401);
+    const res3 = await postCommentLikeRoute(
+      new NextRequest(
+        "http://localhost/api/posts/UgkxSYNTHETICbrowser01/comments/UgySYNTHETICpostComment1/like",
+        { method: "POST", body: JSON.stringify({ value: "like" }) }
+      ),
+      postCommentCtx("UgkxSYNTHETICbrowser01", "UgySYNTHETICpostComment1")
+    );
+    expect(res3.status).toBe(401);
+    const res4 = await createPostRoute(
+      new NextRequest("http://localhost/api/posts", {
+        method: "POST",
+        body: JSON.stringify({ handle: "@RickAstleyYT", text: "guest post" }),
+      })
+    );
+    expect(res4.status).toBe(401);
+    // the gate fired BEFORE anything — zero broker calls, zero upstream calls
+    expect(brokerCalls).toHaveLength(0);
+    expect(upstream.recorded).toHaveLength(0);
   });
 
-  test("post-comment-create: {body} → brokerAction('post-comment-create', {postId}, {text}) + 201 synth DTO", async () => {
+  test("post-like: {action: like} signed-in → the honest 501 youtube-unsupported with the handoff copy (never a fake likes delta)", async () => {
+    const res = await postLikeRoute(
+      authed("http://localhost/api/posts/UgkxSYNTHETICbrowser01/like", {
+        method: "POST",
+        body: JSON.stringify({ action: "like", baseline: { likes: 4400, yourLike: null } }),
+      }),
+      postCtx("UgkxSYNTHETICbrowser01")
+    );
+    expect(res.status).toBe(501);
+    const data = (await res.json()) as any;
+    expect(data.kind).toBe("youtube-unsupported");
+    expect(data.error).toBe(
+      "Liking YouTube community posts isn't supported by the official YouTube API — community posts live on YouTube"
+    );
+    // never a fabricated effect/count on the unsupported lane
+    expect(data.ok).toBeUndefined();
+    expect(data.likes).toBeUndefined();
+    expect(data.yourLike).toBeUndefined();
+    // no shared-operator path serves the write: zero broker calls
+    expect(brokerCalls).toHaveLength(0);
+  });
+
+  test("post-like legacy toggle ({value: like}) → the SAME honest 501 — the request shape is kept, the fabricated 'post-rating-removed' is not", async () => {
+    const res = await postLikeRoute(
+      authed("http://localhost/api/posts/UgkxSYNTHETICbrowser01/like", {
+        method: "POST",
+        body: JSON.stringify({ value: "like", baseline: { likes: 4400, yourLike: "like" } }),
+      }),
+      postCtx("UgkxSYNTHETICbrowser01")
+    );
+    expect(res.status).toBe(501);
+    const data = (await res.json()) as any;
+    expect(data.kind).toBe("youtube-unsupported");
+    expect(data.effect).toBeUndefined();
+    expect(brokerCalls).toHaveLength(0);
+  });
+
+  test("post-like validation: an honest 400 fires BEFORE the 501 (the request contract is still validated)", async () => {
+    const res = await postLikeRoute(
+      authed("http://localhost/api/posts/UgkxSYNTHETICbrowser01/like", {
+        method: "POST",
+        body: JSON.stringify({ baseline: { likes: 4400 } }),
+      }),
+      postCtx("UgkxSYNTHETICbrowser01")
+    );
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error?: string }).error).toContain(
+      "value (like|dislike) or action (like|dislike|none) is required"
+    );
+    expect(brokerCalls).toHaveLength(0);
+  });
+
+  test("post-comment-create signed-in → the honest 501 youtube-unsupported (never a synthesized 201 DTO)", async () => {
     const res = await postComment(
-      new NextRequest("http://localhost/api/posts/UgkxSYNTHETICbrowser01/comments", {
+      authed("http://localhost/api/posts/UgkxSYNTHETICbrowser01/comments", {
         method: "POST",
         body: JSON.stringify({ body: "great poll!" }),
       }),
       postCtx("UgkxSYNTHETICbrowser01")
     );
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(501);
     const data = (await res.json()) as any;
-    expect(data.ok).toBe(true);
-    expect(data.effect).toBe("post-comment-created");
-    expect(data.body).toBe("great poll!");
-    expect(data.author.name).toBe("Demo");
-    expect(brokerCalls).toHaveLength(1);
-    expect(brokerCalls[0].kind).toBe("post-comment-create");
-    expect(brokerCalls[0].target).toEqual({ postId: "UgkxSYNTHETICbrowser01" });
-    expect(brokerCalls[0].payload).toEqual({ text: "great poll!" });
+    expect(data.kind).toBe("youtube-unsupported");
+    expect(data.error).toBe(
+      "Commenting on YouTube community posts isn't supported by the official YouTube API — community posts live on YouTube"
+    );
+    expect(data.ok).toBeUndefined();
+    expect(data.effect).toBeUndefined();
+    expect(brokerCalls).toHaveLength(0);
   });
 
-  test("post-comment-create rejects an empty body before the broker", async () => {
+  test("post-comment-create still rejects an empty body honestly (400 before the 501)", async () => {
     const res = await postComment(
-      new NextRequest("http://localhost/api/posts/UgkxSYNTHETICbrowser01/comments", {
+      authed("http://localhost/api/posts/UgkxSYNTHETICbrowser01/comments", {
         method: "POST",
         body: JSON.stringify({ body: "   " }),
       }),
       postCtx("UgkxSYNTHETICbrowser01")
     );
     expect(res.status).toBe(400);
+    expect(((await res.json()) as { error?: string }).error).toBe("body is required");
     expect(brokerCalls).toHaveLength(0);
   });
 
-  test("post-comment-like: the commentText locator rides the payload (the DOM path)", async () => {
+  test("post-comment-like: the commentText locator contract is kept in the request → the honest 501 (the DOM drive is retired)", async () => {
     const res = await postCommentLikeRoute(
-      new NextRequest("http://localhost/api/posts/UgkxSYNTHETICbrowser01/comments/UgySYNTHETICpostComment1/like", {
-        method: "POST",
-        body: JSON.stringify({
-          value: "like",
-          baseline: { likes: 12, yourLike: null },
-          commentText: "Never gonna give this poll up!",
-        }),
-      }),
+      authed(
+        "http://localhost/api/posts/UgkxSYNTHETICbrowser01/comments/UgySYNTHETICpostComment1/like",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            value: "like",
+            baseline: { likes: 12, yourLike: null },
+            commentText: "Never gonna give this poll up!",
+          }),
+        }
+      ),
       postCommentCtx("UgkxSYNTHETICbrowser01", "UgySYNTHETICpostComment1")
     );
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(501);
     const data = (await res.json()) as any;
-    expect(data.likes).toBe(13);
-    expect(data.yourLike).toBe("like");
-    expect(brokerCalls).toHaveLength(1);
-    expect(brokerCalls[0].kind).toBe("post-comment-like");
-    expect(brokerCalls[0].target).toEqual({
-      postId: "UgkxSYNTHETICbrowser01",
-      commentId: "UgySYNTHETICpostComment1",
-    });
-    expect(brokerCalls[0].payload).toEqual({
-      mode: "toggle",
-      commentText: "Never gonna give this poll up!",
-    });
+    expect(data.kind).toBe("youtube-unsupported");
+    expect(data.error).toBe(
+      "Liking comments on YouTube community posts isn't supported by the official YouTube API — community posts live on YouTube"
+    );
+    // never a fabricated likes delta
+    expect(data.likes).toBeUndefined();
+    expect(brokerCalls).toHaveLength(0);
   });
 
-  test("post-create: text + poll options → brokerAction('post-create') with the handle", async () => {
+  test("post-create: text + poll options signed-in → the honest 501 youtube-unsupported (the composer's write never happens)", async () => {
     const res = await createPostRoute(
-      new NextRequest("http://localhost/api/posts", {
+      authed("http://localhost/api/posts", {
         method: "POST",
         body: JSON.stringify({
           handle: "@RickAstleyYT",
@@ -654,38 +720,40 @@ describe("POST /api/posts/* — the Tier-2 write shapes", () => {
         }),
       })
     );
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(501);
     const data = (await res.json()) as any;
-    expect(data.ok).toBe(true);
-    expect(data.effect).toBe("post-created");
-    expect(brokerCalls).toHaveLength(1);
-    expect(brokerCalls[0].kind).toBe("post-create");
-    expect(brokerCalls[0].payload).toEqual({
-      handle: "RickAstleyYT",
-      text: "Next cover vote:",
-      pollOptions: ["Together Forever", "Keep Singing"],
-    });
+    expect(data.kind).toBe("youtube-unsupported");
+    expect(data.error).toBe(
+      "Creating YouTube community posts isn't supported by the official YouTube API — community posts live on YouTube"
+    );
+    expect(data.ok).toBeUndefined();
+    expect(data.effect).toBeUndefined();
+    expect(brokerCalls).toHaveLength(0);
   });
 
-  test("post-create validation: a lone poll option never reaches the broker (400)", async () => {
+  test("post-create validation: a lone poll option never reaches the write lane (400)", async () => {
     const res = await createPostRoute(
-      new NextRequest("http://localhost/api/posts", {
+      authed("http://localhost/api/posts", {
         method: "POST",
         body: JSON.stringify({ handle: "@RickAstleyYT", text: "", pollOptions: ["only one"] }),
       })
     );
     expect(res.status).toBe(400);
+    expect(((await res.json()) as { error?: string }).error).toBe(
+      "pollOptions must carry 2-5 non-empty options"
+    );
     expect(brokerCalls).toHaveLength(0);
   });
 
   test("post-create validation: an empty post is refused (no text, no image, no poll)", async () => {
     const res = await createPostRoute(
-      new NextRequest("http://localhost/api/posts", {
+      authed("http://localhost/api/posts", {
         method: "POST",
         body: JSON.stringify({ handle: "@RickAstleyYT", text: "" }),
       })
     );
     expect(res.status).toBe(400);
+    expect(((await res.json()) as { error?: string }).error).toBe("a post needs text, an image, or a poll");
     expect(brokerCalls).toHaveLength(0);
   });
 

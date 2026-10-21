@@ -205,10 +205,15 @@ describe("getShortMeta — REAL next_dQw4 + comments_dQw4 via stubbed fetcher", 
 });
 
 // ---------------------------------------------------------------------------
-// P35 — the shorts rail's like state (yourLike from likeStatusEntity)
+// WFX2-P36 — the shared cached shorts meta carries NO per-user state
+// (the P35 operator-session likeStatusEntity parse is RETIRED: it baked one
+// deployment-wide identity's rating into a SHARED cached DTO — the exact
+// cross-user leak the P36 work order closes. The acting user's own rating
+// now overlays per-request at the route — src/app/api/shorts/[id]/route.ts
+// resolveReadTier → videos.getRating, pinned by the watch suite.)
 // ---------------------------------------------------------------------------
 
-describe("P35 getShortMeta — yourLike bootstraps from the next entity mutations", () => {
+describe("WFX2-P36 getShortMeta — the shared cached shorts meta carries NO per-user state", () => {
   afterEach(() => {
     delete process.env.YT_COOKIES;
   });
@@ -232,7 +237,7 @@ describe("P35 getShortMeta — yourLike bootstraps from the next entity mutation
     expect(meta!.yourLike).toBeNull();
   });
 
-  test("session + LIKE entity → yourLike 'like' (the reload-persistence read)", async () => {
+  test("session + LIKE entity → yourLike null — the operator-session entity parse is RETIRED from the shared mapper", async () => {
     process.env.YT_COOKIES = "SAPISID=fake_sapisid; VISITOR_INFO1_LIVE=x";
     const next = likedNext();
     let nextCall = 0;
@@ -254,7 +259,12 @@ describe("P35 getShortMeta — yourLike bootstraps from the next entity mutation
       return new Response("{}", { status: 500 });
     }) as unknown as typeof fetch;
     const meta = await getShortMeta("dQw4w9WgXcQ", fetcher);
-    expect(meta!.yourLike).toBe("like");
+    // WFX2-P36: even with the operator read session configured AND a LIKE
+    // entity riding the payload, the SHARED cached meta carries yourLike
+    // null — one identity's rating must never surface as another viewer's
+    // (the per-user overlay lives at the route, on the acting user's own
+    // token, pinned by the watch suite).
+    expect(meta!.yourLike).toBeNull();
   });
 
   test("session + INDIFFERENT (the real captured fixture) → yourLike null", async () => {

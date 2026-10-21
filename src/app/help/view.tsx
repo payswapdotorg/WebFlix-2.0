@@ -51,13 +51,17 @@ const TOPICS: HelpTopic[] = [
     icon: Compass,
     blurb: "Learn the basics — what WebFlix is, and how to search it.",
     searchText:
-      "WebFlix is an interface over the operator's YouTube session. Searches run YouTube search through the operator session, so you get YouTube's results rendered in WebFlix. Suggestions appear as you type.",
+      "WebFlix is an interface over YouTube. Searches run YouTube search through WebFlix's server, so you get YouTube's results rendered in WebFlix. Suggestions appear as you type. Your likes, subscribes and playlists act on your own connected YouTube account.",
     body: (
       <>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          WebFlix is an interface over the operator's YouTube session — you use WebFlix, and
-          the videos, results, and account actions behind it are YouTube's, read and written
-          through that one session. Read the full disclosure on{" "}
+          WebFlix is an interface over YouTube — you use WebFlix, and the videos and results
+          behind it are YouTube&apos;s, read through WebFlix&apos;s server. Your own actions (likes,
+          subscribes, playlists) act on your connected YouTube account — connect it in{" "}
+          <Link href="/settings#youtube-connection" className="text-yt-red hover:underline">
+            Settings → YouTube account
+          </Link>
+          . Read the full disclosure on{" "}
           <Link href="/account" className="text-yt-red hover:underline">
             /account
           </Link>
@@ -65,8 +69,8 @@ const TOPICS: HelpTopic[] = [
         </p>
         <h3 className="mt-4 text-sm font-semibold">Searching</h3>
         <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-          Type in the search bar to search. Searches run YouTube search through the operator
-          session, so you get YouTube's results rendered in WebFlix. Suggestions appear as you
+          Type in the search bar to search. Searches run YouTube search through WebFlix&apos;s
+          server, so you get YouTube&apos;s results rendered in WebFlix. Suggestions appear as you
           type.
         </p>
       </>
@@ -78,14 +82,14 @@ const TOPICS: HelpTopic[] = [
     icon: MonitorPlay,
     blurb: "Playback, autoplay, and the queue on the watch page.",
     searchText:
-      "Open any result to watch it. The watch page has the player, video details, and related videos. Likes, subscriptions, comments, and other account actions run through the operator's YouTube session. Autoplay and the queue: when a video ends, WebFlix can start the next one automatically — a 5-second countdown shows first, and you can cancel it. The switch lives in Settings → Playback and performance. The queue holds what you've lined up to play next — Add to queue on the watch page.",
+      "Open any result to watch it. The watch page has the player, video details, and related videos. Likes and subscribes act on your own connected YouTube account; comments and Watch later are stored on WebFlix. Autoplay and the queue: when a video ends, WebFlix can start the next one automatically — a 5-second countdown shows first, and you can cancel it. The switch lives in Settings → Playback and performance. The queue holds what you've lined up to play next — Add to queue on the watch page.",
     body: (
       <>
         <h3 className="mt-2 text-sm font-semibold">Watching</h3>
         <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-          Open any result to watch it. The watch page has the player, video details, and
-          related videos. Likes, subscriptions, comments, and other account actions run
-          through the operator's YouTube session — the same session behind all of WebFlix.
+          Open any result to watch it. The watch page has the player, video details, and related
+          videos. Likes and subscribes act on your own connected YouTube account; comments and
+          Watch later are stored on WebFlix.
         </p>
         <h3 className="mt-4 text-sm font-semibold">Autoplay and the queue</h3>
         <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
@@ -106,16 +110,16 @@ const TOPICS: HelpTopic[] = [
     slug: "managing-your-account",
     name: "Managing your account",
     icon: UserRound,
-    blurb: "Playlists, Creator Studio, settings, and the operator session.",
+    blurb: "Playlists, Creator Studio, settings, and your YouTube account.",
     searchText:
-      "Playlists let you save and order videos, including Watch Later. Creator Studio: uploads and channel-side work. Settings holds WebFlix's local preferences — autoplay, theme, language — and points at the account-level settings on youtube.com. Your WebFlix account fronts the operator's YouTube session.",
+      "Playlists let you save and order videos, including Watch Later. Creator Studio: uploads and channel-side work. Settings holds WebFlix's local preferences — autoplay, theme, language — and points at the account-level settings on youtube.com. Your WebFlix account is local to WebFlix; your YouTube actions run on your own connected account.",
     body: (
       <>
         <h3 className="mt-2 text-sm font-semibold">Playlists</h3>
         <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-          Playlists let you save and order videos, including Watch Later. Create and edit them
-          from your playlists; playlist actions run through the operator session like
-          everything else in WebFlix.
+          Playlists let you save and order videos. Create and edit them from your playlists —
+          playlist actions run on your own connected YouTube account (Watch later is stored on
+          WebFlix).
         </p>
         <h3 className="mt-4 text-sm font-semibold">Creator Studio</h3>
         <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
@@ -132,13 +136,14 @@ const TOPICS: HelpTopic[] = [
           </Link>{" "}
           holds WebFlix's local preferences — autoplay, theme, language — and points at the
           account-level settings that live on youtube.com. Every section is labeled LOCAL
-          (this browser) or MANAGED ON YOUTUBE.COM (the operator account).
+          (this browser) or MANAGED ON YOUTUBE.COM.
         </p>
-        <h3 className="mt-4 text-sm font-semibold">Account and the operator session</h3>
+        <h3 className="mt-4 text-sm font-semibold">Account and your YouTube account</h3>
         <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-          Your WebFlix account fronts the operator's YouTube session — comment writes, likes,
-          reports, and creator tools act on the operator's real YouTube account. Read the full
-          disclosure on{" "}
+          Your WebFlix account is local to WebFlix. Your likes, subscribes and playlists act on
+          your own connected YouTube account through the official API; comments and Watch later
+          are stored on WebFlix; some actions (bell preferences, history writes) have no
+          official API and hand off to YouTube. Read the full disclosure on{" "}
           <Link href="/account" className="text-yt-red hover:underline">
             /account
           </Link>
@@ -153,7 +158,7 @@ const TOPICS: HelpTopic[] = [
     icon: Shield,
     blurb: "Reporting content, your report history, and safety-filter honesty.",
     searchText:
-      "Reporting a video sends it to WebFlix's moderation review queue and records a local row — your report history lists them. Reporting a comment submits through the operator's YouTube session and leaves no local record. Safety filters like Restricted Mode are YouTube account settings, not available in WebFlix yet.",
+      "Reporting a video sends it to WebFlix's moderation review queue and records a local row — your report history lists them. Reporting a comment isn't supported by the official YouTube API — WebFlix hands it off to YouTube. Safety filters like Restricted Mode are YouTube account settings, not available in WebFlix yet.",
     body: (
       <>
         <h3 className="mt-2 text-sm font-semibold">Reporting content</h3>
@@ -163,9 +168,8 @@ const TOPICS: HelpTopic[] = [
           <Link href="/report-history" className="text-yt-red hover:underline">
             your report history
           </Link>{" "}
-          lists them. Reporting a comment from its ⋮ menu submits the report through the
-          operator's YouTube session — the same session behind every account action in
-          WebFlix — and leaves no local record.
+          lists them. Reporting a comment isn&apos;t supported by the official YouTube API —
+          WebFlix says so honestly and hands the action off to YouTube&apos;s own site.
         </p>
         <h3 className="mt-4 text-sm font-semibold">Safety filters</h3>
         <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
@@ -277,9 +281,9 @@ export function HelpView() {
       </section>
 
       <p className="mt-6 max-w-2xl text-sm text-muted-foreground">
-        Straight answers about what WebFlix does. WebFlix is an interface over the operator's
-        YouTube session — where a question is really about YouTube itself, we point you there
-        instead of making something up.
+        Straight answers about what WebFlix does. WebFlix is an interface over YouTube — your
+        own actions run on your connected account, and where a question is really about YouTube
+        itself, we point you there instead of making something up.
       </p>
 
       {/* 2 — the topic card grid (the real help topics, expandable below) */}

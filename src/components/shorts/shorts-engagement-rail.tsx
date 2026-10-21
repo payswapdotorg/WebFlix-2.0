@@ -60,15 +60,14 @@ import { soundTokenToKeyLink } from "@/lib/youtube/sound-key";
  * - Comments opens the sheet (wired by the parent feed); Share copies the
  *   /watch/{id} link (the parent's handler).
  * - More (⋯) — the app's real actions: Report (the watch report dialog,
- *   read-only reuse), Save to Watch later (the broker's WL write of
- *   YouTube's own Watch later playlist, pressed state when saved), Copy
- *   link (the share handler), Not interested, Don't recommend channel
- *   (P24-SEND G12 — the seam landed: the broker's home-feed kebab drive,
- *   the not-interested sibling) + the feedback-toast UNDO affordance on
- *   both feedback writes (youtube.com's own family: the toast carries an
- *   Undo button while its window is live; the drive clicks youtube.com's
- *   own toast button — an expired window surfaces the honest failure,
- *   never a fake restoration).
+ *   read-only reuse), Save to Watch later (the WebFlix-LOCAL watch-later
+ *   write — WFX2-P36: YouTube's own WL is a system playlist the official
+ *   API cannot write; POST /api/playlists/watch-later, pressed state when
+ *   saved), Copy link (the share handler), Not interested, Don't recommend
+ *   channel (P24-SEND G12's UI kept — WFX2-P36: both are now the honest
+ *   LOCAL VideoSignal lane per user, with the feedback-toast UNDO
+ *   affordance riding WebFlix's own signal rows — never an operator-session
+ *   write claimed).
  *
  * HONEST ABSENCE (youtube.com ships these; this app has NO real seam —
  * never a fake affordance, per the create-menu precedent):
@@ -333,7 +332,8 @@ export function ShortsEngagementRail({
     }
   };
 
-  // ---- Save to Watch later — the broker's WL write (toggle) ----------------
+  // ---- Save to Watch later — the WebFlix-local list (WFX2-P36: the honest
+  // local lane — YouTube's own WL is a system playlist the API can't write) --
   const toggleWatchLater = async () => {
     if (wlBusy) return;
     if (guest) {
@@ -357,10 +357,8 @@ export function ShortsEngagementRail({
     }
   };
 
-  // ---- Not interested — the real feed action (video stays visible) -----
-  // P24-SEND (G12): youtube.com's own family — the feedback toast carries
-  // the UNDO affordance while its window is live (the drive clicks
-  // youtube.com's own toast button); the video itself stays on the slide.
+  // ---- Not interested — the honest LOCAL signal lane (video stays visible,
+  //   hidden on WebFlix only; the undo restores WebFlix's own signal row)
   const undoFeedback = async (undoUrl: string) => {
     try {
       await post(undoUrl);
@@ -388,11 +386,9 @@ export function ShortsEngagementRail({
     }
   };
 
-  // ---- Don't recommend channel (P24-SEND G12 — the seam landed) ---------
-  // The not-interested sibling: the channel this short carries is the one
-  // youtube.com stops recommending (the broker's home-feed kebab drive by
-  // text anchor — the station's measured evidence: the item is login-scoped
-  // on youtube.com, so the write rides the logged-in operator tab).
+  // ---- Don't recommend channel — the not-interested sibling on the same
+  // honest LOCAL signal lane (WFX2-P36: a per-user VideoSignal — never an
+  // operator-session write claimed).
   const dontRecommendChannel = async () => {
     if (guest) {
       gate();

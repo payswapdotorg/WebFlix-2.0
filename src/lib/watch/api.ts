@@ -6,9 +6,13 @@ import { ZodError } from "zod";
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** WFX2-P36 — the machine-stable failure taxonomy (e.g. "youtube-not-connected"),
+   * surfaced as {error, kind} so the UI can render the connect/re-auth prompts. */
+  kind?: string;
+  constructor(status: number, message: string, kind?: string) {
     super(message);
     this.status = status;
+    if (kind) this.kind = kind;
   }
 }
 
@@ -22,7 +26,10 @@ export function json(data: unknown, init?: ResponseInit | number) {
 
 export function errorResponse(e: unknown) {
   if (e instanceof ApiError) {
-    return NextResponse.json({ error: e.message }, { status: e.status });
+    return NextResponse.json(
+      { error: e.message, ...(e.kind ? { kind: e.kind } : {}) },
+      { status: e.status },
+    );
   }
   if (e instanceof ZodError) {
     return NextResponse.json(

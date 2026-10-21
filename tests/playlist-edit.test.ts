@@ -1,86 +1,135 @@
 /**
- * WFX2-P4-PE app-side tests — the playlist-edit flow at the API + UI seam
- * (the upload-flow.test.ts / action-routes.test.ts idiom: routes with the
- * broker MOCKED at the seam — no network, no live CDP):
+ * WFX2-P4-PE app-side tests → WFX2-P36 re-point — the playlist-edit flow at
+ * the API + proxy seam (the official-actions adapter MOCKED at the seam — no
+ * network, no live CDP):
  *
  *  - PATCH /api/playlists/[id] (the rename + privacy switch + description
- *    edit): auth gate, body validation (special lists refused; empty title;
- *    at-least-one-field), the happy path (broker playlist-update with only
- *    the present fields), the honest verified:false path (the dialog closed
- *    but the header did not re-render), the broker-offline path (502 with
- *    the honest message), and the broker-action-failed path (the broker's
- *    stage-accurate error rides the response)
- *  - POST /api/playlists/[id]/reorder: the same ladder (auth, validation,
- *    happy path, verified:false, broker-offline 502, broker-action-failed)
- *  - the action-proxy helpers (proxyPlaylistUpdate + proxyPlaylistReorder):
- *    the field map + the verified/unverified flags + the unverifiedNote
- *    propagation; the broker-call shape (only the present fields ride the
- *    payload)
+ *    edit): the tier-gated OFFICIAL lane — playlists.update on the signed-in
+ *    user's OWN OAuth connection (the real connection-store Map + real
+ *    encryptSecret blobs, env-clean). The API's own response is the
+ *    read-back, so verified:true rides the success; official failures map to
+ *    the honest 502 taxonomy (quota / provider-rejected / provider-error).
+ *  - POST /api/playlists/[id]/reorder: the HONEST UNSUPPORTED lane — the
+ *    proxy always throws the 501 {error, kind:"youtube-unsupported"} (no safe
+ *    official reorder path; the pre-P36 broker drag-drive is retired).
+ *  - the action-proxy helpers: proxyPlaylistUpdate(playlistId, req, tier) —
+ *    the field map, the noop path, the officialFailure mapping, the tier
+ *    gate; proxyPlaylistReorder — always the honest unsupported verdict.
  */
 import { NextRequest } from "next/server";
 import { afterAll, beforeAll, beforeEach, describe, expect, test, mock } from "bun:test";
 
 /* ------------------------------------------------------------------ */
-/* capture the REAL broker module before the mock replaces it           */
+/* capture the REAL official-actions module before the mock swaps it    */
 /* ------------------------------------------------------------------ */
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const realBroker = { ...require("@/lib/broker") } as Record<string, unknown>;
+const realOfficial = { ...require("@/lib/youtube/official-actions") } as Record<string, unknown>;
 
-class MockBrokerError extends Error {
-  kind: string;
+/** The typed failure shape every official call maps into. */
+interface Failure {
+  ok: false;
+  kind: "http-error" | "network" | "timeout" | "malformed" | "quota";
   status: number;
-  detail?: unknown;
-  constructor(kind: string, message: string, status: number, detail?: unknown) {
-    super(message);
-    this.name = "BrokerError";
-    this.kind = kind;
-    this.status = status;
-    this.detail = detail;
-  }
+  message: string;
 }
 
-const brokerCalls: { kind: string; target: unknown; payload: unknown }[] = [];
-let brokerResponse: unknown = { ok: true, verified: true, path: "ui" };
+const officialCalls: { fn: string; args: unknown[] }[] = [];
 
-mock.module("@/lib/broker", () => ({
-  BROKER_OFFLINE_MESSAGE: "action backend offline — the lead's broker must be running",
-  BrokerError: MockBrokerError,
-  brokerAction: async (kind: string, target: unknown, payload?: unknown) => {
-    brokerCalls.push({ kind, target, payload });
-    return typeof brokerResponse === "function"
-      ? brokerResponse({ kind, target, payload })
-      : brokerResponse;
+let updateResult: { ok: true; data: unknown } | Failure = {
+  ok: true,
+  data: {
+    id: "PLx",
+    title: "T",
+    visibility: "private",
+    itemCount: 0,
+    thumbUrl: null,
+    description: null,
   },
-  brokerOk: (r: unknown) => !(r instanceof MockBrokerError),
-  brokerUrl: () => "http://127.0.0.1:3055",
-  brokerSecret: () => "s3cret",
-  brokerConfigured: () => true,
-  brokerTimeoutMs: () => 15000,
+};
+
+mock.module("@/lib/youtube/official-actions", () => ({
+  // action-proxy imports this at module scope — the mock must carry it
+  SYSTEM_PLAYLIST_IDS: new Set(["WL", "LL"]),
+  officialUpdatePlaylist: async (
+    accessToken: string,
+    playlistId: string,
+    changes: Record<string, unknown>,
+  ) => {
+    officialCalls.push({ fn: "update", args: [accessToken, playlistId, changes] });
+    return updateResult;
+  },
+  // the sibling official fns (unused by this file's paths) stay honest no-ops
+  officialCreatePlaylist: async (accessToken: string, title: string, visibility: string) => {
+    officialCalls.push({ fn: "create", args: [accessToken, title, visibility] });
+    return { ok: true, data: { id: "PLnew", title, visibility, itemCount: 0, thumbUrl: null, description: null } };
+  },
+  officialDeletePlaylist: async (accessToken: string, playlistId: string) => {
+    officialCalls.push({ fn: "delete", args: [accessToken, playlistId] });
+    return { ok: true };
+  },
 }));
 
 /* routes + helpers (imported AFTER the mocks) */
-import { PATCH as patchPlaylist, DELETE as deletePlaylist } from "@/app/api/playlists/[id]/route";
+import { PATCH as patchPlaylist } from "@/app/api/playlists/[id]/route";
 import { POST as postReorder } from "@/app/api/playlists/[id]/reorder/route";
 import {
   proxyPlaylistUpdate,
   proxyPlaylistReorder,
+  type UserActionTier,
 } from "@/lib/watch/action-proxy";
+import { putYouTubeConnection, resetYoutubeConnectionStore } from "@/lib/auth/youtube-connection-store";
+import { encryptSecret } from "@/lib/youtube/oauth";
 import { mintSessionCookie } from "./helpers";
 
-const OFFLINE_MSG = "action backend offline — the lead's broker must be running";
+/* the working tier: the session's sub IS the connection-store key */
+const USER_ID = "u_test_a";
+const ACCESS_TOKEN = "tok_official_a";
 
 let AUTH_COOKIE = "";
 beforeAll(async () => {
-  AUTH_COOKIE = await mintSessionCookie();
+  AUTH_COOKIE = await mintSessionCookie({ sub: USER_ID });
 });
 
-beforeEach(() => {
-  brokerCalls.length = 0;
-  brokerResponse = { ok: true, verified: true, path: "ui" };
+beforeEach(async () => {
+  officialCalls.length = 0;
+  updateResult = {
+    ok: true,
+    data: {
+      id: "PLx",
+      title: "T",
+      visibility: "private",
+      itemCount: 0,
+      thumbUrl: null,
+      description: null,
+    },
+  };
+  resetYoutubeConnectionStore();
+  await putYouTubeConnection({
+    userId: USER_ID,
+    channelId: "UC_own_a",
+    channelTitle: "Test u_test_a",
+    channelThumbUrl: null,
+    scope: "https://www.googleapis.com/auth/youtube.force-ssl",
+    accessTokenEnc: await encryptSecret(ACCESS_TOKEN),
+    refreshTokenEnc: null,
+    accessExpiresAt: Date.now() + 3_600_000,
+    status: "connected",
+    connectedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
 });
 
 afterAll(() => {
-  mock.module("@/lib/broker", () => realBroker);
+  mock.module("@/lib/youtube/official-actions", () => realOfficial);
+  resetYoutubeConnectionStore();
+});
+
+/** A resolved official tier for the direct proxy-level tests. */
+const tierFor = (token = ACCESS_TOKEN): UserActionTier => ({
+  ok: true,
+  user: { id: USER_ID, email: "u_test_a@webflix.test", displayName: "Test A", avatarSeed: 7 },
+  accessToken: token,
+  channelId: "UC_own_a",
 });
 
 /* ------------------------------------------------------------------ */
@@ -104,11 +153,11 @@ const reorderReq = (id: string, body: unknown): NextRequest =>
 const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
 
 /* ------------------------------------------------------------------ */
-/* PATCH /api/playlists/[id] — the rename + privacy switch drive       */
+/* PATCH /api/playlists/[id] — the official playlist-update drive       */
 /* ------------------------------------------------------------------ */
 
-describe("PATCH /api/playlists/[id] — the playlist-update drive (broker mocked)", () => {
-  test("guest → 401 before any broker call", async () => {
+describe("PATCH /api/playlists/[id] — the official playlist-update drive (official-actions mocked)", () => {
+  test("guest → 401 before any official call", async () => {
     const res = await patchPlaylist(
       new Request("http://localhost/api/playlists/PLx", {
         method: "PATCH",
@@ -118,25 +167,21 @@ describe("PATCH /api/playlists/[id] — the playlist-update drive (broker mocked
       ctx("PLx")
     );
     expect(res.status).toBe(401);
-    expect(brokerCalls).toHaveLength(0);
+    expect(officialCalls).toHaveLength(0);
   });
 
-  test("invalid playlist id → 400 before any broker call", async () => {
+  test("invalid playlist id → 400 before any official call", async () => {
     const res = await patchPlaylist(patchReq("bad id!", { title: "X" }), ctx("bad id!"));
     expect(res.status).toBe(400);
-    expect(brokerCalls).toHaveLength(0);
+    expect(officialCalls).toHaveLength(0);
   });
 
   test("special lists (WL/LL) → 400 (YouTube's own lists cannot be edited)", async () => {
-    const res = await patchReq_WL();
+    const res = await patchPlaylist(patchReq("WL", { title: "X" }), ctx("WL"));
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
     expect(body.error).toContain("YouTube's own lists");
-    expect(brokerCalls).toHaveLength(0);
-
-    async function patchReq_WL() {
-      return patchPlaylist(patchReq("WL", { title: "X" }), ctx("WL"));
-    }
+    expect(officialCalls).toHaveLength(0);
   });
 
   test("no fields in the body → 400 (at least one required)", async () => {
@@ -144,17 +189,26 @@ describe("PATCH /api/playlists/[id] — the playlist-update drive (broker mocked
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
     expect(body.error).toContain("at least one of");
-    expect(brokerCalls).toHaveLength(0);
+    expect(officialCalls).toHaveLength(0);
   });
 
   test("empty title → 400", async () => {
     const res = await patchPlaylist(patchReq("PLx", { title: "   " }), ctx("PLx"));
     expect(res.status).toBe(400);
-    expect(brokerCalls).toHaveLength(0);
+    expect(officialCalls).toHaveLength(0);
   });
 
-  test("happy path: title only → broker playlist-update with only title; verified:true", async () => {
-    brokerResponse = { ok: true, verified: true, path: "ui", detail: { stage: "updated" } };
+  test("no connected YouTube account → 403 youtube-not-connected (the tier gate precedes the official call)", async () => {
+    resetYoutubeConnectionStore(); // drop the connection
+    const res = await patchPlaylist(patchReq("PLx", { title: "X" }), ctx("PLx"));
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { error: string; kind?: string };
+    expect(body.error).toBe("Connect your YouTube account to act — Settings → YouTube connection");
+    expect(body.kind).toBe("youtube-not-connected");
+    expect(officialCalls).toHaveLength(0);
+  });
+
+  test("happy path: title only → official update with only title on the user's token; verified:true", async () => {
     const res = await patchPlaylist(patchReq("PLx", { title: "Renamed" }), ctx("PLx"));
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
@@ -162,18 +216,19 @@ describe("PATCH /api/playlists/[id] — the playlist-update drive (broker mocked
       effect: string;
       fields: { title: boolean; description: boolean; visibility: boolean };
       verified: boolean;
+      path?: string;
     };
     expect(body.ok).toBe(true);
     expect(body.effect).toBe("playlist-updated");
     expect(body.fields).toEqual({ title: true, description: false, visibility: false });
-    expect(body.verified).toBe(true);
-    expect(brokerCalls).toEqual([
-      { kind: "playlist-update", target: { playlistId: "PLx" }, payload: { title: "Renamed" } },
+    expect(body.verified).toBe(true); // the API's own response IS the read-back
+    expect(body.path).toBe("oauth-official");
+    expect(officialCalls).toEqual([
+      { fn: "update", args: [ACCESS_TOKEN, "PLx", { title: "Renamed" }] },
     ]);
   });
 
-  test("title + visibility together → both ride the payload", async () => {
-    brokerResponse = { ok: true, verified: true, path: "ui", detail: { stage: "updated" } };
+  test("title + visibility together → both ride the official changes", async () => {
     const res = await patchPlaylist(
       patchReq("PLx", { title: "New", visibility: "unlisted" }),
       ctx("PLx")
@@ -181,75 +236,55 @@ describe("PATCH /api/playlists/[id] — the playlist-update drive (broker mocked
     expect(res.status).toBe(200);
     const body = (await res.json()) as { fields: { title: boolean; description: boolean; visibility: boolean } };
     expect(body.fields).toEqual({ title: true, description: false, visibility: true });
-    expect(brokerCalls[0].payload).toEqual({ title: "New", visibility: "unlisted" });
+    expect(officialCalls[0].args[2]).toEqual({ title: "New", visibility: "unlisted" });
   });
 
-  test("non-canonical visibility → dropped (the route refuses it before the broker)", async () => {
+  test("non-canonical visibility → dropped (the route refuses it before the official call)", async () => {
     const res = await patchPlaylist(
       patchReq("PLx", { visibility: "friends-only" }),
       ctx("PLx")
     );
     // visibility is dropped → no fields → 400
     expect(res.status).toBe(400);
-    expect(brokerCalls).toHaveLength(0);
+    expect(officialCalls).toHaveLength(0);
   });
 
-  test("honest verified:false (dialog closed but header did not re-render) → unverifiedNote rides the response", async () => {
-    brokerResponse = {
-      ok: true,
-      verified: false,
-      path: "ui",
-      detail: {
-        stage: "updated-unverified",
-        note: "the edit dialog closed after Save but the header did not re-render the new title within the deadline",
-      },
-    };
+  test("a malformed pre-update read → the honest 502 provider error (the partial-safe merge base could not be read)", async () => {
+    updateResult = { ok: false, kind: "malformed", status: 404, message: "the playlist could not be read before updating" };
     const res = await patchPlaylist(patchReq("PLx", { title: "Renamed" }), ctx("PLx"));
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { ok: boolean; verified: boolean; unverifiedNote?: string };
-    expect(body.ok).toBe(true);
-    expect(body.verified).toBe(false);
-    expect(body.unverifiedNote).toContain("did not re-render");
+    expect(res.status).toBe(502);
+    const body = (await res.json()) as { error: string; kind?: string };
+    expect(body.error).toBe("the playlist could not be read before updating");
+    expect(body.kind).toBe("youtube-provider-error");
   });
 
-  test("already:true (no fields changed) → effect playlist-update-noop", async () => {
-    brokerResponse = { ok: true, verified: true, already: true, path: "ui" };
-    // the route enforces "at least one field", so the already:true path
-    // is reachable only when the broker itself reports already (the drive
-    // found nothing to change after the route's payload passed)
-    const res = await patchPlaylist(patchReq("PLx", { title: "Same" }), ctx("PLx"));
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { effect: string; already?: boolean };
-    expect(body.effect).toBe("playlist-update-noop");
-    expect(body.already).toBe(true);
-  });
-
-  test("broker OFFLINE → 502 with the honest offline message", async () => {
-    brokerResponse = new MockBrokerError("offline", OFFLINE_MSG, 502);
+  test("official network failure → 502 with the honest provider error", async () => {
+    updateResult = { ok: false, kind: "network", status: 0, message: "network error reaching the YouTube API" };
     const res = await patchPlaylist(patchReq("PLx", { title: "X" }), ctx("PLx"));
     expect(res.status).toBe(502);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe(OFFLINE_MSG);
+    const body = (await res.json()) as { error: string; kind?: string };
+    expect(body.error).toBe("network error reaching the YouTube API");
+    expect(body.kind).toBe("youtube-provider-error");
   });
 
-  test("broker ACTION-FAILED → 502 with the broker's stage-accurate error", async () => {
-    brokerResponse = new MockBrokerError(
-      "action-failed",
-      "playlist-edit-dialog-not-found",
-      502
+  test("provider 403 → 502 youtube-provider-rejected with the re-connect hint", async () => {
+    updateResult = { ok: false, kind: "http-error", status: 403, message: "forbidden" };
+    const res = await patchPlaylist(patchReq("PLx", { title: "X" }), ctx("PLx"));
+    expect(res.status).toBe(502);
+    const body = (await res.json()) as { error: string; kind?: string };
+    expect(body.error).toBe(
+      "YouTube rejected the action (forbidden) — re-connect your account in Settings if it persists",
     );
-    const res = await patchPlaylist(patchReq("PLx", { title: "X" }), ctx("PLx"));
-    expect(res.status).toBe(502);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("playlist-edit-dialog-not-found");
+    expect(body.kind).toBe("youtube-provider-rejected");
   });
 
-  test("broker BAD-REQUEST → 400 (the route's fail mapping)", async () => {
-    brokerResponse = new MockBrokerError("bad-request", "playlist-not-found", 400);
+  test("quota exhaustion → 502 youtube-quota", async () => {
+    updateResult = { ok: false, kind: "quota", status: 403, message: "YouTube API quota exceeded for today" };
     const res = await patchPlaylist(patchReq("PLx", { title: "X" }), ctx("PLx"));
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("playlist-not-found");
+    expect(res.status).toBe(502);
+    const body = (await res.json()) as { error: string; kind?: string };
+    expect(body.error).toBe("YouTube API quota exceeded for today");
+    expect(body.kind).toBe("youtube-quota");
   });
 
   test("non-JSON body → 400", async () => {
@@ -262,16 +297,16 @@ describe("PATCH /api/playlists/[id] — the playlist-update drive (broker mocked
       ctx("PLx")
     );
     expect(res.status).toBe(400);
-    expect(brokerCalls).toHaveLength(0);
+    expect(officialCalls).toHaveLength(0);
   });
 });
 
 /* ------------------------------------------------------------------ */
-/* POST /api/playlists/[id]/reorder — the playlist-reorder drive       */
+/* POST /api/playlists/[id]/reorder — the honest unsupported drive      */
 /* ------------------------------------------------------------------ */
 
-describe("POST /api/playlists/[id]/reorder — the reorder drive (broker mocked)", () => {
-  test("guest → 401 before any broker call", async () => {
+describe("POST /api/playlists/[id]/reorder — the honest UNSUPPORTED drive (no official reorder path)", () => {
+  test("guest → 401 before anything runs", async () => {
     const res = await postReorder(
       new Request("http://localhost/api/playlists/PLx/reorder", {
         method: "POST",
@@ -281,13 +316,13 @@ describe("POST /api/playlists/[id]/reorder — the reorder drive (broker mocked)
       ctx("PLx")
     );
     expect(res.status).toBe(401);
-    expect(brokerCalls).toHaveLength(0);
+    expect(officialCalls).toHaveLength(0);
   });
 
-  test("invalid playlist id → 400 before any broker call", async () => {
+  test("invalid playlist id → 400 before anything runs", async () => {
     const res = await postReorder(reorderReq("bad id!", { fromIndex: 0, toIndex: 1 }), ctx("bad id!"));
     expect(res.status).toBe(400);
-    expect(brokerCalls).toHaveLength(0);
+    expect(officialCalls).toHaveLength(0);
   });
 
   test("special lists (WL/LL) → 400 (YouTube's own lists cannot be reordered)", async () => {
@@ -295,214 +330,125 @@ describe("POST /api/playlists/[id]/reorder — the reorder drive (broker mocked)
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
     expect(body.error).toContain("YouTube's own lists");
-    expect(brokerCalls).toHaveLength(0);
+    expect(officialCalls).toHaveLength(0);
   });
 
   test("missing fromIndex or toIndex → 400", async () => {
     const res = await postReorder(reorderReq("PLx", { fromIndex: 0 }), ctx("PLx"));
     expect(res.status).toBe(400);
-    expect(brokerCalls).toHaveLength(0);
+    expect(officialCalls).toHaveLength(0);
   });
 
   test("negative index → 400", async () => {
     const res = await postReorder(reorderReq("PLx", { fromIndex: -1, toIndex: 1 }), ctx("PLx"));
     expect(res.status).toBe(400);
-    expect(brokerCalls).toHaveLength(0);
+    expect(officialCalls).toHaveLength(0);
   });
 
   test("fromIndex === toIndex → 400 (must differ)", async () => {
     const res = await postReorder(reorderReq("PLx", { fromIndex: 1, toIndex: 1 }), ctx("PLx"));
     expect(res.status).toBe(400);
-    expect(brokerCalls).toHaveLength(0);
+    expect(officialCalls).toHaveLength(0);
   });
 
-  test("happy path: fromIndex/toIndex/videoId → broker playlist-reorder; verified:true", async () => {
-    brokerResponse = { ok: true, verified: true, path: "ui", detail: { stage: "reordered" } };
+  test("a well-formed reorder → the honest 501 {error, kind: youtube-unsupported} — the broker drag-drive is retired", async () => {
     const res = await postReorder(
       reorderReq("PLx", { fromIndex: 0, toIndex: 2, videoId: "dQw4w9WgXcQ" }),
       ctx("PLx")
     );
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as {
-      ok: boolean;
-      effect: string;
-      verified: boolean;
-      fromIndex: number;
-      toIndex: number;
-      videoId: string;
-    };
-    expect(body.ok).toBe(true);
-    expect(body.effect).toBe("playlist-reordered");
-    expect(body.verified).toBe(true);
-    expect(body.fromIndex).toBe(0);
-    expect(body.toIndex).toBe(2);
-    expect(body.videoId).toBe("dQw4w9WgXcQ");
-    expect(brokerCalls).toEqual([
-      {
-        kind: "playlist-reorder",
-        target: { playlistId: "PLx" },
-        payload: { fromIndex: 0, toIndex: 2, videoId: "dQw4w9WgXcQ" },
-      },
-    ]);
+    expect(res.status).toBe(501);
+    const body = (await res.json()) as { error: string; kind?: string };
+    expect(body.error).toBe(
+      "Reordering playlists isn't supported by the official YouTube API — open the video on YouTube to do it there",
+    );
+    expect(body.kind).toBe("youtube-unsupported");
+    expect(officialCalls).toHaveLength(0); // no official seam is touched — the verdict is policy, not backend state
   });
 
-  test("videoId omitted → still works (the verification aid is optional)", async () => {
-    brokerResponse = { ok: true, verified: true, path: "ui", detail: { stage: "reordered" } };
+  test("videoId omitted → the same honest 501 (the verification aid is irrelevant — no drive exists)", async () => {
     const res = await postReorder(
       reorderReq("PLx", { fromIndex: 1, toIndex: 0 }),
       ctx("PLx")
     );
-    expect(res.status).toBe(200);
-    expect(brokerCalls[0].payload).toEqual({ fromIndex: 1, toIndex: 0 });
-  });
-
-  test("honest verified:false (drop fired but order not confirmed) → unverifiedNote rides the response", async () => {
-    brokerResponse = {
-      ok: true,
-      verified: false,
-      path: "ui",
-      detail: {
-        stage: "reorder-unverified",
-        note: "the drag gesture fired (pointerup landed on the target row) but the list did not re-render the new order within the deadline",
-      },
-    };
-    const res = await postReorder(
-      reorderReq("PLx", { fromIndex: 0, toIndex: 2, videoId: "dQw4w9WgXcQ" }),
-      ctx("PLx")
-    );
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { ok: boolean; verified: boolean; unverifiedNote?: string };
-    expect(body.ok).toBe(true);
-    expect(body.verified).toBe(false);
-    expect(body.unverifiedNote).toContain("did not re-render");
-  });
-
-  test("broker OFFLINE → 502 with the honest offline message", async () => {
-    brokerResponse = new MockBrokerError("offline", OFFLINE_MSG, 502);
-    const res = await postReorder(
-      reorderReq("PLx", { fromIndex: 0, toIndex: 1 }),
-      ctx("PLx")
-    );
-    expect(res.status).toBe(502);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe(OFFLINE_MSG);
-  });
-
-  test("broker ACTION-FAILED (playlist-drag-handle-not-found — read-only playlist) → 502", async () => {
-    brokerResponse = new MockBrokerError(
-      "action-failed",
-      "playlist-drag-handle-not-found",
-      502
-    );
-    const res = await postReorder(
-      reorderReq("PLx", { fromIndex: 0, toIndex: 1 }),
-      ctx("PLx")
-    );
-    expect(res.status).toBe(502);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("playlist-drag-handle-not-found");
-  });
-
-  test("broker ACTION-FAILED (playlist-item-not-found — fromIndex out of range) → 502", async () => {
-    brokerResponse = new MockBrokerError(
-      "action-failed",
-      "playlist-item-not-found",
-      502
-    );
-    const res = await postReorder(
-      reorderReq("PLx", { fromIndex: 99, toIndex: 0 }),
-      ctx("PLx")
-    );
-    expect(res.status).toBe(502);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("playlist-item-not-found");
+    expect(res.status).toBe(501);
+    expect(((await res.json()) as { kind?: string }).kind).toBe("youtube-unsupported");
+    expect(officialCalls).toHaveLength(0);
   });
 });
 
 /* ------------------------------------------------------------------ */
-/* the action-proxy helpers (the field map + verified/unverified flags) */
+/* the action-proxy helpers (the field map + the official semantics)    */
 /* ------------------------------------------------------------------ */
 
-describe("proxyPlaylistUpdate — the field map + verified/unverified flags", () => {
-  test("only the present fields ride the broker payload", async () => {
-    brokerResponse = { ok: true, verified: true, path: "ui", detail: { stage: "updated" } };
-    const r = await proxyPlaylistUpdate("PLx", { title: "T" });
+describe("proxyPlaylistUpdate — the field map + the official read-back semantics", () => {
+  test("only the present fields ride the official changes", async () => {
+    const r = await proxyPlaylistUpdate("PLx", { title: "T" }, tierFor());
     expect(r.fields).toEqual({ title: true, description: false, visibility: false });
-    expect(brokerCalls[0].payload).toEqual({ title: "T" });
+    expect(officialCalls[0].args[2]).toEqual({ title: "T" });
   });
 
-  test("all three fields → the field map is all-true; the payload carries all three", async () => {
-    brokerResponse = { ok: true, verified: true, path: "ui", detail: { stage: "updated" } };
-    const r = await proxyPlaylistUpdate("PLx", {
-      title: "T",
-      description: "D",
-      visibility: "public",
-    });
+  test("all three fields → the field map is all-true; the changes carry all three", async () => {
+    const r = await proxyPlaylistUpdate(
+      "PLx",
+      { title: "T", description: "D", visibility: "public" },
+      tierFor(),
+    );
     expect(r.fields).toEqual({ title: true, description: true, visibility: true });
-    expect(brokerCalls[0].payload).toEqual({ title: "T", description: "D", visibility: "public" });
+    expect(officialCalls[0].args[2]).toEqual({ title: "T", description: "D", visibility: "public" });
   });
 
-  test("verified:false + note → unverifiedNote rides the result", async () => {
-    brokerResponse = {
-      ok: true,
-      verified: false,
-      path: "ui",
-      detail: { stage: "updated-unverified", note: "the header lag" },
-    };
-    const r = await proxyPlaylistUpdate("PLx", { title: "T" });
-    expect(r.verified).toBe(false);
-    expect(r.unverifiedNote).toBe("the header lag");
+  test("the official update's response IS the read-back → verified:true (a 2xx alone is never the claim)", async () => {
+    const r = await proxyPlaylistUpdate("PLx", { title: "T" }, tierFor());
+    expect(r.ok).toBe(true);
+    expect(r.effect).toBe("playlist-updated");
+    expect(r.verified).toBe(true);
+    expect(r.path).toBe("oauth-official");
+    expect(r.unverifiedNote).toBeUndefined(); // no unverifiable middle state exists on this lane
   });
 
-  test("already:true → effect playlist-update-noop + already flag", async () => {
-    brokerResponse = { ok: true, verified: true, already: true, path: "ui" };
-    const r = await proxyPlaylistUpdate("PLx", { title: "Same" });
+  test("no fields at all → the noop: effect playlist-update-noop + already:true, ZERO official calls", async () => {
+    const r = await proxyPlaylistUpdate("PLx", {}, tierFor());
     expect(r.effect).toBe("playlist-update-noop");
     expect(r.already).toBe(true);
+    expect(r.verified).toBe(true);
+    expect(r.fields).toEqual({ title: false, description: false, visibility: false });
+    expect(officialCalls).toHaveLength(0);
   });
 
-  test("broker offline → ApiError 502 (the routes map it to the honest response)", async () => {
-    brokerResponse = new MockBrokerError("offline", OFFLINE_MSG, 502);
-    await expect(proxyPlaylistUpdate("PLx", { title: "T" })).rejects.toThrow(OFFLINE_MSG);
+  test("official network failure → ApiError 502 (the routes map it to the honest response)", async () => {
+    updateResult = { ok: false, kind: "network", status: 0, message: "network error reaching the YouTube API" };
+    await expect(proxyPlaylistUpdate("PLx", { title: "T" }, tierFor())).rejects.toThrow(
+      "network error reaching the YouTube API",
+    );
   });
 
-  test("broker bad-request → ApiError 400", async () => {
-    brokerResponse = new MockBrokerError("bad-request", "playlist-not-found", 400);
-    await expect(proxyPlaylistUpdate("PLx", { title: "T" })).rejects.toThrow("playlist-not-found");
+  test("official quota failure → ApiError 502 youtube-quota", async () => {
+    updateResult = { ok: false, kind: "quota", status: 403, message: "YouTube API quota exceeded for today" };
+    await expect(proxyPlaylistUpdate("PLx", { title: "T" }, tierFor())).rejects.toThrow(
+      "YouTube API quota exceeded for today",
+    );
+  });
+
+  test("the tier gate: a not-connected tier rejects before ANY official call", async () => {
+    await expect(
+      proxyPlaylistUpdate("PLx", { title: "T" }, { ok: false, kind: "not-connected" }),
+    ).rejects.toThrow("Connect your YouTube account to act");
+    expect(officialCalls).toHaveLength(0);
   });
 });
 
-describe("proxyPlaylistReorder — the fromIndex/toIndex/videoId shape", () => {
-  test("fromIndex + toIndex + videoId ride the payload", async () => {
-    brokerResponse = { ok: true, verified: true, path: "ui", detail: { stage: "reordered" } };
-    const r = await proxyPlaylistReorder("PLx", 0, 2, "dQw4w9WgXcQ");
-    expect(r.verified).toBe(true);
-    expect(r.fromIndex).toBe(0);
-    expect(r.toIndex).toBe(2);
-    expect(r.videoId).toBe("dQw4w9WgXcQ");
-    expect(brokerCalls[0].payload).toEqual({ fromIndex: 0, toIndex: 2, videoId: "dQw4w9WgXcQ" });
+describe("proxyPlaylistReorder — the honest UNSUPPORTED verdict (always)", () => {
+  test("any well-formed reorder → the 501 ApiError; ZERO official calls (no safe official path exists)", async () => {
+    await expect(proxyPlaylistReorder("PLx", 0, 2, "dQw4w9WgXcQ")).rejects.toThrow(
+      "Reordering playlists isn't supported by the official YouTube API",
+    );
+    expect(officialCalls).toHaveLength(0);
   });
 
-  test("videoId omitted → payload carries only fromIndex + toIndex", async () => {
-    brokerResponse = { ok: true, verified: true, path: "ui", detail: { stage: "reordered" } };
-    await proxyPlaylistReorder("PLx", 1, 0);
-    expect(brokerCalls[0].payload).toEqual({ fromIndex: 1, toIndex: 0 });
-  });
-
-  test("verified:false + note → unverifiedNote rides the result", async () => {
-    brokerResponse = {
-      ok: true,
-      verified: false,
-      path: "ui",
-      detail: { stage: "reorder-unverified", note: "the list lag" },
-    };
-    const r = await proxyPlaylistReorder("PLx", 0, 1, "vid");
-    expect(r.verified).toBe(false);
-    expect(r.unverifiedNote).toBe("the list lag");
-  });
-
-  test("broker offline → ApiError 502", async () => {
-    brokerResponse = new MockBrokerError("offline", OFFLINE_MSG, 502);
-    await expect(proxyPlaylistReorder("PLx", 0, 1)).rejects.toThrow(OFFLINE_MSG);
+  test("videoId omitted → the same honest verdict", async () => {
+    await expect(proxyPlaylistReorder("PLx", 1, 0)).rejects.toThrow(
+      "Reordering playlists isn't supported by the official YouTube API",
+    );
+    expect(officialCalls).toHaveLength(0);
   });
 });

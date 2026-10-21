@@ -1,24 +1,30 @@
 import { NextRequest } from "next/server";
 import { json, errorResponse } from "@/lib/watch/api";
-import { proxyVideoLike } from "@/lib/watch/action-proxy";
+import { proxyVideoLike, resolveActionTier } from "@/lib/watch/action-proxy";
 import type { LikeValue } from "@/lib/watch/types";
 import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/videos/[id]/like — LIVE Tier-2 write (broker proxy).
+ * POST /api/videos/[id]/like — WFX2-P36: the per-user OFFICIAL lane.
+ *
+ * The write acts on the signed-in user's OWN connected YouTube account
+ * (videos.rate) and is confirmed by the authenticated read-back
+ * (videos.getRating) before success is claimed — `verified:true` in the
+ * response means YouTube itself confirmed the acting user's rating.
  *
  * Request (UI shapes kept; both accepted):
  *   { value: "like" | "dislike" }              legacy — YouTube toggle semantics
  *   { action: "like" | "dislike" | "none" }    canonical — set semantics
  *   { baseline?: { likes, dislikes, yourLike } } optional — the UI's current
- *     counts so the response stays honest (YouTube's post-action count is
- *     only observable in the broker tab's DOM).
+ *     counts so the response stays honest (the official API exposes no
+ *     per-write count refresh).
  *
- * Response: { ok, effect, likes, dislikes, yourLike } — same contract the
- * ActionRow consumes, plus ok/effect. Broker unreachable → 502 with the
- * honest offline message.
+ * Response: { ok, effect, likes, dislikes, yourLike, verified, path }.
+ * Failures are typed: 403 kind "youtube-not-connected" /
+ * "youtube-needs-reauth" (connect or re-connect in Settings), 502 kind
+ * "youtube-quota" / "youtube-provider-error" (honest provider truth).
  */
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   if (!(await getSessionUser(req))) return authRequiredResponse();
@@ -49,7 +55,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
                 : null,
           }
         : undefined;
-    const result = await proxyVideoLike(id, { value, action, baseline });
+    const tier = await resolveActionTier(req);
+    const result = await proxyVideoLike(id, { value, action, baseline }, tier);
     return json(result);
   } catch (e) {
     return errorResponse(e);

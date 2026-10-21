@@ -20,9 +20,39 @@ type SubscriptionsPayload = {
   nextCursor: string | null;
   loginRequired: boolean;
   session: boolean;
+  /** WFX2-P36: the per-user truth — false → the connect link in the notice */
+  connected?: boolean;
+  /** WFX2-P36: the honest per-user notice (connect ask / no combined-feed API) */
+  notice?: string;
 };
 
-/** Subscriptions — the operator's REAL subscriptions feed (SSR /feed/subscriptions).
+/** WFX2-P36 — the honest per-user notice banner: the route's notice text,
+ * plus the connect link when the acting user has no connected account. */
+function SubsNoticeBanner({ payload }: { payload: SubscriptionsPayload }) {
+  if (!payload.notice) return null;
+  return (
+    <div
+      className="mx-4 mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-secondary/40 px-4 py-3 sm:mx-6"
+      role="status"
+      data-testid="subscriptions-notice"
+    >
+      <p className="min-w-0 flex-1 text-sm text-muted-foreground">{payload.notice}</p>
+      {payload.connected === false && (
+        <Link
+          href="/settings"
+          className="shrink-0 text-sm font-medium text-foreground underline underline-offset-2"
+        >
+          Connect your YouTube account
+        </Link>
+      )}
+    </div>
+  );
+}
+
+/** Subscriptions — YOUR OWN subscription channels, read through your
+ * connected YouTube account (WFX2-P36 — the operator-session feed is
+ * retired; the combined latest-videos feed has no official API, and the
+ * honest notice says so).
  * WFX2-P2-AU: guests get the youtube.com signed-out screen (the gate).
  * P18-SUBS-NOTIFS: the feed header carries YouTube's grid/list layout
  * switcher; the choice persists in localStorage (wf-subs-layout — the
@@ -230,7 +260,14 @@ function SubscriptionsContent() {
           {error}
         </p>
       )}
-      {data && data.loginRequired && <SubsUnavailableNote session={data.session} />}
+      {/* WFX2-P36 — the honest per-user notice (connect ask, or the no-API
+          disclosure for the combined feed) */}
+      {data && <SubsNoticeBanner payload={data} />}
+      {data && data.loginRequired && !data.notice && (
+        <p className="px-4 py-10 text-center text-sm text-muted-foreground" role="status">
+          Your subscriptions could not be read just now — try again shortly.
+        </p>
+      )}
       {data && !data.loginRequired && channels.length === 0 && videos.length === 0 && (
         <p className="px-4 py-10 text-center text-sm text-muted-foreground">
           No subscriptions surfaced — subscribe from any channel page.
@@ -324,33 +361,11 @@ function SubscriptionsContent() {
             ))}
           </div>
           <p className="px-1 pt-2 text-xs text-muted-foreground">
-            Subscribe/unsubscribe from any channel page — it acts on the real YouTube account.
+            Subscribe/unsubscribe from any channel page — it acts on your connected YouTube
+            account.
           </p>
         </section>
       )}
-    </div>
-  );
-}
-
-/**
- * The honest no-session state (F5 — the HistoryUnavailableNote law): NEVER
- * a "Sign in to …" ask — the viewer already passed the WebFlix gate; what's
- * missing is the deployment's YouTube session, which no WebFlix sign-in can
- * fix. youtube.com never asks a signed-in viewer to sign in again (the
- * measured signed-out ask — "Don't miss new videos" + the accounts.google
- * CTA — belongs to the GUEST gate, which this surface already renders).
- */
-function SubsUnavailableNote({ session }: { session: boolean }) {
-  return (
-    <div className="px-4 py-16 text-center sm:px-6" role="status">
-      <p className="text-lg font-medium">Your subscriptions feed is unavailable right now</p>
-      <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-        The subscriptions feed is personal to the YouTube account this WebFlix deployment rides
-        (single-tenant live mode).{" "}
-        {session
-          ? "The YouTube session is connected but didn't serve your subscriptions feed — open it on youtube.com to check."
-          : "No YouTube session is connected to this deployment yet — your WebFlix sign-in is fine; the operator session (YT_COOKIES) needs to be connected."}
-      </p>
     </div>
   );
 }

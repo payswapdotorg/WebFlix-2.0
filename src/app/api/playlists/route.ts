@@ -1,59 +1,143 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getPlaylists, isSpecialPlaylistId } from "@/lib/youtube/playlists";
 import { hasSession } from "@/lib/youtube/session";
 import { rateLimit } from "@/lib/youtube/cache";
-import { brokerAction, brokerOk, BrokerError } from "@/lib/broker";
-import { resolveViewer } from "@/lib/watch/session";
-import { listPlaylists, createPlaylist } from "@/lib/watch/playlist-service";
-import type { PlaylistDTO } from "@/lib/types";
+import { errorResponse } from "@/lib/watch/api";
+import {
+  proxyPlaylistCreate,
+  readLocalSavedWatchLater,
+  resolveActionTier,
+  resolveReadTier,
+  tierError,
+} from "@/lib/watch/action-proxy";
+import {
+  officialListPlaylists,
+  officialPlaylistMembership,
+} from "@/lib/youtube/official-actions";
+import { ensureShadowUser } from "@/lib/watch/local-comments";
+import { db } from "@/lib/db";
 import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
+import type { WebFlixSessionUser } from "@/lib/auth/types";
+import type { PlaylistDTO } from "@/lib/types";
+import type { PlaylistDto } from "@/lib/watch/types";
 
 export const dynamic = "force-dynamic";
 
-/** Map a broker failure to the honest HTTP response. */
-function brokerErrorResponse(err: BrokerError): NextResponse {
-  if (err.kind === "bad-request") {
-    return NextResponse.json({ error: err.message }, { status: 400 });
-  }
-  return NextResponse.json({ error: err.message }, { status: 502 });
-}
-
 /**
- * GET /api/playlists — two shapes, one route:
- *  - no query: the playlists PAGE's live list — the operator's REAL playlists
- *    (SSR /feed/playlists; Watch later = YouTube's own WL card when present).
- *    Response: { playlists, loginRequired, session } — honest login-required
- *    empties in public mode (no fake rows).
- *  - ?videoId=: the watch-page Save dialog's shape { playlists } with
- *    containsVideo flags (local mirror — the dialog's toggle contract; the
- *    broker-side save-dialog state lands in a later wave).
+ * GET /api/playlists — WFX2-P36: the SIGNED-IN user's own playlists, read
+ * through the official YouTube Data API with their connected account. The
+ * pre-P36 operator read (the deployment-wide SSR /feed/playlists — one
+ * person's real playlists served to every user) is RETIRED with the rest of
+ * the shared-identity paths: an unconnected or failed official read answers
+ * the honest empty + notice, NEVER the operator's data.
+ *
+ * Two shapes, one route:
+ *  - no query — the playlists PAGE: { playlists, loginRequired, unavailable,
+ *    session, connected, notice } (the page's existing top-level keys kept,
+ *    connected/notice additive for the honest per-user banner).
+ *  - ?videoId= — the watch-page Save dialog: { playlists, connected, notice? }
+ *    with the local Watch-later row FIRST (local:true — the WebFlix list;
+ *    YouTube's own WL is a system playlist the Data API cannot write) and the
+ *    user's real playlists after it, each with its containsVideo membership
+ *    flag read through their own token.
  */
 export async function GET(req: NextRequest) {
-  if (!(await getSessionUser(req))) return authRequiredResponse();
+  const sessionUser = await getSessionUser(req);
+  if (!sessionUser) return authRequiredResponse();
   try {
     if (!(await rateLimit(`playlists:${req.headers.get("x-forwarded-for") ?? "local"}`))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
     const videoId = new URL(req.url).searchParams.get("videoId");
+
     if (videoId) {
-      const viewer = await resolveViewer(req.headers);
-      const playlists = await listPlaylists(videoId, viewer.id);
-      return NextResponse.json({ playlists });
+      // ---- the Save dialog's rows (the user's own lists + the local WL) ----
+      const tier = await resolveReadTier(req);
+      if (!tier) {
+        return NextResponse.json({
+          playlists: [] as PlaylistDto[],
+          connected: false,
+          kind: "youtube-not-connected",
+          notice:
+            "Connect your YouTube account to save to your YouTube playlists — Settings → YouTube connection",
+          connectUrl: "/api/connection/youtube/oauth/start",
+        });
+      }
+      const watchLaterRow = await localWatchLaterRow(videoId, sessionUser);
+      const official = await officialListPlaylists(tier.accessToken);
+      if (!official.ok) {
+        // honest failure: the local Watch-later row still serves, the
+        // YouTube-side rows honestly do not — never the operator's lists
+        return NextResponse.json({
+          playlists: [watchLaterRow],
+          connected: true,
+          notice:
+            "Your YouTube playlists could not be read just now (the official API answered with an error) — try again shortly. Watch later below is the WebFlix list.",
+        });
+      }
+      const rows = await Promise.all(
+        official.data.map(async (p): Promise<PlaylistDto> => {
+          const membership = await officialPlaylistMembership(tier.accessToken, p.id, videoId);
+          return {
+            id: p.id,
+            name: p.title,
+            isWatchLater: false,
+            visibility: p.visibility,
+            itemCount: p.itemCount,
+            containsVideo: membership.ok ? membership.data.contains : false,
+          };
+        }),
+      );
+      return NextResponse.json({
+        playlists: [watchLaterRow, ...rows],
+        connected: true,
+      });
     }
-    const { playlists, loginRequired, unavailable } = await getPlaylists();
-    // YouTube's special cards (WL) are flagged for the UI's pinned layout
-    const flagged: PlaylistDTO[] = playlists.map((p) => ({
-      ...p,
-      isWatchLater: isSpecialPlaylistId(p.id) ? p.id === "WL" : p.isWatchLater,
+
+    // ---- the playlists page (the user's own official rows) ----
+    const tier = await resolveReadTier(req);
+    if (!tier) {
+      return NextResponse.json({
+        playlists: [] as PlaylistDTO[],
+        loginRequired: false,
+        unavailable: false,
+        session: hasSession(),
+        connected: false,
+        notice:
+          "Connect your YouTube account to see your playlists — Settings → YouTube connection",
+      });
+    }
+    const official = await officialListPlaylists(tier.accessToken);
+    if (!official.ok) {
+      return NextResponse.json({
+        playlists: [] as PlaylistDTO[],
+        loginRequired: false,
+        unavailable: true,
+        session: hasSession(),
+        connected: true,
+        notice:
+          "Your playlists could not be read just now (the official YouTube API answered with an error) — try again shortly",
+      });
+    }
+    const playlists: PlaylistDTO[] = official.data.map((p) => ({
+      id: p.id,
+      title: p.title,
+      visibility: p.visibility,
+      isWatchLater: false,
+      // the official row carries no creation date — honest empty, never a
+      // fabricated timestamp
+      createdAt: "",
+      videoCount: p.itemCount,
+      coverUrl: p.thumbUrl,
+      videos: [],
     }));
     return NextResponse.json({
-      playlists: flagged,
-      loginRequired,
-      // P22-B: a session IS configured but the read was not served (the
-      // empty-read split — the WL lockup YouTube always carries for a served
-      // signed-in /feed/playlists was absent)
-      unavailable,
+      playlists,
+      loginRequired: false,
+      unavailable: false,
       session: hasSession(),
+      connected: true,
+      notice:
+        "Your playlists, read through your own connected YouTube account — WebFlix never reads someone else's.",
     });
   } catch (err) {
     console.error("GET /api/playlists failed", err);
@@ -61,11 +145,50 @@ export async function GET(req: NextRequest) {
   }
 }
 
+/** The Save dialog's local Watch-later row (always first): the WebFlix-local
+ * list, disclosed as local:true — containsVideo from the acting user's own
+ * local truth, the count badge from the same store (0 on a store hiccup). */
+async function localWatchLaterRow(
+  videoId: string,
+  sessionUser: WebFlixSessionUser | null,
+): Promise<PlaylistDto & { local: true }> {
+  const containsVideo = await readLocalSavedWatchLater(videoId, sessionUser);
+  let itemCount = 0;
+  if (sessionUser) {
+    try {
+      const user = await ensureShadowUser(sessionUser);
+      const wl = await db.playlist.findFirst({
+        where: { userId: user.id, isWatchLater: true },
+        select: { id: true },
+      });
+      if (wl) {
+        itemCount = await db.playlistItem.count({ where: { playlistId: wl.id } });
+      }
+    } catch {
+      /* the count badge degrades to 0 — the contains flag stays truthful */
+    }
+  }
+  return {
+    id: "WL",
+    name: "Watch later",
+    isWatchLater: true,
+    visibility: "private",
+    itemCount,
+    containsVideo,
+    local: true,
+  };
+}
+
 /**
- * POST /api/playlists { name|title, visibility } — CREATE a real playlist on
- * the operator's YouTube account (broker kind `playlist-create`, Tier-2).
- * The broker is the only writer (same-exact-effect law); the local mirror
- * path remains only as the honest offline fallback for the Save dialog.
+ * POST /api/playlists { name|title, visibility } — WFX2-P36: CREATE a
+ * playlist on the SIGNED-IN user's OWN YouTube account (playlists.insert,
+ * the official lane with the API's own resource as the read-back). The
+ * pre-P36 broker write (the operator's account) and the local-mirror
+ * fallback are both RETIRED — no shared identity can serve this write.
+ *
+ * Response (201): { ok, effect: "created", verified, path, playlist } — the
+ * playlist row carries BOTH consumer shapes (title/name, videoCount/itemCount)
+ * so the playlists page and the watch-page Save dialog can both adopt it.
  */
 export async function POST(req: NextRequest) {
   if (!(await getSessionUser(req))) return authRequiredResponse();
@@ -82,59 +205,39 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Playlist name cannot be empty" }, { status: 400 });
     }
     const visibilityRaw = typeof body.visibility === "string" ? body.visibility : "private";
-    const visibility = ["private", "unlisted", "public"].includes(visibilityRaw) ? visibilityRaw : "private";
+    const visibility =
+      visibilityRaw === "public" || visibilityRaw === "unlisted" || visibilityRaw === "private"
+        ? visibilityRaw
+        : "private";
 
-    // Tier-2: the real account is the source of truth — broker first
-    const result = await brokerAction("playlist-create", {}, { title, visibility });
-    if (brokerOk(result)) {
-      const r = result as { ok: true; verified?: boolean; path?: string; detail?: Record<string, unknown> };
-      const created: PlaylistDTO = {
-        id: (r.detail?.playlistId as string | undefined) ?? "",
-        title,
-        visibility: visibility as PlaylistDTO["visibility"],
-        isWatchLater: false,
-        createdAt: new Date().toISOString(),
-        videoCount: 0,
-        coverUrl: null,
-        videos: [],
-      };
-      return NextResponse.json(
-        {
-          ok: true,
-          effect: "created",
-          verified: r.verified ?? false,
-          path: r.path ?? null,
-          playlist: created,
+    const tier = await resolveActionTier(req);
+    if (!tier.ok) throw tierError(tier.kind);
+    const result = await proxyPlaylistCreate(title, visibility, tier);
+    return NextResponse.json(
+      {
+        ok: true,
+        effect: result.effect,
+        verified: result.verified,
+        path: result.path,
+        playlist: {
+          // the playlists page's PlaylistDTO shape
+          id: result.playlist.id,
+          title: result.playlist.title,
+          visibility: result.playlist.visibility,
+          isWatchLater: false,
+          createdAt: "",
+          videoCount: result.playlist.itemCount,
+          coverUrl: result.playlist.thumbUrl,
+          videos: [],
+          // the Save dialog's PlaylistDto shape
+          name: result.playlist.title,
+          itemCount: result.playlist.itemCount,
+          containsVideo: false,
         },
-        { status: 201 }
-      );
-    }
-    const err = result as BrokerError;
-    if (err.kind === "offline") {
-      // honest offline: the create cannot ride the real account without the
-      // broker — surface it, and keep the local-mirror fallback ONLY for the
-      // Save-dialog contract (documented in PERSONAL.md)
-      try {
-        const viewer = await resolveViewer(req.headers);
-        const playlist = await createPlaylist(viewer.id, title, visibility);
-        return NextResponse.json(
-          {
-            ok: true,
-            effect: "created-local-fallback",
-            playlist,
-            note: "created on the WebFlix mirror only — the YouTube broker is offline",
-          },
-          { status: 201 }
-        );
-      } catch (localErr) {
-        const status = (localErr as { status?: number }).status ?? 500;
-        const message = localErr instanceof Error ? localErr.message : "Failed to create playlist";
-        return NextResponse.json({ error: message }, { status });
-      }
-    }
-    return brokerErrorResponse(err);
+      },
+      { status: 201 }
+    );
   } catch (err) {
-    console.error("POST /api/playlists failed", err);
-    return NextResponse.json({ error: "Failed to create playlist" }, { status: 500 });
+    return errorResponse(err);
   }
 }

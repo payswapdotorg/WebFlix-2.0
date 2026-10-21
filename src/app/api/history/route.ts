@@ -1,19 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getHistoryFeed } from "@/lib/youtube/history";
 import { hasSession } from "@/lib/youtube/session";
 import { rateLimit } from "@/lib/youtube/cache";
-import { brokerAction, brokerOk, BrokerError } from "@/lib/broker";
+import { ApiError, errorResponse } from "@/lib/watch/api";
+import { resolveReadTier } from "@/lib/watch/action-proxy";
 import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/history?cursor= — the operator's REAL YouTube watch history
- * (SSR /feed/history + browse continuations), grouped by the page's own day
- * headers. Public mode (no YT_COOKIES): the SSR page answers the sign-in
- * promo → { groups: [], loginRequired: true } — honest, never fake rows.
- * WFX2-P2-AU: guests (no WebFlix session) get the uniform 401 before any
- * upstream call — the client degrades on it (the signed-out screen).
+ * GET /api/history?cursor= — WFX2-P36: the HONEST per-user envelope. YouTube's
+ * watch history has NO official Data API (it is account-private on
+ * youtube.com), and the pre-P36 read served the OPERATOR's SSR /feed/history
+ * to every signed-in user — one person's history rendered as another's, the
+ * exact cross-user leak the P36 work order closes. So this route never reads
+ * anyone's history anymore: it answers the honest empty + notice (the view
+ * renders it as the notice banner), with `connected` disclosing whether the
+ * acting user's own YouTube account is connected.
+ *
+ * WFX2-P2-AU kept: guests (no WebFlix session) get the uniform 401 before
+ * anything runs — the client degrades on it (the signed-out screen).
  */
 export async function GET(req: NextRequest) {
   if (!(await getSessionUser(req))) return authRequiredResponse();
@@ -21,16 +26,18 @@ export async function GET(req: NextRequest) {
     if (!(await rateLimit(`history:${req.headers.get("x-forwarded-for") ?? "local"}`))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
-    const cursor = new URL(req.url).searchParams.get("cursor") ?? undefined;
-    const feed = await getHistoryFeed(cursor || undefined);
+    const tier = await resolveReadTier(req);
     return NextResponse.json({
-      groups: feed.groups,
-      nextCursor: feed.nextCursor,
-      loginRequired: feed.loginRequired,
-      watchHistoryPaused: feed.watchHistoryPaused,
-      searchHistoryPaused: feed.searchHistoryPaused,
-      total: feed.total,
+      groups: [],
+      nextCursor: null,
+      loginRequired: false,
+      watchHistoryPaused: null,
+      searchHistoryPaused: null,
+      total: 0,
       session: hasSession(),
+      connected: tier !== null,
+      notice:
+        "Your YouTube watch history has no official API — WebFlix never reads one person's history for another. Open youtube.com/feed/history for yours.",
     });
   } catch (err) {
     console.error("GET /api/history failed", err);
@@ -38,18 +45,12 @@ export async function GET(req: NextRequest) {
   }
 }
 
-/** Map a broker failure to the honest HTTP response. */
-function brokerErrorResponse(err: BrokerError): NextResponse {
-  if (err.kind === "bad-request") {
-    return NextResponse.json({ error: err.message }, { status: 400 });
-  }
-  return NextResponse.json({ error: err.message }, { status: 502 });
-}
-
 /**
- * DELETE /api/history?videoId= — remove ONE video from the real watch
- * history (broker kind `history-remove`, Tier-2). Without a videoId: clear
- * ALL watch history (broker kind `history-clear-all`).
+ * DELETE /api/history?videoId= — WFX2-P36: the HONEST UNSUPPORTED lane.
+ * History writes (remove one video / clear all) have no official YouTube API,
+ * and the pre-P36 broker drive acted on the OPERATOR's account — retired with
+ * the shared identity itself. The response is the honest 501 with the
+ * machine-stable kind, the handoff to YouTube's own history page.
  */
 export async function DELETE(req: NextRequest) {
   if (!(await getSessionUser(req))) return authRequiredResponse();
@@ -58,27 +59,24 @@ export async function DELETE(req: NextRequest) {
     if (videoId && !/^[\w-]{6,20}$/.test(videoId)) {
       return NextResponse.json({ error: "videoId is invalid" }, { status: 400 });
     }
-    const result = videoId
-      ? await brokerAction("history-remove", { videoId })
-      : await brokerAction("history-clear-all", {});
-    if (!brokerOk(result)) return brokerErrorResponse(result as BrokerError);
-    const r = result as { ok: true; verified?: boolean; already?: boolean; path?: string };
-    return NextResponse.json({
-      ok: true,
-      effect: videoId ? "removed-from-history" : "history-cleared",
-      verified: r.verified ?? false,
-      path: r.path ?? null,
-    });
+    throw new ApiError(
+      501,
+      videoId
+        ? "Removing a video from your YouTube watch history isn't supported by the official API — open youtube.com/feed/history to remove it there"
+        : "Clearing your YouTube watch history isn't supported by the official API — open youtube.com/feed/history to clear it there",
+      "youtube-unsupported",
+    );
   } catch (err) {
-    console.error("DELETE /api/history failed", err);
-    return NextResponse.json({ error: "Failed to update history" }, { status: 500 });
+    return errorResponse(err);
   }
 }
 
 /**
- * PATCH /api/history {paused: boolean, type?: "watch"|"search"} — the
- * pause/resume toggles on the real account (broker kinds `history-pause` /
- * `search-history-pause`, Tier-2).
+ * PATCH /api/history {paused: boolean, type?: "watch"|"search"} — WFX2-P36:
+ * the HONEST UNSUPPORTED lane. The pause/resume toggles are YouTube account
+ * settings with no official API, and the pre-P36 broker drive acted on the
+ * OPERATOR's account — retired. The response is the honest 501 with the
+ * machine-stable kind, the handoff to YouTube's own history settings.
  */
 export async function PATCH(req: NextRequest) {
   if (!(await getSessionUser(req))) return authRequiredResponse();
@@ -89,25 +87,13 @@ export async function PATCH(req: NextRequest) {
     } catch {
       return NextResponse.json({ error: "body must be JSON" }, { status: 400 });
     }
-    const paused = body.paused === true;
     const type = body.type === "search" ? "search" : "watch";
-    const result =
-      type === "search"
-        ? await brokerAction("search-history-pause", {}, { paused })
-        : await brokerAction("history-pause", {}, { paused });
-    if (!brokerOk(result)) return brokerErrorResponse(result as BrokerError);
-    const r = result as { ok: true; verified?: boolean; already?: boolean; path?: string };
-    return NextResponse.json({
-      ok: true,
-      type,
-      paused,
-      effect: paused ? "paused" : "resumed",
-      verified: r.verified ?? false,
-      already: r.already ?? false,
-      path: r.path ?? null,
-    });
+    throw new ApiError(
+      501,
+      `Pausing or resuming your ${type === "search" ? "search " : ""}watch history on YouTube isn't supported by the official API — open youtube.com/feed/history to change it there`,
+      "youtube-unsupported",
+    );
   } catch (err) {
-    console.error("PATCH /api/history failed", err);
-    return NextResponse.json({ error: "Failed to toggle history" }, { status: 500 });
+    return errorResponse(err);
   }
 }

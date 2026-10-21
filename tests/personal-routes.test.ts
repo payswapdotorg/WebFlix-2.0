@@ -1,12 +1,18 @@
 /// <reference types="bun-types" />
 /**
- * WFX2-B-B route tests — the live personal-surface routes exercised against
- * fixture bytes via the test-only `setUpstream()` seam (the pattern from
- * A-B's yt-routes.test.ts). NEVER the network.
+ * WFX2-B-B route tests — the personal-surface routes.
  *
- * Session handling: `YT_COOKIES` is set in the "live session" describes so
- * hasSession() is true (personal mode); it is deleted in the public-mode
- * describes so the honest login-required degradation is exercised.
+ * WFX2-P36 re-point: the shared-operator reads/writes are RETIRED — these
+ * routes now answer the honest per-user envelopes (per-user official reads
+ * for subscriptions channels / playlists; honest empty + notice for the
+ * no-official-API surfaces history / liked; honest 501 youtube-unsupported
+ * for the no-API writes). The per-user OAuth binding rides the REAL
+ * connection store (Map fallback, env-clean) with real encryptSecret blobs;
+ * the official-API seam is mocked at the module boundary (the action-routes
+ * mock.module idiom, restored in afterAll). The fixture upstream stays for
+ * the routes that still read public InnerTube surfaces — and its `recorded`
+ * log now doubles as the proof that the retired operator reads NEVER fire.
+ * NEVER the network.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { readFileSync } from "node:fs";
@@ -14,6 +20,31 @@ import { readFileSync } from "node:fs";
 import { setUpstream } from "@/lib/youtube/innertube";
 import { clearCache } from "@/lib/youtube/cache";
 import { mintSessionCookie } from "./helpers";
+import { putYouTubeConnection, resetYoutubeConnectionStore } from "@/lib/auth/youtube-connection-store";
+import { encryptSecret } from "@/lib/youtube/oauth";
+
+// ---------------------------------------------------------------------------
+// WFX2-P36 — the per-user official-API seam, mocked at the module boundary
+// (the action-routes mock.module idiom, restored in afterAll): the per-user
+// official reads answer programmable typed results, and each call's
+// accessToken is RECORDED so the tests can pin that the ACTING user's own
+// token served the read — never the operator's.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const realOfficial = { ...require("@/lib/youtube/official-actions") } as Record<string, unknown>;
+const officialCalls: string[] = [];
+let officialChannelsResult: unknown = { ok: true, data: [] };
+let officialPlaylistsResult: unknown = { ok: true, data: [] };
+mock.module("@/lib/youtube/official-actions", () => ({
+  ...realOfficial,
+  officialListSubscribedChannels: async (accessToken: string) => {
+    officialCalls.push(`subscriptions:${accessToken}`);
+    return officialChannelsResult;
+  },
+  officialListPlaylists: async (accessToken: string) => {
+    officialCalls.push(`playlists:${accessToken}`);
+    return officialPlaylistsResult;
+  },
+}));
 
 import { GET as historyRoute, DELETE as historyDelete, PATCH as historyPatch } from "@/app/api/history/route";
 import { GET as playlistsRoute } from "@/app/api/playlists/route";
@@ -54,6 +85,34 @@ let AUTH_COOKIE = "";
 beforeAll(async () => {
   AUTH_COOKIE = await mintSessionCookie();
 });
+
+// env-clean: the per-user connection store must ride its Map fallback (never
+// a live Upstash), so the REST env vars are saved + deleted for this file and
+// restored in afterAll (bun --isolate gives each file its own process).
+const savedUpstashUrl = process.env.UPSTASH_REDIS_REST_URL;
+const savedUpstashToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+delete process.env.UPSTASH_REDIS_REST_URL;
+delete process.env.UPSTASH_REDIS_REST_TOKEN;
+
+/** Connect the ACTING user's (or another user's) own YouTube account in the
+ * Map-fallback store: real encryptSecret token blobs, a non-expiring access
+ * token (the transparent refresh must never fire — no network), status
+ * "connected". The P36 per-user binding. */
+async function connectUser(userId = "u_wfx2_test"): Promise<void> {
+  await putYouTubeConnection({
+    userId,
+    channelId: "UCown0000000000000001",
+    channelTitle: `Channel of ${userId}`,
+    channelThumbUrl: null,
+    scope: "https://www.googleapis.com/auth/youtube.force-ssl",
+    accessTokenEnc: await encryptSecret(`access-token-${userId}`),
+    refreshTokenEnc: await encryptSecret(`refresh-token-${userId}`),
+    accessExpiresAt: Date.now() + 3_600_000,
+    status: "connected",
+    connectedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+}
 const req = (url: string, init?: RequestInit): never =>
   new Request(url, {
     ...init,
@@ -159,10 +218,15 @@ let upstream: ReturnType<typeof fixtureUpstream>;
 beforeEach(() => {
   clearCache();
   upstream = fixtureUpstream();
+  resetYoutubeConnectionStore(); // the per-user connection store is per-test
+  officialCalls.length = 0;
+  officialChannelsResult = { ok: true, data: [] };
+  officialPlaylistsResult = { ok: true, data: [] };
 });
 
 afterEach(() => {
   setUpstream(null);
+  resetYoutubeConnectionStore();
   delete process.env.YT_COOKIES;
   delete process.env.BROKER_URL;
   delete process.env.BROKER_SECRET;
@@ -170,86 +234,99 @@ afterEach(() => {
 
 // ---------------------------------------------------------------------------
 
-describe("GET /api/history — live session (fixture: real 95-item-day-grouped capture)", () => {
+describe("GET /api/history — the honest per-user envelope (WFX2-P36: no official history API)", () => {
   beforeEach(() => {
     process.env.YT_COOKIES = "SAPISID=fixture; SID=fixture; LOGIN_INFO=fixture";
     setUpstream(upstream.impl);
   });
 
-  test("maps the real day-grouped history with a continuation cursor", async () => {
+  test("no connected account → the honest empty + notice (connected:false) — never the operator's 95-item history", async () => {
     const res = await historyRoute(req("http://localhost/api/history"));
     expect(res.status).toBe(200);
     const data = (await res.json()) as any;
-    expect(data.loginRequired).toBe(false);
-    expect(data.session).toBe(true);
-    expect(data.groups.length).toBeGreaterThan(10);
-    expect(data.groups[0].label).toBe("Today");
-    expect(data.total).toBeGreaterThan(100);
-    expect(typeof data.nextCursor).toBe("string");
-    // the first item carries watched-progress from the real startPercent overlay
-    const first = data.groups[0].items[0];
-    expect(first.id).toBe("dQw4w9WgXcQ");
-    expect(first.watchedSec).toBe(214);
-    // the real capture's control rail reads "Pause watch history" → recording
-    expect(data.watchHistoryPaused).toBe(false);
-    // one SSR call for the page
-    const ssr = upstream.recorded.filter((r) => r.url.includes("/feed/history"));
-    expect(ssr).toHaveLength(1);
+    expect(data).toMatchObject({
+      groups: [],
+      nextCursor: null,
+      loginRequired: false,
+      watchHistoryPaused: null,
+      searchHistoryPaused: null,
+      total: 0,
+      session: true, // the deployment read-session flag is disclosed…
+      connected: false, // …but the acting user has no connected account
+    });
+    expect(data.notice).toBe(
+      "Your YouTube watch history has no official API — WebFlix never reads one person's history for another. Open youtube.com/feed/history for yours."
+    );
+    // the retired operator SSR read NEVER fires — zero upstream calls
+    expect(upstream.recorded).toHaveLength(0);
   });
 
-  test("?cursor= pages via browse {continuation}", async () => {
-    const res = await historyRoute(
-      req("http://localhost/api/history?cursor=4qmFsgJ0ZXN0")
-    );
+  test("the acting user's own connected account → the SAME honest empty + notice (connected:true — a connection never fabricates history)", async () => {
+    await connectUser();
+    const res = await historyRoute(req("http://localhost/api/history"));
     expect(res.status).toBe(200);
     const data = (await res.json()) as any;
-    expect(data.groups.length).toBeGreaterThan(0);
-    const browse = upstream.recorded.filter(
-      (r) => r.url.includes("/youtubei/v1/browse") && r.body?.continuation === "4qmFsgJ0ZXN0"
-    );
-    expect(browse).toHaveLength(1);
+    expect(data).toMatchObject({
+      groups: [],
+      nextCursor: null,
+      loginRequired: false,
+      watchHistoryPaused: null,
+      searchHistoryPaused: null,
+      total: 0,
+      session: true,
+      connected: true,
+    });
+    expect(data.notice).toContain("no official API");
+    expect(data.notice).toContain("youtube.com/feed/history");
+    expect(upstream.recorded).toHaveLength(0);
   });
 });
 
-describe("GET /api/history — public mode (honest degradation)", () => {
+describe("GET /api/history — public mode (the read-session flag honestly false)", () => {
   beforeEach(() => {
     delete process.env.YT_COOKIES;
     setUpstream(upstream.implPublic);
   });
 
-  test("the logged-out promo page maps to the honest login-required state", async () => {
+  test("no YT_COOKIES → the same honest envelope with session:false — the WebFlix gate owns sign-in, never a login lie", async () => {
     const res = await historyRoute(req("http://localhost/api/history"));
     expect(res.status).toBe(200);
     const data = (await res.json()) as any;
-    expect(data.loginRequired).toBe(true);
-    expect(data.groups).toEqual([]);
-    expect(data.nextCursor).toBeNull();
-    expect(data.total).toBe(0);
+    expect(data).toMatchObject({
+      groups: [],
+      nextCursor: null,
+      loginRequired: false,
+      watchHistoryPaused: null,
+      searchHistoryPaused: null,
+      total: 0,
+      session: false,
+      connected: false,
+    });
+    expect(data.notice).toContain("no official API");
+    expect(upstream.recorded).toHaveLength(0);
   });
 });
 
-describe("DELETE / PATCH /api/history — broker tier", () => {
-  beforeEach(() => {
-    delete process.env.BROKER_URL; // broker offline → honest 502
-  });
-
-  test("DELETE ?videoId= without the broker → the honest offline 502", async () => {
+describe("DELETE / PATCH /api/history — the honest unsupported lane (WFX2-P36)", () => {
+  test("DELETE ?videoId= → the honest 501 youtube-unsupported with the handoff (the broker drive retired)", async () => {
     const res = await historyDelete(
       req("http://localhost/api/history?videoId=dQw4w9WgXcQ")
     );
-    expect(res.status).toBe(502);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toContain("offline");
+    expect(res.status).toBe(501);
+    const body = (await res.json()) as { error: string; kind: string };
+    expect(body.kind).toBe("youtube-unsupported");
+    expect(body.error).toContain("Removing a video from your YouTube watch history");
+    expect(body.error).toContain("youtube.com/feed/history");
   });
 
-  test("DELETE with an invalid videoId → 400 without a broker call", async () => {
+  test("DELETE with an invalid videoId → 400 (validated before the unsupported verdict)", async () => {
     const res = await historyDelete(
       req("http://localhost/api/history?videoId=%20%20")
     );
     expect(res.status).toBe(400);
   });
 
-  test("PATCH {paused:true} without the broker → the honest offline 502", async () => {
+  test("PATCH {paused:true} → the honest 501 youtube-unsupported (the pause toggles are YouTube account settings)", async () => {
     const res = await historyPatch(
       req("http://localhost/api/history", {
         method: "PATCH",
@@ -257,128 +334,196 @@ describe("DELETE / PATCH /api/history — broker tier", () => {
         body: JSON.stringify({ paused: true, type: "watch" }),
       })
     );
-    expect(res.status).toBe(502);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toContain("offline");
+    expect(res.status).toBe(501);
+    const body = (await res.json()) as { error: string; kind: string };
+    expect(body.kind).toBe("youtube-unsupported");
+    expect(body.error).toContain("Pausing or resuming your watch history");
+    expect(body.error).toContain("youtube.com/feed/history");
   });
 });
 
 // ---------------------------------------------------------------------------
 
-describe("GET /api/subscriptions — live session (fixture: real 95-item capture)", () => {
+describe("GET /api/subscriptions — the per-user official read (WFX2-P36)", () => {
   beforeEach(() => {
     process.env.YT_COOKIES = "SAPISID=fixture; SID=fixture";
     setUpstream(upstream.impl);
   });
 
-  test("maps the real feed: 95 videos, 2 channels, cursor", async () => {
+  test("the acting user's own channels via officialListSubscribedChannels + the honest combined-feed notice", async () => {
+    await connectUser();
+    officialChannelsResult = {
+      ok: true,
+      data: [
+        {
+          channelId: "UCalice0000000001",
+          title: "Alice's Channel",
+          thumbUrl: "https://example.com/a.jpg",
+          subscribedAt: "2026-01-01T00:00:00Z",
+        },
+        { channelId: "UCbob000000000002", title: "Bob Builds", thumbUrl: null, subscribedAt: null },
+      ],
+    };
     const res = await subscriptionsRoute(req("http://localhost/api/subscriptions"));
     expect(res.status).toBe(200);
     const data = (await res.json()) as any;
-    expect(data.loginRequired).toBe(false);
-    expect(data.videos).toHaveLength(95);
     expect(data.channels).toHaveLength(2);
-    expect(data.channels[0].id).toBe("UCICYIUduSnJCb1bB_6iJBAQ");
-    expect(typeof data.nextCursor).toBe("string");
-  });
-
-  test("?cursor= pages via browse {continuation}", async () => {
-    const res = await subscriptionsRoute(
-      req("http://localhost/api/subscriptions?cursor=4qmFsgJ0ZXN0")
+    expect(data.channels[0]).toMatchObject({
+      id: "UCalice0000000001",
+      handle: "Alice's Channel",
+      name: "Alice's Channel",
+      avatarUrl: "https://example.com/a.jpg",
+    });
+    expect(data.channels[1]).toMatchObject({ id: "UCbob000000000002", name: "Bob Builds", avatarUrl: "" });
+    expect(data.videos).toEqual([]); // the combined latest-videos feed has no official API
+    expect(data.nextCursor).toBeNull();
+    expect(data.loginRequired).toBe(false);
+    expect(data.connected).toBe(true);
+    expect(data.notice).toBe(
+      "Your channels, read through your connected account. The combined latest-videos feed has no official YouTube API — open youtube.com/feed/subscriptions for it."
     );
-    expect(res.status).toBe(200);
-    const browse = upstream.recorded.filter(
-      (r) => r.url.includes("/youtubei/v1/browse") && r.body?.continuation === "4qmFsgJ0ZXN0"
-    );
-    expect(browse).toHaveLength(1);
-  });
-});
-
-describe("GET /api/subscriptions — public mode", () => {
-  beforeEach(() => {
-    delete process.env.YT_COOKIES;
-    setUpstream(upstream.implPublic);
+    // the official read rode the ACTING user's own token — never the operator's
+    expect(officialCalls).toEqual(["subscriptions:access-token-u_wfx2_test"]);
+    // the retired operator SSR feed NEVER fires
+    expect(upstream.recorded).toHaveLength(0);
   });
 
-  test("the logged-out promo → honest login-required empties", async () => {
+  test("a failed official read → the honest failure notice (connected:true, empty channels — never the operator's feed)", async () => {
+    await connectUser();
+    officialChannelsResult = { ok: false, kind: "http-error", status: 500, message: "the YouTube API answered 500" };
     const res = await subscriptionsRoute(req("http://localhost/api/subscriptions"));
     expect(res.status).toBe(200);
     const data = (await res.json()) as any;
-    expect(data.loginRequired).toBe(true);
     expect(data.channels).toEqual([]);
     expect(data.videos).toEqual([]);
-  });
-});
-
-// ---------------------------------------------------------------------------
-
-describe("GET /api/playlists — live session (SYNTHETIC-shaped operator list)", () => {
-  beforeEach(() => {
-    process.env.YT_COOKIES = "SAPISID=fixture; SID=fixture";
-    setUpstream(upstream.impl);
-  });
-
-  test("maps the operator playlists list", async () => {
-    const res = await playlistsRoute(req("http://localhost/api/playlists"));
-    expect(res.status).toBe(200);
-    const data = (await res.json()) as any;
+    expect(data.nextCursor).toBeNull();
     expect(data.loginRequired).toBe(false);
-    expect(data.playlists).toHaveLength(3);
-    expect(data.playlists[0]).toMatchObject({
-      id: "PLsynthetic0001",
-      title: "Synth private list",
-      visibility: "private",
-      videoCount: 6,
-    });
-    const ssr = upstream.recorded.filter((r) => r.url.includes("/feed/playlists"));
-    expect(ssr).toHaveLength(1);
+    expect(data.connected).toBe(true);
+    expect(data.notice).toBe(
+      "Your subscription list could not be read just now (the YouTube API answered honestly with an error) — try again shortly"
+    );
+    expect(upstream.recorded).toHaveLength(0);
   });
 });
 
-describe("GET /api/playlists — public mode", () => {
+describe("GET /api/subscriptions — no connected account (the honest connect ask)", () => {
   beforeEach(() => {
     delete process.env.YT_COOKIES;
     setUpstream(upstream.implPublic);
   });
 
-  test("the public skeleton page → honest login-required empties", async () => {
-    const res = await playlistsRoute(req("http://localhost/api/playlists"));
+  test("the acting user has no connection → empty channels + the connect notice — never the operator's feed", async () => {
+    const res = await subscriptionsRoute(req("http://localhost/api/subscriptions"));
     expect(res.status).toBe(200);
     const data = (await res.json()) as any;
-    expect(data.loginRequired).toBe(true);
-    expect(data.unavailable).toBe(false);
-    expect(data.playlists).toEqual([]);
+    expect(data.channels).toEqual([]);
+    expect(data.videos).toEqual([]);
+    expect(data.nextCursor).toBeNull();
+    expect(data.loginRequired).toBe(false);
+    expect(data.connected).toBe(false);
+    expect(data.notice).toBe("Connect your YouTube account to see your subscriptions — Settings → YouTube connection");
+    expect(upstream.recorded).toHaveLength(0);
   });
 });
 
 // ---------------------------------------------------------------------------
 
-describe("GET /api/playlists — P22-B unavailable (session configured, read not served)", () => {
-  test("an empty /feed/playlists WITH a session → honest unavailable empties (never the no-playlists claim)", async () => {
-    // the custom upstream serves the promo-skeleton page (the REAL public
-    // capture) for /feed/playlists even with cookies — the shape the
-    // production deploy answers while its LL/WL reads answer the not-exist
-    // alert. The WL-invariant: a served signed-in /feed/playlists always
-    // carries the Watch later lockup, so zero lockups WITH a session = the
-    // read was not served.
+describe("GET /api/playlists — the per-user official read (WFX2-P36)", () => {
+  beforeEach(() => {
     process.env.YT_COOKIES = "SAPISID=fixture; SID=fixture";
-    const skeleton = load("ssr_playlists_public");
-    setUpstream(async (url: string, init?: RequestInit) => {
-      if (url.includes("/feed/playlists")) {
-        return new Response(
-          `<!doctype html><html><head></head><body><script>var ytInitialData = ${JSON.stringify(skeleton)};</script></body></html>`,
-          { status: 200, headers: { "Content-Type": "text/html" } }
-        );
-      }
-      return new Response("not found", { status: 404 });
-    });
+    setUpstream(upstream.impl);
+  });
+
+  test("the acting user's own playlists via officialListPlaylists + the per-user notice — never the operator's list", async () => {
+    await connectUser();
+    officialPlaylistsResult = {
+      ok: true,
+      data: [
+        {
+          id: "PLown0000000001",
+          title: "My Private List",
+          visibility: "private",
+          itemCount: 6,
+          thumbUrl: "https://example.com/t.jpg",
+          description: null,
+        },
+        {
+          id: "PLown0000000002",
+          title: "Road Trip",
+          visibility: "public",
+          itemCount: 12,
+          thumbUrl: null,
+          description: null,
+        },
+      ],
+    };
     const res = await playlistsRoute(req("http://localhost/api/playlists"));
     expect(res.status).toBe(200);
     const data = (await res.json()) as any;
+    expect(data.loginRequired).toBe(false);
+    expect(data.unavailable).toBe(false);
+    expect(data.session).toBe(true);
+    expect(data.connected).toBe(true);
+    expect(data.playlists).toHaveLength(2);
+    expect(data.playlists[0]).toMatchObject({
+      id: "PLown0000000001",
+      title: "My Private List",
+      visibility: "private",
+      isWatchLater: false,
+      createdAt: "", // the official row carries no creation date — honest empty
+      videoCount: 6,
+      coverUrl: "https://example.com/t.jpg",
+    });
+    expect(data.notice).toBe(
+      "Your playlists, read through your own connected YouTube account — WebFlix never reads someone else's."
+    );
+    // the official read rode the ACTING user's own token
+    expect(officialCalls).toEqual(["playlists:access-token-u_wfx2_test"]);
+    // the retired operator SSR /feed/playlists read NEVER fires
+    expect(upstream.recorded).toHaveLength(0);
+  });
+});
+
+describe("GET /api/playlists — no connected account (the honest connect ask)", () => {
+  beforeEach(() => {
+    delete process.env.YT_COOKIES;
+    setUpstream(upstream.implPublic);
+  });
+
+  test("the acting user has no connection → empty playlists + the connect notice — never a login lie", async () => {
+    const res = await playlistsRoute(req("http://localhost/api/playlists"));
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.playlists).toEqual([]);
+    expect(data.loginRequired).toBe(false);
+    expect(data.unavailable).toBe(false);
+    expect(data.session).toBe(false);
+    expect(data.connected).toBe(false);
+    expect(data.notice).toBe("Connect your YouTube account to see your playlists — Settings → YouTube connection");
+    expect(upstream.recorded).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("GET /api/playlists — a failed official read (the honest unavailable)", () => {
+  test("connected + the official read fails → unavailable:true + the honest failure notice — never the operator's rows", async () => {
+    process.env.YT_COOKIES = "SAPISID=fixture; SID=fixture";
+    await connectUser();
+    officialPlaylistsResult = { ok: false, kind: "http-error", status: 503, message: "the YouTube API answered 503" };
+    setUpstream(upstream.impl);
+    const res = await playlistsRoute(req("http://localhost/api/playlists"));
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.playlists).toEqual([]);
     expect(data.unavailable).toBe(true);
     expect(data.loginRequired).toBe(false);
     expect(data.session).toBe(true);
-    expect(data.playlists).toEqual([]);
+    expect(data.connected).toBe(true);
+    expect(data.notice).toBe(
+      "Your playlists could not be read just now (the official YouTube API answered with an error) — try again shortly"
+    );
+    expect(upstream.recorded).toHaveLength(0);
   });
 });
 
@@ -420,7 +565,7 @@ describe("GET /api/playlists/[id] — browse VL items", () => {
     expect(data.nextCursor).toBeNull();
   });
 
-  test("WL without a session → honest loginRequired (REAL auth-gated capture)", async () => {
+  test("WL without a session → the A3 honest notice envelope (never the operator's Watch later)", async () => {
     delete process.env.YT_COOKIES;
     const res = await playlistItemsRoute(
       req("http://localhost/api/playlists/WL"),
@@ -428,9 +573,19 @@ describe("GET /api/playlists/[id] — browse VL items", () => {
     );
     expect(res.status).toBe(200);
     const data = (await res.json()) as any;
-    expect(data.loginRequired).toBe(true);
-    expect(data.special).toBe(true);
-    expect(data.videos).toEqual([]);
+    expect(data).toMatchObject({
+      playlist: null,
+      videos: [],
+      nextCursor: null,
+      loginRequired: false,
+      unavailable: false,
+      special: true,
+    });
+    expect(data.notice).toBe(
+      "YouTube's Watch Later / Liked lists have no official API — your WebFlix Watch later lives in the save button (local), and YouTube's own page has the rest"
+    );
+    // the operator's VLWL browse NEVER fires
+    expect(upstream.recorded.filter((r) => r.url.includes("/youtubei/v1/browse"))).toHaveLength(0);
   });
 
   test("an unknown regular playlist id → honest 404", async () => {
@@ -449,7 +604,7 @@ describe("GET /api/playlists/[id] — browse VL items", () => {
     expect(res.status).toBe(400);
   });
 
-  test("P22-B: WL with a session + the not-exist alert → honest unavailable (the dialog's flag)", async () => {
+  test("P22-B re-point: WL with a session → the SAME honest notice (the session-gated operator read is retired)", async () => {
     process.env.YT_COOKIES = "SAPISID=fixture; SID=fixture";
     const res = await playlistItemsRoute(
       req("http://localhost/api/playlists/WL"),
@@ -457,60 +612,61 @@ describe("GET /api/playlists/[id] — browse VL items", () => {
     );
     expect(res.status).toBe(200);
     const data = (await res.json()) as any;
-    expect(data.unavailable).toBe(true);
-    expect(data.loginRequired).toBe(false);
     expect(data.special).toBe(true);
+    expect(data.loginRequired).toBe(false);
+    expect(data.unavailable).toBe(false);
+    expect(data.playlist).toBeNull();
     expect(data.videos).toEqual([]);
+    expect(data.notice).toContain("no official API");
+    expect(upstream.recorded.filter((r) => r.url.includes("/youtubei/v1/browse"))).toHaveLength(0);
   });
 });
 
 // ---------------------------------------------------------------------------
 
-describe("GET /api/playlist/[id] — the special lists through the playlist PAGE route (P22-B)", () => {
+describe("GET /api/playlist/[id] — the special lists through the playlist PAGE route (WFX2-P36: the honest notice)", () => {
   beforeEach(() => {
     process.env.YT_COOKIES = "SAPISID=fixture; SID=fixture";
     setUpstream(upstream.impl);
   });
 
-  test("WL + the not-exist alert WITH a session → the honest unavailable special page (never a login ask)", async () => {
+  const expectSpecialNotice = (data: any) => {
+    expect(data).toMatchObject({
+      playlist: null,
+      videos: [],
+      nextCursor: null,
+      loginRequired: false,
+      unavailable: false,
+      special: true,
+    });
+    expect(data.notice).toBe(
+      "YouTube's Watch Later / Liked lists have no official API — your WebFlix Watch later lives in the save button (local), and YouTube's own page has the rest"
+    );
+  };
+
+  test("WL WITH a session → the honest special notice page (playlist:null — never the operator's list)", async () => {
     const res = await playlistPageRoute(
       req("http://localhost/api/playlist/WL"),
       { params: Promise.resolve({ id: "WL" }) }
     );
     expect(res.status).toBe(200);
-    const data = (await res.json()) as any;
-    expect(data.special).toBe(true);
-    expect(data.unavailable).toBe(true);
-    expect(data.loginRequired).toBe(false);
-    // the honest identity of the list survives the failed read
-    expect(data.playlist.channelName).toBe("You");
-    expect(data.playlist.title).toBe("Watch later");
-    expect(data.playlist.viewsText).toBeNull();
-    expect(data.videos).toEqual([]);
-    // the read went through the special-list browse (the session semantics)
-    const browse = upstream.recorded.filter((r) => r.url.includes("/youtubei/v1/browse"));
-    expect(browse.at(-1)?.body.browseId).toBe("VLWL");
+    expectSpecialNotice(await res.json());
+    // the special-list browse (the operator's VLWL read) never fires
+    expect(upstream.recorded.filter((r) => r.url.includes("/youtubei/v1/browse"))).toHaveLength(0);
   });
 
-  test("WL without a session → the honest login-required special page", async () => {
+  test("WL without a session → the SAME honest notice (the login-gated split is retired with the operator read)", async () => {
     delete process.env.YT_COOKIES;
     const res = await playlistPageRoute(
       req("http://localhost/api/playlist/WL"),
       { params: Promise.resolve({ id: "WL" }) }
     );
     expect(res.status).toBe(200);
-    const data = (await res.json()) as any;
-    expect(data.special).toBe(true);
-    expect(data.loginRequired).toBe(true);
-    expect(data.unavailable).toBe(false);
-    expect(data.playlist.title).toBe("Watch later");
+    expectSpecialNotice(await res.json());
+    expect(upstream.recorded.filter((r) => r.url.includes("/youtubei/v1/browse"))).toHaveLength(0);
   });
 
-  test("a SERVED WL read maps onto the playlist page DTO (You owner row + count + the videos)", async () => {
-    // a custom upstream serving a REAL served playlist fixture for VLWL —
-    // the served path: the upstream's own title wins (the fallback only
-    // applies when the read carries no header), the owner row is "You"
-    // (youtube.com labels the WL page's owner "You" — measured 2026-10-11)
+  test("an upstream that WOULD serve a WL playlist changes nothing — the notice answers with ZERO browse calls (the retired read, proven gone)", async () => {
     const served = load("browse_vl_public");
     setUpstream(async (url: string, init?: RequestInit) => {
       if (url.includes("/youtubei/v1/browse")) {
@@ -530,73 +686,77 @@ describe("GET /api/playlist/[id] — the special lists through the playlist PAGE
       { params: Promise.resolve({ id: "WL" }) }
     );
     expect(res.status).toBe(200);
-    const data = (await res.json()) as any;
-    expect(data.special).toBe(true);
-    expect(data.unavailable).toBe(false);
-    expect(data.loginRequired).toBe(false);
-    expect(data.playlist.channelName).toBe("You");
-    // the served read's OWN title wins (the fallback only applies when the
-    // read carries no header) — here the fixture's real title, a known
-    // fixture artifact on the WL route
-    expect(data.playlist.title).toBe("💕Lofi Hip Hop💕 Bart 2021");
-    expect(typeof data.playlist.videoCountText).toBe("string");
-    expect(data.playlist.videoCountText).toContain("videos");
-    expect(data.videos.length).toBeGreaterThan(0);
-    expect(data.videos[0].id).toBe("oHaGR0shnvA");
+    expectSpecialNotice(await res.json());
+    expect(upstream.recorded.filter((r) => r.url.includes("/youtubei/v1/browse"))).toHaveLength(0);
   });
 });
 
 // ---------------------------------------------------------------------------
 
-describe("GET /api/liked — the LL surface", () => {
+describe("GET /api/liked — the honest per-user notice envelope (WFX2-P36: no official liked-list API)", () => {
   beforeEach(() => {
     setUpstream(upstream.impl);
   });
 
-  test("without a session: the real auth-gated VL response → honest loginRequired", async () => {
+  test("no YT session, no connected account → the honest notice (session:false, connected:false)", async () => {
     delete process.env.YT_COOKIES;
     const res = await likedRoute(req("http://localhost/api/liked"));
     expect(res.status).toBe(200);
     const data = (await res.json()) as any;
-    expect(data.loginRequired).toBe(true);
-    expect(data.videos).toEqual([]);
-    // the upstream call was browse VLLL (the verified mechanism)
-    const browse = upstream.recorded.filter((r) => r.url.includes("/youtubei/v1/browse"));
-    expect(browse).toHaveLength(1);
-    expect(browse[0].body.browseId).toBe("VLLL");
+    expect(data).toMatchObject({
+      videos: [],
+      playlist: null,
+      nextCursor: null,
+      loginRequired: false,
+      unavailable: false,
+      session: false,
+      connected: false,
+    });
+    expect(data.notice).toBe(
+      "The list of videos you liked on YouTube has no official API — your likes still act on your account (the like button); the list lives on youtube.com/feed/liked"
+    );
+    // the operator's VLLL browse NEVER fires
+    expect(upstream.recorded.filter((r) => r.url.includes("/youtubei/v1/browse"))).toHaveLength(0);
   });
 
-  test("with a session the same VL path is used (cookies ride the InnerTube call)", async () => {
-    process.env.YT_COOKIES = "SAPISID=fixture; SID=fixture";
-    const res = await likedRoute(req("http://localhost/api/liked"));
-    expect(res.status).toBe(200);
-    const browse = upstream.recorded.filter((r) => r.url.includes("/youtubei/v1/browse"));
-    expect(browse[0].body.browseId).toBe("VLLL");
-  });
-
-  test("P22-B: with a session, the not-exist alert is honestly UNAVAILABLE — never login-required (the production deploy's shape)", async () => {
-    // the fixture upstream answers the "playlist does not exist" alert for
-    // VLLL regardless of cookies — exactly what the production deploy does
-    // WITH the operator session configured (measured live 2026-10-11). The
-    // split: a session IS configured → the read was not served.
+  test("the operator read session configured → the liked list still NEVER serves (the retired cross-user leak, closed)", async () => {
     process.env.YT_COOKIES = "SAPISID=fixture; SID=fixture";
     const res = await likedRoute(req("http://localhost/api/liked"));
     expect(res.status).toBe(200);
     const data = (await res.json()) as any;
-    expect(data.unavailable).toBe(true);
-    expect(data.loginRequired).toBe(false);
     expect(data.session).toBe(true);
+    expect(data.connected).toBe(false);
     expect(data.videos).toEqual([]);
     expect(data.playlist).toBeNull();
+    expect(data.loginRequired).toBe(false);
+    expect(data.unavailable).toBe(false);
+    expect(data.notice).toContain("no official API");
+    expect(upstream.recorded.filter((r) => r.url.includes("/youtubei/v1/browse"))).toHaveLength(0);
   });
 
-  test("without a session, the same alert stays honestly login-required", async () => {
-    delete process.env.YT_COOKIES;
+  test("the acting user's own connected account → connected:true, still the honest empty + notice (a connection never fabricates the list)", async () => {
+    process.env.YT_COOKIES = "SAPISID=fixture; SID=fixture";
+    await connectUser();
     const res = await likedRoute(req("http://localhost/api/liked"));
     expect(res.status).toBe(200);
     const data = (await res.json()) as any;
-    expect(data.loginRequired).toBe(true);
-    expect(data.unavailable).toBe(false);
+    expect(data.connected).toBe(true);
+    expect(data.videos).toEqual([]);
+    expect(data.playlist).toBeNull();
+    expect(data.session).toBe(true);
+    expect(data.notice).toContain("your likes still act on your account");
+    expect(upstream.recorded.filter((r) => r.url.includes("/youtubei/v1/browse"))).toHaveLength(0);
+  });
+
+  test("another user's connection never leaks — the acting user still honestly not-connected (the per-user isolation law)", async () => {
+    process.env.YT_COOKIES = "SAPISID=fixture; SID=fixture";
+    await connectUser("u_someone_else");
+    const res = await likedRoute(req("http://localhost/api/liked"));
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.connected).toBe(false);
+    expect(data.videos).toEqual([]);
+    expect(data.notice).toContain("no official API");
   });
 });
 
@@ -634,15 +794,16 @@ describe("GET /api/notifications — the verified endpoints", () => {
   });
 });
 
-describe("POST /api/notifications/read — broker tier", () => {
-  test("without the broker → the honest offline 502", async () => {
-    delete process.env.BROKER_URL;
+describe("POST /api/notifications/read — the honest unsupported lane (WFX2-P36)", () => {
+  test("→ the honest 501 youtube-unsupported with the handoff (the broker bell-drive retired)", async () => {
     const res = await notificationsReadRoute(
       req("http://localhost/api/notifications/read", { method: "POST" })
     );
-    expect(res.status).toBe(502);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toContain("offline");
+    expect(res.status).toBe(501);
+    const body = (await res.json()) as { error: string; kind: string };
+    expect(body.kind).toBe("youtube-unsupported");
+    expect(body.error).toContain("Marking your YouTube notifications read");
+    expect(body.error).toContain("open the bell on youtube.com");
   });
 });
 
@@ -703,4 +864,9 @@ describe("GET /api/me — the ownedChannel seam (P22-B)", () => {
 
 afterAll(() => {
   mock.module("@/lib/youtube/studio", () => realStudio);
+  mock.module("@/lib/youtube/official-actions", () => realOfficial);
+  if (savedUpstashUrl) process.env.UPSTASH_REDIS_REST_URL = savedUpstashUrl;
+  else delete process.env.UPSTASH_REDIS_REST_URL;
+  if (savedUpstashToken) process.env.UPSTASH_REDIS_REST_TOKEN = savedUpstashToken;
+  else delete process.env.UPSTASH_REDIS_REST_TOKEN;
 });

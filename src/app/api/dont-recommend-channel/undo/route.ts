@@ -6,17 +6,24 @@ import { NextRequest } from "next/server";
 export const dynamic = "force-dynamic";
 
 /**
- * P24-SEND (G12) — POST /api/dont-recommend-channel/undo — LIVE Tier-2
- * write (broker): clicks the VISIBLE Undo button on youtube.com's feedback
- * toast (the notification that followed the don't-recommend-channel
- * action). The window is short — an expired window answers the honest 502
- * ('undo-toast-not-found'), never a fake restoration. Response:
- * {ok, effect:"feedback-undo", restored:true, path}.
+ * P24-SEND (G12) → WFX2-P36 — POST /api/dont-recommend-channel/undo:
+ * removes the WebFlix-LOCAL dont-recommend-channel signal (always
+ * available — the signal is ours; no YouTube toast window is needed or
+ * claimed). Response: {ok, effect:"feedback-undo", restored:true, local, note}.
  */
 export async function POST(req: NextRequest) {
-  if (!(await getSessionUser(req))) return authRequiredResponse();
+  const sessionUser = await getSessionUser(req);
+  if (!sessionUser) return authRequiredResponse();
   try {
-    const result = await proxyFeedbackUndo();
+    let body: Record<string, unknown> = {};
+    try {
+      body = (await req.json()) as Record<string, unknown>;
+    } catch {
+      return json({ error: "body must be JSON" }, 400);
+    }
+    const videoId = typeof body.videoId === "string" ? body.videoId : "";
+    if (!videoId) return json({ error: "videoId is required" }, 400);
+    const result = await proxyFeedbackUndo(videoId, "dont_recommend_channel", sessionUser);
     return json(result);
   } catch (e) {
     return errorResponse(e);

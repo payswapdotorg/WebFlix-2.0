@@ -45,6 +45,10 @@ type PlaylistsPayload = {
   /** P22-B: a session IS configured but the read was not served */
   unavailable?: boolean;
   session: boolean;
+  /** WFX2-P36: the per-user truth — false → the connect prompt banner */
+  connected?: boolean;
+  /** WFX2-P36: the honest per-user notice (connect ask / failed read / disclosure) */
+  notice?: string;
 };
 
 type PlaylistItemsPayload = {
@@ -55,15 +59,42 @@ type PlaylistItemsPayload = {
   /** P22-B: a session IS configured but the read was not served */
   unavailable?: boolean;
   special: boolean;
+  /** WFX2-P36 — the honest per-user notice (the WL/LL handoff, or a failed read) */
+  notice?: string;
 };
 
-/** Playlists — the operator's REAL YouTube playlists (SSR /feed/playlists).
- * WFX2-P2-AU: guests get the youtube.com signed-out screen (the gate). */
+/** Playlists — YOUR OWN YouTube playlists, read through your connected
+ * account (WFX2-P36 — the operator-session read is retired; never someone
+ * else's lists). WFX2-P2-AU: guests get the youtube.com signed-out screen
+ * (the gate). */
 export default function PlaylistsPage() {
   return (
     <PersonalSurfaceGate surface="playlists">
       <PlaylistsContent />
     </PersonalSurfaceGate>
+  );
+}
+
+/** WFX2-P36 — the honest per-user notice banner: the route's notice text,
+ * plus the connect link when the acting user has no connected account. */
+function PlaylistsNoticeBanner({ payload }: { payload: PlaylistsPayload }) {
+  if (!payload.notice) return null;
+  return (
+    <div
+      className="mx-4 mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-secondary/40 px-4 py-3 sm:mx-6"
+      role="status"
+      data-testid="playlists-notice"
+    >
+      <p className="min-w-0 flex-1 text-sm text-muted-foreground">{payload.notice}</p>
+      {payload.connected === false && (
+        <Link
+          href="/settings"
+          className="shrink-0 text-sm font-medium text-foreground underline underline-offset-2"
+        >
+          Connect your YouTube account
+        </Link>
+      )}
+    </div>
   );
 }
 
@@ -81,15 +112,13 @@ function PlaylistsContent() {
     if (!title) return;
     setCreating(true);
     try {
-      const res = await postJson<{ ok?: boolean; note?: string; playlist?: PlaylistDTO }>(
-        "/api/playlists",
-        { title, visibility: "private" }
-      );
-      if (res.note) {
-        toast.info(`${title} created on the WebFlix mirror — the YouTube broker is offline`);
-      } else {
-        toast.success(`Created “${title}” on the YouTube account`);
-      }
+      await postJson<{ ok?: boolean; playlist?: PlaylistDTO }>("/api/playlists", {
+        title,
+        visibility: "private",
+      });
+      // WFX2-P36: the create rode the official lane on the user's OWN
+      // connected account — no broker fallback to disclose anymore
+      toast.success(`Created “${title}” on your YouTube account`);
       setNewTitle("");
       reload();
     } catch (err) {
@@ -154,33 +183,22 @@ function PlaylistsContent() {
           {error}
         </p>
       )}
-      {data && data.unavailable && (
+      {data && <PlaylistsNoticeBanner payload={data} />}
+      {data && (data.loginRequired || data.unavailable) && !data.notice && (
         <div className="px-4 py-16 text-center sm:px-6" role="status" data-testid="playlists-unavailable">
           <p className="text-lg font-medium">Playlists are unavailable right now</p>
           <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-            The YouTube session is connected, but it didn&apos;t return your playlists — they may be
-            empty on YouTube, or YouTube didn&apos;t serve them to WebFlix. Open them on youtube.com
-            to check.
+            Your playlists could not be read just now — try again shortly, or open them on
+            youtube.com to check.
           </p>
         </div>
       )}
-      {data && !data.unavailable && data.loginRequired && (
-        <div className="px-4 py-16 text-center sm:px-6" role="status" data-testid="playlists-no-session">
-          <p className="text-lg font-medium">Playlists are unavailable right now</p>
-          <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-            Playlists are personal to the YouTube account this WebFlix deployment rides
-            (single-tenant live mode). No YouTube session is connected to this deployment yet —
-            your WebFlix sign-in is fine; the operator session (YT_COOKIES) needs to be
-            connected.
-          </p>
-        </div>
-      )}
-      {data && !data.loginRequired && !data.unavailable && playlists.length === 0 && (
+      {data && !data.unavailable && !data.loginRequired && playlists.length === 0 && (
         <div className="px-4 py-16 text-center sm:px-6">
           <p className="text-lg font-medium">No playlists yet</p>
           <p className="mt-1 text-sm text-muted-foreground">
             Create one above, or use “Save to playlist” in any video&apos;s menu — it saves to
-            the real YouTube account.
+            your own YouTube playlists.
           </p>
         </div>
       )}
@@ -328,9 +346,9 @@ export function PlaylistDetailsDialog({
         throw new Error(body.error ?? `HTTP ${res.status}`);
       }
       if (body.verified) {
-        toast.success(`Updated “${title}” on the YouTube account`);
+        toast.success(`Updated “${title}” on your YouTube account`);
       } else if (body.unverifiedNote) {
-        toast.info(`Update submitted — the broker could not confirm the new title yet`);
+        toast.info(`Update submitted — the new title could not be confirmed yet`);
       } else {
         toast.success(`Update submitted`);
       }
@@ -373,7 +391,7 @@ export function PlaylistDetailsDialog({
       if (body.verified) {
         toast.success(`Moved “${moved.title}” to position ${toIndex + 1}`);
       } else if (body.unverifiedNote) {
-        toast.info(`Move submitted — the broker could not confirm the new order yet`);
+        toast.info(`Move submitted — the new order could not be confirmed yet`);
       } else {
         toast.success(`Move submitted`);
       }
@@ -498,21 +516,23 @@ export function PlaylistDetailsDialog({
                   {error}
                 </p>
               )}
-              {data?.unavailable && (
+              {data?.notice && (
+                <p className="px-6 py-6 text-center text-sm text-muted-foreground" data-testid="dialog-notice">
+                  {data.notice}
+                </p>
+              )}
+              {!data?.notice && data?.unavailable && (
                 <p className="px-6 py-6 text-center text-sm text-muted-foreground" data-testid="dialog-unavailable">
-                  The YouTube session is connected, but it didn&apos;t return this list — it may
-                  be empty on YouTube, or YouTube didn&apos;t serve it to WebFlix. Open it on
+                  Your playlist could not be read just now — try again shortly, or open it on
                   youtube.com to check.
                 </p>
               )}
-              {!data?.unavailable && data?.loginRequired && (
+              {!data?.notice && !data?.unavailable && data?.loginRequired && (
                 <p className="px-6 py-6 text-center text-sm text-muted-foreground" data-testid="dialog-no-session">
-                  This list is personal to the YouTube account this WebFlix deployment rides —
-                  no YouTube session is connected right now (P22-B: never a login ask; the
-                  WebFlix sign-in is separate).
+                  This list could not be read for your account just now — try again shortly.
                 </p>
               )}
-              {!loading && !error && !data?.loginRequired && !data?.unavailable && listedVideos.length === 0 && (
+              {!loading && !error && !data?.notice && !data?.loginRequired && !data?.unavailable && listedVideos.length === 0 && (
                 <p className="px-6 py-6 text-center text-sm text-muted-foreground">
                   Empty playlist — add videos via the kebab menu on any card.
                 </p>

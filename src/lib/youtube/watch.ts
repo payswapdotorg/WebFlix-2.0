@@ -20,7 +20,6 @@
  */
 import { innertubeNext } from "./innertube";
 import { cached, cacheInvalidate, TTL } from "./cache";
-import { hasSession } from "./session";
 import {
   runsText,
   parseViewCount,
@@ -31,8 +30,6 @@ import {
 import { mapRelatedPage, type RelatedPage } from "./related";
 import { mapAutoplay } from "./autoplay";
 import { commentsTokenFromWatchResponse } from "./comments";
-import { operatorIsCreator } from "./operator";
-import { directAuthConfigured, playlistContains } from "../youtube-direct";
 import type { VideoDto, ViewerVideoState, VideoDetailDto, LikeValue } from "@/lib/watch/types";
 import { parseChapters, type Chapter } from "@/lib/watch/chapters";
 
@@ -170,15 +167,16 @@ export function mapWatchMetadata(videoId: string, response: unknown): WatchMetad
     isLive,
   };
 
-  const subscribeButton = secondaryInfo?.subscribeButton?.subscribeButtonRenderer;
-  const subscribed = hasSession() ? subscribeButton?.subscribed === true : false;
-
-  // P35 — the viewer's rating from the SAME response (likeStatusEntity in
-  // frameworkUpdates — youtube.com's own watch-load mechanism; verified live
-  // 2026-10-21). The pre-P33 "like state is broker-tier" comment was stale:
-  // the direct tier owns the like family since P33, and the state rides the
-  // session-authenticated `next` call this mapper already consumes.
-  const like: LikeValue | null = hasSession() ? likeStatusFromResponse(response, videoId) : null;
+  // WFX2-P36 — the per-user state law: the SHARED cached `next` payload
+  // carries NO per-user state. The pre-P36 parse (the operator session's
+  // likeStatusEntity / subscribeButton baked into this cached mapper) served
+  // one deployment-wide identity's state to every signed-in user — the exact
+  // account-isolation defect the P36 work order closed. The acting user's
+  // own truth (videos.getRating / subscriptions.list with THEIR connected
+  // account, + their local watch-later) is overlaid per-request at the route
+  // (src/app/api/videos/[id]/route.ts).
+  const subscribed = false;
+  const like: LikeValue | null = null;
 
   const state: ViewerVideoState = {
     like,
@@ -282,37 +280,17 @@ export async function getWatchMetadata(videoId: string): Promise<WatchMetadata |
   return meta;
 }
 
-/** The /api/videos/[id] payload shape. */
+/**
+ * The /api/videos/[id] payload shape — the SHARED metadata only. The
+ * per-user state overlay (like / subscribed / savedWatchLater / isCreator,
+ * read with the acting user's own OAuth connection + local list) is the
+ * route's job (P36) — never this cached mapper's.
+ */
 export async function getVideoDetail(videoId: string): Promise<VideoDetailDto | null> {
-  // P35 — the WL membership read rides BESIDE the cached meta (fresh per
-  // load, session-authenticated): the save button bootstraps from the
-  // server-side truth instead of the hardcoded false that made every reload
-  // un-save a saved video. Parallel with the meta so latency stays one hop.
-  const [meta, savedWatchLater] = await Promise.all([
-    getWatchMetadata(videoId),
-    readSavedWatchLater(videoId),
-  ]);
+  const meta = await getWatchMetadata(videoId);
   if (!meta) return null;
-  // WFX2-B-S creator-mode: the operator session IS the video's channel
-  // (heart/pin surface on the watch page). Public mode → false, honestly.
-  const isCreator = await operatorIsCreator(meta.video.channel.id);
   return {
     video: meta.video,
-    state: { ...meta.state, isCreator, savedWatchLater },
+    state: { ...meta.state, isCreator: false, savedWatchLater: false },
   };
-}
-
-/**
- * P35 — fresh Watch-later membership for the watch bootstrap. Honest false
- * when the direct session isn't configured or the read fails/overflows the
- * page budget (the toggle path re-reads fresh server-side before acting, so
- * a wrong false can never double-add — the ensure semantics absorb it).
- */
-async function readSavedWatchLater(videoId: string): Promise<boolean> {
-  if (!directAuthConfigured()) return false;
-  try {
-    return (await playlistContains("WL", videoId)) === true;
-  } catch {
-    return false;
-  }
 }

@@ -148,8 +148,9 @@ export function ActionRow({
       onLikeResult(result);
     } catch (e) {
       setState({ likes, dislikes, yourLike });
-      // Task 4-b: the broker-offline shape gets the "check the connection in
-      // Settings" prompt; every other error keeps its existing message
+      // WFX2-P36: the connect / re-connect prompt rides the failure kind
+      // (youtube-not-connected / youtube-needs-reauth → the Settings action);
+      // every other error keeps its honest per-surface message
       toastActionError(e, "Failed to update rating");
     } finally {
       setBusy(false);

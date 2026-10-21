@@ -6,21 +6,25 @@
  * mutable useParams for the /playlist/[id] route) and sonner are mocked via
  * mock.module (file-scoped by --isolate, restored in afterAll).
  *
- * The laws pinned here:
+ * The laws pinned here (WFX2-P36 re-point):
  *   - the special lists (WL/LL) on /playlist/[id]: guests get the honest
- *     gate ask; signed-in viewers NEVER get a login ask — `unavailable`
- *     (session configured, read not served) and `loginRequired` (no
- *     session) are two different states and the page says which one it is;
- *   - the reorder ⋯ menu is never offered for the special lists (the route
- *     honestly 400s — YouTube's own lists); REA-3 F3 replaced that with
- *     youtube.com's own per-row Action menu (remove-from-list through the
- *     existing write seams + Save to playlist + Share — never reorder);
+ *     gate ask; signed-in viewers get the HONEST SpecialListNotice — the
+ *     three operator-session special notes (unavailable / no-session /
+ *     empty) are RETIRED with the operator-session read itself (neither
+ *     list has an official per-user read API, and the pre-P36 read served
+ *     the OPERATOR's list to every signed-in user — the cross-user leak the
+ *     P36 work order closes);
+ *   - the special-list ROWS (and their ⋯ Action menus / reorder / remove
+ *     seams) are retired with the read: the notice owns the page, Watch
+ *     later hands off to the WebFlix-local save button; public playlists
+ *     keep the reorder affordance exactly as before;
+ *   - the details dialog carries the route's notice envelope for the
+ *     special lists (the handoff copy), never the retired state notes;
  *   - the sidebar You section = youtube.com's guide order (Your channel,
  *     History, Playlists, Your videos, Watch later, Liked videos, Downloads)
  *     with "Your channel" honestly hidden when the seam unresolved;
  *   - the Downloads page is the honest no-tier state (no fake rows, no
- *     fake buttons);
- *   - the details dialog carries the same unavailable/no-session split.
+ *     fake buttons).
  */
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { Window } from "happy-dom";
@@ -188,6 +192,22 @@ function makeSpecialPage(
   };
 }
 
+/** The REAL special-list envelope /api/playlist/[id] answers for WL/LL
+ * (WFX2-P36): playlist:null + the honest per-user notice — never the
+ * operator's rows, never a fabricated read. */
+function makeSpecialNotice() {
+  return {
+    playlist: null,
+    videos: [],
+    nextCursor: null,
+    loginRequired: false,
+    unavailable: false,
+    special: true,
+    notice:
+      "YouTube's Watch Later / Liked lists have no official API — your WebFlix Watch later lives in the save button (local), and YouTube's own page has the rest",
+  };
+}
+
 function makeDialogPlaylist(id: string, title: string) {
   return {
     id,
@@ -261,99 +281,72 @@ describe("PlaylistPage — the special lists (WL) on the playlist page route", (
     expect(fetchLog.filter((f) => f.url.includes("/api/playlist/WL"))).toHaveLength(0);
   });
 
-  test("signed-in + unavailable (session configured, read not served) → the honest unavailable note, never a login ask", async () => {
+  test("signed-in + WL → the honest SpecialListNotice (never the operator's rows, never a login ask)", async () => {
     routeParams = { id: "WL" };
     fetchHandler = (url) => {
-      if (url.includes("/api/playlist/WL")) return Response.json(makeSpecialPage("WL", [], { unavailable: true }));
+      if (url.includes("/api/playlist/WL")) return Response.json(makeSpecialNotice());
       return Response.json({}, { status: 200 });
     };
     await render(<PlaylistPage />);
     await act(async () => {});
-    const note = q("[data-testid='playlist-special-unavailable']");
+    const note = q("[data-testid='playlist-special-notice']");
     expect(note).not.toBeNull();
-    expect(note!.textContent ?? "").toContain("didn't return your watch later list");
-    expect(note!.textContent ?? "").toContain("Open it on youtube.com to check");
-    // never a login ask inside the note
-    expect(note!.textContent ?? "").not.toMatch(/sign in/i);
-    // the header still carries the honest identity of the list
-    expect(q("[data-testid='playlist-title']")?.textContent).toBe("Watch later");
-    expect(q("[data-testid='playlist-meta']")?.textContent).toContain("You");
-    // no empty-claim while unavailable
-    expect(q("[data-testid='playlist-special-empty']")).toBeNull();
-  });
-
-  test("signed-in + loginRequired (no YT session) → the honest no-session note (the WebFlix sign-in is fine)", async () => {
-    routeParams = { id: "WL" };
-    fetchHandler = (url) => {
-      if (url.includes("/api/playlist/WL")) return Response.json(makeSpecialPage("WL", [], { loginRequired: true }));
-      return Response.json({}, { status: 200 });
-    };
-    await render(<PlaylistPage />);
-    await act(async () => {});
-    const note = q("[data-testid='playlist-special-no-session']");
-    expect(note).not.toBeNull();
-    expect(note!.textContent ?? "").toContain("No YouTube session is connected to this deployment yet");
-    expect(note!.textContent ?? "").toContain("your WebFlix sign-in is fine");
-    expect(note!.textContent ?? "").not.toMatch(/sign in to /i);
-    expect(q("[data-testid='playlist-special-unavailable']")).toBeNull();
-  });
-
-  test("served + empty → the honest empty state (the read came back; the list is empty)", async () => {
-    routeParams = { id: "WL" };
-    fetchHandler = (url) => {
-      if (url.includes("/api/playlist/WL")) return Response.json(makeSpecialPage("WL", []));
-      return Response.json({}, { status: 200 });
-    };
-    await render(<PlaylistPage />);
-    await act(async () => {});
-    expect(q("[data-testid='playlist-special-empty']")?.textContent ?? "").toContain(
-      "No videos in Watch later yet"
+    expect(note!.getAttribute("role")).toBe("status");
+    expect(note!.textContent).toContain("Watch later lives outside WebFlix's reach");
+    expect(note!.textContent).toContain(
+      "no official API — your WebFlix Watch later lives in the save button (local)"
     );
+    // the two handoffs: browse home + YouTube's own page
+    expect(q("[data-testid='playlist-special-find']")?.getAttribute("href")).toBe("/");
+    const ytLink = all("a").find((a) => (a.textContent ?? "").trim() === "Open watch later on YouTube");
+    expect(ytLink).toBeDefined();
+    expect(ytLink!.getAttribute("href")).toBe("https://www.youtube.com/feed/playlists");
+    // never a login ask for a signed-in viewer, and the three retired
+    // operator-session special notes are gone
+    expect(note!.textContent).not.toMatch(/sign in/i);
     expect(q("[data-testid='playlist-special-unavailable']")).toBeNull();
     expect(q("[data-testid='playlist-special-no-session']")).toBeNull();
+    expect(q("[data-testid='playlist-special-empty']")).toBeNull();
+    // the two-column layout (title/meta/rows) is GONE — the notice owns the page
+    expect(q("[data-testid='playlist-title']")).toBeNull();
+    expect(q("[data-testid='playlist-meta']")).toBeNull();
   });
 
-  test("served with videos → the grid + Play all + Shuffle + the You owner row; the ⋯ Action menu exists but NEVER reorders", async () => {
-    routeParams = { id: "WL" };
-    const videos = [makeVideo("v1", "Saved one"), makeVideo("v2", "Saved two"), makeVideo("v3", "Saved three")];
-    fetchHandler = (url) => {
-      if (url.includes("/api/playlist/WL")) return Response.json(makeSpecialPage("WL", videos));
-      return Response.json({}, { status: 200 });
-    };
-    await render(<PlaylistPage />);
-    await act(async () => {});
-    expect(q("[data-testid='playlist-meta']")?.textContent).toContain("You");
-    expect(q("[data-testid='playlist-meta']")?.textContent).toContain("3 videos");
-    expect(all("a[href^='/watch/']").length).toBeGreaterThanOrEqual(3);
-    const playAll = all("a").find((a) => /Play all/.test(a.textContent ?? ""));
-    expect(playAll).toBeDefined();
-    // REA-1 G16: Play all carries the list context (youtube.com's measured
-    // /watch?v=<first>&list=<id> — the watch page's queue follows the list);
-    // updated from the pre-G16 bare /watch/v1 assertion by the lane contract.
-    expect(playAll!.getAttribute("href")).toBe("/watch/v1?list=WL");
-    // the special lists cannot be reordered — but REA-3 F3: youtube.com's
-    // own per-row Action menu IS offered (remove-from-list / save / share);
-    // "Move up"/"Move down" never ride it (the reorder route honestly 400s)
-    expect(all("[aria-label^='Actions for']")).toHaveLength(3);
-    expect(win.document.body.textContent ?? "").not.toContain("Move up");
-    expect(win.document.body.textContent ?? "").not.toContain("Move down");
-    // REA-1 G16 reaches the WL special list specifically (the REA-3 work
-    // order's verification ask): Shuffle rides the header card beside Play all
-    expect(q("[data-testid='playlist-shuffle']")).not.toBeNull();
-  });
-
-  test("LL variant: the unavailable note names the liked list; the title falls back honestly", async () => {
+  test("LL variant → the notice names the liked list; the handoff opens YouTube's liked feed", async () => {
     routeParams = { id: "LL" };
     fetchHandler = (url) => {
-      if (url.includes("/api/playlist/LL")) return Response.json(makeSpecialPage("LL", [], { unavailable: true }));
+      if (url.includes("/api/playlist/LL")) return Response.json(makeSpecialNotice());
       return Response.json({}, { status: 200 });
     };
     await render(<PlaylistPage />);
     await act(async () => {});
-    expect(q("[data-testid='playlist-special-unavailable']")?.textContent ?? "").toContain(
-      "didn't return your liked videos list"
-    );
-    expect(q("[data-testid='playlist-title']")?.textContent).toBe("Liked videos");
+    const note = q("[data-testid='playlist-special-notice']");
+    expect(note).not.toBeNull();
+    expect(note!.textContent).toContain("Liked videos lives outside WebFlix's reach");
+    const ytLink = all("a").find((a) => (a.textContent ?? "").trim() === "Open liked videos on YouTube");
+    expect(ytLink).toBeDefined();
+    expect(ytLink!.getAttribute("href")).toBe("https://www.youtube.com/feed/liked");
+  });
+
+  test("even a seam that WOULD serve rows changes nothing — no rows, no Play all/Shuffle, no ⋯ menus, no write seams", async () => {
+    routeParams = { id: "WL" };
+    // a pre-P36-shaped payload (the operator's WL with three rows) — the
+    // page must refuse to render it: the notice is the only honest state
+    fetchHandler = (url) => {
+      if (url.includes("/api/playlist/WL")) {
+        return Response.json(makeSpecialPage("WL", [makeVideo("v1", "Saved one"), makeVideo("v2", "Saved two")]));
+      }
+      return Response.json({}, { status: 200 });
+    };
+    await render(<PlaylistPage />);
+    await act(async () => {});
+    expect(q("[data-testid='playlist-special-notice']")).not.toBeNull();
+    expect(all("a[href^='/watch/']")).toHaveLength(0); // never the operator's rows
+    expect(all("[aria-label^='Actions for']")).toHaveLength(0); // no row Action menus
+    expect(win.document.body.textContent ?? "").not.toContain("Play all");
+    expect(win.document.body.textContent ?? "").not.toContain("Shuffle");
+    // and ZERO write seams fire from the page (no WL toggle, no like write)
+    expect(fetchLog.filter((f) => f.method !== "GET")).toHaveLength(0);
   });
 
   test("a public (non-special) playlist keeps the ⋯ reorder affordance", async () => {
@@ -404,48 +397,39 @@ describe("PlaylistDetailsDialog — the P22-B state split (the WL row in /playli
     );
   }
 
-  test("unavailable → the honest unavailable note (never a login ask)", async () => {
+  test("WL row → the route's honest notice envelope in the dialog (the handoff copy; never a state note)", async () => {
     fetchHandler = (url) => {
       if (url.includes("/api/playlists/WL")) {
+        // the REAL special envelope /api/playlists/[id] answers for WL/LL
         return Response.json({
           playlist: null,
           videos: [],
           nextCursor: null,
           loginRequired: false,
-          unavailable: true,
-          special: true,
-        });
-      }
-      return Response.json({}, { status: 200 });
-    };
-    await renderDialog(makeDialogPlaylist("WL", "Watch later"));
-    await act(async () => {});
-    expect(docq("[data-testid='dialog-unavailable']")?.textContent ?? "").toContain(
-      "didn't return this list"
-    );
-    expect(docq("[data-testid='dialog-no-session']")).toBeNull();
-  });
-
-  test("loginRequired (no YT session) → the honest no-session note", async () => {
-    fetchHandler = (url) => {
-      if (url.includes("/api/playlists/WL")) {
-        return Response.json({
-          playlist: null,
-          videos: [],
-          nextCursor: null,
-          loginRequired: true,
           unavailable: false,
           special: true,
+          notice:
+            "YouTube's Watch Later / Liked lists have no official API — your WebFlix Watch later lives in the save button (local), and YouTube's own page has the rest",
         });
       }
       return Response.json({}, { status: 200 });
     };
     await renderDialog(makeDialogPlaylist("WL", "Watch later"));
     await act(async () => {});
-    expect(docq("[data-testid='dialog-no-session']")?.textContent ?? "").toContain(
-      "no YouTube session is connected right now"
+    const notice = docq("[data-testid='dialog-notice']");
+    expect(notice).not.toBeNull();
+    expect(notice!.textContent).toContain(
+      "YouTube's Watch Later / Liked lists have no official API"
     );
+    expect(notice!.textContent).toContain(
+      "your WebFlix Watch later lives in the save button (local)"
+    );
+    // the retired P22-B state notes never ride the special envelope (the
+    // notice preempts them), and no rows render to reorder or remove
     expect(docq("[data-testid='dialog-unavailable']")).toBeNull();
+    expect(docq("[data-testid='dialog-no-session']")).toBeNull();
+    expect(win.document.body.textContent ?? "").not.toContain("Move up");
+    expect(win.document.body.textContent ?? "").not.toContain("Remove from Watch later");
   });
 
   test("served + empty (a created list) → the honest empty line, no state notes", async () => {
@@ -786,15 +770,20 @@ describe("HistoryView — REA-3 F2: the tab family + the watched-shorts shelves"
 });
 
 // ---------------------------------------------------------------------------
-// REA-3 F3 — youtube.com's per-row Action menu on its own special lists
-// (the station pack, measured logged-in 2026-10-17: "WATCH LATER (playlist
-// WL): header actions 'Play all' AND 'Shuffle'; per-row Action menu").
-// The remove rides the EXISTING write seams — the WL toggle (add:false) and
-// the remove-rating like write (action:"none"); optimistic removal with an
-// honest revert, never a fake success.
+// REA-3 F3 — WFX2-P36 re-point: the special-list row Action menu is RETIRED
+// with the special-list rows themselves. The pre-P36 surface rode the
+// operator-session WL/LL read (one person's rows served to every signed-in
+// user) and wrote through seams whose rows no longer render; the page now
+// hands Watch later to the WebFlix-local save button (the video-card /
+// watch-page seams) and the rest to YouTube's own pages — the SpecialListNotice
+// owns /playlist/WL and /playlist/LL. These pins prove the retired surface
+// is gone at the UI seam: no rows, no ⋯ menus, and the write seams
+// (/api/playlists/watch-later, /api/videos/[id]/like action:"none") are
+// never dispatched from the special-list pages even when a legacy-shaped
+// payload would still serve rows.
 // ---------------------------------------------------------------------------
 
-describe("REA-3 F3 — the special-list row Action menu (remove / save / share)", () => {
+describe("REA-3 F3 — the special-list row Action menu is retired with the operator-session read", () => {
   function serveSpecial(id: "WL" | "LL") {
     const videos = [makeVideo("v1", "Saved one"), makeVideo("v2", "Saved two"), makeVideo("v3", "Saved three")];
     fetchHandler = (url) => {
@@ -803,99 +792,44 @@ describe("REA-3 F3 — the special-list row Action menu (remove / save / share)"
     };
   }
 
-  async function openFirstRowMenu() {
-    const kebab = all("[aria-label^='Actions for']")[0];
-    await act(async () => {
-      kebab.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0 }));
-    });
-    await act(async () => {});
-  }
-
-  test("WL rows carry the ⋯ menu with youtube.com's own items — never reorder", async () => {
+  test("WL: zero ⋯ menus, zero remove items — the WL write seam never fires from the special-list page", async () => {
     routeParams = { id: "WL" };
     serveSpecial("WL");
     await render(<PlaylistPage />);
     await act(async () => {});
-    expect(all("[aria-label^='Actions for']")).toHaveLength(3);
-    await openFirstRowMenu();
+    // no rows render → no row Action menus at all
+    expect(all("[aria-label^='Actions for']")).toHaveLength(0);
+    expect(docAll("[data-testid='playlist-row-remove']")).toHaveLength(0);
     const body = win.document.body.textContent ?? "";
-    expect(body).toContain("Remove from Watch later");
-    expect(body).toContain("Save to playlist");
-    expect(body).toContain("Share");
+    expect(body).not.toContain("Remove from Watch later");
+    expect(body).not.toContain("Save to playlist");
     expect(body).not.toContain("Move up");
     expect(body).not.toContain("Move down");
+    // the honest notice owns the page instead
+    expect(q("[data-testid='playlist-special-notice']")).not.toBeNull();
+    // the WL toggle write seam is never dispatched (Watch later writes ride
+    // the WebFlix-local save button on the video surfaces, not this page)
+    expect(fetchLog.filter((f) => f.url.includes("/api/playlists/watch-later"))).toHaveLength(0);
+    expect(fetchLog.filter((f) => f.method !== "GET")).toHaveLength(0);
   });
 
-  test("Remove from Watch later → the existing WL write seam (add:false), optimistic row removal + the live count", async () => {
-    routeParams = { id: "WL" };
-    serveSpecial("WL");
-    await render(<PlaylistPage />);
-    await act(async () => {});
-    expect(q("[data-testid='playlist-meta']")?.textContent).toContain("3 videos");
-    await openFirstRowMenu();
-    const remove = docAll("[data-testid='playlist-row-remove']")[0];
-    expect(remove).toBeDefined();
-    await act(async () => {
-      remove.click();
-    });
-    await act(async () => {});
-    await act(async () => {});
-    // the write rode the EXISTING seam — the same route the video-card save
-    // uses, with the honest remove direction (add:false)
-    const post = fetchLog.find((f) => f.url.includes("/api/playlists/watch-later"));
-    expect(post).toBeDefined();
-    expect(post!.method).toBe("POST");
-    expect(post!.body).toEqual({ videoId: "v1", add: false });
-    // the row left optimistically; the header count follows the live list
-    expect(host!.textContent ?? "").not.toContain("Saved one");
-    expect(q("[data-testid='playlist-meta']")?.textContent).toContain("2 videos");
-    expect(toasts.some((t) => t === "success:Removed from Watch later")).toBe(true);
-  });
-
-  test("a failed remove reverts honestly (never a silent fake success)", async () => {
-    routeParams = { id: "WL" };
-    const videos = [makeVideo("v1", "Saved one")];
-    fetchHandler = (url) => {
-      if (url.includes("/api/playlist/WL")) return Response.json(makeSpecialPage("WL", videos));
-      if (url.includes("/api/playlists/watch-later")) return Response.json({}, { status: 502 });
-      return Response.json({}, { status: 200 });
-    };
-    await render(<PlaylistPage />);
-    await act(async () => {});
-    await openFirstRowMenu();
-    const remove = docAll("[data-testid='playlist-row-remove']")[0];
-    await act(async () => {
-      remove.click();
-    });
-    await act(async () => {});
-    await act(async () => {});
-    // the row is back (the honest revert) with the error toast — no success
-    expect(host!.textContent ?? "").toContain("Saved one");
-    expect(q("[data-testid='playlist-meta']")?.textContent).toContain("1 video");
-    expect(toasts.some((t) => t.startsWith("error:"))).toBe(true);
-    expect(toasts.some((t) => t === "success:Removed from Watch later")).toBe(false);
-  });
-
-  test("LL rows: Remove from Liked videos rides the existing remove-rating like write", async () => {
+  test("LL: the remove-rating like write is never dispatched — the notice owns the page", async () => {
     routeParams = { id: "LL" };
     serveSpecial("LL");
     await render(<PlaylistPage />);
     await act(async () => {});
-    await openFirstRowMenu();
+    expect(all("[aria-label^='Actions for']")).toHaveLength(0);
     const body = win.document.body.textContent ?? "";
-    expect(body).toContain("Remove from Liked videos");
+    expect(body).not.toContain("Remove from Liked videos");
     expect(body).not.toContain("Remove from Watch later");
-    const remove = docAll("[data-testid='playlist-row-remove']")[0];
-    await act(async () => {
-      remove.click();
-    });
-    await act(async () => {});
-    await act(async () => {});
-    const post = fetchLog.find((f) => f.url.includes("/api/videos/v1/like"));
-    expect(post).toBeDefined();
-    expect(post!.method).toBe("POST");
-    expect(post!.body).toEqual({ action: "none" });
-    expect(host!.textContent ?? "").not.toContain("Saved one");
-    expect(toasts.some((t) => t === "success:Removed from Liked videos")).toBe(true);
+    // the honest notice names the liked list
+    expect(q("[data-testid='playlist-special-notice']")?.textContent).toContain(
+      "Liked videos lives outside WebFlix's reach"
+    );
+    // the like write seam (the pre-P36 remove-rating ride) never fires here
+    expect(fetchLog.filter((f) => f.url.includes("/like"))).toHaveLength(0);
+    expect(fetchLog.filter((f) => f.method !== "GET")).toHaveLength(0);
+    // no success/error toasts either — no write was attempted
+    expect(toasts).toHaveLength(0);
   });
 });

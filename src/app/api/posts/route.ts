@@ -2,27 +2,29 @@ import { NextRequest } from "next/server";
 import { json, errorResponse } from "@/lib/watch/api";
 import { proxyPostCreate } from "@/lib/community/action-proxy";
 import { rateLimit } from "@/lib/youtube/cache";
+import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/posts — LIVE Tier-2 write: create a community post on the
- * operator's OWN channel (the creator composer's path — broker post-create
- * executes youtube.com's real backstage create flow).
+ * POST /api/posts — WFX2-P36: the HONEST UNSUPPORTED lane. Creating a
+ * community post has no official end-user YouTube API, and the pre-P36
+ * broker drive (youtube.com's backstage composer on the OPERATOR's tab) is
+ * retired with the shared operator identity itself — the proxy answers the
+ * honest 501 (kind "youtube-unsupported", the handoff to YouTube), rendered
+ * verbatim by errorResponse. The composer's request validation (text/image/
+ * poll, the 2-5 poll option law) still answers its honest 400s first.
  *
- * Request: { handle, channelId?, text, imageUrl?, pollOptions? }
- *   — handle (required): the OWN channel's handle (the browser navigates to
- *     its community tab, where the composer lives);
- *   — text: the post body (required unless an image or poll carries the post);
- *   — imageUrl: an https image URL (fetched into the real composer's file
- *     input — a real upload through YouTube's own pipeline);
- *   — pollOptions: 2-5 non-empty option texts.
+ * WFX2-P2-AU added: the route is now gated on the WebFlix session — a guest
+ * gets the uniform 401 before anything runs (it was rate-limit-only before
+ * P36).
  *
- * Response: { ok, effect, verified?, path?, note? } — the PostCreateResult
- * contract. Ownership is enforced by youtube.com itself (the composer only
- * renders on the operator's own channel); the routes never synthesize a post.
+ * Request: { handle, channelId?, text, imageUrl?, pollOptions? } (shapes kept).
+ *
+ * Response: 501 { error, kind: "youtube-unsupported" } — post on YouTube.
  */
 export async function POST(req: NextRequest) {
+  if (!(await getSessionUser(req))) return authRequiredResponse();
   try {
     if (!(await rateLimit(`post-create:${req.headers.get("x-forwarded-for") ?? "local"}`, { limit: 20 }))) {
       return json({ error: "Too many requests" }, { status: 429 });
