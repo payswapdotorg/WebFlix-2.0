@@ -1,0 +1,36 @@
+=== SUITE boot ===
+ 845 pass
+ 0 fail
+ 4580 expect() calls
+Ran 845 tests across 43 files. [32.59s]
+=== SUITE watch ===
+ 676 pass
+ 0 fail
+ 2697 expect() calls
+Ran 676 tests across 38 files. [95.35s]
+=== SUITE liveshorts ===
+ 150 pass
+ 0 fail
+ 522 expect() calls
+Ran 150 tests across 9 files. [5.01s]
+=== SUITE cutover ===
+ 111 pass
+ 0 fail
+ 961 expect() calls
+Ran 111 tests across 9 files. [6.43s]
+=== SUITE auth ===
+ 138 pass
+ 0 fail
+ 506 expect() calls
+Ran 138 tests across 7 files. [3.72s]
+=== SUITE community ===
+ 34 pass
+ 0 fail
+ 141 expect() calls
+Ran 34 tests across 1 file. [1086.00ms]
+=== SUITE notifications ===
+ 41 pass
+ 0 fail
+ 165 expect() calls
+Ran 41 tests across 2 files. [2.56s]
+=== BATTERY DONE ===

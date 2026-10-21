@@ -23,6 +23,7 @@ Environment (secrets from env ONLY — never committed):
 | `BROKER_SECRET`  | *(none — fail-closed)*         | shared secret required on every `/broker/*`    |
 | `CDP_HTTP`       | `http://127.0.0.1:9222`        | DevTools HTTP endpoint of the logged-in browser |
 | `BROKER_JOURNAL` | `./actions.jsonl`              | append-only action journal                     |
+| `BROKER_CAPTURES`| `./captures.jsonl`             | P34 — captured-wire journal                    |
 
 The browser must be started with `--remote-debugging-port=9222` and a
 profile that is **logged in to youtube.com**. When no youtube.com tab
@@ -38,6 +39,17 @@ exists, the broker creates one (it must be logged in for actions to work).
 
 `tabFound: false` + a `cdp` field means the DevTools endpoint was reachable
 but held no youtube.com tab (or is unreachable) — an honest state, not an error.
+
+### `GET /broker/captures` (header `x-broker-secret`) — P34
+
+The tail of the **captured-wire journal** (default `./captures.jsonl`):
+
+```json
+{ "ok": true, "total": 12, "returned": 2, "captures": [ { "ts": "…", "kind": "dislike", "target": { "videoId": "…" }, "endpoint": "like/like", "url": "…", "method": "POST", "postData": "{\"context\":…,\"params\":\"Cg0K…\"}", "truncated": false, "status": 200, "requestId": "…" } ] }
+```
+
+Query: `?tail=N` (1–200, default 20) and `&endpoint=<substr>` (e.g.
+`like`, `subscription`, `comment`).
 
 ### `POST /broker/action` (header `x-broker-secret`)
 
@@ -116,8 +128,42 @@ Response:
 ### Journal
 
 Every action appends one JSONL line to `actions.jsonl`:
-`{"ts","kind","target","result":{ok,verified,already,path,error}}`.
-`GET /healthz` reports the last action's timestamp.
+`{"ts","kind","target","result":{ok,verified,already,path,error,captures}}`.
+`GET /healthz` reports the last action's timestamp; `result.captures`
+counts the wires the P34 recorder kept during that action's window.
+
+## P34 — the wire-capture loop (the self-upgrading action ladder)
+
+The house law (P33): a direct action lane ships only with a CAPTURED wire
+template — never a guessed protobuf. Dislike, bell preferences,
+comment-like and the feedback family still ride this broker because their
+wires were never captured. P34 closes that gap with a loop:
+
+1. **Every action window is recorded.** While any `/broker/action`
+   executes, a CDP `Network` listener keeps every youtubei ACTION POST the
+   page fires (the `like/`, `subscription/`, `notification/`, `comment/`,
+   `feedback`, `browse/edit_playlist`, `history/`, `live_chat/` families;
+   POSTs only; read noise like `next`/`player`/`browse` page loads is
+   excluded by construction). Bodies the event didn't carry are fetched
+   via `Network.getRequestPostData`. Captures land in `captures.jsonl`
+   (one JSONL line per wire — endpoint, params body, response status, the
+   action's kind/target as context). The recorder NEVER fails the action
+   it observes.
+2. **The operator's next natural action captures its own upgrade path.**
+   The next dislike / bell / comment-like executed through WebFlix (or by
+   hand in the logged-in tab while the broker is connected) writes the
+   real wire into the journal.
+3. **The promotion tool reads the wire — never guesses it.**
+   `bun run promote [--endpoint like] [--index -1] [--json]` walks the
+   captured params protobuf byte-by-byte (a generic walk), locates the
+   embedded id and the unix-sec timestamp slot, and emits the `_TPL`
+   fixture constant plus — when the layout matches the like family — a
+   proposed `buildXxxParams` following the P33 like law (fixed-offset id
+   swap + refreshed timestamp varint). The tool NEVER edits source files;
+   the scaffolding goes through a reviewed lane before it joins
+   `src/lib/youtube-direct.ts`, and the verification plan is stated on
+   every report: the deterministic-401 wire-validity probe first, then ONE
+   authenticated round-trip observed live before the direct lane ships.
 
 ## Security model
 

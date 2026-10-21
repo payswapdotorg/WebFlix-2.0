@@ -5,7 +5,7 @@
  * action journal, healthz shape, like-params templating.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createBrokerServer, validateActionRequest } from "./server";
@@ -15,6 +15,7 @@ import { playlistUpdateScript, playlistReorderScript } from "./kinds/playlistedi
 import { createBrokerOptions } from "./options";
 import { secretMatches } from "./auth";
 import { Journal } from "./journal";
+import { CaptureJournal, type CaptureEntry } from "./captures";
 import type { CdpConnection } from "./cdp";
 import {
   buildLikeParams,
@@ -27,10 +28,12 @@ import {
 
 const dir = mkdtempSync(join(tmpdir(), "broker-test-"));
 const journalPath = join(dir, "actions.jsonl");
+const capturesPath = join(dir, "captures.jsonl");
 const opts = createBrokerOptions({
   BROKER_SECRET: "test-secret",
   CDP_HTTP: "http://127.0.0.1:59999", // dead port — no CDP browser in CI
   BROKER_JOURNAL: journalPath,
+  BROKER_CAPTURES: capturesPath,
 });
 opts.port = 0; // ephemeral
 const server = createBrokerServer(opts);
@@ -239,6 +242,103 @@ describe("action route guards", () => {
     const last = j.last();
     expect(last?.kind).toBe("like");
     expect(last?.result.ok).toBe(false);
+    // P34 — CDP was down before the recorder could arm: the journal entry
+    // carries NO captures field (the honest never-armed shape)
+    expect(last?.result.captures).toBeUndefined();
+  });
+});
+
+describe("P34 — GET /broker/captures (the captured-wire journal tail)", () => {
+  const seed: CaptureEntry[] = [
+    {
+      ts: "2026-10-21T01:00:00Z",
+      kind: "dislike",
+      target: { videoId: "dQw4w9WgXcQ" },
+      endpoint: "like/like",
+      url: "https://www.youtube.com/youtubei/v1/like/like",
+      method: "POST",
+      postData: '{"params":"AA=="}',
+      truncated: false,
+      status: 200,
+      requestId: "r1",
+    },
+    {
+      ts: "2026-10-21T02:00:00Z",
+      kind: "bell",
+      target: { channelId: "UC123" },
+      endpoint: "subscription/subscribe",
+      url: "https://www.youtube.com/youtubei/v1/subscription/subscribe",
+      method: "POST",
+      postData: '{"params":"BB=="}',
+      truncated: false,
+      status: 200,
+      requestId: "r2",
+    },
+  ];
+
+  test("missing secret → 401; wrong secret → 401", async () => {
+    const noHeader = await fetch(`${base}/broker/captures`);
+    expect(noHeader.status).toBe(401);
+    const wrong = await fetch(`${base}/broker/captures`, { headers: { "x-broker-secret": "nope" } });
+    expect(wrong.status).toBe(401);
+  });
+
+  test("POST → 405 (GET-only surface)", async () => {
+    const res = await fetch(`${base}/broker/captures`, {
+      method: "POST",
+      headers: { "x-broker-secret": "test-secret" },
+    });
+    expect(res.status).toBe(405);
+  });
+
+  test("seeded journal answers the tail with endpoint filtering", async () => {
+    writeFileSync(capturesPath, seed.map((e) => JSON.stringify(e)).join("\n") + "\n", "utf8");
+    const res = await fetch(`${base}/broker/captures?tail=10&endpoint=subscription`, {
+      headers: { "x-broker-secret": "test-secret" },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; total: number; returned: number; captures: CaptureEntry[] };
+    expect(body.ok).toBe(true);
+    expect(body.total).toBe(2);
+    expect(body.returned).toBe(1);
+    expect(body.captures[0].endpoint).toBe("subscription/subscribe");
+    expect(body.captures[0].kind).toBe("bell");
+  });
+
+  test("an absent journal is the honest empty shape (total 0)", async () => {
+    const o2 = createBrokerOptions({
+      BROKER_SECRET: "test-secret",
+      CDP_HTTP: "http://127.0.0.1:59999",
+      BROKER_JOURNAL: join(dir, "j4.jsonl"),
+      BROKER_CAPTURES: join(dir, "never-created-captures.jsonl"),
+    });
+    o2.port = 0;
+    const s2 = createBrokerServer(o2);
+    try {
+      const res = await fetch(`http://127.0.0.1:${s2.port}/broker/captures`, {
+        headers: { "x-broker-secret": "test-secret" },
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { ok: boolean; total: number; returned: number; captures: unknown[] };
+      expect(body.ok).toBe(true);
+      expect(body.total).toBe(0);
+      expect(body.captures).toEqual([]);
+    } finally {
+      s2.stop(true);
+    }
+  });
+
+  test("the service index lists the captures endpoint", async () => {
+    const res = await fetch(`${base}/`);
+    const body = (await res.json()) as { endpoints: Record<string, string> };
+    expect(body.endpoints.captures).toContain("/broker/captures");
+  });
+
+  test("CaptureJournal.tail/count read what was written (round-trip)", () => {
+    const journal = new CaptureJournal(capturesPath);
+    expect(journal.count()).toBe(2);
+    expect(journal.tail(1)[0].requestId).toBe("r2");
+    expect(journal.tail(10, "like/")[0].endpoint).toBe("like/like");
   });
 });
 

@@ -21,23 +21,39 @@ interface PendingCall {
   timer: ReturnType<typeof setTimeout>;
 }
 
+/** P34 — a CDP event handler (notifications without ids). */
+export type CdpEventHandler = (params: unknown) => void;
+
 /** One WebSocket connection to one debug target. */
 export class CdpConnection {
   private ws: WebSocket;
   private nextId = 1;
   private pending = new Map<number, PendingCall>();
   private closed = false;
+  /** P34 — CDP EVENT subscriptions (notifications without ids; previously
+   * dropped on the floor). Keyed by method, e.g. "Network.requestWillBeSent". */
+  private handlers = new Map<string, Set<CdpEventHandler>>();
 
   private constructor(ws: WebSocket) {
     this.ws = ws;
     ws.addEventListener("message", (ev: MessageEvent) => {
-      let msg: { id?: number; result?: unknown; error?: { message?: string } };
+      let msg: {
+        id?: number;
+        result?: unknown;
+        error?: { message?: string };
+        method?: string;
+        params?: unknown;
+      };
       try {
         msg = JSON.parse(String(ev.data));
       } catch {
         return;
       }
-      if (msg.id === undefined) return;
+      if (msg.id === undefined) {
+        // P34 — an event notification (no id): dispatch to subscribers.
+        if (typeof msg.method === "string") this.dispatchEvent(msg.method, msg.params);
+        return;
+      }
       const call = this.pending.get(msg.id);
       if (!call) return;
       clearTimeout(call.timer);
@@ -52,6 +68,7 @@ export class CdpConnection {
         call.reject(new Error("CDP connection closed"));
       }
       this.pending.clear();
+      this.handlers.clear();
     });
   }
 
@@ -119,6 +136,36 @@ export class CdpConnection {
       return { __exception: String(text).slice(0, 500) };
     }
     return res?.result?.value;
+  }
+
+  /**
+   * P34 — subscribe to a CDP EVENT (a notification without an id, e.g.
+   * "Network.requestWillBeSent"). The handler receives the event's params
+   * object. Returns an unsubscribe function. A handler that throws NEVER
+   * breaks the RPC channel (the dispatch is guarded).
+   */
+  on(method: string, handler: CdpEventHandler): () => void {
+    let set = this.handlers.get(method);
+    if (!set) {
+      set = new Set();
+      this.handlers.set(method, set);
+    }
+    set.add(handler);
+    return () => {
+      set.delete(handler);
+    };
+  }
+
+  private dispatchEvent(method: string, params: unknown): void {
+    const set = this.handlers.get(method);
+    if (!set || set.size === 0) return;
+    for (const handler of set) {
+      try {
+        handler(params);
+      } catch {
+        /* a listener defect never breaks the channel */
+      }
+    }
   }
 
   close(): void {
