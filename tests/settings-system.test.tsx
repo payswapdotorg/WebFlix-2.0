@@ -423,15 +423,71 @@ describe("P5-SS settings: Appearance + Advanced (local, honest about effect scop
 });
 
 // ---------------------------------------------------------------------------
-// Part 1c — Task 4-b: the YouTube connection (settings card + client + API)
+// Part 1c — Task 4-b → P33: the YouTube connection (settings card + client + API)
 // ---------------------------------------------------------------------------
 
-describe("P4B settings: the YouTube connection card (the shared session, honestly)", () => {
-  test("connected → the shared-session explainer + green card + coarse tab context, never the raw URL", async () => {
+describe("P33 settings: the direct-first connection card (the main-interface doctrine, honestly)", () => {
+  test("direct connected → the server-side session explainer + green card + no-browser doctrine, the broker note when known-offline", async () => {
     fetchHandler = (url) => {
       if (url.includes("/api/connection/youtube")) {
         return Response.json({
           connected: true,
+          mode: "direct",
+          sessionServed: true,
+          broker: { connected: false, tabFound: false },
+          checkedAt: new Date().toISOString(),
+        });
+      }
+      return new Response("{}", { status: 200 });
+    };
+    await renderSignedInSettings();
+    const section = q('[data-settings-section="youtube-connection"]');
+    expect(section).not.toBeNull();
+    // the direct doctrine, stated honestly (the section explainer)
+    expect(section!.textContent).toContain("server-side YouTube session");
+    expect(section!.textContent).toContain("never have to go back to youtube.com");
+    // the connected card — the DIRECT tier's own copy
+    expect(section!.querySelector('[data-connection-state="connected"]')).not.toBeNull();
+    expect(section!.textContent).toContain("Connected — actions are available");
+    expect(section!.textContent).toContain(
+      "Actions run through WebFlix's server-side YouTube session"
+    );
+    expect(section!.querySelector('[data-connection-mode="direct"]')).not.toBeNull();
+    expect(section!.textContent).toContain("no separate browser or YouTube tab needed");
+    // the honest note: the few broker-tier actions left, and the broker is offline
+    expect(section!.textContent).toContain("dislike, bell preferences");
+    expect(section!.textContent).toContain("offline right now; everything else works without it");
+    expect(section!.textContent).toContain("Checked");
+    // the direct card never renders the broker-era tab-context copy
+    expect(section!.textContent).not.toContain("connected tab is on a watch page");
+  });
+
+  test("direct configured but not served → the honest 'session needs attention' card + Retry", async () => {
+    fetchHandler = (url) => {
+      if (url.includes("/api/connection/youtube")) {
+        return Response.json({
+          connected: false,
+          mode: "direct",
+          sessionServed: false,
+          checkedAt: new Date().toISOString(),
+        });
+      }
+      return new Response("{}", { status: 200 });
+    };
+    await renderSignedInSettings();
+    const section = q('[data-settings-section="youtube-connection"]');
+    expect(section!.querySelector('[data-connection-state="disconnected"]')).not.toBeNull();
+    expect(section!.textContent).toContain("YouTube session needs attention");
+    expect(section!.textContent).toContain("YouTube didn't serve it just now");
+    expect(section!.textContent).toContain("Checked");
+  });
+
+  test("broker connected (no session) → the fallback tier's own card + coarse tab context, never the raw URL", async () => {
+    fetchHandler = (url) => {
+      if (url.includes("/api/connection/youtube")) {
+        return Response.json({
+          connected: true,
+          mode: "broker",
           tabFound: true,
           tabUrl: "https://www.youtube.com/watch?v=okH-kaRjuAQ",
           lastActionAt: new Date(Date.now() - 90_000).toISOString(),
@@ -442,28 +498,22 @@ describe("P4B settings: the YouTube connection card (the shared session, honestl
     };
     await renderSignedInSettings();
     const section = q('[data-settings-section="youtube-connection"]');
-    expect(section).not.toBeNull();
-    // the shared-session model, stated honestly (one or two sentences)
-    expect(section!.textContent).toContain("one shared logged-in session");
-    // the connected card
     expect(section!.querySelector('[data-connection-state="connected"]')).not.toBeNull();
     expect(section!.textContent).toContain("Connected — actions are available");
     expect(section!.textContent).toContain(
       "Actions are performed through the WebFlix connected session"
     );
-    // channel-safe tab context + the last action's relative time
     expect(section!.textContent).toContain("Session active — the connected tab is on a watch page");
     expect(section!.textContent).toContain("last action");
-    expect(section!.textContent).toContain("Checked");
-    // coarse context only — the raw video id from the tab URL never renders
     expect(section!.textContent).not.toContain("okH-kaRjuAQ");
   });
 
-  test("disconnected → the warning + what stops working + Retry forces a fresh probe past the cache", async () => {
+  test("mode none → the honest disconnected card: what's missing + how actions come back + Retry forces a fresh probe past the cache", async () => {
     fetchHandler = (url) => {
       if (url.includes("/api/connection/youtube")) {
         return Response.json({
           connected: false,
+          mode: "none",
           tabFound: false,
           tabUrl: null,
           lastActionAt: null,
@@ -478,6 +528,7 @@ describe("P4B settings: the YouTube connection card (the shared session, honestl
     expect(section!.textContent).toContain(
       "Like, subscribe and comment actions are unavailable right now"
     );
+    expect(section!.textContent).toContain("No server-side YouTube session is configured");
     expect(section!.textContent).toContain("Checked");
     const probes = () =>
       fetchLog.filter((f) => f.url.includes("/api/connection/youtube")).length;
@@ -492,9 +543,8 @@ describe("P4B settings: the YouTube connection card (the shared session, honestl
       if (url.includes("/api/connection/youtube")) {
         return Response.json({
           connected: true,
-          tabFound: true,
-          tabUrl: "https://www.youtube.com/",
-          lastActionAt: null,
+          mode: "direct",
+          sessionServed: true,
           checkedAt: new Date().toISOString(),
         });
       }
@@ -625,6 +675,120 @@ describe("P4B /api/connection/youtube: the gated, honest-degrade status route", 
     const data = (await res.json()) as { connected: boolean; tabUrl: string | null };
     expect(data.connected).toBe(false);
     expect(data.tabUrl).toBeNull();
+  });
+
+  // P33 — the direct-first route semantics (the server-side session tier)
+  describe("P33 /api/connection/youtube: the direct tier (the main-interface doctrine)", () => {
+    const DIRECT_COOKIES = "SAPISID=fake-direct; SID=x";
+    const SIGNED_IN_MENU = {
+      actions: [
+        {
+          openPopupAction: {
+            popup: {
+              multiPageMenuRenderer: {
+                sections: [
+                  {
+                    multiPageMenuSectionRenderer: {
+                      items: [
+                        {
+                          compactLinkRenderer: {
+                            navigationEndpoint: {
+                              browseEndpoint: { browseId: "UCoperator1234567890abcdef" },
+                            },
+                          },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      ],
+    };
+
+    let savedCookies = "";
+    beforeEach(() => {
+      savedCookies = process.env.YT_COOKIES ?? "";
+      process.env.YT_COOKIES = DIRECT_COOKIES;
+    });
+    afterEach(() => {
+      if (savedCookies) process.env.YT_COOKIES = savedCookies;
+      else delete process.env.YT_COOKIES;
+    });
+
+    test("session configured + account_menu SERVED → mode direct, connected, sessionServed true", async () => {
+      fetchHandler = (url) => {
+        if (String(url).includes("account/account_menu")) {
+          return Response.json(SIGNED_IN_MENU);
+        }
+        if (url.includes("/healthz")) {
+          return Response.json({ ok: true, tabFound: false, tabUrl: null, lastActionAt: null });
+        }
+        return new Response("{}", { status: 200 });
+      };
+      const res = await connectionGet(
+        new Request("http://localhost/api/connection/youtube", {
+          headers: { cookie: AUTH_COOKIE },
+        }) as never
+      );
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as {
+        connected: boolean;
+        mode: string;
+        sessionServed?: boolean;
+        broker?: { connected: boolean; tabFound: boolean };
+        checkedAt: string;
+      };
+      expect(data.mode).toBe("direct");
+      expect(data.sessionServed).toBe(true);
+      expect(data.connected).toBe(true);
+      // the secondary broker reachability rides along for the card's honest note
+      expect(data.broker).toEqual({ connected: false, tabFound: false });
+      expect(data.checkedAt).toBeTruthy();
+      // the probe actually hit the account menu endpoint with the session cookies
+      const probe = fetchLog.find((f) => f.url.includes("account/account_menu"));
+      expect(probe).toBeDefined();
+    });
+
+    test("session configured but the menu answers the PUBLIC variant → mode direct, honest not-served", async () => {
+      fetchHandler = (url) => {
+        if (String(url).includes("account/account_menu")) {
+          return Response.json({}); // the signed-out menu carries zero account rows
+        }
+        return new Response("{}", { status: 200 });
+      };
+      const res = await connectionGet(
+        new Request("http://localhost/api/connection/youtube", {
+          headers: { cookie: AUTH_COOKIE },
+        }) as never
+      );
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as {
+        connected: boolean;
+        mode: string;
+        sessionServed?: boolean;
+      };
+      expect(data.mode).toBe("direct");
+      expect(data.sessionServed).toBe(false);
+      expect(data.connected).toBe(false);
+    });
+
+    test("session configured but the probe fails (network/upstream) → mode direct, honest disconnected", async () => {
+      fetchHandler = () => {
+        throw new Error("fetch failed");
+      };
+      const res = await connectionGet(
+        new Request("http://localhost/api/connection/youtube", {
+          headers: { cookie: AUTH_COOKIE },
+        }) as never
+      );
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as { connected: boolean; mode: string };
+      expect(data.mode).toBe("direct");
+      expect(data.connected).toBe(false);
+    });
   });
 });
 

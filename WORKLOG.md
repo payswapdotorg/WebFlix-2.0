@@ -889,3 +889,97 @@ honest floor fast from the datacenter egress (the operator's residential
 egress rides the head-started embed lane — the exact path their playing
 shorts measured). Zero page/console errors — evidence/wfx2p32/
 (prod-dqw4-native-playing.png, prod-walled-static-pill.png).
+
+## 2026-10-21 — P33-DIRECT-ACTIONS (the operator's read-only-sessions dispatch: the main-interface doctrine)
+
+**The dispatch (verbatim):** "my youtube sessions are read only which means I
+can't perform any action / remember, if we aim to become the main interface
+for youtube.com, we can't require users to go back to youtube.com before
+they can like, comment, etc. / currently my settings in webflix are showing
+[Disconnected — actions are unavailable / The WebFlix connected session
+isn't reachable right now — either its browser isn't running or the YouTube
+tab isn't open]"
+
+**The architectural truth behind it:** every everyday write (like, dislike,
+subscribe, comment, watch-later, playlist-add) rode the Session Broker — a
+CDP-driven logged-in youtube.com TAB in a separate browser. The broker being
+down (the operator's exact settings card) made the whole app read-only, and
+the doctrine is right: a main interface cannot require the old interface to
+be open in another tab. The subscribe lane had already proven the way out
+(§16/§17: subscription/subscribe + unsubscribe with cookie auth +
+SAPISIDHASH work server-side), and comment-create/reply had joined it
+(WFX2-P6-CR's three-rung chain). Like, dislike, watch-later and playlist-add
+were still broker-only.
+
+**The deliverables:**
+
+1. **THE DIRECT EVERYDAY-ACTION FAMILY** (`src/lib/youtube-direct.ts`):
+   - `buildLikeParams` — the CAPTURED params templates (the fixture's exact
+     bytes: like `20 00`, removelike `18 00`, the videoId at offset 4, the
+     ts varint refreshed at bytes 20-24), ported byte-exact from the
+     broker's own executor (its verified page-context fetch fallback).
+   - `rateVideo(videoId, "like"|"none")` — POST like/like | like/removelike
+     with cookie auth + SAPISIDHASH (the subscribe-lane law).
+   - `editPlaylistMembership(playlistId, videoId, want)` — POST
+     browse/edit_playlist with the broker's own VERIFIED fetch wire
+     (ACTION_ADD_VIDEO + addedVideoId + videoId / ACTION_REMOVE_VIDEO +
+     removedVideoId + videoId) — works for real playlists AND the WL list.
+   - `playlistContains(playlistId, videoId)` — the fresh UNCACHED membership
+     read (browse VL…, up to 4 continuation pages, honest null beyond/
+     on failure) that resolves TOGGLES server-side.
+   - **The one honest gap kept:** `like/dislike` has NO captured wire
+     template (the fixture never captured one; guessing the protobuf is
+     against the house law) — dislike stays broker-tier with the honest
+     degrade; a live capture closes it later.
+
+2. **THE DIRECT-FIRST ACTION PROXY** (`src/lib/watch/action-proxy.ts`):
+   `proxyVideoLike` (like/remove direct-first; the legacy toggle-off
+   resolves from the UI's own baseline; dislike → broker, documented),
+   `proxyWatchLater` (ensure + toggle direct-first; the toggle inverts the
+   fresh membership read; unresolved → broker honestly), `proxyPlaylistAdd`
+   (same law for real playlists). Subscribe and comment were already
+   direct-first — unchanged. Every tier keeps the broker as the FALLBACK,
+   so a session-less deployment loses nothing.
+
+3. **THE DIRECT-FIRST CONNECTION TRUTH**
+   (`/api/connection/youtube` + `connection-client.ts` + the settings card):
+   the route answers `mode: "direct" | "broker" | "none"` — direct when the
+   session is configured, with `sessionServed` as the LIVE verdict of an
+   account/account_menu probe (the P22-B served-detection: the public
+   variant carries zero account rows — a configured session YouTube won't
+   serve is the honest "needs attention" state, never "connected"); the
+   broker sub-probe rides along for the card's honest note about the few
+   broker-tier actions left (dislike, bell). The settings card states the
+   doctrine verbatim: "actions run through WebFlix's server-side YouTube
+   session — the same signed-in session the app reads with, so you never
+   have to go back to youtube.com to act", with the no-session copy
+   replaced by what actually restores actions (configure the session — not
+   "open a youtube.com tab").
+
+**Gates:** 1995/0 (base 1965 + 30: the action-routes battery's like family
+re-pinned direct-first +8 — the zero-broker-call pin, the fallback, the
+dislike no-wire pin, the both-down 502; the watch-later battery +6 — the
+direct ensure/toggle/fallback pins; the youtube-direct battery +19 — the
+template bytes, the wire shapes, the membership page-walking; the settings
+battery +3 card states re-pinned + the route's 3 direct-tier pins); lint
+0e/1 pre-existing; tsc clean.
+
+**Live verification (the station's honest matrix):**
+- The WIRE probe (real egress, unauthenticated — zero side effects):
+  like/like with the templated params answers 401 "You must be signed in to
+  perform this operation" (deterministic across interleaved rounds once the
+  visitor context warms; the first cold-start 400s were transient) — the
+  wire is VALID, only the session is missing; the videoId swap works for
+  arbitrary 11-char ids; the broker-era ts-refresh surgery is accepted;
+  browse/edit_playlist with the ACTION_ADD_VIDEO shape answers 200 —
+  evidence/wfx2p33/wire-probe.txt.
+- The dev ladder (:3105, PUBLIC MODE — the station holds no YT_COOKIES
+  material; the session lives in the production env): the connection API
+  answers the honest mode:"none" envelope; like/watch-later answer the
+  honest 502; the settings card renders the new doctrine copy live with
+  Retry re-probing; zero console/page errors —
+  evidence/wfx2p33/ladder-smoke.txt + ladder-connection-card.png.
+- **The honest limit:** this station cannot authenticate the direct tier
+  itself (no session material) — the auth'd proof is the operator's own
+  next like/comment/subscribe on the deployed build, which rides the exact
+  same SAPISIDHASH law the subscribe lane verified live in the §16/§17 era.

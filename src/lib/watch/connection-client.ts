@@ -1,11 +1,14 @@
 /**
- * WFX2 Task 4-b — the YouTube connection client (browser side).
+ * WFX2 Task 4-b → P33-DIRECT-ACTIONS — the YouTube connection client
+ * (browser side).
  *
- * WebFlix performs YouTube write actions (like, subscribe, comment) through
- * one shared logged-in session — the broker's operator tab. The connection
- * state comes from GET /api/connection/youtube (the server-side proxy that
- * talks to the broker; the broker URL and shared secret never reach the
- * browser).
+ * P33: the connection truth is DIRECT-FIRST — the app's own server-side
+ * YouTube session performs the everyday writes (like / subscribe /
+ * comment / watch-later); the connected-browser broker is the FALLBACK
+ * tier (mode "broker") for deployments without a session and for the few
+ * no-captured-wire actions (dislike, bell). The state comes from
+ * GET /api/connection/youtube (the server-side probe; the broker URL and
+ * shared secret never reach the browser).
  *
  * This module owns the client side of that surface:
  *  - the typed state + an SWR-style ~30s cache (one probe per TTL window no
@@ -17,16 +20,28 @@
  */
 import { toast } from "sonner";
 
+/** P33 — which tier answers actions right now (the route's own enum). */
+export type YouTubeConnectionMode = "direct" | "broker" | "none";
+
 export interface YouTubeConnectionState {
-  /** the broker answered healthy AND holds the YouTube tab — write actions work */
+  /** the answering tier performs actions — see mode for which one */
   connected: boolean;
-  /** the broker's operator tab is on youtube.com right now */
+  /** P33 — the answering tier: "direct" (the app's server-side session),
+   * "broker" (the connected browser), "none" (neither) */
+  mode: YouTubeConnectionMode;
+  /** direct mode: the account_menu probe served the signed-in menu — the
+   * live verdict that the session performs actions (absent otherwise) */
+  sessionServed?: boolean;
+  /** broker mode: the broker's operator tab is on youtube.com right now */
   tabFound: boolean;
-  /** the operator tab's current URL (coarse context; null when unknown) */
+  /** broker mode: the operator tab's current URL (coarse context; null when unknown) */
   tabUrl: string | null;
   /** when the session last performed an action (epoch ms / epoch s / ISO —
    * the broker's wire format; null when never or unknown) */
   lastActionAt: string | number | null;
+  /** P33 — the optional connected browser's reachability (the card's honest
+   * note about the few broker-tier actions left; null when no broker) */
+  broker?: { connected: boolean; tabFound: boolean } | null;
   /** when the server performed this check (ISO) */
   checkedAt: string;
 }
@@ -44,6 +59,7 @@ export const CONNECTION_TTL_MS = 30_000;
 function disconnectedState(): YouTubeConnectionState {
   return {
     connected: false,
+    mode: "none",
     tabFound: false,
     tabUrl: null,
     lastActionAt: null,
@@ -52,7 +68,10 @@ function disconnectedState(): YouTubeConnectionState {
 }
 
 /** Narrow whatever /api/connection/youtube answered into the typed state —
- * a missing/garbled field degrades to its falsy shape, never a throw. */
+ * a missing/garbled field degrades to its falsy shape, never a throw.
+ * P33: mode/sessionServed/broker ride through; a pre-P33 route answer (no
+ * mode field) degrades to "broker" — the old truth — when its tab fields
+ * answer, else "none". */
 function normalizeState(body: unknown): YouTubeConnectionState {
   if (typeof body !== "object" || body === null) return disconnectedState();
   const b = body as Record<string, unknown>;
@@ -66,7 +85,23 @@ function normalizeState(body: unknown): YouTubeConnectionState {
         : null;
   const checkedAt =
     typeof b.checkedAt === "string" && b.checkedAt ? b.checkedAt : new Date().toISOString();
-  return { connected: b.connected === true && tabFound, tabFound, tabUrl, lastActionAt, checkedAt };
+  const mode: YouTubeConnectionMode =
+    b.mode === "direct" || b.mode === "broker" || b.mode === "none"
+      ? b.mode
+      : tabFound
+        ? "broker"
+        : "none";
+  const sessionServed = b.sessionServed === true ? true : undefined;
+  const brokerRaw = b.broker;
+  const broker =
+    typeof brokerRaw === "object" && brokerRaw !== null && "connected" in brokerRaw
+      ? {
+          connected: (brokerRaw as Record<string, unknown>).connected === true,
+          tabFound: (brokerRaw as Record<string, unknown>).tabFound === true,
+        }
+      : null;
+  const connected = mode === "direct" ? sessionServed === true : b.connected === true && tabFound;
+  return { connected, mode, sessionServed, tabFound, tabUrl, lastActionAt, broker, checkedAt };
 }
 
 let cache: { state: YouTubeConnectionState; at: number } | null = null;

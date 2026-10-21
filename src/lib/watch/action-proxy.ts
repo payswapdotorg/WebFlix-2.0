@@ -1,11 +1,16 @@
 /**
  * WFX2-A-W action proxy — maps the UI's action request/response shapes onto
- * the live Tier-2 write paths (broker + direct SAPISIDHASH) while keeping
+ * the live Tier-2 write paths (direct SAPISIDHASH + broker) while keeping
  * the response contracts the WebFlix UI already consumes.
  *
- * Order of execution (architecture doc): direct-first for endpoints known
- * direct (subscribe/unsubscribe — verification log §16/§17), broker for
- * everything else (the `_u` attestation tier — §18/§19).
+ * Order of execution: P33-DIRECT-ACTIONS (2026-10-21, the operator's
+ * main-interface doctrine: "if we aim to become the main interface for
+ * youtube.com, we can't require users to go back to youtube.com before
+ * they can like, comment, etc.") — DIRECT-FIRST for the everyday family
+ * (like / remove-rating, watch-later, playlist membership — the app's own
+ * server-side session performing the writes), broker as the FALLBACK for
+ * every tier (and the primary for the no-captured-wire kinds: dislike,
+ * bell, comment-like — each documented at its proxy).
  */
 import { ApiError } from "./api";
 import type { CommentAuthorDto, CommentDto, CommentVideoSnapshotDto, LikeValue } from "./types";
@@ -22,6 +27,9 @@ import {
   subscribeChannel,
   getSubscribedState,
   directAuthConfigured,
+  rateVideo,
+  editPlaylistMembership,
+  playlistContains,
 } from "@/lib/youtube-direct";
 import { writeLocalComment } from "./local-comments";
 
@@ -72,9 +80,15 @@ export interface LikeResult {
 }
 
 /**
- * Video like/dislike — broker tier (like is `_u`-attested, §18).
+ * Video like/dislike — P33: direct-first for like / remove-rating (the
+ * captured-wire templates), broker the fallback.
  * - action: like|dislike|none → set semantics (idempotent)
  * - value: like|dislike → YouTube toggle semantics (same value unsets)
+ * The DIRECT tier resolves the legacy toggle from the UI's own baseline
+ * (yourLike) — the honest toggle truth without a DOM state check. Dislike
+ * stays broker-tier: like/dislike has no captured wire template (the
+ * fixture never captured one; guessing the protobuf is against the house
+ * law) — the broker path below serves it when the browser session lives.
  */
 export async function proxyVideoLike(videoId: string, req: LikeRequest): Promise<LikeResult> {
   const action = req.action ?? req.value;
@@ -84,6 +98,34 @@ export async function proxyVideoLike(videoId: string, req: LikeRequest): Promise
     dislikes: Math.max(0, req.baseline?.dislikes ?? 0),
     yourLike: req.baseline?.yourLike ?? null,
   };
+
+  // P33 direct tier — the like/remove family (dislike-SET excluded: no wire)
+  const legacyToggleOff =
+    !!(req.value && !req.action && base.yourLike === req.value);
+  const directCovers =
+    action === "none" || action === "like" || legacyToggleOff;
+  if (directCovers && directAuthConfigured()) {
+    const direct = await rateVideo(videoId, action === "like" && !legacyToggleOff ? "like" : "none");
+    if (direct.ok) {
+      const yourLike: LikeValue | null =
+        action === "like" && !legacyToggleOff ? "like" : null;
+      const effect = yourLike ? "liked" : "rating-removed";
+      const likes =
+        yourLike === "like" && base.yourLike !== "like"
+          ? base.likes + 1
+          : yourLike !== "like" && base.yourLike === "like"
+            ? Math.max(0, base.likes - 1)
+            : base.likes;
+      // the direct remove clears a PRIOR dislike too (the legacy
+      // value=dislike toggle-off) — the only way dislikes move here
+      const dislikes =
+        yourLike === null && base.yourLike === "dislike"
+          ? Math.max(0, base.dislikes - 1)
+          : base.dislikes;
+      return { ok: true, effect, likes, dislikes, yourLike, already: false, path: "direct" };
+    }
+    // direct failed → the broker fallback below (the honest degrade)
+  }
 
   if (action === "none") {
     const r = await brokerAction("remove-rating", { videoId });
@@ -500,9 +542,12 @@ export interface PlaylistAddResult {
 }
 
 /**
- * Add/toggle a video in a playlist (broker playlist-add). `title` enables
- * the Save-dialog row match for the UI path; real YouTube playlist ids
- * (PL…/VL…/WL) also work through the fetch fallback.
+ * Add/toggle a video in a playlist — P33: direct-first (browse/edit_playlist
+ * — the broker's own verified fetch wire), broker the fallback. `title`
+ * enables the Save-dialog row match on the broker's UI path; real YouTube
+ * playlist ids (PL…/VL…/WL) work through BOTH tiers. Toggle resolves the
+ * membership server-side (playlistContains — the fresh uncached read);
+ * an unresolved membership (null) falls to the broker honestly.
  */
 export async function proxyPlaylistAdd(
   playlistId: string,
@@ -510,6 +555,31 @@ export async function proxyPlaylistAdd(
   opts: { mode?: "add" | "remove" | "toggle"; title?: string } = {}
 ): Promise<PlaylistAddResult> {
   const mode = opts.mode ?? "add";
+
+  // P33 direct tier
+  if (directAuthConfigured()) {
+    let want: boolean | null = mode === "add" ? true : mode === "remove" ? false : null;
+    if (want === null) {
+      // toggle: the server-side membership read decides the INVERSE
+      const membership = await playlistContains(playlistId, videoId);
+      want = membership === null ? null : !membership;
+    }
+    if (want !== null) {
+      const direct = await editPlaylistMembership(playlistId, videoId, want);
+      if (direct.ok) {
+        return {
+          ok: true,
+          effect: want ? "playlist-added" : "playlist-removed",
+          added: want,
+          containsVideo: want,
+          already: false,
+          path: "direct",
+        };
+      }
+      // direct failed → the broker fallback below (the honest degrade)
+    }
+  }
+
   const r = await brokerAction(
     "playlist-add",
     { playlistId },
@@ -536,12 +606,42 @@ export interface WatchLaterResult {
   path?: string;
 }
 
-/** Watch later (YouTube's own WL playlist via the broker). */
+/**
+ * Watch later — P33: direct-first (YouTube's own WL playlist through
+ * browse/edit_playlist — the broker's verified fetch wire), broker the
+ * fallback. Toggle resolves the WL membership server-side (the fresh
+ * uncached read); an unresolved membership falls to the broker honestly.
+ */
 export async function proxyWatchLater(
   videoId: string,
   add: boolean | undefined
 ): Promise<WatchLaterResult> {
   const mode = add === undefined ? "toggle" : add ? "add" : "remove";
+
+  // P33 direct tier
+  if (directAuthConfigured()) {
+    let want: boolean | null = add ?? null;
+    if (want === null) {
+      // toggle: the server-side membership read decides the INVERSE
+      const membership = await playlistContains("WL", videoId);
+      want = membership === null ? null : !membership;
+    }
+    if (want !== null) {
+      const direct = await editPlaylistMembership("WL", videoId, want);
+      if (direct.ok) {
+        return {
+          ok: true,
+          effect: want ? "watch-later-added" : "watch-later-removed",
+          added: want,
+          playlistId: "WL",
+          already: false,
+          path: "direct",
+        };
+      }
+      // direct failed → the broker fallback below (the honest degrade)
+    }
+  }
+
   const r = await brokerAction("watch-later", { videoId }, { mode });
   if (!ok(r)) throw fail(r);
   const added = typeof r.detail?.["added"] === "boolean" ? r.detail.added : add !== false;

@@ -1,0 +1,33 @@
+P33-DIRECT-ACTIONS — the live wire probe (2026-10-21, the sandbox's real egress, UNAUTHENTICATED — no side effects)
+
+Round 1 (cold client, no ?key=):
+  like/like valid-templated params   → HTTP 400 "Request contains an invalid argument" (transient — see round 3)
+  like/removelike valid-templated    → HTTP 400 (same transient)
+  like/like garbage params           → HTTP 400 (same transient)
+  browse/edit_playlist ACTION_ADD_VIDEO shape → HTTP 200 (a real responseContext envelope — the endpoint ACCEPTS the verified action shape even unauth)
+  bogus endpoint (negative control)  → HTTP 404 (the base is live, the endpoints are discriminated)
+
+Round 2 (with the innertube ?key= + the full browser header set):
+  like/like module-templated params  → HTTP 400 (transient cold-start)
+  like/like EXACT fixture bytes      → HTTP 401 "You must be signed in to perform this operation."
+
+Round 3 (determinism check, 3 interleaved rounds):
+  like/like module-templated params  → HTTP 401 × 3 (deterministic once warm)
+  like/like exact fixture bytes      → HTTP 401 × 3
+
+Round 4 (the swap law):
+  videoId-swap ONLY (jNQXAC9IVRw, frozen captured ts+hash pair) → HTTP 401 (the swap itself parses)
+  untouched fixture (dQw4w9WgXcQ)                               → HTTP 401
+  videoId-swap + ts-refresh (the broker's surgery)              → HTTP 401 (the refreshed timestamp varint is accepted)
+
+VERDICT (the honest reading):
+  - The like/like + like/removelike endpoints PARSE the templated params: an unauthenticated
+    request answers 401 "You must be signed in to perform this operation" — the wire is VALID,
+    only the session is missing. The auth'd proof rides the operator's production session
+    (their next like IS the live verification).
+  - The videoId byte-swap works for arbitrary 11-char ids (a different id answers identically).
+  - The broker-era ts-refresh surgery is accepted (not the 400 cause); the first-round 400s
+    were a cold-client transient (the visitor context warming), gone in every later round.
+  - browse/edit_playlist with the broker's own ACTION_ADD_VIDEO shape answers 200 — the
+    playlist wire shape is accepted; the membership edit itself needs the session.
+  - All probes ran with NO cookies: zero side effects on any account.

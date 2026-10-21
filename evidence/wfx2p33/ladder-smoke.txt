@@ -1,0 +1,28 @@
+P33-DIRECT-ACTIONS — the dev-ladder smoke (:3105, PUBLIC MODE — no YT_COOKIES on the station, no broker)
+
+GET /api/connection/youtube (minted dev session):
+  {"connected":false,"mode":"none","tabFound":false,"tabUrl":null,"lastActionAt":null,"checkedAt":"2026-10-21T02:25:26.551Z"}
+  → the honest mode:"none" envelope (the new direct-first truth — a session-less deployment says so)
+
+GET /api/connection/youtube (guest): 401 (the gate fires before any probe)
+
+POST /api/videos/dQw4w9WgXcQ/like (public mode): 502 {"error":"action backend offline — the lead's broker must be running"}
+POST /api/playlists/watch-later (public mode):   502 (the honest offline — neither tier configured)
+
+Browser (agent-browser, session cookie set):
+  /settings renders the NEW card live:
+    - section explainer: "Like, subscribe, comment and watch-later actions run through WebFlix's
+      server-side YouTube session — the same signed-in session the app reads with, so you never
+      have to go back to youtube.com to act. A few actions (dislike, bell preferences) can also
+      use an optional connected-browser session."
+    - the disconnected card: "Disconnected — actions are unavailable / Like, subscribe and
+      comment actions are unavailable right now. / Retry / No server-side YouTube session is
+      configured for actions, and the optional connected browser isn't reachable. Configure the
+      YouTube session to enable like, subscribe and comment right from WebFlix — no youtube.com
+      tab needed."
+  The Retry button re-probes (forced, past the 30s cache) and the state stays honestly disconnected.
+  Zero console errors, zero page errors. Screenshot: ladder-connection-card.png
+
+The station's honest limit: this sandbox holds no YT_COOKIES material (the session lives in the
+production env) — the DIRECT tier's auth'd proof is the operator's own next like/comment/subscribe
+on the deployed build. The wire itself is probe-verified (wire-probe.txt).

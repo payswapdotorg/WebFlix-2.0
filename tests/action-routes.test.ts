@@ -62,9 +62,14 @@ mock.module("@/lib/broker", () => ({
 }));
 
 const directCalls: { channelId: string; on: boolean }[] = [];
+const directRateCalls: { videoId: string; action: string }[] = [];
+const directPlaylistCalls: { playlistId: string; videoId: string; want: boolean }[] = [];
 let directResponse: unknown = { ok: true };
+let directRateResponse: unknown = { ok: true };
+let directPlaylistResponse: unknown = { ok: true };
 let directConfigured = true;
 let subscribedState: boolean | null = null;
+let playlistMembership: boolean | null = null;
 
 mock.module("@/lib/youtube-direct", () => ({
   parseCookies: (raw: string) => {
@@ -83,6 +88,20 @@ mock.module("@/lib/youtube-direct", () => ({
     return directResponse;
   },
   getSubscribedState: async () => subscribedState,
+  // P33 — the direct everyday-action family
+  rateVideo: async (videoId: string, action: string) => {
+    directRateCalls.push({ videoId, action });
+    return directRateResponse;
+  },
+  editPlaylistMembership: async (playlistId: string, videoId: string, want: boolean) => {
+    directPlaylistCalls.push({ playlistId, videoId, want });
+    return directPlaylistResponse;
+  },
+  playlistContains: async () => playlistMembership,
+  createComment: async () => ({ ok: false, error: "direct-not-configured" }),
+  createReply: async () => ({ ok: false, error: "direct-not-configured" }),
+  buildLikeParams: () => "Cg0KC2RRdzR3OVdnWGNRIAAyDAiH6OzVBhCG4ZOCAg%3D%3D",
+  playlistBrowseId: () => "VLWL",
 }));
 
 /* routes (imported after the mocks) */
@@ -105,10 +124,15 @@ beforeAll(async () => {
 beforeEach(() => {
   brokerCalls.length = 0;
   directCalls.length = 0;
+  directRateCalls.length = 0;
+  directPlaylistCalls.length = 0;
   brokerResponse = { ok: true, verified: true, path: "ui" };
   directResponse = { ok: true };
+  directRateResponse = { ok: true };
+  directPlaylistResponse = { ok: true };
   directConfigured = true;
   subscribedState = null;
+  playlistMembership = null;
 });
 
 /* bun's mock.module is process-wide — restore the real modules so the
@@ -128,10 +152,10 @@ const req = (body: unknown, url = "http://localhost/api/x"): NextRequest =>
     body: JSON.stringify(body),
   }) as unknown as NextRequest;
 
-describe("POST /api/videos/[id]/like (broker proxy)", () => {
+describe("POST /api/videos/[id]/like (direct-first, broker fallback)", () => {
   const ctx = { params: Promise.resolve({ id: "dQw4w9WgXcQ" }) };
 
-  test("ok path: legacy value=like maps to broker kind like; honest counts from baseline", async () => {
+  test("P33 direct like: the server-side session answers — ZERO broker calls, path direct, honest counts", async () => {
     const res = await postLike(
       req({ value: "like", baseline: { likes: 5, dislikes: 0, yourLike: null } }),
       ctx
@@ -143,54 +167,75 @@ describe("POST /api/videos/[id]/like (broker proxy)", () => {
       likes: number;
       dislikes: number;
       yourLike: string | null;
+      path?: string;
     };
     expect(body.ok).toBe(true);
     expect(body.effect).toBe("liked");
     expect(body.yourLike).toBe("like");
     expect(body.likes).toBe(6);
     expect(body.dislikes).toBe(0);
-    expect(brokerCalls).toEqual([{ kind: "like", target: { videoId: "dQw4w9WgXcQ" }, payload: undefined }]);
+    expect(body.path).toBe("direct");
+    expect(directRateCalls).toEqual([{ videoId: "dQw4w9WgXcQ", action: "like" }]);
+    expect(brokerCalls).toEqual([]); // the main-interface doctrine: no broker needed
   });
 
-  test("toggle-off: broker already:true → remove-rating second call; yourLike null", async () => {
-    const calls: string[] = [];
-    brokerResponse = ({ kind }: { kind: string }) => {
-      calls.push(kind);
-      return { ok: true, verified: true, already: kind === "like", path: "ui" };
-    };
+  test("P33 direct fail → the honest broker fallback (kind like)", async () => {
+    directRateResponse = { ok: false, status: 403, error: "direct like/like returned 403" };
+    const res = await postLike(req({ value: "like" }), ctx);
+    expect(res.status).toBe(200);
+    expect(directRateCalls.length).toBe(1);
+    expect(brokerCalls).toEqual([{ kind: "like", target: { videoId: "dQw4w9WgXcQ" }, payload: undefined }]);
+    const body = (await res.json()) as { path?: string };
+    expect(body.path).toBe("ui");
+  });
+
+  test("P33 direct unconfigured (no session) → the broker tier serves the like", async () => {
+    directConfigured = false;
+    const res = await postLike(req({ value: "like" }), ctx);
+    expect(res.status).toBe(200);
+    expect(directRateCalls).toEqual([]);
+    expect(brokerCalls[0].kind).toBe("like");
+  });
+
+  test("P33 toggle-off: the UI's own baseline resolves the direct remove — one none call, no second trip", async () => {
     const res = await postLike(
       req({ value: "like", baseline: { likes: 5, dislikes: 0, yourLike: "like" } }),
       ctx
     );
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { yourLike: string | null; likes: number };
+    const body = (await res.json()) as { yourLike: string | null; likes: number; effect: string };
     expect(body.yourLike).toBeNull();
     expect(body.likes).toBe(4);
-    expect(calls).toEqual(["like", "remove-rating"]);
+    expect(body.effect).toBe("rating-removed");
+    expect(directRateCalls).toEqual([{ videoId: "dQw4w9WgXcQ", action: "none" }]);
+    expect(brokerCalls).toEqual([]);
   });
 
-  test("canonical action=none maps to remove-rating", async () => {
+  test("canonical action=none maps to the direct remove", async () => {
     const res = await postLike(req({ action: "none" }), ctx);
     expect(res.status).toBe(200);
-    expect(brokerCalls[0].kind).toBe("remove-rating");
+    expect(directRateCalls[0]).toEqual({ videoId: "dQw4w9WgXcQ", action: "none" });
+    expect(brokerCalls).toEqual([]);
     const body = (await res.json()) as { yourLike: string | null; effect: string };
     expect(body.yourLike).toBeNull();
     expect(body.effect).toBe("rating-removed");
   });
 
-  test("swap path: action=dislike with baseline yourLike=like swaps honestly", async () => {
+  test("P33 dislike: NO captured wire → the direct tier is never called (the no-guess law), broker serves it", async () => {
     const res = await postLike(
       req({ value: "dislike", baseline: { likes: 5, dislikes: 2, yourLike: "like" } }),
       ctx
     );
     const body = (await res.json()) as { likes: number; dislikes: number; yourLike: string };
+    expect(directRateCalls).toEqual([]); // never a guessed like/dislike wire
     expect(brokerCalls[0].kind).toBe("dislike");
     expect(body.yourLike).toBe("dislike");
     expect(body.likes).toBe(4);
     expect(body.dislikes).toBe(3);
   });
 
-  test("broker down → 502 with the honest offline message", async () => {
+  test("broker down with no session → 502 with the honest offline message", async () => {
+    directConfigured = false;
     brokerResponse = new MockBrokerError("offline", OFFLINE_MSG, 502);
     const res = await postLike(req({ value: "like" }), ctx);
     expect(res.status).toBe(502);
@@ -198,7 +243,17 @@ describe("POST /api/videos/[id]/like (broker proxy)", () => {
     expect(body.error).toBe(OFFLINE_MSG);
   });
 
-  test("broker action-failure → 502 with the broker's message", async () => {
+  test("P33 direct AND broker both down → 502 with the honest offline message", async () => {
+    directRateResponse = { ok: false, status: 502, error: "direct like/like returned 502" };
+    brokerResponse = new MockBrokerError("offline", OFFLINE_MSG, 502);
+    const res = await postLike(req({ value: "like" }), ctx);
+    expect(res.status).toBe(502);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe(OFFLINE_MSG);
+  });
+
+  test("broker action-failure (no session) → 502 with the broker's message", async () => {
+    directConfigured = false;
     brokerResponse = new MockBrokerError("action-failed", "like-button-not-found", 502);
     const res = await postLike(req({ value: "like" }), ctx);
     expect(res.status).toBe(502);
@@ -206,7 +261,8 @@ describe("POST /api/videos/[id]/like (broker proxy)", () => {
     expect(body.error).toBe("like-button-not-found");
   });
 
-  test("DOM-observed count wins over baseline math (likesLabel parsed)", async () => {
+  test("DOM-observed count wins over baseline math (likesLabel parsed — the broker fallback tier)", async () => {
+    directConfigured = false;
     brokerResponse = { ok: true, verified: true, path: "ui", detail: { likesLabel: "2.4M" } };
     const res = await postLike(
       req({ value: "like", baseline: { likes: 5, dislikes: 0, yourLike: null } }),
@@ -275,8 +331,8 @@ describe("POST /api/subscribe (direct-first, broker fallback)", () => {
   });
 });
 
-describe("POST /api/playlists/watch-later (broker watch-later)", () => {
-  test("toggle mode by default; response keeps the {added, playlistId} contract", async () => {
+describe("POST /api/playlists/watch-later (direct-first, broker fallback)", () => {
+  test("toggle mode by default; an unresolved membership falls to the broker honestly; response keeps the {added, playlistId} contract", async () => {
     brokerResponse = { ok: true, verified: true, path: "ui", detail: { added: true } };
     const res = await postWatchLater(req({ videoId: "dQw4w9WgXcQ" }));
     expect(res.status).toBe(200);
@@ -288,10 +344,58 @@ describe("POST /api/playlists/watch-later (broker watch-later)", () => {
     expect(brokerCalls[0].payload).toEqual({ mode: "toggle" });
   });
 
-  test("add:false maps to remove mode", async () => {
+  test("P33 direct ensure: add:false → the server-side edit_playlist REMOVE — no broker call", async () => {
     const res = await postWatchLater(req({ videoId: "dQw4w9WgXcQ", add: false }));
-    expect(brokerCalls[0].payload).toEqual({ mode: "remove" });
     expect(res.status).toBe(200);
+    expect(directPlaylistCalls).toEqual([
+      { playlistId: "WL", videoId: "dQw4w9WgXcQ", want: false },
+    ]);
+    expect(brokerCalls).toEqual([]);
+    const body = (await res.json()) as { ok: boolean; added: boolean; effect: string; path?: string };
+    expect(body.added).toBe(false);
+    expect(body.effect).toBe("watch-later-removed");
+    expect(body.path).toBe("direct");
+  });
+
+  test("P33 direct ensure: add:true → the server-side edit_playlist ADD", async () => {
+    const res = await postWatchLater(req({ videoId: "dQw4w9WgXcQ", add: true }));
+    expect(res.status).toBe(200);
+    expect(directPlaylistCalls).toEqual([
+      { playlistId: "WL", videoId: "dQw4w9WgXcQ", want: true },
+    ]);
+    expect(brokerCalls).toEqual([]);
+    const body = (await res.json()) as { added: boolean; effect: string };
+    expect(body.added).toBe(true);
+    expect(body.effect).toBe("watch-later-added");
+  });
+
+  test("P33 direct toggle: membership=false → the server-side ADD (the fresh read decides)", async () => {
+    playlistMembership = false;
+    const res = await postWatchLater(req({ videoId: "dQw4w9WgXcQ" }));
+    expect(res.status).toBe(200);
+    expect(directPlaylistCalls).toEqual([
+      { playlistId: "WL", videoId: "dQw4w9WgXcQ", want: true },
+    ]);
+    expect(brokerCalls).toEqual([]);
+  });
+
+  test("P33 direct toggle: membership=true → the server-side REMOVE", async () => {
+    playlistMembership = true;
+    const res = await postWatchLater(req({ videoId: "dQw4w9WgXcQ" }));
+    expect(res.status).toBe(200);
+    expect(directPlaylistCalls).toEqual([
+      { playlistId: "WL", videoId: "dQw4w9WgXcQ", want: false },
+    ]);
+    expect(brokerCalls).toEqual([]);
+  });
+
+  test("P33 direct edit fails → the broker fallback serves the watch-later", async () => {
+    directPlaylistResponse = { ok: false, status: 403, error: "direct edit_playlist returned 403" };
+    const res = await postWatchLater(req({ videoId: "dQw4w9WgXcQ", add: true }));
+    expect(res.status).toBe(200);
+    expect(directPlaylistCalls.length).toBe(1);
+    expect(brokerCalls[0].kind).toBe("watch-later");
+    expect(brokerCalls[0].payload).toEqual({ mode: "add" });
   });
 
   test("broker down → 502 honest", async () => {

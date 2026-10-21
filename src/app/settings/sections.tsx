@@ -239,12 +239,15 @@ function tabContextLabel(tabUrl: string | null): string {
   return "Session active";
 }
 
-/** WFX2 Task 4-b — the live YouTube connection card: is the shared session
- * that performs WebFlix's YouTube actions (like, subscribe, comment)
- * reachable right now? Connected → the honest "actions run through the
- * WebFlix connected session" state with the tab context + last action;
- * disconnected → the warning + what stops working + Retry (a forced
- * re-probe). The shared-session model is stated honestly up front. */
+/** WFX2 Task 4-b → P33-DIRECT-ACTIONS — the live YouTube connection card:
+ * can WebFlix perform YouTube actions right now, and through which tier?
+ * P33 (the operator's main-interface doctrine) makes the DIRECT tier the
+ * headline: the app's own server-side YouTube session performing like /
+ * subscribe / comment / watch-later — no separate browser, no youtube.com
+ * tab, nothing to go back to. The connected browser (the old shared
+ * session) is the FALLBACK tier: mode "broker" when no session is
+ * configured, plus the honest note that a few actions (dislike, bell
+ * preferences — no captured wire) still ride it when present. */
 export function YouTubeConnectionSection() {
   const { state, loading, reload } = useYouTubeConnection();
 
@@ -253,7 +256,7 @@ export function YouTubeConnectionSection() {
       id="youtube-connection"
       title="YouTube connection"
       scope="managed"
-      description="WebFlix doesn't sign in to your own YouTube account — like, subscribe and comment actions are performed through one shared logged-in session (the WebFlix connected session). This card shows whether that session is reachable right now."
+      description="Like, subscribe, comment and watch-later actions run through WebFlix's server-side YouTube session — the same signed-in session the app reads with, so you never have to go back to youtube.com to act. A few actions (dislike, bell preferences) can also use an optional connected-browser session. This card shows whether actions can run right now."
     >
       <div role="status" aria-live="polite" data-connection-loading={loading || undefined}>
         {loading || !state ? (
@@ -290,7 +293,81 @@ function ConnectionCard({
   const checkedAgo = relativeTime(state.checkedAt) || "just now";
   const lastActionAgo = relativeTime(parseConnectionTimestamp(state.lastActionAt));
 
+  // P33 — the DIRECT tier: the app's own server-side session performs the
+  // everyday actions (the main-interface doctrine — no browser, no tab).
+  if (state.mode === "direct") {
+    if (state.connected) {
+      return (
+        <Card className="gap-3 rounded-xl py-5" data-connection-state="connected">
+          <CardHeader className="px-5">
+            <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+              <CheckCircle2 className="size-5 shrink-0 text-emerald-500" aria-hidden="true" />
+              Connected — actions are available
+            </CardTitle>
+            <CardDescription>
+              Actions run through WebFlix&apos;s server-side YouTube session.
+            </CardDescription>
+            <CardAction>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onRetry}
+                aria-label="Recheck the YouTube connection"
+              >
+                <RotateCw className="size-4" aria-hidden="true" />
+                Recheck
+              </Button>
+            </CardAction>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2 px-5 text-sm text-muted-foreground">
+            <p data-connection-mode="direct">
+              Like, subscribe, comment and watch later run right from WebFlix — no separate
+              browser or YouTube tab needed.
+            </p>
+            {state.broker ? (
+              <p>
+                {state.broker.connected
+                  ? "The optional connected browser is also available (dislike and bell preferences ride it)."
+                  : "A few actions (dislike, bell preferences) still ride the optional connected browser — offline right now; everything else works without it."}
+              </p>
+            ) : null}
+            <p className="text-xs">Checked {checkedAgo}.</p>
+          </CardContent>
+        </Card>
+      );
+    }
+    return (
+      <Card className="gap-3 rounded-xl py-5" data-connection-state="disconnected">
+        <CardHeader className="px-5">
+          <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+            <AlertTriangle className="size-5 shrink-0 text-amber-500" aria-hidden="true" />
+            YouTube session needs attention
+          </CardTitle>
+          <CardDescription>
+            Like, subscribe and comment actions are unavailable right now.
+          </CardDescription>
+          <CardAction>
+            <Button size="sm" onClick={onRetry} aria-label="Retry the YouTube connection check">
+              <RotateCw className="size-4" aria-hidden="true" />
+              Retry
+            </Button>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2 px-5 text-sm text-muted-foreground">
+          <p>
+            A YouTube session is configured, but YouTube didn&apos;t serve it just now — actions
+            may fail until the session is refreshed. Retry to re-check; the reads you see are
+            unaffected.
+          </p>
+          <p className="text-xs">Checked {checkedAgo}.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (state.connected) {
+    // mode "broker" — the Task 4-b card (the fallback tier): the connected
+    // browser holds a youtube.com tab; the tab context + last action ride it
     return (
       <Card className="gap-3 rounded-xl py-5" data-connection-state="connected">
         <CardHeader className="px-5">
@@ -325,6 +402,7 @@ function ConnectionCard({
     );
   }
 
+  // mode "none" — neither tier answers
   return (
     <Card className="gap-3 rounded-xl py-5" data-connection-state="disconnected">
       <CardHeader className="px-5">
@@ -344,9 +422,9 @@ function ConnectionCard({
       </CardHeader>
       <CardContent className="flex flex-col gap-2 px-5 text-sm text-muted-foreground">
         <p>
-          The WebFlix connected session isn&apos;t reachable right now — either its browser
-          isn&apos;t running or the YouTube tab isn&apos;t open. It usually comes back on its own;
-          retry, or check back here later.
+          No server-side YouTube session is configured for actions, and the optional connected
+          browser isn&apos;t reachable. Configure the YouTube session to enable like, subscribe
+          and comment right from WebFlix — no youtube.com tab needed.
         </p>
         <p className="text-xs">Checked {checkedAgo}.</p>
       </CardContent>
