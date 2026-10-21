@@ -307,45 +307,56 @@ describe("P18 — the feed header's grid/list switcher", () => {
   });
 });
 
-describe("F5 — the signed-in loginRequired state (the HistoryUnavailableNote law)", () => {
-  test("no YT session → the honest unavailable note, NEVER a 'Sign in …' ask (the viewer is signed in)", async () => {
+describe("F5 — the signed-in per-user notice banner (the WFX2-P36 honest envelope)", () => {
+  test("not connected → the honest connect-ask notice + the Connect link, NEVER a 'Sign in …' ask (the viewer is signed in)", async () => {
     feedData = {
       channels: [],
       videos: [],
       nextCursor: null,
-      loginRequired: true,
-      session: false,
+      loginRequired: false,
+      connected: false,
+      notice: "Connect your YouTube account to see your subscriptions — Settings → YouTube connection",
     };
     await render(createElement(SubscriptionsPage));
     const text = host!.textContent ?? "";
-    expect(text).toContain("Your subscriptions feed is unavailable right now");
-    expect(text).toContain("No YouTube session is connected to this deployment yet");
-    expect(text).toContain("your WebFlix sign-in is fine");
+    expect(text).toContain("Connect your YouTube account to see your subscriptions");
+    expect(text).toContain("Settings → YouTube connection");
     // THE LAW: the sign-in ask belongs to the GUEST gate only — youtube.com
     // never asks a signed-in viewer to sign in again.
     expect(text).not.toContain("Sign in to see your subscriptions feed");
-    // the honest empty-state line does not ride this state either
-    expect(text).not.toContain("No subscriptions surfaced");
-    // the history idiom: role=status (a status note), never role=alert
+    // the banner is a status note (the history idiom), never an alert
+    expect(all('[data-testid="subscriptions-notice"]').length).toBe(1);
     expect(all('[role="status"]').length).toBeGreaterThan(0);
     expect(all('[role="alert"]').length).toBe(0);
+    // the connect link lands on the settings surface (the YouTube account card)
+    const connect = all("a").find(
+      (a) => (a.textContent ?? "").trim() === "Connect your YouTube account"
+    );
+    expect(connect).toBeDefined();
+    expect(connect!.getAttribute("href")).toBe("/settings");
     // the feed header chrome (the layout switcher) stays mounted — the state
     // note owns the CONTENT, not the header
     expect(all('[data-testid="subs-layout-toggle"]').length).toBe(1);
   });
 
-  test("session connected but the read not served → the connected-but-unavailable copy (honest divergence)", async () => {
+  test("connected but the official read failed → the honest failure notice, NO connect link (honest divergence)", async () => {
     feedData = {
       channels: [],
       videos: [],
       nextCursor: null,
-      loginRequired: true,
-      session: true,
+      loginRequired: false,
+      connected: true,
+      notice:
+        "Your subscription list could not be read just now (the YouTube API answered honestly with an error) — try again shortly",
     };
     await render(createElement(SubscriptionsPage));
     const text = host!.textContent ?? "";
-    expect(text).toContain("The YouTube session is connected but didn't serve your subscriptions feed");
-    expect(text).not.toContain("No YouTube session is connected");
+    expect(text).toContain("Your subscription list could not be read just now");
+    expect(text).toContain("try again shortly");
+    // connected:true → the banner carries NO connect link
+    expect(
+      all("a").some((a) => (a.textContent ?? "").trim() === "Connect your YouTube account")
+    ).toBe(false);
     expect(text).not.toContain("Sign in to see your subscriptions feed");
   });
 });

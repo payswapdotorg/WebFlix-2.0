@@ -163,16 +163,19 @@ describe("GET /api/watch/queue — the deterministic local shuffle (G16)", () =>
 });
 
 describe("GET /api/watch/queue — the honest states", () => {
-  test("WL without a session: the honest loginRequired state (never a fabricated queue)", async () => {
+  test("WL/LL (the special lists): the honest no-queue 404 — never the operator's list, never a fabricated queue", async () => {
     const res = await get("videoId=dQw4w9WgXcQ&list=WL");
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(404);
     const data = (await res.json()) as any;
-    expect(data.loginRequired).toBe(true);
-    expect(data.items).toEqual([]);
-    expect(data.playlist.title).toBe("Watch later");
-    // the special list rides the session read (browse VLWL), not the next seam
-    const call = upstream.recorded.find((r) => r.url.includes("/youtubei/v1/browse"));
-    expect(call?.body.browseId).toBe("VLWL");
+    expect(data.error).toBe(
+      "Watch Later / Liked lists have no official API — the WebFlix save button keeps your Watch later; YouTube's own page has the rest",
+    );
+    // the special list never rides ANY read seam — zero upstream calls
+    expect(upstream.recorded).toHaveLength(0);
+    // LL answers the same honest no-queue verdict
+    const ll = await get("videoId=dQw4w9WgXcQ&list=LL");
+    expect(ll.status).toBe(404);
+    expect(upstream.recorded).toHaveLength(0);
   });
 
   test("a list the upstream will not queue for this video → the honest 404", async () => {

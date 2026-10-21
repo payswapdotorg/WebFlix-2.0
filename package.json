@@ -9,7 +9,7 @@
     "start": "DATABASE_URL=file:../db/webflix2.db next start -p 3000",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "bun run test:boot && bun run test:watch && bun run test:liveshorts && bun run test:cutover && bun run test:auth && bun run test:community && bun run test:notifications",
+    "test": "bun run test:boot && bun run test:watch && bun run test:liveshorts && bun run test:cutover && bun run test:auth && bun run test:community && bun run test:notifications && bun run test:p36",
     "db:push": "DATABASE_URL=file:../db/webflix2.db prisma db push --accept-data-loss",
     "db:generate": "DATABASE_URL=file:../db/webflix2.db prisma generate",
     "db:seed": "DATABASE_URL=file:../db/webflix2.db bun prisma/seed.ts",
@@ -26,7 +26,8 @@
     "acceptance:selftest": "bun scripts/acceptance.mjs --selftest",
     "warm": "bun scripts/warm-cache.mjs",
     "test:community": "DATABASE_URL=file:../db/boot-test.db bun test --isolate tests/community-posts.test.ts",
-    "test:notifications": "DATABASE_URL=file:../db/boot-test.db bun test --isolate tests/notifications-center.test.ts tests/notifications-prefs.test.tsx"
+    "test:notifications": "DATABASE_URL=file:../db/boot-test.db bun test --isolate tests/notifications-center.test.ts tests/notifications-prefs.test.tsx",
+    "test:p36": "DATABASE_URL=file:../db/p36-test.db bun test --isolate tests/p36-official-actions.test.ts tests/p36-oauth.test.ts tests/p36-isolation.test.ts tests/p36-oauth-routes.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "6.3.1",

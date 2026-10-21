@@ -1,110 +1,104 @@
 /**
- * WFX2-A-W tests — action routes with the broker client + direct path
- * MOCKED (no network, no live CDP): the ok path, the direct-first path,
- * the broker fallback, and the honest 502 offline mapping.
+ * WFX2-P36 tests — the action routes re-pointed to the per-user lanes:
  *
- * WFX2-B-B note (pre-existing flake fixed here): bun's `mock.module` is
- * PROCESS-wide and is not restored between test files, so the alphabetical
- * run order (action-routes < broker-client < youtube-direct) leaked these
- * mocks into the sibling contract tests (17 spurious failures on `bun test`).
- * The real modules are captured up front and re-installed in `afterAll`,
- * making this file's mocks effectively file-scoped again.
+ *  - OFFICIAL lane (like / dislike / remove-rating, subscribe / unsubscribe):
+ *    the signed-in user's OWN OAuth connection (the real connection-store Map
+ *    + real encryptSecret blobs, env-clean) driving the official-actions
+ *    adapter MOCKED at the seam — controllable typed results, no network;
+ *    the authenticated read-back (getRating / subscriptions.list) is the ONLY
+ *    success confirmation, reported as `verified`;
+ *  - LOCAL lane (watch-later, dont-recommend-channel, the feedback undos):
+ *    the honest WebFlix store (local:true disclosed, the real test DB via
+ *    setupTestDb) — YouTube's WL is a system playlist the Data API cannot
+ *    write and feed feedback has no end-user API;
+ *  - tier failures: no connection → 403 youtube-not-connected; a revoked
+ *    grant → 403 youtube-needs-reauth; official failures → the honest
+ *    officialFailure mapping (quota → 502 youtube-quota, 401/403 →
+ *    youtube-provider-rejected, else youtube-provider-error).
+ *
+ * The pre-P36 direct-first/broker-fallback pins are RETIRED with the shared
+ * operator identity itself (action-proxy imports neither @/lib/broker nor
+ * @/lib/youtube-direct — isolation by construction; these tests pin exactly
+ * that: ZERO official calls whenever the tier or lane says no).
+ *
+ * Same mock pattern as the lane's established idiom: real modules captured
+ * up front and re-installed in `afterAll` (bun's mock.module is
+ * process-wide).
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, test, mock } from "bun:test";
 
 /* ------------------------------------------------------------------ */
-/* capture the REAL modules before the mocks replace them (restore)    */
+/* capture the REAL official-actions module before the mock swaps it    */
 /*                                                                      */
 /* NOTE: a plain `const real = require(...)` snapshot is NOT enough —   */
 /* bun mutates the captured namespace in place when mock.module swaps   */
 /* the registry, so the values must be copied into a fresh object.      */
 /* ------------------------------------------------------------------ */
-
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const realBroker = { ...require("@/lib/broker") } as Record<string, unknown>;
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const realDirect = { ...require("@/lib/youtube-direct") } as Record<string, unknown>;
+const realOfficial = { ...require("@/lib/youtube/official-actions") } as Record<string, unknown>;
 
 /* ------------------------------------------------------------------ */
-/* mock the broker client + direct module BEFORE the routes load       */
+/* the official-actions MOCK — controllable typed results               */
 /* ------------------------------------------------------------------ */
 
-class MockBrokerError extends Error {
-  kind: string;
+/** The typed failure shape every official call maps into. */
+interface Failure {
+  ok: false;
+  kind: "http-error" | "network" | "timeout" | "malformed" | "quota";
   status: number;
-  detail?: unknown;
-  constructor(kind: string, message: string, status: number, detail?: unknown) {
-    super(message);
-    this.name = "BrokerError";
-    this.kind = kind;
-    this.status = status;
-    this.detail = detail;
-  }
+  message: string;
 }
+type Result<T> = { ok: true; data: T } | Failure;
+type MaybeFn<T> = T | ((call: number) => T);
 
-const brokerCalls: { kind: string; target: unknown; payload: unknown }[] = [];
-let brokerResponse: unknown = { ok: true, verified: true, path: "ui" };
+const officialCalls: { fn: string; args: unknown[] }[] = [];
 
-mock.module("@/lib/broker", () => ({
-  BROKER_OFFLINE_MESSAGE: "action backend offline — the lead's broker must be running",
-  BrokerError: MockBrokerError,
-  brokerAction: async (kind: string, target: unknown, payload?: unknown) => {
-    brokerCalls.push({ kind, target, payload });
-    return typeof brokerResponse === "function"
-      ? brokerResponse({ kind, target, payload })
-      : brokerResponse;
+let rateResult: MaybeFn<{ ok: true } | Failure> = { ok: true };
+let ratingRead: MaybeFn<Result<{ rating: "like" | "dislike" | "none" }>> = {
+  ok: true,
+  data: { rating: "like" },
+};
+let subStatus: MaybeFn<Result<{ subscribed: boolean; subscriptionId: string | null }>> = {
+  ok: true,
+  data: { subscribed: false, subscriptionId: null },
+};
+let subscribeResult: MaybeFn<Result<{ subscriptionId: string | null; channelId: string }>> = {
+  ok: true,
+  data: { subscriptionId: "sub_new", channelId: "UC1" },
+};
+let unsubscribeResult: MaybeFn<{ ok: true } | Failure> = { ok: true };
+
+const resolve = <T>(v: MaybeFn<T>, call: number): T =>
+  typeof v === "function" ? (v as (n: number) => T)(call) : v;
+
+const callsOf = (fn: string): number => officialCalls.filter((c) => c.fn === fn).length;
+
+mock.module("@/lib/youtube/official-actions", () => ({
+  // action-proxy imports this at module scope — the mock must carry it
+  SYSTEM_PLAYLIST_IDS: new Set(["WL", "LL"]),
+  officialRateVideo: async (accessToken: string, videoId: string, rating: string) => {
+    officialCalls.push({ fn: "rate", args: [accessToken, videoId, rating] });
+    return resolve(rateResult, callsOf("rate"));
   },
-  brokerOk: (r: unknown) => !(r instanceof MockBrokerError),
-  brokerUrl: () => "http://127.0.0.1:3055",
-  brokerSecret: () => "s3cret",
-  brokerConfigured: () => true,
-  brokerTimeoutMs: () => 15000,
+  officialGetRating: async (accessToken: string, videoId: string) => {
+    officialCalls.push({ fn: "getRating", args: [accessToken, videoId] });
+    return resolve(ratingRead, callsOf("getRating"));
+  },
+  officialSubscriptionStatus: async (accessToken: string, channelId: string) => {
+    officialCalls.push({ fn: "subStatus", args: [accessToken, channelId] });
+    return resolve(subStatus, callsOf("subStatus"));
+  },
+  officialSubscribe: async (accessToken: string, channelId: string) => {
+    officialCalls.push({ fn: "subscribe", args: [accessToken, channelId] });
+    return resolve(subscribeResult, callsOf("subscribe"));
+  },
+  officialUnsubscribeById: async (accessToken: string, subscriptionId: string) => {
+    officialCalls.push({ fn: "unsubscribe", args: [accessToken, subscriptionId] });
+    return resolve(unsubscribeResult, callsOf("unsubscribe"));
+  },
 }));
 
-const directCalls: { channelId: string; on: boolean }[] = [];
-const directRateCalls: { videoId: string; action: string }[] = [];
-const directPlaylistCalls: { playlistId: string; videoId: string; want: boolean }[] = [];
-let directResponse: unknown = { ok: true };
-let directRateResponse: unknown = { ok: true };
-let directPlaylistResponse: unknown = { ok: true };
-let directConfigured = true;
-let subscribedState: boolean | null = null;
-let playlistMembership: boolean | null = null;
-
-mock.module("@/lib/youtube-direct", () => ({
-  parseCookies: (raw: string) => {
-    const out: Record<string, string> = {};
-    for (const part of raw.split(";")) {
-      const i = part.indexOf("=");
-      if (i > 0) out[part.slice(0, i).trim()] = part.slice(i + 1).trim();
-    }
-    return out;
-  },
-  cookieValue: () => "fake",
-  directAuthConfigured: () => directConfigured,
-  sapisidhash: () => "0_hash",
-  subscribeChannel: async (channelId: string, on: boolean) => {
-    directCalls.push({ channelId, on });
-    return directResponse;
-  },
-  getSubscribedState: async () => subscribedState,
-  // P33 — the direct everyday-action family
-  rateVideo: async (videoId: string, action: string) => {
-    directRateCalls.push({ videoId, action });
-    return directRateResponse;
-  },
-  editPlaylistMembership: async (playlistId: string, videoId: string, want: boolean) => {
-    directPlaylistCalls.push({ playlistId, videoId, want });
-    return directPlaylistResponse;
-  },
-  playlistContains: async () => playlistMembership,
-  createComment: async () => ({ ok: false, error: "direct-not-configured" }),
-  createReply: async () => ({ ok: false, error: "direct-not-configured" }),
-  buildLikeParams: () => "Cg0KC2RRdzR3OVdnWGNRIAAyDAiH6OzVBhCG4ZOCAg%3D%3D",
-  playlistBrowseId: () => "VLWL",
-}));
-
-/* routes (imported after the mocks) */
+/* routes + stores (imported after the mocks) */
 import { POST as postLike } from "@/app/api/videos/[id]/like/route";
 import { clearCache } from "@/lib/youtube/cache";
 import { cacheJsonSet, cachePeek } from "@/lib/youtube/upstash-cache";
@@ -113,51 +107,74 @@ import { POST as postWatchLater } from "@/app/api/playlists/watch-later/route";
 import { POST as postDontRecommendChannel } from "@/app/api/dont-recommend-channel/route";
 import { POST as postDontRecommendChannelUndo } from "@/app/api/dont-recommend-channel/undo/route";
 import { POST as postNotInterestedUndo } from "@/app/api/not-interested/undo/route";
-import { mintSessionCookie } from "./helpers";
+import { putYouTubeConnection, resetYoutubeConnectionStore } from "@/lib/auth/youtube-connection-store";
+import { encryptSecret } from "@/lib/youtube/oauth";
+import { ensureShadowVideo } from "@/lib/watch/local-comments";
+import { db } from "@/lib/db";
+import { mintSessionCookie, setupTestDb } from "./helpers";
 
-const OFFLINE_MSG = "action backend offline — the lead's broker must be running";
+/* the working tier: the session's sub IS the connection-store key */
+const USER_A = "u_test_a";
+const TOKEN_A = "tok_a";
 
 let AUTH_COOKIE = "";
+let COOKIE_B = "";
+
 beforeAll(async () => {
-  // WFX2-P2-AU: these write routes sit behind the auth gate — sign in
-  AUTH_COOKIE = await mintSessionCookie();
+  AUTH_COOKIE = await mintSessionCookie({ sub: USER_A });
+  COOKIE_B = await mintSessionCookie({ sub: "u_test_b" });
 });
 
-beforeEach(() => {
-  brokerCalls.length = 0;
-  directCalls.length = 0;
-  directRateCalls.length = 0;
-  directPlaylistCalls.length = 0;
-  brokerResponse = { ok: true, verified: true, path: "ui" };
-  directResponse = { ok: true };
-  directRateResponse = { ok: true };
-  directPlaylistResponse = { ok: true };
-  directConfigured = true;
-  subscribedState = null;
-  playlistMembership = null;
+setupTestDb(); // the LOCAL families write the real (test) DB
+
+/** The user's own connected account record — tokens as real encryptSecret blobs. */
+async function connectUser(userId: string, token: string): Promise<void> {
+  await putYouTubeConnection({
+    userId,
+    channelId: `UC_own_${userId}`,
+    channelTitle: `Test ${userId}`,
+    channelThumbUrl: null,
+    scope: "https://www.googleapis.com/auth/youtube.force-ssl",
+    accessTokenEnc: await encryptSecret(token),
+    refreshTokenEnc: null,
+    accessExpiresAt: Date.now() + 3_600_000,
+    status: "connected",
+    connectedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+beforeEach(async () => {
+  officialCalls.length = 0;
+  rateResult = { ok: true };
+  ratingRead = { ok: true, data: { rating: "like" } };
+  subStatus = { ok: true, data: { subscribed: false, subscriptionId: null } };
+  subscribeResult = { ok: true, data: { subscriptionId: "sub_new", channelId: "UC1" } };
+  unsubscribeResult = { ok: true };
+  resetYoutubeConnectionStore();
+  await connectUser(USER_A, TOKEN_A);
 });
 
-/* bun's mock.module is process-wide — restore the real modules so the
- * later-loaded contract tests (broker-client, youtube-direct) exercise
- * the real implementations again. */
+/* bun's mock.module is process-wide — restore the real module so any
+ * later-loaded contract tests exercise the real adapter again. */
 afterAll(() => {
-  mock.module("@/lib/broker", () => realBroker);
-  mock.module("@/lib/youtube-direct", () => realDirect);
+  mock.module("@/lib/youtube/official-actions", () => realOfficial);
+  resetYoutubeConnectionStore();
 });
 
 import type { NextRequest } from "next/server";
 
-const req = (body: unknown, url = "http://localhost/api/x"): NextRequest =>
+const req = (body: unknown, url = "http://localhost/api/x", cookie = AUTH_COOKIE): NextRequest =>
   new Request(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json", cookie: AUTH_COOKIE },
+    headers: { "Content-Type": "application/json", cookie },
     body: JSON.stringify(body),
   }) as unknown as NextRequest;
 
-describe("POST /api/videos/[id]/like (direct-first, broker fallback)", () => {
+describe("POST /api/videos/[id]/like (the per-user OFFICIAL lane — videos.rate + getRating)", () => {
   const ctx = { params: Promise.resolve({ id: "dQw4w9WgXcQ" }) };
 
-  test("P33 direct like: the server-side session answers — ZERO broker calls, path direct, honest counts", async () => {
+  test("official like: the user's own token on the wire + the getRating read-back → verified:true, honest counts", async () => {
     const res = await postLike(
       req({ value: "like", baseline: { likes: 5, dislikes: 0, yourLike: null } }),
       ctx,
@@ -170,131 +187,217 @@ describe("POST /api/videos/[id]/like (direct-first, broker fallback)", () => {
       dislikes: number;
       yourLike: string | null;
       path?: string;
+      verified?: boolean;
     };
     expect(body.ok).toBe(true);
     expect(body.effect).toBe("liked");
     expect(body.yourLike).toBe("like");
     expect(body.likes).toBe(6);
     expect(body.dislikes).toBe(0);
-    expect(body.path).toBe("direct");
-    expect(directRateCalls).toEqual([{ videoId: "dQw4w9WgXcQ", action: "like" }]);
-    expect(brokerCalls).toEqual([]); // the main-interface doctrine: no broker needed
+    expect(body.path).toBe("oauth-official");
+    expect(body.verified).toBe(true);
+    // the user's OWN token drove the write AND the authenticated read-back
+    expect(officialCalls).toEqual([
+      { fn: "rate", args: [TOKEN_A, "dQw4w9WgXcQ", "like"] },
+      { fn: "getRating", args: [TOKEN_A, "dQw4w9WgXcQ"] },
+    ]);
   });
 
-  test("P35: a successful direct like DROPS the cached watch response (the reload-persistence law)", async () => {
+  test("P35 law kept: a verified like DROPS the cached watch response (the reload-persistence law)", async () => {
     clearCache();
     const key = "yt:watch:dQw4w9WgXcQ";
     await cacheJsonSet(key, { marker: "stale-next" }, 60_000);
     expect(await cachePeek<any>(key)).not.toBeNull();
     const res = await postLike(req({ value: "like" }), ctx);
     expect(res.status).toBe(200);
-    expect(await cachePeek<any>(key)).toBeNull(); // invalidated — the next bootstrap re-fetches with the session
+    expect(await cachePeek<any>(key)).toBeNull(); // invalidated — the next bootstrap re-reads per-user state
   });
 
-  test("P35: a broker-tier like success ALSO drops the cached watch response (the broker tab changed YouTube state too)", async () => {
+  test("a like whose read-back is unavailable STILL drops the cached watch response (the write changed YouTube-side state)", async () => {
     clearCache();
     const key = "yt:watch:dQw4w9WgXcQ";
     await cacheJsonSet(key, { marker: "stale-next" }, 60_000);
-    directRateResponse = { ok: false, status: 403, error: "direct like/like returned 403" };
-    brokerResponse = { ok: true, verified: true, path: "ui" };
+    ratingRead = { ok: false, kind: "network", status: 0, message: "network error reaching the YouTube API" };
     const res = await postLike(req({ value: "like" }), ctx);
     expect(res.status).toBe(200);
-    expect(await cachePeek<any>(key)).toBeNull(); // the broker write changed YouTube-side state
+    expect(await cachePeek<any>(key)).toBeNull();
   });
 
-  test("P33 direct fail → the honest broker fallback (kind like)", async () => {
-    directRateResponse = { ok: false, status: 403, error: "direct like/like returned 403" };
-    const res = await postLike(req({ value: "like" }), ctx);
-    expect(res.status).toBe(200);
-    expect(directRateCalls.length).toBe(1);
-    expect(brokerCalls).toEqual([
-      { kind: "like", target: { videoId: "dQw4w9WgXcQ" }, payload: undefined },
-    ]);
-    const body = (await res.json()) as { path?: string };
-    expect(body.path).toBe("ui");
-  });
-
-  test("P33 direct unconfigured (no session) → the broker tier serves the like", async () => {
-    directConfigured = false;
-    const res = await postLike(req({ value: "like" }), ctx);
-    expect(res.status).toBe(200);
-    expect(directRateCalls).toEqual([]);
-    expect(brokerCalls[0].kind).toBe("like");
-  });
-
-  test("P33 toggle-off: the UI's own baseline resolves the direct remove — one none call, no second trip", async () => {
+  test("the legacy toggle: the UI's own baseline resolves the remove — one none call on the official lane", async () => {
+    ratingRead = { ok: true, data: { rating: "none" } };
     const res = await postLike(
       req({ value: "like", baseline: { likes: 5, dislikes: 0, yourLike: "like" } }),
       ctx,
     );
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { yourLike: string | null; likes: number; effect: string };
+    const body = (await res.json()) as { yourLike: string | null; likes: number; effect: string; verified?: boolean };
     expect(body.yourLike).toBeNull();
     expect(body.likes).toBe(4);
     expect(body.effect).toBe("rating-removed");
-    expect(directRateCalls).toEqual([{ videoId: "dQw4w9WgXcQ", action: "none" }]);
-    expect(brokerCalls).toEqual([]);
+    expect(body.verified).toBe(true); // the read-back confirmed the removal
+    expect(officialCalls).toEqual([
+      { fn: "rate", args: [TOKEN_A, "dQw4w9WgXcQ", "none"] },
+      { fn: "getRating", args: [TOKEN_A, "dQw4w9WgXcQ"] },
+    ]);
   });
 
-  test("canonical action=none maps to the direct remove", async () => {
+  test("canonical action=none maps to the official none rating", async () => {
+    ratingRead = { ok: true, data: { rating: "none" } };
     const res = await postLike(req({ action: "none" }), ctx);
     expect(res.status).toBe(200);
-    expect(directRateCalls[0]).toEqual({ videoId: "dQw4w9WgXcQ", action: "none" });
-    expect(brokerCalls).toEqual([]);
+    expect(officialCalls[0]).toEqual({ fn: "rate", args: [TOKEN_A, "dQw4w9WgXcQ", "none"] });
     const body = (await res.json()) as { yourLike: string | null; effect: string };
     expect(body.yourLike).toBeNull();
     expect(body.effect).toBe("rating-removed");
   });
 
-  test("P33 dislike: NO captured wire → the direct tier is never called (the no-guess law), broker serves it", async () => {
+  test("dislike rides the SAME official lane (the P33 broker-only gap closed the policy-aligned way)", async () => {
+    ratingRead = { ok: true, data: { rating: "dislike" } };
     const res = await postLike(
       req({ value: "dislike", baseline: { likes: 5, dislikes: 2, yourLike: "like" } }),
       ctx,
     );
-    const body = (await res.json()) as { likes: number; dislikes: number; yourLike: string };
-    expect(directRateCalls).toEqual([]); // never a guessed like/dislike wire
-    expect(brokerCalls[0].kind).toBe("dislike");
+    const body = (await res.json()) as {
+      likes: number;
+      dislikes: number;
+      yourLike: string;
+      verified?: boolean;
+    };
+    expect(officialCalls[0]).toEqual({ fn: "rate", args: [TOKEN_A, "dQw4w9WgXcQ", "dislike"] });
     expect(body.yourLike).toBe("dislike");
     expect(body.likes).toBe(4);
     expect(body.dislikes).toBe(3);
+    expect(body.verified).toBe(true);
   });
 
-  test("broker down with no session → 502 with the honest offline message", async () => {
-    directConfigured = false;
-    brokerResponse = new MockBrokerError("offline", OFFLINE_MSG, 502);
-    const res = await postLike(req({ value: "like" }), ctx);
-    expect(res.status).toBe(502);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe(OFFLINE_MSG);
-  });
-
-  test("P33 direct AND broker both down → 502 with the honest offline message", async () => {
-    directRateResponse = { ok: false, status: 502, error: "direct like/like returned 502" };
-    brokerResponse = new MockBrokerError("offline", OFFLINE_MSG, 502);
-    const res = await postLike(req({ value: "like" }), ctx);
-    expect(res.status).toBe(502);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe(OFFLINE_MSG);
-  });
-
-  test("broker action-failure (no session) → 502 with the broker's message", async () => {
-    directConfigured = false;
-    brokerResponse = new MockBrokerError("action-failed", "like-button-not-found", 502);
-    const res = await postLike(req({ value: "like" }), ctx);
-    expect(res.status).toBe(502);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("like-button-not-found");
-  });
-
-  test("DOM-observed count wins over baseline math (likesLabel parsed — the broker fallback tier)", async () => {
-    directConfigured = false;
-    brokerResponse = { ok: true, verified: true, path: "ui", detail: { likesLabel: "2.4M" } };
+  test("read-back MISMATCH → verified:false honest (a 2xx write alone is never a success claim)", async () => {
+    ratingRead = { ok: true, data: { rating: "none" } }; // target like, YouTube says none
     const res = await postLike(
       req({ value: "like", baseline: { likes: 5, dislikes: 0, yourLike: null } }),
       ctx,
     );
-    const body = (await res.json()) as { likes: number };
-    expect(body.likes).toBe(2400000);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { verified?: boolean; yourLike: string | null };
+    expect(body.verified).toBe(false); // honest — never a claimed success
+    expect(body.yourLike).toBeNull(); // the read-back's own truth
+  });
+
+  test("read-back UNAVAILABLE → verified:false + the honest note; the intended rating is shown as such", async () => {
+    ratingRead = { ok: false, kind: "network", status: 0, message: "network error reaching the YouTube API" };
+    const res = await postLike(req({ value: "like" }), ctx);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { verified?: boolean; yourLike: string | null; note?: string };
+    expect(body.verified).toBe(false);
+    expect(body.yourLike).toBe("like"); // the intended rating, disclosed as unconfirmed
+    expect(body.note).toBe(
+      "the rating was written; the read-back was unavailable so the state shows your intended rating",
+    );
+  });
+
+  test("no connected account → 403 youtube-not-connected; ZERO official calls (isolation by construction)", async () => {
+    resetYoutubeConnectionStore(); // drop the connection
+    const res = await postLike(req({ value: "like" }), ctx);
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { error: string; kind?: string };
+    expect(body.error).toBe("Connect your YouTube account to act — Settings → YouTube connection");
+    expect(body.kind).toBe("youtube-not-connected");
+    expect(officialCalls).toEqual([]);
+  });
+
+  test("a revoked/expired grant (status needs_reauth) → 403 youtube-needs-reauth", async () => {
+    resetYoutubeConnectionStore();
+    await putYouTubeConnection({
+      userId: USER_A,
+      channelId: null,
+      channelTitle: null,
+      channelThumbUrl: null,
+      scope: "https://www.googleapis.com/auth/youtube.force-ssl",
+      accessTokenEnc: await encryptSecret(TOKEN_A),
+      refreshTokenEnc: null,
+      accessExpiresAt: Date.now() + 3_600_000,
+      status: "needs_reauth",
+      connectedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    const res = await postLike(req({ value: "like" }), ctx);
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { error: string; kind?: string };
+    expect(body.error).toBe(
+      "Your YouTube account connection needs re-authorizing — Settings → YouTube connection",
+    );
+    expect(body.kind).toBe("youtube-needs-reauth");
+    expect(officialCalls).toEqual([]);
+  });
+
+  test("quota exhaustion → 502 youtube-quota (never fake success)", async () => {
+    rateResult = { ok: false, kind: "quota", status: 403, message: "YouTube API quota exceeded for today" };
+    const res = await postLike(req({ value: "like" }), ctx);
+    expect(res.status).toBe(502);
+    const body = (await res.json()) as { error: string; kind?: string };
+    expect(body.error).toBe("YouTube API quota exceeded for today");
+    expect(body.kind).toBe("youtube-quota");
+    expect(callsOf("getRating")).toBe(0); // the write refused — no read-back claimed
+  });
+
+  test("provider 401 → 502 youtube-provider-rejected with the re-connect hint", async () => {
+    rateResult = { ok: false, kind: "http-error", status: 401, message: "Invalid Credentials" };
+    const res = await postLike(req({ value: "like" }), ctx);
+    expect(res.status).toBe(502);
+    const body = (await res.json()) as { error: string; kind?: string };
+    expect(body.error).toBe(
+      "YouTube rejected the action (Invalid Credentials) — re-connect your account in Settings if it persists",
+    );
+    expect(body.kind).toBe("youtube-provider-rejected");
+  });
+
+  test("other provider failures → 502 youtube-provider-error with the provider's own message", async () => {
+    rateResult = { ok: false, kind: "http-error", status: 500, message: "the YouTube API answered 500" };
+    const res = await postLike(req({ value: "like" }), ctx);
+    expect(res.status).toBe(502);
+    const body = (await res.json()) as { error: string; kind?: string };
+    expect(body.error).toBe("the YouTube API answered 500");
+    expect(body.kind).toBe("youtube-provider-error");
+  });
+
+  test("the transparent refresh: an expired access token is refreshed server-side and the FRESH token serves the rate", async () => {
+    resetYoutubeConnectionStore();
+    await putYouTubeConnection({
+      userId: USER_A,
+      channelId: "UC_own_a",
+      channelTitle: "Test u_test_a",
+      channelThumbUrl: null,
+      scope: "https://www.googleapis.com/auth/youtube.force-ssl",
+      accessTokenEnc: await encryptSecret("tok_stale"),
+      refreshTokenEnc: await encryptSecret("refresh_a"),
+      accessExpiresAt: Date.now() - 1_000, // expired → the refresh path
+      status: "connected",
+      connectedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    // the oauth token endpoint (the only real fetch left on this path)
+    const realFetch = globalThis.fetch;
+    const tokenCalls: string[] = [];
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      const u = String(url instanceof Request ? url.url : url);
+      tokenCalls.push(u);
+      return new Response(
+        JSON.stringify({ access_token: "tok_refreshed", expires_in: 3600, scope: "https://www.googleapis.com/auth/youtube.force-ssl" }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }) as unknown as typeof fetch;
+    try {
+      const res = await postLike(req({ value: "like" }), ctx);
+      expect(res.status).toBe(200);
+      expect(tokenCalls[0]).toContain("https://oauth2.googleapis.com/token");
+      // the REFRESHED token is the one on the official wire
+      expect(officialCalls[0]).toEqual({ fn: "rate", args: ["tok_refreshed", "dQw4w9WgXcQ", "like"] });
+      // the store now carries the refreshed record (accessExpiresAt in the future)
+      const { getYouTubeConnection } = await import("@/lib/auth/youtube-connection-store");
+      const updated = await getYouTubeConnection(USER_A);
+      expect(updated?.accessExpiresAt).toBeGreaterThan(Date.now());
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   });
 
   test("missing action/value → 400", async () => {
@@ -303,51 +406,79 @@ describe("POST /api/videos/[id]/like (direct-first, broker fallback)", () => {
   });
 });
 
-describe("POST /api/subscribe (direct-first, broker fallback)", () => {
-  test("direct path: SAPISIDHASH subscribe verified §16 → path direct, no broker call", async () => {
+describe("POST /api/subscribe (the per-user OFFICIAL lane — subscriptions.insert/delete + list read-back)", () => {
+  test("subscribe: the own-state pre-read, the insert on the user's token, the list read-back → verified:true", async () => {
+    subStatus = (n) =>
+      n === 1
+        ? { ok: true, data: { subscribed: false, subscriptionId: null } }
+        : { ok: true, data: { subscribed: true, subscriptionId: "sub_new" } };
     const res = await postSubscribe(req({ channelId: "UCuAXFkgsw1L7xaCfnd5JJOw", on: true }));
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { ok: boolean; subscribed: boolean; path: string };
+    const body = (await res.json()) as {
+      ok: boolean;
+      subscribed: boolean;
+      path: string;
+      verified?: boolean;
+      already?: boolean;
+    };
     expect(body.ok).toBe(true);
     expect(body.subscribed).toBe(true);
-    expect(body.path).toBe("direct");
-    expect(directCalls).toEqual([{ channelId: "UCuAXFkgsw1L7xaCfnd5JJOw", on: true }]);
-    expect(brokerCalls).toHaveLength(0);
+    expect(body.path).toBe("oauth-official");
+    expect(body.verified).toBe(true);
+    expect(body.already).toBeUndefined();
+    expect(officialCalls).toEqual([
+      { fn: "subStatus", args: [TOKEN_A, "UCuAXFkgsw1L7xaCfnd5JJOw"] },
+      { fn: "subscribe", args: [TOKEN_A, "UCuAXFkgsw1L7xaCfnd5JJOw"] },
+      { fn: "subStatus", args: [TOKEN_A, "UCuAXFkgsw1L7xaCfnd5JJOw"] },
+    ]);
   });
 
-  test("direct unconfigured → broker fallback (kind unsubscribe for on:false)", async () => {
-    directConfigured = false;
-    const res = await postSubscribe(req({ channelId: "UC1", on: false }));
-    const body = (await res.json()) as { ok: boolean; subscribed: boolean; path: string };
-    expect(body.subscribed).toBe(false);
-    expect(body.path).toBe("broker");
-    expect(brokerCalls[0].kind).toBe("unsubscribe");
-  });
-
-  test("direct fails → broker fallback", async () => {
-    directResponse = { ok: false, status: 403 };
+  test("already-subscribed → idempotent already:true (the own-state pre-read is the guard), NO insert call", async () => {
+    subStatus = { ok: true, data: { subscribed: true, subscriptionId: "sub_exists" } };
     const res = await postSubscribe(req({ channelId: "UC1", on: true }));
-    const body = (await res.json()) as { path: string };
-    expect(body.path).toBe("broker");
-    expect(brokerCalls[0].kind).toBe("subscribe");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { subscribed: boolean; already?: boolean; verified?: boolean };
+    expect(body.subscribed).toBe(true);
+    expect(body.already).toBe(true);
+    expect(body.verified).toBe(true);
+    expect(callsOf("subscribe")).toBe(0); // never a redundant YouTube write
+    expect(callsOf("subStatus")).toBe(1);
   });
 
-  test("on omitted → toggle: state read + direct inverse", async () => {
-    subscribedState = true; // currently subscribed → direct unsubscribes
+  test("unsubscribe resolves the subscription id from the OWN list, never a guess", async () => {
+    subStatus = (n) =>
+      n === 1
+        ? { ok: true, data: { subscribed: true, subscriptionId: "sub_123" } }
+        : { ok: true, data: { subscribed: false, subscriptionId: null } };
+    const res = await postSubscribe(req({ channelId: "UC1", on: false }));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { subscribed: boolean; verified?: boolean; effect: string };
+    expect(body.subscribed).toBe(false);
+    expect(body.effect).toBe("unsubscribed");
+    expect(body.verified).toBe(true);
+    expect(officialCalls[1]).toEqual({ fn: "unsubscribe", args: [TOKEN_A, "sub_123"] });
+  });
+
+  test("on omitted → toggle resolved from the user's OWN subscription state (subscribed → unsubscribe)", async () => {
+    subStatus = (n) =>
+      n === 1
+        ? { ok: true, data: { subscribed: true, subscriptionId: "sub_123" } }
+        : { ok: true, data: { subscribed: false, subscriptionId: null } };
     const res = await postSubscribe(req({ channelId: "UC1" }));
     const body = (await res.json()) as { subscribed: boolean };
     expect(body.subscribed).toBe(false);
-    expect(directCalls).toEqual([{ channelId: "UC1", on: false }]);
+    expect(officialCalls[1]).toEqual({ fn: "unsubscribe", args: [TOKEN_A, "sub_123"] });
   });
 
-  test("toggle with unknown state + broker down → 502 honest", async () => {
-    subscribedState = null;
-    directConfigured = false;
-    brokerResponse = new MockBrokerError("offline", OFFLINE_MSG, 502);
+  test("the own-state pre-read fails → the honest 502 provider error (never a guessed toggle)", async () => {
+    subStatus = { ok: false, kind: "network", status: 0, message: "network error reaching the YouTube API" };
     const res = await postSubscribe(req({ channelId: "UC1" }));
     expect(res.status).toBe(502);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe(OFFLINE_MSG);
+    const body = (await res.json()) as { error: string; kind?: string };
+    expect(body.error).toBe("network error reaching the YouTube API");
+    expect(body.kind).toBe("youtube-provider-error");
+    expect(callsOf("subscribe")).toBe(0);
+    expect(callsOf("unsubscribe")).toBe(0);
   });
 
   test("channelId missing → 400", async () => {
@@ -356,139 +487,142 @@ describe("POST /api/subscribe (direct-first, broker fallback)", () => {
   });
 });
 
-describe("POST /api/playlists/watch-later (direct-first, broker fallback)", () => {
-  test("toggle mode by default; an unresolved membership falls to the broker honestly; response keeps the {added, playlistId} contract", async () => {
-    brokerResponse = { ok: true, verified: true, path: "ui", detail: { added: true } };
-    const res = await postWatchLater(req({ videoId: "dQw4w9WgXcQ" }));
+describe("POST /api/playlists/watch-later (the honest WebFlix-LOCAL list)", () => {
+  test("add:true → the LOCAL list: local:true + the disclosed note + the DB row — ZERO official calls", async () => {
+    const res = await postWatchLater(req({ videoId: "wlAdd1", add: true }));
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { ok: boolean; added: boolean; playlistId: string };
-    expect(body.ok).toBe(true);
-    expect(body.added).toBe(true);
-    expect(body.playlistId).toBe("WL");
-    expect(brokerCalls[0].kind).toBe("watch-later");
-    expect(brokerCalls[0].payload).toEqual({ mode: "toggle" });
-  });
-
-  test("P33 direct ensure: add:false → the server-side edit_playlist REMOVE — no broker call", async () => {
-    const res = await postWatchLater(req({ videoId: "dQw4w9WgXcQ", add: false }));
-    expect(res.status).toBe(200);
-    expect(directPlaylistCalls).toEqual([
-      { playlistId: "WL", videoId: "dQw4w9WgXcQ", want: false },
-    ]);
-    expect(brokerCalls).toEqual([]);
     const body = (await res.json()) as {
       ok: boolean;
       added: boolean;
+      playlistId: string;
       effect: string;
       path?: string;
+      local?: boolean;
+      note?: string;
     };
+    expect(body.ok).toBe(true);
+    expect(body.added).toBe(true);
+    expect(body.playlistId).toBe("WL"); // the save button's contract shape kept
+    expect(body.effect).toBe("watch-later-added");
+    expect(body.path).toBe("local");
+    expect(body.local).toBe(true); // origin disclosed — never a YouTube write claimed
+    expect(body.note).toBe(
+      "Saved on WebFlix — YouTube's own Watch Later isn't writable through the official API",
+    );
+    // the row lives in the WebFlix store (the shadow author's own list)
+    const wl = await db.playlist.findFirstOrThrow({
+      where: { userId: `wf-${USER_A}`, isWatchLater: true },
+    });
+    expect(await db.playlistItem.findUnique({
+      where: { playlistId_videoId: { playlistId: wl.id, videoId: "wlAdd1" } },
+    })).not.toBeNull();
+    expect(officialCalls).toEqual([]); // the local lane never touches the official seam
+  });
+
+  test("add:false → removed from the LOCAL list (idempotent already:true when absent)", async () => {
+    const res = await postWatchLater(req({ videoId: "wlRemove1", add: false }));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { added: boolean; effect: string; already?: boolean; local?: boolean };
     expect(body.added).toBe(false);
     expect(body.effect).toBe("watch-later-removed");
-    expect(body.path).toBe("direct");
+    expect(body.already).toBe(true); // nothing to remove — the honest idempotence
+    expect(body.local).toBe(true);
+    expect(officialCalls).toEqual([]);
   });
 
-  test("P33 direct ensure: add:true → the server-side edit_playlist ADD", async () => {
-    const res = await postWatchLater(req({ videoId: "dQw4w9WgXcQ", add: true }));
-    expect(res.status).toBe(200);
-    expect(directPlaylistCalls).toEqual([{ playlistId: "WL", videoId: "dQw4w9WgXcQ", want: true }]);
-    expect(brokerCalls).toEqual([]);
-    const body = (await res.json()) as { added: boolean; effect: string };
+  test("toggle: the fresh LOCAL read decides — add then toggle removes", async () => {
+    const first = await postWatchLater(req({ videoId: "wlToggle1" }));
+    expect(((await first.json()) as { added: boolean }).added).toBe(true);
+    const second = await postWatchLater(req({ videoId: "wlToggle1" }));
+    const body = (await second.json()) as { added: boolean; effect: string; already?: boolean };
+    expect(body.added).toBe(false);
+    expect(body.effect).toBe("watch-later-removed");
+    expect(body.already).toBe(false); // a real transition, not a no-op
+    const wl = await db.playlist.findFirstOrThrow({
+      where: { userId: `wf-${USER_A}`, isWatchLater: true },
+    });
+    expect(await db.playlistItem.findUnique({
+      where: { playlistId_videoId: { playlistId: wl.id, videoId: "wlToggle1" } },
+    })).toBeNull();
+  });
+
+  test("add twice → the second is already:true, ONE row (the unique playlistId_videoId key)", async () => {
+    await postWatchLater(req({ videoId: "wlDup1", add: true }));
+    const second = await postWatchLater(req({ videoId: "wlDup1", add: true }));
+    const body = (await second.json()) as { added: boolean; already?: boolean };
     expect(body.added).toBe(true);
-    expect(body.effect).toBe("watch-later-added");
+    expect(body.already).toBe(true);
+    const wl = await db.playlist.findFirstOrThrow({
+      where: { userId: `wf-${USER_A}`, isWatchLater: true },
+    });
+    expect(await db.playlistItem.count({ where: { playlistId: wl.id, videoId: "wlDup1" } })).toBe(1);
   });
 
-  test("P33 direct toggle: membership=false → the server-side ADD (the fresh read decides)", async () => {
-    playlistMembership = false;
-    const res = await postWatchLater(req({ videoId: "dQw4w9WgXcQ" }));
-    expect(res.status).toBe(200);
-    expect(directPlaylistCalls).toEqual([{ playlistId: "WL", videoId: "dQw4w9WgXcQ", want: true }]);
-    expect(brokerCalls).toEqual([]);
+  test("guest (no session) → 401, never a write", async () => {
+    const res = await postWatchLater(req({ videoId: "wlGuest1", add: true }, "http://localhost/api/x", ""));
+    expect(res.status).toBe(401);
+    expect(await db.playlistItem.count({ where: { videoId: "wlGuest1" } })).toBe(0);
   });
 
-  test("P33 direct toggle: membership=true → the server-side REMOVE", async () => {
-    playlistMembership = true;
-    const res = await postWatchLater(req({ videoId: "dQw4w9WgXcQ" }));
-    expect(res.status).toBe(200);
-    expect(directPlaylistCalls).toEqual([
-      { playlistId: "WL", videoId: "dQw4w9WgXcQ", want: false },
-    ]);
-    expect(brokerCalls).toEqual([]);
-  });
-
-  test("P33 direct edit fails → the broker fallback serves the watch-later", async () => {
-    directPlaylistResponse = { ok: false, status: 403, error: "direct edit_playlist returned 403" };
-    const res = await postWatchLater(req({ videoId: "dQw4w9WgXcQ", add: true }));
-    expect(res.status).toBe(200);
-    expect(directPlaylistCalls.length).toBe(1);
-    expect(brokerCalls[0].kind).toBe("watch-later");
-    expect(brokerCalls[0].payload).toEqual({ mode: "add" });
-  });
-
-  test("broker down → 502 honest", async () => {
-    brokerResponse = new MockBrokerError("offline", OFFLINE_MSG, 502);
-    const res = await postWatchLater(req({ videoId: "dQw4w9WgXcQ" }));
-    expect(res.status).toBe(502);
+  test("missing videoId → 400", async () => {
+    const res = await postWatchLater(req({}));
+    expect(res.status).toBe(400);
   });
 });
 
 // ---------------------------------------------------------------------------
-// P24-SEND (G12) — the feed-feedback family's route contracts: the channel
-// variant of not-interested + the shared undo (youtube.com's own feedback
-// toast Undo button, clicked on the operator tab while its window is live).
-// The proxy shapes mirror proxyNotInterested exactly (the precedent).
+// P24-SEND (G12) → P36 — the feed-feedback family's route contracts: the
+// channel variant of not-interested + the shared undo, all on the honest
+// WebFlix-LOCAL signal lane (no official end-user API exists — disclosed).
 // ---------------------------------------------------------------------------
 
-describe("POST /api/dont-recommend-channel (broker — the not-interested sibling)", () => {
-  test("ok path: broker kind dont-recommend-channel; the {hidden:true} contract the card kebab consumes", async () => {
+describe("POST /api/dont-recommend-channel (the LOCAL signal lane)", () => {
+  test("ok path: the {hidden:true} contract the card kebab consumes, local:true disclosed, the signal row per user", async () => {
     const res = await postDontRecommendChannel(req({ videoId: "dQw4w9WgXcQ" }));
     expect(res.status).toBe(200);
-    expect(brokerCalls).toEqual([
-      { kind: "dont-recommend-channel", target: { videoId: "dQw4w9WgXcQ" }, payload: undefined },
-    ]);
     const body = (await res.json()) as {
       ok: boolean;
       effect: string;
       dontRecommendChannel: boolean;
       hidden: boolean;
       path: string;
+      local?: boolean;
     };
     expect(body.ok).toBe(true);
     expect(body.effect).toBe("dont-recommend-channel");
     expect(body.dontRecommendChannel).toBe(true);
     expect(body.hidden).toBe(true);
-    expect(body.path).toBe("ui");
+    expect(body.path).toBe("local");
+    expect(body.local).toBe(true);
+    const signal = await db.videoSignal.findUniqueOrThrow({
+      where: { videoId_userId: { videoId: "dQw4w9WgXcQ", userId: `wf-${USER_A}` } },
+    });
+    expect(signal.kind).toBe("dont_recommend_channel");
+    expect(officialCalls).toEqual([]); // never a YouTube-side claim
   });
 
-  test("the drive's honest note rides the response (the undo-window detail)", async () => {
-    brokerResponse = {
-      ok: true,
-      verified: true,
-      path: "ui",
-      detail: { note: "youtube.com shows the undo toast while the window is open" },
-    };
+  test("the local note rides the response (the honest disclosure)", async () => {
     const res = await postDontRecommendChannel(req({ videoId: "abc123" }));
     const body = (await res.json()) as { note?: string };
-    expect(body.note).toBe("youtube.com shows the undo toast while the window is open");
-  });
-
-  test("broker down → 502 with the honest offline message", async () => {
-    brokerResponse = new MockBrokerError("offline", OFFLINE_MSG, 502);
-    const res = await postDontRecommendChannel(req({ videoId: "dQw4w9WgXcQ" }));
-    expect(res.status).toBe(502);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe(OFFLINE_MSG);
-  });
-
-  test("honest drive failure (menu item not found) → 502 with the broker's own error", async () => {
-    brokerResponse = new MockBrokerError(
-      "action-failed",
-      "dont-recommend-channel-menu-item-not-found",
-      502,
+    expect(body.note).toBe(
+      "The channel won't be recommended on WebFlix — YouTube's own feed feedback isn't available through the official API",
     );
-    const res = await postDontRecommendChannel(req({ videoId: "dQw4w9WgXcQ" }));
-    expect(res.status).toBe(502);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("dont-recommend-channel-menu-item-not-found");
+  });
+
+  test("the signal is PER USER (the P36 isolation law): user B's write never touches user A's row", async () => {
+    await postDontRecommendChannel(req({ videoId: "dQw4w9WgXcQ" })); // A
+    const res = await postDontRecommendChannel(
+      req({ videoId: "dQw4w9WgXcQ" }, "http://localhost/api/x", COOKIE_B),
+    );
+    expect(res.status).toBe(200);
+    const rows = await db.videoSignal.findMany({ where: { videoId: "dQw4w9WgXcQ" } });
+    expect(rows.map((r) => r.userId).sort()).toEqual([`wf-${USER_A}`, "wf-u_test_b"]);
+  });
+
+  test("guest → 401, never a write (the honest gate)", async () => {
+    const res = await postDontRecommendChannel(req({ videoId: "drcGuest1" }, "http://localhost/api/x", ""));
+    expect(res.status).toBe(401);
+    expect(await db.videoSignal.count({ where: { videoId: "drcGuest1" } })).toBe(0);
   });
 
   test("missing videoId → 400; non-JSON body → 400", async () => {
@@ -505,45 +639,62 @@ describe("POST /api/dont-recommend-channel (broker — the not-interested siblin
   });
 });
 
-describe("POST /api/dont-recommend-channel/undo + /api/not-interested/undo (the shared feedback-undo)", () => {
-  test("the dont-recommend-channel undo rides the shared kind; the {restored:true} contract", async () => {
-    const res = await postDontRecommendChannelUndo(req({}));
+describe("POST /api/dont-recommend-channel/undo + /api/not-interested/undo (the LOCAL feedback-undo)", () => {
+  test("the dont-recommend-channel undo removes the LOCAL signal; the {restored:true} contract + the local disclosure", async () => {
+    await postDontRecommendChannel(req({ videoId: "undoDrc1" }));
+    const res = await postDontRecommendChannelUndo(req({ videoId: "undoDrc1" }));
     expect(res.status).toBe(200);
-    expect(brokerCalls).toEqual([{ kind: "feedback-undo", target: {}, payload: undefined }]);
     const body = (await res.json()) as {
       ok: boolean;
       effect: string;
       restored: boolean;
       path: string;
+      local?: boolean;
+      note?: string;
     };
     expect(body.ok).toBe(true);
     expect(body.effect).toBe("feedback-undo");
     expect(body.restored).toBe(true);
-    expect(body.path).toBe("ui");
+    expect(body.path).toBe("local");
+    expect(body.local).toBe(true);
+    expect(body.note).toBe("Restored on WebFlix");
+    expect(await db.videoSignal.count({ where: { videoId: "undoDrc1" } })).toBe(0);
   });
 
-  test("the not-interested undo is the SAME shared seam (youtube.com's one toast, one Undo button)", async () => {
-    const res = await postNotInterestedUndo(req({}));
+  test("the not-interested undo is the SAME local seam (one signal store, kind-scoped removal)", async () => {
+    await ensureShadowVideo("undoNi1");
+    await db.videoSignal.create({
+      data: { videoId: "undoNi1", userId: `wf-${USER_A}`, kind: "not_interested" },
+    });
+    const res = await postNotInterestedUndo(req({ videoId: "undoNi1" }));
     expect(res.status).toBe(200);
-    expect(brokerCalls).toEqual([{ kind: "feedback-undo", target: {}, payload: undefined }]);
     const body = (await res.json()) as { effect: string; restored: boolean };
     expect(body.effect).toBe("feedback-undo");
     expect(body.restored).toBe(true);
+    expect(await db.videoSignal.count({ where: { videoId: "undoNi1" } })).toBe(0);
   });
 
-  test("an expired undo window → 502 with the drive's honest error, never a fake restoration", async () => {
-    brokerResponse = new MockBrokerError("action-failed", "undo-toast-not-found", 502);
-    const res = await postDontRecommendChannelUndo(req({}));
-    expect(res.status).toBe(502);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("undo-toast-not-found");
+  test("the undo targets its OWN kind only — the other kind's signal for the same video stays", async () => {
+    await ensureShadowVideo("undoKind1");
+    // one signal row per user+video; its kind is the LATEST verdict
+    await db.videoSignal.create({
+      data: { videoId: "undoKind1", userId: `wf-${USER_A}`, kind: "not_interested" },
+    });
+    // the dont-recommend undo never removes a not-interested signal
+    const res = await postDontRecommendChannelUndo(req({ videoId: "undoKind1" }));
+    expect(res.status).toBe(200);
+    const remaining = await db.videoSignal.findMany({ where: { videoId: "undoKind1" } });
+    expect(remaining.map((r) => r.kind)).toEqual(["not_interested"]);
+    // ...but the not-interested undo (its own kind) removes it
+    const res2 = await postNotInterestedUndo(req({ videoId: "undoKind1" }));
+    expect(res2.status).toBe(200);
+    expect(await db.videoSignal.count({ where: { videoId: "undoKind1" } })).toBe(0);
   });
 
-  test("broker down → 502 honest (both undo routes)", async () => {
-    brokerResponse = new MockBrokerError("offline", OFFLINE_MSG, 502);
-    const res = await postDontRecommendChannelUndo(req({}));
-    expect(res.status).toBe(502);
-    const res2 = await postNotInterestedUndo(req({}));
-    expect(res2.status).toBe(502);
+  test("guest → 401 on both undo routes (never a write)", async () => {
+    const res = await postDontRecommendChannelUndo(req({ videoId: "undoGuest1" }, "http://localhost/api/x", ""));
+    expect(res.status).toBe(401);
+    const res2 = await postNotInterestedUndo(req({ videoId: "undoGuest1" }, "http://localhost/api/x", ""));
+    expect(res2.status).toBe(401);
   });
 });

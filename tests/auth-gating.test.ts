@@ -2,11 +2,15 @@
 /**
  * WFX2-P2-AU tests — the GATING contract: guests (no WebFlix session) get
  * the uniform 401 `{ error: "unauthenticated" }` on the personal + write
- * routes BEFORE any broker/InnerTube call (guests never hit the broker);
- * signed-in requests (minted session cookie) get EXACTLY the prior DTOs.
+ * routes BEFORE any upstream/official call (guests never hit a write lane);
+ * signed-in requests (minted session cookie) get the CURRENT honest DTOs —
+ * WFX2-P36 re-pointed the history pin: the personal history read answers the
+ * honest empty + notice envelope (no official API, zero upstream calls),
+ * while the PUBLIC playlist-item read keeps its public DTO unchanged.
  *
  * The signed-in /api/history case rides the same REAL fixture bytes as
- * personal-routes.test.ts via the setUpstream seam — never the network.
+ * personal-routes.test.ts via the setUpstream seam — never the network
+ * (and proves the fixture is never asked for anymore).
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
@@ -91,7 +95,7 @@ describe("guests → the uniform 401 on personal + write routes (never the broke
   });
 });
 
-describe("signed-in → EXACTLY the prior behavior (DTOs unchanged)", () => {
+describe("signed-in → the current honest DTOs (the public PL read unchanged; history = the honest per-user envelope)", () => {
   const FIXTURE_DIR = "tests/fixtures/yt";
   const load = (name: string): any => JSON.parse(readFileSync(`${FIXTURE_DIR}/${name}.json`, "utf8"));
   const htmlFor = (data: unknown) =>
@@ -99,10 +103,14 @@ describe("signed-in → EXACTLY the prior behavior (DTOs unchanged)", () => {
       data
     )};</script></body></html>`;
 
-  test("GET /api/history with the fixture upstream → the unchanged 200 DTO", async () => {
+  test("GET /api/history → the honest empty + notice envelope — an upstream that WOULD serve the operator's SSR history is never asked", async () => {
     process.env.YT_COOKIES = "SAPISID=fixture; SID=fixture; LOGIN_INFO=fixture";
+    const upstreamCalls: string[] = [];
     setUpstream(async (url: string) => {
+      upstreamCalls.push(url);
       if (url.includes("/feed/history")) {
+        // the pre-P36 operator read: a REAL 95-item SSR history this route
+        // must never serve to a signed-in user again
         return new Response(htmlFor(load("ssr_history")), {
           status: 200,
           headers: { "Content-Type": "text/html" },
@@ -113,12 +121,24 @@ describe("signed-in → EXACTLY the prior behavior (DTOs unchanged)", () => {
     const res = await historyRoute(authedReq("http://localhost/api/history"));
     expect(res.status).toBe(200);
     const data = (await res.json()) as any;
-    // the exact contract personal-routes.test.ts asserts for the signed-in app
-    expect(data.loginRequired).toBe(false);
-    expect(data.session).toBe(true);
-    expect(data.groups.length).toBeGreaterThan(10);
-    expect(data.groups[0].label).toBe("Today");
-    expect(data.groups[0].items[0].id).toBe("dQw4w9WgXcQ");
+    // WFX2-P36: YouTube watch history has no official API — the honest
+    // empty + notice (with the per-user connected flag disclosed), never
+    // one person's history rendered as another's
+    expect(data).toMatchObject({
+      groups: [],
+      nextCursor: null,
+      loginRequired: false,
+      watchHistoryPaused: null,
+      searchHistoryPaused: null,
+      total: 0,
+      session: true, // the deployment read-session flag is disclosed…
+      connected: false, // …but the acting user has no connected account
+    });
+    expect(data.notice).toBe(
+      "Your YouTube watch history has no official API — WebFlix never reads one person's history for another. Open youtube.com/feed/history for yours."
+    );
+    // the retired operator SSR read NEVER fires — zero upstream calls
+    expect(upstreamCalls).toHaveLength(0);
   });
 
   test("GET /api/playlists/[id] stays PUBLIC for guests (playlist viewing is public, per youtube.com)", async () => {

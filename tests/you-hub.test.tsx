@@ -449,44 +449,63 @@ describe("YouView — History section (the real /api/history seam)", () => {
     expect(q("[data-testid='you-history-count']")).toBeNull();
   });
 
-  test("loginRequired (public operator mode) → the honest note, not the empty state", async () => {
+  test("unconnected account → the honest notice + the Settings connect link (never the empty claim)", async () => {
     historyPayload = {
       groups: [],
       nextCursor: null,
-      loginRequired: true,
-      watchHistoryPaused: null,
-      searchHistoryPaused: null,
-      total: 0,
-      session: false,
-    };
-    serveYouSeams();
-    await render(<YouView />);
-    await act(async () => {});
-    expect(win.document.body.textContent ?? "").toContain(
-      "the operator session (YT_COOKIES) needs to be connected"
-    );
-    expect(win.document.body.textContent ?? "").toContain("your WebFlix sign-in is fine");
-    expect(win.document.body.textContent ?? "").not.toContain("Videos you watch will show up here.");
-  });
-
-  test("P22-B: loginRequired WITH a session → the didn't-serve-it note (never a login ask)", async () => {
-    historyPayload = {
-      groups: [],
-      nextCursor: null,
-      loginRequired: true,
+      loginRequired: false,
       watchHistoryPaused: null,
       searchHistoryPaused: null,
       total: 0,
       session: true,
+      // WFX2-P36: the honest per-user envelope /api/history answers
+      connected: false,
+      notice:
+        "Your YouTube watch history has no official API — WebFlix never reads one person's history for another. Open youtube.com/feed/history for yours.",
     };
     serveYouSeams();
     await render(<YouView />);
     await act(async () => {});
-    expect(win.document.body.textContent ?? "").toContain(
-      "didn't serve your watch history"
+    const body = win.document.body.textContent ?? "";
+    expect(body).toContain("Your YouTube watch history has no official API");
+    expect(body).toContain("Open youtube.com/feed/history for yours");
+    // the connect ask links Settings — never a sign-in ask for a signed-in viewer
+    const connect = all("a[href='/settings']").find(
+      (a) => (a.textContent ?? "").trim() === "Connect your YouTube account"
     );
-    expect(win.document.body.textContent ?? "").toContain("open it on youtube.com to check");
-    expect(win.document.body.textContent ?? "").not.toContain("Videos you watch will show up here.");
+    expect(connect).toBeDefined();
+    // the "will show up here" empty never rides the notice envelope (it would
+    // imply a served read that found nothing)
+    expect(body).not.toContain("Videos you watch will show up here.");
+    expect(q("[data-testid='you-history-count']")).toBeNull();
+  });
+
+  test("connected account → the SAME honest notice, no connect link (a connection never fabricates history)", async () => {
+    historyPayload = {
+      groups: [],
+      nextCursor: null,
+      loginRequired: false,
+      watchHistoryPaused: null,
+      searchHistoryPaused: null,
+      total: 0,
+      session: true,
+      connected: true,
+      notice:
+        "Your YouTube watch history has no official API — WebFlix never reads one person's history for another. Open youtube.com/feed/history for yours.",
+    };
+    serveYouSeams();
+    await render(<YouView />);
+    await act(async () => {});
+    const body = win.document.body.textContent ?? "";
+    expect(body).toContain("Your YouTube watch history has no official API");
+    expect(body).not.toContain("Videos you watch will show up here.");
+    // connected → no connect ask either (the notice is the whole truth)
+    expect(
+      all("a[href='/settings']").find(
+        (a) => (a.textContent ?? "").trim() === "Connect your YouTube account"
+      )
+    ).toBeUndefined();
+    expect(q("[data-testid='you-history-count']")).toBeNull();
   });
 });
 
@@ -525,21 +544,32 @@ describe("YouView — Playlists section (the real /api/playlists seam)", () => {
     expect(all("[data-testid='you-playlist-card']")).toHaveLength(0);
   });
 
-  test("P22-B: unavailable (session configured, read not served) → the didn't-return-them note, never the no-playlists claim", async () => {
+  test("P36 failed official read (unavailable) → the honest didn't-return-them notice, never the no-playlists claim", async () => {
     playlistsPayload = {
       playlists: [],
       loginRequired: false,
       unavailable: true,
       session: true,
+      // WFX2-P36: the route's failed-read envelope — the user's own official
+      // read was not served (never the operator's lists as a fallback)
+      connected: true,
+      notice:
+        "Your playlists could not be read just now (the official YouTube API answered with an error) — try again shortly",
     };
     serveYouSeams();
     await render(<YouView />);
     await act(async () => {});
     const body = win.document.body.textContent ?? "";
-    expect(body).toContain("didn't return your playlists");
-    expect(body).toContain("Open them on youtube.com to check");
+    expect(body).toContain("Your playlists could not be read just now");
+    expect(body).toContain("try again shortly");
     // the honest-empty claim is suppressed while the read is unserved
     expect(body).not.toContain("Playlists you create will show up here");
+    // no connect ask while connected (the read failed, the account did not)
+    expect(
+      all("a[href='/settings']").find(
+        (a) => (a.textContent ?? "").trim() === "Connect your YouTube account"
+      )
+    ).toBeUndefined();
     // the special-cards grid note says why the cards carry no counts
     expect(q("[data-testid='you-special-cards-unavailable']")?.textContent ?? "").toContain(
       "the counts can't be shown"

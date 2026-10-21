@@ -141,6 +141,12 @@ const {
 const connectionRouteModule = await import("@/app/api/connection/youtube/route");
 const connectionGet = connectionRouteModule.GET;
 const { mintSessionCookie } = await import("./helpers");
+// WFX2-P36 — the per-user OAuth connection store (the REAL module, Map
+// fallback — env-clean) + the real token-crypto, for the route tests below
+const { putYouTubeConnection, resetYoutubeConnectionStore } = await import(
+  "@/lib/auth/youtube-connection-store"
+);
+const { encryptSecret } = await import("@/lib/youtube/oauth");
 const { FEEDBACK_DISCLOSURE, FEEDBACK_CATEGORIES } = await import("@/app/feedback/shared");
 const FeedbackView = (await import("@/app/feedback/view")).default;
 const feedbackRouteModule = await import("@/app/api/feedback/route");
@@ -309,22 +315,23 @@ describe("P5-SS settings: every section renders with its visible scope label", (
     expect(host!.textContent).toContain(SCOPE_MANAGED_LABEL);
   });
 
-  test("Account: the WebFlix identity summary + the /account link + the operator-session wording law", async () => {
+  test("Account: the WebFlix identity summary + the /account link + the per-user truth wording law", async () => {
     await renderSignedInSettings();
     expect(host!.textContent).toContain("The Operator");
     expect(host!.textContent).toContain("operator@webflix.test");
     const accountLink = all("a").find((a) => a.getAttribute("href") === "/account");
     expect(accountLink).toBeDefined();
-    // the account page's exact sentences (the wording law)
+    // the account section's P36 wording: the server session READS public
+    // pages; every user write acts on the user's OWN connected account
     expect(host!.textContent).toContain(
-      "Operator session connected — comment writes, likes, reports and creator tools act on the operator's real YouTube account."
+      "Operator read session connected — WebFlix's server uses it to read public YouTube pages. It never performs your actions: your likes, subscribes and playlists act on your own connected YouTube account (see YouTube account below)."
     );
     expect(host!.textContent).toContain(
-      "Your WebFlix account fronts that session — it is not a YouTube account, and WebFlix never fabricates YouTube-account data."
+      "Your WebFlix account is local to WebFlix — it is not a YouTube account, and WebFlix never fabricates YouTube-account data."
     );
   });
 
-  test("Account: the honest public-mode wording when no operator session is configured", async () => {
+  test("Account: the honest public-mode wording when no read session is configured", async () => {
     fetchHandler = (url) => {
       if (url.includes("/api/watch/session")) {
         return Response.json({ operatorSession: false });
@@ -333,7 +340,7 @@ describe("P5-SS settings: every section renders with its visible scope label", (
     };
     await renderSignedInSettings();
     expect(host!.textContent).toContain(
-      "No operator session is configured (public mode). Reads stay fully live; write surfaces (comments, likes, reports, heart/pin) honestly show their signed-out states until the session is connected."
+      "No operator read session is configured (public mode). Reads stay fully live; your own actions run through your connected YouTube account (see YouTube account below)."
     );
   });
 
@@ -426,135 +433,194 @@ describe("P5-SS settings: Appearance + Advanced (local, honest about effect scop
 // Part 1c — Task 4-b → P33: the YouTube connection (settings card + client + API)
 // ---------------------------------------------------------------------------
 
-describe("P33 settings: the direct-first connection card (the main-interface doctrine, honestly)", () => {
-  test("direct connected → the server-side session explainer + green card + no-browser doctrine, the broker note when known-offline", async () => {
-    fetchHandler = (url) => {
-      if (url.includes("/api/connection/youtube")) {
-        return Response.json({
-          connected: true,
-          mode: "direct",
-          sessionServed: true,
-          broker: { connected: false, tabFound: false },
-          checkedAt: new Date().toISOString(),
-        });
-      }
-      return new Response("{}", { status: 200 });
-    };
+describe("P36 settings: the per-user YouTube account card (the OAuth connection, honestly)", () => {
+  /** The honest actions capability map the route always answers. */
+  const CONNECT_ACTIONS = {
+    like: "official",
+    dislike: "official",
+    subscribe: "official",
+    playlists: "official",
+    watchLater: "local",
+    comments: "local",
+    notInterested: "local",
+    bell: "unsupported",
+    history: "unsupported",
+  };
+  const CONNECTED_ENVELOPE = {
+    mode: "oauth",
+    status: "connected",
+    connected: true,
+    account: {
+      channelId: "UCown0000000000000001",
+      channelTitle: "Your Own Channel",
+      channelThumbUrl: null,
+      scope: "https://www.googleapis.com/auth/youtube.force-ssl",
+      connectedAt: new Date(Date.now() - 86_400_000).toISOString(),
+    },
+    actions: CONNECT_ACTIONS,
+    oauth: {
+      configured: true,
+      missingEnv: [],
+      redirectUri: "https://webflix.example/api/connection/youtube/oauth/callback",
+      connectUrl: "/api/connection/youtube/oauth/start",
+      disconnectUrl: "/api/connection/youtube/disconnect",
+    },
+    serverReadSession: { configured: true },
+    checkedAt: new Date().toISOString(),
+  };
+  const NEEDS_REAUTH_ENVELOPE = {
+    ...CONNECTED_ENVELOPE,
+    status: "needs-reauth",
+    connected: false,
+  };
+  const NOT_CONFIGURED_ENVELOPE = {
+    mode: "oauth",
+    status: "not-configured",
+    connected: false,
+    actions: CONNECT_ACTIONS,
+    oauth: {
+      configured: false,
+      missingEnv: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
+      redirectUri: "https://webflix.example/api/connection/youtube/oauth/callback",
+      connectUrl: "/api/connection/youtube/oauth/start",
+      disconnectUrl: "/api/connection/youtube/disconnect",
+    },
+    serverReadSession: { configured: false },
+    checkedAt: new Date().toISOString(),
+  };
+  const NOT_CONNECTED_ENVELOPE = {
+    mode: "oauth",
+    status: "not-connected",
+    connected: false,
+    actions: CONNECT_ACTIONS,
+    oauth: {
+      configured: true,
+      missingEnv: [],
+      redirectUri: "https://webflix.example/api/connection/youtube/oauth/callback",
+      connectUrl: "/api/connection/youtube/oauth/start",
+      disconnectUrl: "/api/connection/youtube/disconnect",
+    },
+    serverReadSession: { configured: false },
+    checkedAt: new Date().toISOString(),
+  };
+  const serve = (envelope: unknown, session = true) => (url: string) => {
+    if (url.includes("/api/connection/youtube")) return Response.json(envelope);
+    if (url.includes("/api/watch/session")) return Response.json({ operatorSession: session });
+    return new Response("{}", { status: 200 });
+  };
+
+  test("connected → the account identity + the capability lines + the read-session disclosure + Disconnect; Recheck forces a fresh probe past the cache", async () => {
+    fetchHandler = serve(CONNECTED_ENVELOPE);
     await renderSignedInSettings();
     const section = q('[data-settings-section="youtube-connection"]');
     expect(section).not.toBeNull();
-    // the direct doctrine, stated honestly (the section explainer)
-    expect(section!.textContent).toContain("server-side YouTube session");
-    expect(section!.textContent).toContain("never have to go back to youtube.com");
-    // the connected card — the DIRECT tier's own copy
     expect(section!.querySelector('[data-connection-state="connected"]')).not.toBeNull();
-    expect(section!.textContent).toContain("Connected — actions are available");
+    expect(section!.textContent).toContain("Connected as Your Own Channel");
+    expect(section!.textContent).toContain("Actions run on your own account through the official YouTube API.");
+    // the honest capability lines (the same disclosure on every actionable state)
+    expect(section!.textContent).toContain("Runs on your account: like, dislike, subscribe, playlists.");
+    expect(section!.textContent).toContain("On WebFlix only: watch later, comments, feed feedback.");
+    expect(section!.textContent).toContain("Not API-supported: bell preferences, history writes — hand off to YouTube.");
+    // the deployment-wide READ session disclosure — never used for actions
     expect(section!.textContent).toContain(
-      "Actions run through WebFlix's server-side YouTube session"
+      "WebFlix's server keeps a separate read-only YouTube session for public pages — it is never used for your actions."
     );
-    expect(section!.querySelector('[data-connection-mode="direct"]')).not.toBeNull();
-    expect(section!.textContent).toContain("no separate browser or YouTube tab needed");
-    // the honest note: the few broker-tier actions left, and the broker is offline
-    expect(section!.textContent).toContain("dislike, bell preferences");
-    expect(section!.textContent).toContain("offline right now; everything else works without it");
     expect(section!.textContent).toContain("Checked");
-    // the direct card never renders the broker-era tab-context copy
-    expect(section!.textContent).not.toContain("connected tab is on a watch page");
-  });
-
-  test("direct configured but not served → the honest 'session needs attention' card + Retry", async () => {
-    fetchHandler = (url) => {
-      if (url.includes("/api/connection/youtube")) {
-        return Response.json({
-          connected: false,
-          mode: "direct",
-          sessionServed: false,
-          checkedAt: new Date().toISOString(),
-        });
-      }
-      return new Response("{}", { status: 200 });
-    };
-    await renderSignedInSettings();
-    const section = q('[data-settings-section="youtube-connection"]');
-    expect(section!.querySelector('[data-connection-state="disconnected"]')).not.toBeNull();
-    expect(section!.textContent).toContain("YouTube session needs attention");
-    expect(section!.textContent).toContain("YouTube didn't serve it just now");
-    expect(section!.textContent).toContain("Checked");
-  });
-
-  test("broker connected (no session) → the fallback tier's own card + coarse tab context, never the raw URL", async () => {
-    fetchHandler = (url) => {
-      if (url.includes("/api/connection/youtube")) {
-        return Response.json({
-          connected: true,
-          mode: "broker",
-          tabFound: true,
-          tabUrl: "https://www.youtube.com/watch?v=okH-kaRjuAQ",
-          lastActionAt: new Date(Date.now() - 90_000).toISOString(),
-          checkedAt: new Date().toISOString(),
-        });
-      }
-      return new Response("{}", { status: 200 });
-    };
-    await renderSignedInSettings();
-    const section = q('[data-settings-section="youtube-connection"]');
-    expect(section!.querySelector('[data-connection-state="connected"]')).not.toBeNull();
-    expect(section!.textContent).toContain("Connected — actions are available");
-    expect(section!.textContent).toContain(
-      "Actions are performed through the WebFlix connected session"
-    );
-    expect(section!.textContent).toContain("Session active — the connected tab is on a watch page");
-    expect(section!.textContent).toContain("last action");
-    expect(section!.textContent).not.toContain("okH-kaRjuAQ");
-  });
-
-  test("mode none → the honest disconnected card: what's missing + how actions come back + Retry forces a fresh probe past the cache", async () => {
-    fetchHandler = (url) => {
-      if (url.includes("/api/connection/youtube")) {
-        return Response.json({
-          connected: false,
-          mode: "none",
-          tabFound: false,
-          tabUrl: null,
-          lastActionAt: null,
-          checkedAt: new Date().toISOString(),
-        });
-      }
-      return new Response("{}", { status: 200 });
-    };
-    await renderSignedInSettings();
-    const section = q('[data-settings-section="youtube-connection"]');
-    expect(section!.querySelector('[data-connection-state="disconnected"]')).not.toBeNull();
-    expect(section!.textContent).toContain(
-      "Like, subscribe and comment actions are unavailable right now"
-    );
-    expect(section!.textContent).toContain("No server-side YouTube session is configured");
-    expect(section!.textContent).toContain("Checked");
-    const probes = () =>
-      fetchLog.filter((f) => f.url.includes("/api/connection/youtube")).length;
-    expect(probes()).toBe(1); // one probe on mount
-
-    // Retry → a FORCED second probe (a cache hit would issue no second fetch)
-    const retry = section!.querySelector(
-      'button[aria-label="Retry the YouTube connection check"]'
+    expect(section!.querySelector('button[aria-label="Disconnect your YouTube account"]')).not.toBeNull();
+    const recheck = section!.querySelector(
+      'button[aria-label="Recheck the YouTube account connection"]'
     ) as unknown as HTMLButtonElement | null;
-    expect(retry).not.toBeNull();
-    fetchHandler = (url) => {
-      if (url.includes("/api/connection/youtube")) {
-        return Response.json({
-          connected: true,
-          mode: "direct",
-          sessionServed: true,
-          checkedAt: new Date().toISOString(),
-        });
-      }
-      return new Response("{}", { status: 200 });
-    };
+    expect(recheck).not.toBeNull();
+    // the retired operator/broker doctrine never renders again
+    expect(section!.textContent).not.toContain("never have to go back to youtube.com");
+    expect(section!.textContent).not.toContain("connected tab is on a watch page");
+
+    // Recheck → a FORCED second probe (a cache hit would issue no second fetch)
+    const probes = () => fetchLog.filter((f) => f.url.includes("/api/connection/youtube")).length;
+    expect(probes()).toBe(1);
+    fetchHandler = serve(NEEDS_REAUTH_ENVELOPE);
     await act(async () => {
-      retry!.click();
+      recheck!.click();
     });
     expect(probes()).toBe(2);
-    expect(section!.querySelector('[data-connection-state="connected"]')).not.toBeNull();
+    expect(section!.querySelector('[data-connection-state="needs-reauth"]')).not.toBeNull();
+  });
+
+  test("needs-reauth → the honest re-connect card (Google expired or revoked the grant)", async () => {
+    fetchHandler = serve(NEEDS_REAUTH_ENVELOPE);
+    await renderSignedInSettings();
+    const section = q('[data-settings-section="youtube-connection"]');
+    expect(section!.querySelector('[data-connection-state="needs-reauth"]')).not.toBeNull();
+    expect(section!.textContent).toContain("Re-connect your YouTube account");
+    expect(section!.textContent).toContain(
+      "Google expired or revoked the authorization — your actions pause until you re-connect."
+    );
+    // the Connect affordance is the same-origin OAuth start link
+    const connect = all("a").find((a) => a.getAttribute("href") === "/api/connection/youtube/oauth/start");
+    expect(connect).toBeDefined();
+    expect(connect!.textContent).toContain("Connect your YouTube account");
+    expect(section!.textContent).toContain("Checked");
+    expect(section!.textContent).not.toContain("Connected as");
+  });
+
+  test("not-configured → the deployment's honest setup card (the exact missing env vars + the redirect URI to register)", async () => {
+    fetchHandler = serve(NOT_CONFIGURED_ENVELOPE);
+    await renderSignedInSettings();
+    const section = q('[data-settings-section="youtube-connection"]');
+    expect(section!.querySelector('[data-connection-state="not-configured"]')).not.toBeNull();
+    expect(section!.textContent).toContain("YouTube account connection isn't configured");
+    expect(section!.textContent).toContain(
+      "Users can't connect their own YouTube accounts yet — the deployment is missing its Google OAuth credentials."
+    );
+    expect(section!.textContent).toContain("Missing environment variables:");
+    expect(section!.textContent).toContain("GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET");
+    expect(section!.textContent).toContain("Register this redirect URI in the Google Cloud console:");
+    expect(section!.textContent).toContain("https://webflix.example/api/connection/youtube/oauth/callback");
+    expect(section!.textContent).toContain(
+      "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in the deployment env to let users connect their own accounts."
+    );
+    expect(section!.textContent).toContain("Checked");
+    expect(
+      section!.querySelector('button[aria-label="Recheck the YouTube account connection"]')
+    ).not.toBeNull();
+    // the retired broker-era copy never renders again
+    expect(section!.textContent).not.toContain("connected tab");
+  });
+
+  test("checking → not-connected: the pre-probe Checking card, then the honest Connect card + capability lines + the same-origin OAuth link", async () => {
+    // the probe defers — the card is honestly "Checking" until the server answers
+    let resolveProbe: ((r: Response) => void) | null = null;
+    fetchHandler = (url) => {
+      if (url.includes("/api/connection/youtube")) {
+        return new Promise<Response>((res) => {
+          resolveProbe = res;
+        });
+      }
+      if (url.includes("/api/watch/session")) return Response.json({ operatorSession: true });
+      return new Response("{}", { status: 200 });
+    };
+    await renderSignedInSettings();
+    const section = q('[data-settings-section="youtube-connection"]');
+    expect(section!.textContent).toContain("Checking your YouTube account…");
+    expect(section!.querySelector('[data-connection-state]')).toBeNull();
+    // the probe resolves → the honest per-user Connect card
+    await act(async () => {
+      resolveProbe?.(Response.json(NOT_CONNECTED_ENVELOPE));
+    });
+    await act(async () => {});
+    expect(section!.querySelector('[data-connection-state="not-connected"]')).not.toBeNull();
+    expect(section!.textContent).toContain("Connect your YouTube account");
+    expect(section!.textContent).toContain(
+      "Your likes, subscribes and playlists act on your own YouTube account, through the official YouTube API — WebFlix never acts as someone else."
+    );
+    expect(section!.textContent).toContain("Runs on your account: like, dislike, subscribe, playlists.");
+    expect(section!.textContent).toContain("Checked");
+    const connect = all("a").find((a) => a.getAttribute("href") === "/api/connection/youtube/oauth/start");
+    expect(connect).toBeDefined();
+    expect(connect!.textContent).toContain("Connect your YouTube account");
+    // THE LAW: never the retired operator/broker claims
+    expect(section!.textContent).not.toContain("never have to go back to youtube.com");
+    expect(section!.textContent).not.toContain("No server-side YouTube session is configured");
   });
 });
 
@@ -581,46 +647,75 @@ describe("P4B connection client: the broker-offline error shape (the action prom
   });
 });
 
-describe("P4B /api/connection/youtube: the gated, honest-degrade status route", () => {
+describe("P4B /api/connection/youtube: the gated, per-user OAuth status route", () => {
   let AUTH_COOKIE = "";
   beforeAll(async () => {
     AUTH_COOKIE = await mintSessionCookie();
   });
 
-  let savedSecret = "";
-  let savedUrl = "";
+  // env-clean per test: no OAuth client vars, no Upstash (the store rides its
+  // Map fallback), no operator cookies — restored after each test
+  const ENV_KEYS = [
+    "GOOGLE_CLIENT_ID",
+    "GOOGLE_CLIENT_SECRET",
+    "GOOGLE_OAUTH_REDIRECT_URI",
+    "YT_COOKIES",
+    "UPSTASH_REDIS_REST_URL",
+    "UPSTASH_REDIS_REST_TOKEN",
+  ] as const;
+  const savedEnv: Record<string, string | undefined> = {};
   beforeEach(() => {
-    savedSecret = process.env.BROKER_SECRET ?? "";
-    savedUrl = process.env.BROKER_URL ?? "";
-    process.env.BROKER_SECRET = "wfx2-test-secret";
-    process.env.BROKER_URL = "http://127.0.0.1:3055"; // the direct default; the stub answers
+    for (const k of ENV_KEYS) {
+      savedEnv[k] = process.env[k];
+      delete process.env[k];
+    }
+    resetYoutubeConnectionStore();
   });
   afterEach(() => {
-    if (savedSecret) process.env.BROKER_SECRET = savedSecret;
-    else delete process.env.BROKER_SECRET;
-    if (savedUrl) process.env.BROKER_URL = savedUrl;
-    else delete process.env.BROKER_URL;
+    for (const k of ENV_KEYS) {
+      if (savedEnv[k] !== undefined) process.env[k] = savedEnv[k];
+      else delete process.env[k];
+    }
+    resetYoutubeConnectionStore();
   });
 
-  test("guests → the uniform 401 (the gate fires before any broker call)", async () => {
+  /** A connected record for the ACTING user (or another user): real
+   * encryptSecret token blobs, a non-expiring access token (the transparent
+   * refresh must never fire — no network). */
+  async function putConnection(
+    opts: {
+      userId?: string;
+      status?: "connected" | "needs_reauth";
+      expired?: boolean;
+      withRefresh?: boolean;
+    } = {},
+  ): Promise<void> {
+    const userId = opts.userId ?? "u_wfx2_test";
+    await putYouTubeConnection({
+      userId,
+      channelId: "UCown0000000000000001",
+      channelTitle: "Your Own Channel",
+      channelThumbUrl: null,
+      scope: "https://www.googleapis.com/auth/youtube.force-ssl",
+      accessTokenEnc: await encryptSecret("user-access-token"),
+      refreshTokenEnc:
+        opts.withRefresh === false ? null : await encryptSecret("user-refresh-token"),
+      accessExpiresAt: opts.expired ? Date.now() - 1_000 : Date.now() + 3_600_000,
+      status: opts.status ?? "connected",
+      connectedAt: new Date(Date.now() - 86_400_000).toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  test("guests → the uniform 401 (the gate fires before any store or env read)", async () => {
     const res = await connectionGet(new Request("http://localhost/api/connection/youtube") as never);
     expect(res.status).toBe(401);
     expect(((await res.json()) as { error?: string }).error).toBe("unauthenticated");
-    expect(fetchLog.filter((f) => f.url.includes("/healthz"))).toHaveLength(0);
+    // the per-user route probes NOTHING upstream (no broker, no Google)
+    expect(fetchLog).toHaveLength(0);
   });
 
-  test("signed-in + broker healthy with the tab → the connected envelope", async () => {
-    fetchHandler = (url) => {
-      if (url.includes("/healthz")) {
-        return Response.json({
-          ok: true,
-          tabFound: true,
-          tabUrl: "https://www.youtube.com/watch?v=okH-kaRjuAQ",
-          lastActionAt: null,
-        });
-      }
-      return new Response("{}", { status: 200 });
-    };
+  test("no GOOGLE_CLIENT_ID/SECRET env → the honest not-configured envelope (the exact missing vars + the redirect URI to register)", async () => {
     const res = await connectionGet(
       new Request("http://localhost/api/connection/youtube", {
         headers: { cookie: AUTH_COOKIE },
@@ -628,167 +723,147 @@ describe("P4B /api/connection/youtube: the gated, honest-degrade status route", 
     );
     expect(res.status).toBe(200);
     const data = (await res.json()) as {
+      mode: string;
+      status: string;
       connected: boolean;
-      tabFound: boolean;
-      tabUrl: string | null;
-      lastActionAt: unknown;
+      account?: unknown;
+      actions: Record<string, string>;
+      oauth: { configured: boolean; missingEnv: string[]; redirectUri: string; connectUrl: string; disconnectUrl: string };
+      serverReadSession: { configured: boolean };
       checkedAt: string;
     };
-    expect(data.connected).toBe(true);
-    expect(data.tabFound).toBe(true);
-    expect(data.tabUrl).toContain("youtube.com/watch");
-    expect(data.lastActionAt).toBeNull();
+    expect(data.mode).toBe("oauth");
+    expect(data.status).toBe("not-configured");
+    expect(data.connected).toBe(false);
+    expect(data.account).toBeUndefined();
+    expect(data.oauth.configured).toBe(false);
+    expect(data.oauth.missingEnv).toEqual(["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]);
+    expect(data.oauth.connectUrl).toBe("/api/connection/youtube/oauth/start");
+    expect(data.oauth.disconnectUrl).toBe("/api/connection/youtube/disconnect");
+    expect(data.oauth.redirectUri).toBe("http://localhost/api/connection/youtube/oauth/callback");
+    expect(data.actions).toMatchObject({
+      like: "official",
+      dislike: "official",
+      subscribe: "official",
+      playlists: "official",
+      watchLater: "local",
+      comments: "local",
+      notInterested: "local",
+      bell: "unsupported",
+      history: "unsupported",
+    });
+    expect(data.serverReadSession).toEqual({ configured: false });
     expect(data.checkedAt).toBeTruthy();
-    // the probe hit the broker's healthz with the gateway header set
-    const probe = fetchLog.find((f) => f.url.includes("/healthz"));
-    expect(probe).toBeDefined();
+    // zero upstream probes — the operator tiers are retired
+    expect(fetchLog).toHaveLength(0);
   });
 
-  test("broker ok but no YouTube tab → connected:false, tabFound:false (honest 200)", async () => {
-    fetchHandler = (url) => {
-      if (url.includes("/healthz")) {
-        return Response.json({ ok: true, tabFound: false, tabUrl: null, lastActionAt: null });
-      }
-      return new Response("{}", { status: 200 });
-    };
+  test("env configured + no connection → not-connected (the honest per-user miss; the redirect-URI env override wins)", async () => {
+    process.env.GOOGLE_CLIENT_ID = "test-client-id";
+    process.env.GOOGLE_CLIENT_SECRET = "test-client-secret";
+    process.env.GOOGLE_OAUTH_REDIRECT_URI = "https://example.org/api/connection/youtube/oauth/callback";
     const res = await connectionGet(
       new Request("http://localhost/api/connection/youtube", {
         headers: { cookie: AUTH_COOKIE },
       }) as never
     );
     expect(res.status).toBe(200);
-    const data = (await res.json()) as { connected: boolean; tabFound: boolean };
+    const data = (await res.json()) as {
+      status: string;
+      connected: boolean;
+      account?: unknown;
+      oauth: { configured: boolean; missingEnv: string[]; redirectUri: string };
+    };
+    expect(data.status).toBe("not-connected");
     expect(data.connected).toBe(false);
-    expect(data.tabFound).toBe(false);
+    expect(data.account).toBeUndefined();
+    expect(data.oauth.configured).toBe(true);
+    expect(data.oauth.missingEnv).toEqual([]);
+    expect(data.oauth.redirectUri).toBe("https://example.org/api/connection/youtube/oauth/callback");
+    expect(fetchLog).toHaveLength(0);
   });
 
-  test("broker unreachable → the honest disconnected 200, never a 5xx", async () => {
-    fetchHandler = () => {
-      throw new Error("connect ECONNREFUSED");
-    };
+  test("env configured + the user's own connected record → connected + the account block (the store is the truth — no upstream probe)", async () => {
+    process.env.GOOGLE_CLIENT_ID = "test-client-id";
+    process.env.GOOGLE_CLIENT_SECRET = "test-client-secret";
+    process.env.YT_COOKIES = "SAPISID=fake; SID=x"; // the read-session disclosure flips true
+    await putConnection();
     const res = await connectionGet(
       new Request("http://localhost/api/connection/youtube", {
         headers: { cookie: AUTH_COOKIE },
       }) as never
     );
     expect(res.status).toBe(200);
-    const data = (await res.json()) as { connected: boolean; tabUrl: string | null };
-    expect(data.connected).toBe(false);
-    expect(data.tabUrl).toBeNull();
+    const data = (await res.json()) as {
+      status: string;
+      connected: boolean;
+      account: { channelId: string | null; channelTitle: string | null; channelThumbUrl: string | null; scope: string | null; connectedAt: string | null };
+      serverReadSession: { configured: boolean };
+      checkedAt: string;
+    };
+    expect(data.status).toBe("connected");
+    expect(data.connected).toBe(true);
+    expect(data.account).toEqual({
+      channelId: "UCown0000000000000001",
+      channelTitle: "Your Own Channel",
+      channelThumbUrl: null,
+      scope: "https://www.googleapis.com/auth/youtube.force-ssl",
+      connectedAt: expect.any(String),
+    });
+    expect(data.serverReadSession).toEqual({ configured: true });
+    expect(data.checkedAt).toBeTruthy();
+    // NO broker healthz, NO account_menu, NO googleapis — the retired probes are gone
+    expect(
+      fetchLog.filter(
+        (f) => f.url.includes("/healthz") || f.url.includes("account_menu") || f.url.includes("googleapis")
+      )
+    ).toHaveLength(0);
   });
 
-  // P33 — the direct-first route semantics (the server-side session tier)
-  describe("P33 /api/connection/youtube: the direct tier (the main-interface doctrine)", () => {
-    const DIRECT_COOKIES = "SAPISID=fake-direct; SID=x";
-    const SIGNED_IN_MENU = {
-      actions: [
-        {
-          openPopupAction: {
-            popup: {
-              multiPageMenuRenderer: {
-                sections: [
-                  {
-                    multiPageMenuSectionRenderer: {
-                      items: [
-                        {
-                          compactLinkRenderer: {
-                            navigationEndpoint: {
-                              browseEndpoint: { browseId: "UCoperator1234567890abcdef" },
-                            },
-                          },
-                        },
-                      ],
-                    },
-                  },
-                ],
-              },
-            },
-          },
-        },
-      ],
-    };
+  test("a needs_reauth record → the honest needs-reauth verdict (the revoked grant)", async () => {
+    process.env.GOOGLE_CLIENT_ID = "test-client-id";
+    process.env.GOOGLE_CLIENT_SECRET = "test-client-secret";
+    await putConnection({ status: "needs_reauth" });
+    const res = await connectionGet(
+      new Request("http://localhost/api/connection/youtube", {
+        headers: { cookie: AUTH_COOKIE },
+      }) as never
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { status: string; connected: boolean };
+    expect(data.status).toBe("needs-reauth");
+    expect(data.connected).toBe(false);
+  });
 
-    let savedCookies = "";
-    beforeEach(() => {
-      savedCookies = process.env.YT_COOKIES ?? "";
-      process.env.YT_COOKIES = DIRECT_COOKIES;
-    });
-    afterEach(() => {
-      if (savedCookies) process.env.YT_COOKIES = savedCookies;
-      else delete process.env.YT_COOKIES;
-    });
+  test("an expired access token with no refresh grant → needs-reauth (the same verdict the action tier reaches)", async () => {
+    process.env.GOOGLE_CLIENT_ID = "test-client-id";
+    process.env.GOOGLE_CLIENT_SECRET = "test-client-secret";
+    await putConnection({ expired: true, withRefresh: false });
+    const res = await connectionGet(
+      new Request("http://localhost/api/connection/youtube", {
+        headers: { cookie: AUTH_COOKIE },
+      }) as never
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { status: string; connected: boolean };
+    expect(data.status).toBe("needs-reauth");
+    expect(data.connected).toBe(false);
+  });
 
-    test("session configured + account_menu SERVED → mode direct, connected, sessionServed true", async () => {
-      fetchHandler = (url) => {
-        if (String(url).includes("account/account_menu")) {
-          return Response.json(SIGNED_IN_MENU);
-        }
-        if (url.includes("/healthz")) {
-          return Response.json({ ok: true, tabFound: false, tabUrl: null, lastActionAt: null });
-        }
-        return new Response("{}", { status: 200 });
-      };
-      const res = await connectionGet(
-        new Request("http://localhost/api/connection/youtube", {
-          headers: { cookie: AUTH_COOKIE },
-        }) as never
-      );
-      expect(res.status).toBe(200);
-      const data = (await res.json()) as {
-        connected: boolean;
-        mode: string;
-        sessionServed?: boolean;
-        broker?: { connected: boolean; tabFound: boolean };
-        checkedAt: string;
-      };
-      expect(data.mode).toBe("direct");
-      expect(data.sessionServed).toBe(true);
-      expect(data.connected).toBe(true);
-      // the secondary broker reachability rides along for the card's honest note
-      expect(data.broker).toEqual({ connected: false, tabFound: false });
-      expect(data.checkedAt).toBeTruthy();
-      // the probe actually hit the account menu endpoint with the session cookies
-      const probe = fetchLog.find((f) => f.url.includes("account/account_menu"));
-      expect(probe).toBeDefined();
-    });
-
-    test("session configured but the menu answers the PUBLIC variant → mode direct, honest not-served", async () => {
-      fetchHandler = (url) => {
-        if (String(url).includes("account/account_menu")) {
-          return Response.json({}); // the signed-out menu carries zero account rows
-        }
-        return new Response("{}", { status: 200 });
-      };
-      const res = await connectionGet(
-        new Request("http://localhost/api/connection/youtube", {
-          headers: { cookie: AUTH_COOKIE },
-        }) as never
-      );
-      expect(res.status).toBe(200);
-      const data = (await res.json()) as {
-        connected: boolean;
-        mode: string;
-        sessionServed?: boolean;
-      };
-      expect(data.mode).toBe("direct");
-      expect(data.sessionServed).toBe(false);
-      expect(data.connected).toBe(false);
-    });
-
-    test("session configured but the probe fails (network/upstream) → mode direct, honest disconnected", async () => {
-      fetchHandler = () => {
-        throw new Error("fetch failed");
-      };
-      const res = await connectionGet(
-        new Request("http://localhost/api/connection/youtube", {
-          headers: { cookie: AUTH_COOKIE },
-        }) as never
-      );
-      expect(res.status).toBe(200);
-      const data = (await res.json()) as { connected: boolean; mode: string };
-      expect(data.mode).toBe("direct");
-      expect(data.connected).toBe(false);
-    });
+  test("another user's connection never leaks — the acting user honestly not-connected (the per-user isolation law)", async () => {
+    process.env.GOOGLE_CLIENT_ID = "test-client-id";
+    process.env.GOOGLE_CLIENT_SECRET = "test-client-secret";
+    await putConnection({ userId: "u_someone_else_entirely" });
+    const res = await connectionGet(
+      new Request("http://localhost/api/connection/youtube", {
+        headers: { cookie: AUTH_COOKIE },
+      }) as never
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { status: string; connected: boolean; account?: unknown };
+    expect(data.status).toBe("not-connected");
+    expect(data.connected).toBe(false);
+    expect(data.account).toBeUndefined();
   });
 });
 
