@@ -130,25 +130,61 @@ async function ensureShadowChannel(snapshot: CommentVideoSnapshotDto): Promise<s
   return id;
 }
 
-/** Upsert the shadow Video mirroring the real YouTube video (id = videoId). */
+/**
+ * Upsert the shadow Video mirroring the real YouTube video (id = videoId).
+ *
+ * WFX2-P39 — THE HEAL LAW: first-write-wins applies ONLY while the first
+ * write carried real display data. A row born GENERIC (the no-snapshot
+ * fallbacks — title `YouTube video <id>`, the shadow channel id
+ * `ytch-unknown` / name "YouTube channel") is HEALED the first time a save
+ * arrives carrying real display data: the generic title takes the
+ * snapshot's title, and the generic channel relinks to the snapshot's real
+ * shadow channel. A row that already carries REAL data is NEVER
+ * overwritten — a later, different snapshot changes nothing (real data is
+ * the truth, whichever save wrote it first). Idempotent by construction:
+ * a healed row is real, so every later snapshot (same or different) is a
+ * no-op.
+ */
 export async function ensureShadowVideo(
   videoId: string,
   snapshot: CommentVideoSnapshotDto = {}
 ): Promise<void> {
-  const existing = await db.video.findUnique({ where: { id: videoId } });
-  if (existing) return;
-  const channelId = await ensureShadowChannel(snapshot);
-  await db.video.create({
-    data: {
-      id: videoId,
-      channelId,
-      title: snapshot.title || `YouTube video ${videoId}`,
-      // honest mirror: the real thumbnail + the real watch page
-      thumbnailUrl: videoThumbnailUrl(videoId),
-      videoUrl: watchUrl(videoId),
-      visibility: "public",
-    },
+  const existing = await db.video.findUnique({
+    where: { id: videoId },
+    include: { channel: true },
   });
+  if (!existing) {
+    const channelId = await ensureShadowChannel(snapshot);
+    await db.video.create({
+      data: {
+        id: videoId,
+        channelId,
+        title: snapshot.title || `YouTube video ${videoId}`,
+        // honest mirror: the real thumbnail + the real watch page
+        thumbnailUrl: videoThumbnailUrl(videoId),
+        videoUrl: watchUrl(videoId),
+        visibility: "public",
+      },
+    });
+    return;
+  }
+  // WFX2-P39 — the heal pass: a GENERIC row takes the arriving snapshot's
+  // real display data; a REAL row keeps everything (never overwritten).
+  const genericTitle = existing.title === `YouTube video ${videoId}`;
+  const genericChannel =
+    existing.channelId === "ytch-unknown" ||
+    existing.channel?.name === "YouTube channel";
+  const snapshotHasChannel = Boolean(
+    snapshot.channelId ?? snapshot.channelHandle ?? snapshot.channelName,
+  );
+  const data: { title?: string; channelId?: string } = {};
+  if (genericTitle && snapshot.title) data.title = snapshot.title;
+  if (genericChannel && snapshotHasChannel) {
+    const channelId = await ensureShadowChannel(snapshot);
+    if (channelId !== existing.channelId) data.channelId = channelId;
+  }
+  if (data.title === undefined && data.channelId === undefined) return;
+  await db.video.update({ where: { id: videoId }, data });
 }
 
 /**

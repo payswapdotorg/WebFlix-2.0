@@ -968,6 +968,11 @@ export function WatchPage({
           open
           onOpenChange={setSaveOpen}
           videoId={videoId}
+          // WFX2-P39 — the detail's display snapshot rides the local WL save
+          // (the same DTO fields the queue meta uses) so /playlist/WL's row
+          // renders the real title/channel, never the generic fallback.
+          title={video.title}
+          channelName={video.channel.name}
           onSavedChange={(watchLater) => {
             setDetail((d) =>
               d ? { ...d, state: { ...d.state, savedWatchLater: watchLater } } : d,

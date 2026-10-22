@@ -440,3 +440,57 @@ describe("the ⋯ menu — Don't recommend channel + the undo family (P24-SEND G
     expect(toasts).not.toContain("success:Recommendations restored");
   });
 });
+
+// ---------------------------------------------------------------------------
+// WFX2-P39 — the Watch-later save carries the display snapshot: the rail's
+// meta (title + channel.name) rides the POST body so the local WL list's
+// rows render the short's REAL title/channel, never the generic
+// "YouTube video <id>" / "YouTube channel" fallback.
+// ---------------------------------------------------------------------------
+
+describe("WFX2-P39 — Save to Watch later carries the display snapshot", () => {
+  test("the ⋯ menu's Watch-later save posts {videoId, title, channelName} — the meta's real display data", async () => {
+    await renderRail({
+      meta: {
+        ...META_NO_SOUND,
+        title: "A short with a real title",
+        channel: {
+          id: "UCshorts1",
+          handle: "@shortschannel",
+          name: "Shorts Channel",
+          avatarUrl: null,
+        },
+      },
+      guest: false,
+    });
+    // the G12 openMenu idiom
+    const more = qa("button").find((b) => b.getAttribute("aria-label") === "More actions");
+    expect(more).toBeTruthy();
+    await act(async () => {
+      more!.dispatchEvent(
+        new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+    await act(async () => {});
+    const saveItem = Array.from(
+      win.document.querySelectorAll("[role='menuitem']") as unknown as HTMLElement[],
+    ).find((el) => (el.textContent ?? "").trim() === "Save to Watch later");
+    expect(saveItem).toBeDefined();
+    await act(async () => {
+      saveItem!.click();
+    });
+    await act(async () => {});
+    await act(async () => {});
+    // the tracked post body carries the display snapshot (the exact shape
+    // /api/playlists/watch-later's snapshot parse consumes)
+    expect(posts).toContainEqual({
+      url: "/api/playlists/watch-later",
+      body: {
+        videoId: "H3ONg7SPSWU",
+        title: "A short with a real title",
+        channelName: "Shorts Channel",
+      },
+    });
+    expect(toasts).toContain("success:Saved to Watch later"); // the honest add toast
+  });
+});

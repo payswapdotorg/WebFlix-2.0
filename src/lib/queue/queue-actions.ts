@@ -10,6 +10,12 @@
  * Never a fake append: a failed write leaves the queue untouched and
  * surfaces the honest error. Remove-from-queue is the same local remove,
  * same law. Toasts live in the components — these functions report outcomes.
+ *
+ * WFX2-P39: the add's watch-later post body carries the item's display
+ * snapshot (title + channelName — QueueItem already holds them; conditional
+ * spread, only when truthy) so the WL row the same write shapes renders real
+ * display data on /playlist/WL, never the generic "YouTube video <id>"
+ * fallback. Remove stays snapshot-free — removes need no display metadata.
  */
 import { post } from "@/lib/watch/client";
 import { useQueueStore, type QueueItem } from "./queue-store";
@@ -35,6 +41,10 @@ export async function addToQueue(item: QueueItem): Promise<QueueActionOutcome> {
     await post<{ ok: true; added: boolean; playlistId: string }>("/api/playlists/watch-later", {
       videoId: item.videoId,
       add: true,
+      // WFX2-P39 — the item's display snapshot rides the WL-backed save
+      // (conditional spread — a truthy-less field stays out of the body)
+      ...(item.title ? { title: item.title } : {}),
+      ...(item.channelName ? { channelName: item.channelName } : {}),
     });
   } catch (e) {
     // honest failure (unauthenticated / store error): the queue NEVER gains

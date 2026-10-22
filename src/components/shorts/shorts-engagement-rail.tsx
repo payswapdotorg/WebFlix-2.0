@@ -123,6 +123,11 @@ import { soundTokenToKeyLink } from "@/lib/youtube/sound-key";
  * work, with the honest note (youtube.com's own honest-toast pattern,
  * mirrored).
  *
+ * WFX2-P39 — the Watch-later save carries the display snapshot: the meta's
+ * title + channel.name ride the POST body (the conditional-spread law;
+ * bare/unhydrated meta keeps the exact pre-P39 body) so the local WL list's
+ * rows render the short's real title/channel, never the generic fallback.
+ *
  * P25 G14 (2026-10-19, re-measured this run — the Shorts-AI verdict):
  * youtube.com's 2026 Shorts AI editing family (AI first-draft editing) is
  * studio/app-side and unreachable from this egress — MEASURED: studio
@@ -346,6 +351,11 @@ export function ShortsEngagementRail({
     try {
       const res = await post<{ added: boolean }>("/api/playlists/watch-later", {
         videoId,
+        // WFX2-P39 — the display snapshot rides the local WL save: the
+        // meta's real title/channel (conditional spread — a bare sequence
+        // entry or a null channel keeps the exact pre-P39 body shape)
+        ...(meta?.title ? { title: meta.title } : {}),
+        ...(meta?.channel?.name ? { channelName: meta.channel.name } : {}),
       });
       setSaved(res.added);
       toast.success(res.added ? "Saved to Watch later" : "Removed from Watch later");
