@@ -1,12 +1,20 @@
 # P36 — prove and fix YouTube action persistence per user
 
 **Priority:** P0 / production correctness and account isolation  
-**Status:** queued for TL2 review; no implementation is claimed in this work item  
+**Status:** P36 implementation merged and deployed; live authenticated release acceptance remains OPEN pending secure Google OAuth configuration and the real-user round-trip  
 **Reported:** 2026-10-21 — production actions such as Subscribe and Like do not reliably persist at youtube.com  
 **Production alias:** https://webflix-2-0-one.vercel.app  
 **Tracking issue:** see the repository issue titled “P36: Make YouTube actions persist on the intended user's account”
 
-## What I verified
+## Current status — verified 2026-10-22
+
+- **P36 code is implemented:** merge commit [890b161](https://github.com/payswapdotorg/WebFlix-2.0/commit/890b161bd967b4c20595574fbc5d6990d2a8b61e) introduced the per-user Google OAuth spine, encrypted per-user token storage, official YouTube Data API mutation/read-back adapter, removal of shared operator-cookie/broker writes from the user-action path, honest unsupported/local capability handling, and the two-user isolation test battery.
+- **Deployment:** Vercel reports the production alias `webflix-2-0-one.vercel.app` is READY on source SHA [132659d](https://github.com/payswapdotorg/WebFlix-2.0/commit/132659d6728c2c4c6abb4a1a106fb048cd0d437e), which includes P36 and the later P37–P39 merges. Deployment identity is independently checked; this review connection could not read Vercel environment values or runtime logs.
+- **P38 truthfulness fix:** the current ledger reports that the deployment is missing `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Therefore official-tier YouTube actions are intentionally blocked with a deployment-not-configured response, rather than falsely claiming success or using another user's/operator's identity.
+- **P39 is separate:** its verified change fixes the titles/channel names in the WebFlix-local Watch-later list. The TL's production test of local saves does not prove that YouTube Like/Subscribe writes work.
+- **Still OPEN:** no checked-in `evidence/wfx2p36/live-acceptance.md` was found in the work described so far, and the live acceptance runbook remains pending. The required proof is a real OAuth connection by a dedicated test user, Like + Subscribe/Unsubscribe via the deployed app, independent same-account YouTube read-back, then reload and verification. Do not close this task based on the fixture gate alone.
+- **Credential safety:** never paste `GOOGLE_CLIENT_SECRET`, access tokens, refresh tokens, cookies, or OAuth client-secret files into this chat or a GitHub issue. Configure credentials directly in the Vercel project's Production environment variables, then redeploy and verify the deployment's status card. The non-secret Client ID should also be configured there so the whole setup is reproducible.
+## Original review findings (before P36 landed)
 
 1. The Vercel production alias currently resolves to a READY deployment of `payswapdotorg/WebFlix-2.0` at source SHA `b00ebf7c0b1e421b4033a54e3aa90f7340620d04` (P35-LIKE-STATE), rather than an older P33/P34 build. Deployment metadata is available; Vercel runtime logs/environment inspection returned 403, so this review could not independently inspect live action request logs or secret-variable presence.
 2. `src/lib/youtube-direct.ts` reads `process.env.YT_COOKIES` as a singleton operator/session cookie. `docs/ops/vercel-env.md` explicitly describes this as the operator's YouTube session. `directAuthConfigured()` only tests whether the cookie string contains SAPISID; it does not prove the session is fresh, that a write changed state, or that it belongs to the current WebFlix user.
