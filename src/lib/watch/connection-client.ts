@@ -18,6 +18,13 @@
  *    youtube-needs-reauth renders the connect / re-connect prompt (message +
  *    a Settings action); every other failure keeps its honest per-surface
  *    message
+ *
+ * WFX2-P38 — THE DEPLOYMENT-TRUTH LAW: the kind youtube-not-configured (the
+ * deployment itself lacks GOOGLE_CLIENT_ID/SECRET — connecting is
+ * IMPOSSIBLE here) renders the deployment truth ("this WebFlix deployment
+ * isn't connected to Google yet") with a Details action to the settings
+ * card — NEVER the user connect errand, which stays reserved for the case
+ * where a connection could actually be made.
  */
 import { toast } from "sonner";
 import { ApiClientError } from "./client";
@@ -215,9 +222,25 @@ export function resetYouTubeConnectionCache(): void {
  * connect / re-connect prompt (message + a Settings action that opens the
  * YouTube account card); every other error — quota, provider, store,
  * unsupported — keeps its honest per-surface message.
+ *
+ * WFX2-P38 — kind youtube-not-configured speaks the DEPLOYMENT truth (the
+ * connect errand is impossible on this deployment): the honest
+ * unavailable-yet title + the still-working local lanes + a Details action
+ * to the settings card that explains the setup state.
  */
 export function toastActionError(e: unknown, fallback: string): void {
   const kind = e instanceof ApiClientError ? e.kind : undefined;
+  if (kind === "youtube-not-configured") {
+    toast.error("YouTube actions aren't available yet", {
+      description:
+        "This WebFlix deployment isn't connected to Google yet — watch later, comments and not-interested still work here.",
+      action: {
+        label: "Details",
+        onClick: () => window.location.assign(YOUTUBE_CONNECTION_SETTINGS_HREF),
+      },
+    });
+    return;
+  }
   if (kind === "youtube-not-connected") {
     toast.error("Connect your YouTube account to act", {
       description:

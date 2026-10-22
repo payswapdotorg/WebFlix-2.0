@@ -17,7 +17,10 @@
  *    app's own persisted bytes round-trip across a simulated reload, and an
  *    invalid stored value falls back to grid;
  *  - THE UNCHANGED SEAMS: list-view skeletons, the honest error state, and
- *    cursor paging (the P22-C sentinel auto-loads rows in list view too).
+ *    cursor paging (the P22-C sentinel auto-loads rows in list view too);
+ *  - WFX2-P38: the deployment-truth banner — oauthConfigured:false on the
+ *    payload → the notice shows with NO connect link (the errand is
+ *    impossible on an unconfigured deployment).
  */
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { createElement, type ReactElement } from "react";
@@ -358,6 +361,30 @@ describe("F5 — the signed-in per-user notice banner (the WFX2-P36 honest envel
       all("a").some((a) => (a.textContent ?? "").trim() === "Connect your YouTube account")
     ).toBe(false);
     expect(text).not.toContain("Sign in to see your subscriptions feed");
+  });
+
+  test("WFX2-P38: oauthConfigured:false (the unconfigured deployment) → the deployment notice shows, NO Connect link (the errand is impossible here)", async () => {
+    feedData = {
+      channels: [],
+      videos: [],
+      nextCursor: null,
+      loginRequired: false,
+      connected: false,
+      oauthConfigured: false, // THIS deployment can never offer the connect flow
+      notice:
+        "This WebFlix deployment isn't connected to Google yet — your subscriptions will appear here once it is.",
+    };
+    await render(createElement(SubscriptionsPage));
+    const text = host!.textContent ?? "";
+    expect(text).toContain("This WebFlix deployment isn't connected to Google yet");
+    expect(text).toContain("your subscriptions will appear here once it is");
+    // THE P38 LAW: never the user connect errand where connecting is impossible
+    expect(
+      all("a").some((a) => (a.textContent ?? "").trim() === "Connect your YouTube account")
+    ).toBe(false);
+    // the banner still renders as the status note (the history idiom)
+    expect(all('[data-testid="subscriptions-notice"]').length).toBe(1);
+    expect(all('[role="alert"]').length).toBe(0);
   });
 });
 

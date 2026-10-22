@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { hasSession } from "@/lib/youtube/session";
 import { rateLimit } from "@/lib/youtube/cache";
 import { resolveReadTier } from "@/lib/watch/action-proxy";
+import { oauthConfigured } from "@/lib/youtube/oauth";
 import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,11 @@ export const dynamic = "force-dynamic";
  * renders it as the notice banner), with `connected` disclosing whether the
  * acting user's own YouTube account is connected. The LIKE BUTTON still acts
  * on your own account — through the official videos.rate lane.
+ *
+ * WFX2-P38 — the envelope also carries `oauthConfigured` (the deployment
+ * truth) so the view banners can gate their Connect links: a deployment
+ * without the Google OAuth env never sends the user on a connect errand.
+ * The notice text is unchanged (capability-honest, not a connect errand).
  */
 export async function GET(req: Request) {
   if (!(await getSessionUser(req))) return authRequiredResponse();
@@ -33,6 +39,7 @@ export async function GET(req: Request) {
       unavailable: false,
       session: hasSession(),
       connected: tier !== null,
+      oauthConfigured: oauthConfigured(),
       notice:
         "The list of videos you liked on YouTube has no official API — your likes still act on your account (the like button); the list lives on youtube.com/feed/liked",
     });

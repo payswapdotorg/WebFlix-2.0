@@ -8,6 +8,7 @@ import {
   tierError,
 } from "@/lib/watch/action-proxy";
 import { officialListSubscribedChannels } from "@/lib/youtube/official-actions";
+import { oauthConfigured } from "@/lib/youtube/oauth";
 import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 import type { ChannelLite } from "@/lib/types";
 
@@ -23,7 +24,14 @@ export const dynamic = "force-dynamic";
  * combined latest-videos feed has no official API — the honest notice says
  * so; the channel rail is the user's own truth.
  *
- * Envelope: { channels, videos: [], nextCursor: null, connected, notice }.
+ * Envelope: { channels, videos: [], nextCursor: null, connected,
+ * oauthConfigured, notice }.
+ *
+ * WFX2-P38 — THE DEPLOYMENT-TRUTH LAW: an unconfigured deployment answers
+ * kind "youtube-not-configured" + oauthConfigured:false + the deployment
+ * notice ("this WebFlix deployment isn't connected to Google yet") — never
+ * the user connect errand, which stays reserved for a deployment where
+ * connecting is actually possible.
  */
 export async function GET(req: NextRequest) {
   if (!(await getSessionUser(req))) return authRequiredResponse();
@@ -33,12 +41,28 @@ export async function GET(req: NextRequest) {
     }
     const tier = await resolveReadTier(req);
     if (!tier) {
+      // WFX2-P38 — the deployment truth when the deployment itself isn't
+      // connected to Google (never the user connect errand).
+      if (!oauthConfigured()) {
+        return NextResponse.json({
+          channels: [] as ChannelLite[],
+          videos: [],
+          nextCursor: null,
+          loginRequired: false,
+          connected: false,
+          oauthConfigured: false,
+          kind: "youtube-not-configured",
+          notice:
+            "This WebFlix deployment isn't connected to Google yet — your subscriptions will appear here once it is.",
+        });
+      }
       return NextResponse.json({
         channels: [] as ChannelLite[],
         videos: [],
         nextCursor: null,
         loginRequired: false,
         connected: false,
+        oauthConfigured: true,
         notice:
           "Connect your YouTube account to see your subscriptions — Settings → YouTube connection",
       });

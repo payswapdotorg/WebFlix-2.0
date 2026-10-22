@@ -18,6 +18,14 @@
  *     neither @/lib/broker nor @/lib/youtube-direct, and NO route file under
  *     src/app/api/ imports @/lib/broker — isolation by construction, not
  *     configuration.
+ *
+ * WFX2-P38 — the deployment-truth layer: the not-connected tier pins SET the
+ * Google OAuth env inside the test (a configured deployment — the connect
+ * errand is the honest verdict there); the unconfigured case answers
+ * "not-configured" instead (pinned in action-routes/playlist-edit/personal-
+ * routes). Plus the toastActionError battery: kind youtube-not-configured
+ * renders the DEPLOYMENT truth (never the connect errand — sonner mocked at
+ * the module boundary, the house channel-page toast idiom).
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, mock } from "bun:test";
 import { readdirSync } from "node:fs";
@@ -64,8 +72,36 @@ mock.module("@/lib/youtube/official-actions", () => ({
   },
 }));
 
+/* ------------------------------------------------------------------ */
+/* WFX2-P38 — the sonner mock for the toastActionError battery          */
+/* (the house channel-page toast idiom: captured per call, restored never */
+/* needed — bun --isolate gives this file its own process)               */
+/* ------------------------------------------------------------------ */
+interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+const toastCalls: {
+  kind: "error" | "success" | "info";
+  text: string;
+  opts?: { description?: string; action?: ToastAction };
+}[] = [];
+mock.module("sonner", () => ({
+  toast: Object.assign((_msg: string) => {}, {
+    error: (text: string, opts?: { description?: string; action?: ToastAction }) =>
+      toastCalls.push({ kind: "error", text, opts }),
+    success: (text: string) => toastCalls.push({ kind: "success", text }),
+    info: (text: string) => toastCalls.push({ kind: "info", text }),
+  }),
+}));
+
 /* modules under test (imported after the mock, per the established idiom) */
 import { proxyVideoLike, resolveActionTier, resolveReadTier } from "@/lib/watch/action-proxy";
+import {
+  toastActionError,
+  YOUTUBE_CONNECTION_SETTINGS_HREF,
+} from "@/lib/watch/connection-client";
+import { ApiClientError } from "@/lib/watch/client";
 import {
   getYouTubeConnection,
   putYouTubeConnection,
@@ -177,10 +213,21 @@ describe("resolveActionTier (the per-user action tier)", () => {
   });
 
   test("THE CORE TWO-USER PIN: user B with NO connection → not-connected EVEN THOUGH A IS CONNECTED", async () => {
+    // WFX2-P38: a CONFIGURED deployment — the connect errand is the honest
+    // verdict (this file's beforeEach deletes the Google env by default)
+    process.env.GOOGLE_CLIENT_ID = "p38-iso-client-id";
+    process.env.GOOGLE_CLIENT_SECRET = "p38-iso-client-secret";
     await connectUser(USER_A, TOKEN_A); // A is fully connected…
     const tier = await resolveActionTier(reqFor(COOKIE_B)); // …but B acts
     expect(tier).toEqual({ ok: false, kind: "not-connected" });
     expect(officialCalls).toHaveLength(0); // B never reached ANY official call
+  });
+
+  test("WFX2-P38: the UNCONFIGURED deployment → B's absent connection answers not-configured (the deployment truth, not the connect errand)", async () => {
+    await connectUser(USER_A, TOKEN_A); // A is connected, but the DEPLOYMENT has no Google OAuth env
+    const tier = await resolveActionTier(reqFor(COOKIE_B)); // B acts with no connection
+    expect(tier).toEqual({ ok: false, kind: "not-configured" });
+    expect(officialCalls).toHaveLength(0);
   });
 
   test("user B with a needs_reauth record → needs-reauth (never A's token)", async () => {
@@ -298,6 +345,10 @@ describe("the proxy isolation (proxyVideoLike with recorded tokens)", () => {
   });
 
   test("B's tier is refused BEFORE any official call when B has no connection (A connected)", async () => {
+    // WFX2-P38: a CONFIGURED deployment — the connect-errand message is the
+    // honest verdict (this file's beforeEach deletes the Google env by default)
+    process.env.GOOGLE_CLIENT_ID = "p38-iso-client-id";
+    process.env.GOOGLE_CLIENT_SECRET = "p38-iso-client-secret";
     await connectUser(USER_A, TOKEN_A);
     const tier = await resolveActionTier(reqFor(COOKIE_B));
     expect(tier.ok).toBe(false);
@@ -305,6 +356,63 @@ describe("the proxy isolation (proxyVideoLike with recorded tokens)", () => {
       "Connect your YouTube account to act",
     );
     expect(officialCalls).toHaveLength(0); // isolation by construction
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* 3.5 WFX2-P38 — the toastActionError deployment-truth battery        */
+/* ------------------------------------------------------------------ */
+
+describe("toastActionError — WFX2-P38: the deployment-truth toast (the connect errand reserved for the configured case)", () => {
+  test("kind youtube-not-configured → the honest unavailable-yet title + the deployment description + a Details action targeting the settings anchor", () => {
+    toastCalls.length = 0;
+    toastActionError(
+      new ApiClientError(
+        503,
+        "YouTube actions aren't available yet — this WebFlix deployment isn't connected to Google",
+        "youtube-not-configured",
+      ),
+      "Failed to update rating",
+    );
+    expect(toastCalls).toHaveLength(1);
+    const call = toastCalls[0];
+    expect(call.kind).toBe("error");
+    expect(call.text).toBe("YouTube actions aren't available yet");
+    expect(call.opts?.description).toContain("isn't connected to Google yet");
+    expect(call.opts?.description).toContain(
+      "watch later, comments and not-interested still work here",
+    );
+    // the action is Details — NOT a connect ask — and it targets the settings
+    // anchor (the YouTube connection card explains the deployment's setup state)
+    expect(call.opts?.action?.label).toBe("Details");
+    const assigned: string[] = [];
+    (globalThis as Record<string, unknown>).window = {
+      location: { assign: (url: string) => assigned.push(url) },
+    };
+    try {
+      call.opts?.action?.onClick();
+    } finally {
+      delete (globalThis as Record<string, unknown>).window;
+    }
+    expect(assigned).toEqual([YOUTUBE_CONNECTION_SETTINGS_HREF]);
+  });
+
+  test("kind youtube-not-connected keeps the connect errand (the reserved case — a deployment where connecting is possible)", () => {
+    toastCalls.length = 0;
+    toastActionError(
+      new ApiClientError(
+        403,
+        "Connect your YouTube account to act — Settings → YouTube connection",
+        "youtube-not-connected",
+      ),
+      "Failed to update rating",
+    );
+    expect(toastCalls).toHaveLength(1);
+    const call = toastCalls[0];
+    expect(call.kind).toBe("error");
+    expect(call.text).toBe("Connect your YouTube account to act");
+    expect(call.opts?.description).toContain("connect it in Settings");
+    expect(call.opts?.action?.label).toBe("Settings");
   });
 });
 

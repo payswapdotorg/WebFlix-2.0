@@ -9,6 +9,10 @@
  *    encryptSecret blobs, env-clean). The API's own response is the
  *    read-back, so verified:true rides the success; official failures map to
  *    the honest 502 taxonomy (quota / provider-rejected / provider-error).
+ *    WFX2-P38: the not-connected pin SETS GOOGLE_CLIENT_ID/SECRET (a
+ *    configured deployment — the connect errand is the honest ask); the
+ *    not-configured pin deletes them (the deployment truth: 503
+ *    youtube-not-configured, never the connect errand).
  *  - POST /api/playlists/[id]/reorder: the HONEST UNSUPPORTED lane — the
  *    proxy always throws the 501 {error, kind:"youtube-unsupported"} (no safe
  *    official reorder path; the pre-P36 broker drag-drive is retired).
@@ -90,6 +94,24 @@ beforeAll(async () => {
   AUTH_COOKIE = await mintSessionCookie({ sub: USER_ID });
 });
 
+/* WFX2-P38 — the Google OAuth env originals, captured up front and restored
+ * in afterAll: the not-connected pins SET the pair (oauthConfigured → true),
+ * the not-configured pins DELETE it (the deployment truth). */
+const savedGoogleClientId = process.env.GOOGLE_CLIENT_ID;
+const savedGoogleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
+/** WFX2-P38 — make this deployment "configured" (the connect errand is real). */
+const setGoogleEnv = (): void => {
+  process.env.GOOGLE_CLIENT_ID = "p38-playlist-client-id";
+  process.env.GOOGLE_CLIENT_SECRET = "p38-playlist-client-secret";
+};
+
+/** WFX2-P38 — make this deployment UNCONFIGURED (the deployment truth). */
+const deleteGoogleEnv = (): void => {
+  delete process.env.GOOGLE_CLIENT_ID;
+  delete process.env.GOOGLE_CLIENT_SECRET;
+};
+
 beforeEach(async () => {
   officialCalls.length = 0;
   updateResult = {
@@ -122,6 +144,11 @@ beforeEach(async () => {
 afterAll(() => {
   mock.module("@/lib/youtube/official-actions", () => realOfficial);
   resetYoutubeConnectionStore();
+  // WFX2-P38 — the Google OAuth env back to its process-original state
+  if (savedGoogleClientId !== undefined) process.env.GOOGLE_CLIENT_ID = savedGoogleClientId;
+  else delete process.env.GOOGLE_CLIENT_ID;
+  if (savedGoogleClientSecret !== undefined) process.env.GOOGLE_CLIENT_SECRET = savedGoogleClientSecret;
+  else delete process.env.GOOGLE_CLIENT_SECRET;
 });
 
 /** A resolved official tier for the direct proxy-level tests. */
@@ -199,6 +226,7 @@ describe("PATCH /api/playlists/[id] — the official playlist-update drive (offi
   });
 
   test("no connected YouTube account → 403 youtube-not-connected (the tier gate precedes the official call)", async () => {
+    setGoogleEnv(); // WFX2-P38: a CONFIGURED deployment — the connect errand is the honest ask
     resetYoutubeConnectionStore(); // drop the connection
     const res = await patchPlaylist(patchReq("PLx", { title: "X" }), ctx("PLx"));
     expect(res.status).toBe(403);
@@ -206,6 +234,20 @@ describe("PATCH /api/playlists/[id] — the official playlist-update drive (offi
     expect(body.error).toBe("Connect your YouTube account to act — Settings → YouTube connection");
     expect(body.kind).toBe("youtube-not-connected");
     expect(officialCalls).toHaveLength(0);
+  });
+
+  test("WFX2-P38: deployment without Google OAuth env → 503 youtube-not-configured (the deployment-truth law — never the connect errand)", async () => {
+    deleteGoogleEnv(); // this deployment can NEVER offer the connect flow
+    resetYoutubeConnectionStore(); // drop the connection
+    const res = await patchPlaylist(patchReq("PLx", { title: "X" }), ctx("PLx"));
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { error: string; kind?: string };
+    expect(body.error).toBe(
+      "YouTube actions aren't available yet — this WebFlix deployment isn't connected to Google",
+    );
+    expect(body.kind).toBe("youtube-not-configured");
+    expect(officialCalls).toHaveLength(0); // isolation by construction still holds
+    setGoogleEnv(); // leave the configured state for the sibling pins
   });
 
   test("happy path: title only → official update with only title on the user's token; verified:true", async () => {
@@ -430,6 +472,7 @@ describe("proxyPlaylistUpdate — the field map + the official read-back semanti
   });
 
   test("the tier gate: a not-connected tier rejects before ANY official call", async () => {
+    setGoogleEnv(); // WFX2-P38: a CONFIGURED deployment — the connect-errand mapping is the honest ask
     await expect(
       proxyPlaylistUpdate("PLx", { title: "T" }, { ok: false, kind: "not-connected" }),
     ).rejects.toThrow("Connect your YouTube account to act");

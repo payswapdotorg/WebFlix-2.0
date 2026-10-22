@@ -23,7 +23,11 @@ import type { PlaylistDTO } from "@/lib/types";
  * playlistItems / playlists lanes — the operator-session reads and the
  * broker write lane are retired).
  * WFX2-P2-AU: WebFlix guests see the honest account gate — saving is a
- * personal write, so the dialog links /signin instead of a 401 toast. */
+ * personal write, so the dialog links /signin instead of a 401 toast.
+ * WFX2-P38 — THE DEPLOYMENT-TRUTH LAW: when the deployment itself isn't
+ * connected to Google (oauthConfigured:false on the payload), the dialog
+ * renders the deployment row INSTEAD of the connect prompt — no connect
+ * errand (it's impossible on this deployment). */
 export function PlaylistSaveDialog({
   open,
   onOpenChange,
@@ -42,6 +46,9 @@ export function PlaylistSaveDialog({
     loginRequired: boolean;
     /** WFX2-P36: false → the connect prompt replaces the rows */
     connected?: boolean;
+    /** WFX2-P38: false → the DEPLOYMENT row replaces the connect prompt (the
+     * deployment itself isn't connected to Google — no connect errand) */
+    oauthConfigured?: boolean;
     /** WFX2-P36: the honest per-user notice (the connect ask) */
     notice?: string;
   }>(open && authed ? "/api/playlists" : null);
@@ -107,9 +114,19 @@ export function PlaylistSaveDialog({
               </Button>
             </div>
           )}
-          {data?.connected === false ? (
-            // WFX2-P36 — no connected YouTube account: the honest connect
-            // prompt replaces the rows (never the operator's playlists)
+          {data?.connected === false && data.oauthConfigured === false ? (
+            // WFX2-P38 — the deployment itself isn't connected to Google: the
+            // honest deployment row (NO Connect button — connecting is
+            // impossible on this deployment; never the operator's playlists)
+            <div className="px-3 py-6 text-center" data-testid="playlist-save-deployment-prompt">
+              <p className="text-sm text-muted-foreground">
+                {data.notice ??
+                  "Saving to YouTube playlists needs the Google setup — Watch later below still saves on WebFlix."}
+              </p>
+            </div>
+          ) : data?.connected === false ? (
+            // WFX2-P36 — no connected YouTube account (the deployment IS
+            // configured): the honest connect prompt replaces the rows
             <div className="px-3 py-6 text-center" data-testid="playlist-save-connect-prompt">
               <p className="text-sm text-muted-foreground">
                 {data.notice ??

@@ -38,6 +38,9 @@ type HistoryPayload = {
   session: boolean;
   /** WFX2-P36: the per-user truth — false → the connect link in the notice */
   connected?: boolean;
+  /** WFX2-P38: the deployment truth — false → NO connect link (the errand is
+   * impossible on a deployment without the Google OAuth env) */
+  oauthConfigured?: boolean;
   /** WFX2-P36: the honest per-user notice (YouTube's history has no official
    *  API — WebFlix never reads one person's history for another) */
   notice?: string;
@@ -72,7 +75,9 @@ function HistoryNoticeBanner({ payload }: { payload: HistoryPayload }) {
       data-testid="history-notice"
     >
       <p className="min-w-0 flex-1 text-sm text-muted-foreground">{payload.notice}</p>
-      {payload.connected === false && (
+      {/* WFX2-P38 — the connect link ONLY on a deployment where connecting is
+          actually possible (oauthConfigured !== false) */}
+      {payload.connected === false && payload.oauthConfigured !== false && (
         <Link
           href="/settings"
           className="shrink-0 text-sm font-medium text-foreground underline underline-offset-2"

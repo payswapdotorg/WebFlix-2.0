@@ -47,6 +47,9 @@ type PlaylistsPayload = {
   session: boolean;
   /** WFX2-P36: the per-user truth — false → the connect prompt banner */
   connected?: boolean;
+  /** WFX2-P38: the deployment truth — false → NO connect link (the errand is
+   * impossible on a deployment without the Google OAuth env) */
+  oauthConfigured?: boolean;
   /** WFX2-P36: the honest per-user notice (connect ask / failed read / disclosure) */
   notice?: string;
 };
@@ -86,7 +89,9 @@ function PlaylistsNoticeBanner({ payload }: { payload: PlaylistsPayload }) {
       data-testid="playlists-notice"
     >
       <p className="min-w-0 flex-1 text-sm text-muted-foreground">{payload.notice}</p>
-      {payload.connected === false && (
+      {/* WFX2-P38 — the connect link ONLY on a deployment where connecting is
+          actually possible (oauthConfigured !== false) */}
+      {payload.connected === false && payload.oauthConfigured !== false && (
         <Link
           href="/settings"
           className="shrink-0 text-sm font-medium text-foreground underline underline-offset-2"

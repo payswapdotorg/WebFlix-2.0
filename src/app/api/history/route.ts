@@ -3,6 +3,7 @@ import { hasSession } from "@/lib/youtube/session";
 import { rateLimit } from "@/lib/youtube/cache";
 import { ApiError, errorResponse } from "@/lib/watch/api";
 import { resolveReadTier } from "@/lib/watch/action-proxy";
+import { oauthConfigured } from "@/lib/youtube/oauth";
 import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +20,11 @@ export const dynamic = "force-dynamic";
  *
  * WFX2-P2-AU kept: guests (no WebFlix session) get the uniform 401 before
  * anything runs — the client degrades on it (the signed-out screen).
+ *
+ * WFX2-P38 — the envelope also carries `oauthConfigured` (the deployment
+ * truth) so the view banners can gate their Connect links: a deployment
+ * without the Google OAuth env never sends the user on a connect errand.
+ * The notice text is unchanged (capability-honest, not a connect errand).
  */
 export async function GET(req: NextRequest) {
   if (!(await getSessionUser(req))) return authRequiredResponse();
@@ -36,6 +42,7 @@ export async function GET(req: NextRequest) {
       total: 0,
       session: hasSession(),
       connected: tier !== null,
+      oauthConfigured: oauthConfigured(),
       notice:
         "Your YouTube watch history has no official API — WebFlix never reads one person's history for another. Open youtube.com/feed/history for yours.",
     });

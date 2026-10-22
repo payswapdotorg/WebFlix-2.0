@@ -13,6 +13,12 @@
  * the routes that still read public InnerTube surfaces — and its `recorded`
  * log now doubles as the proof that the retired operator reads NEVER fire.
  * NEVER the network.
+ *
+ * WFX2-P38 — the deployment-truth battery: the not-connected notice pins SET
+ * GOOGLE_CLIENT_ID/SECRET (a configured deployment — the connect ask is the
+ * honest copy); the not-configured pins DELETE them (the subscriptions /
+ * playlists GETs answer kind "youtube-not-configured" + oauthConfigured:false
+ * + the deployment notice — never the user connect errand).
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { readFileSync } from "node:fs";
@@ -90,10 +96,26 @@ beforeAll(async () => {
 // env-clean: the per-user connection store must ride its Map fallback (never
 // a live Upstash), so the REST env vars are saved + deleted for this file and
 // restored in afterAll (bun --isolate gives each file its own process).
+// WFX2-P38: the Google OAuth pair is captured too — the not-configured pins
+// delete it, the connect-ask pins set it (see setGoogleEnv/deleteGoogleEnv).
 const savedUpstashUrl = process.env.UPSTASH_REDIS_REST_URL;
 const savedUpstashToken = process.env.UPSTASH_REDIS_REST_TOKEN;
 delete process.env.UPSTASH_REDIS_REST_URL;
 delete process.env.UPSTASH_REDIS_REST_TOKEN;
+const savedGoogleClientId = process.env.GOOGLE_CLIENT_ID;
+const savedGoogleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
+/** WFX2-P38 — make this deployment "configured" (the connect ask is honest). */
+function setGoogleEnv(): void {
+  process.env.GOOGLE_CLIENT_ID = "p38-personal-client-id";
+  process.env.GOOGLE_CLIENT_SECRET = "p38-personal-client-secret";
+}
+
+/** WFX2-P38 — make this deployment UNCONFIGURED (the deployment truth). */
+function deleteGoogleEnv(): void {
+  delete process.env.GOOGLE_CLIENT_ID;
+  delete process.env.GOOGLE_CLIENT_SECRET;
+}
 
 /** Connect the ACTING user's (or another user's) own YouTube account in the
  * Map-fallback store: real encryptSecret token blobs, a non-expiring access
@@ -414,6 +436,7 @@ describe("GET /api/subscriptions — no connected account (the honest connect as
   });
 
   test("the acting user has no connection → empty channels + the connect notice — never the operator's feed", async () => {
+    setGoogleEnv(); // WFX2-P38: a CONFIGURED deployment — the connect ask is the honest copy
     const res = await subscriptionsRoute(req("http://localhost/api/subscriptions"));
     expect(res.status).toBe(200);
     const data = (await res.json()) as any;
@@ -422,7 +445,37 @@ describe("GET /api/subscriptions — no connected account (the honest connect as
     expect(data.nextCursor).toBeNull();
     expect(data.loginRequired).toBe(false);
     expect(data.connected).toBe(false);
+    expect(data.oauthConfigured).toBe(true); // WFX2-P38: the deployment truth rides the envelope
     expect(data.notice).toBe("Connect your YouTube account to see your subscriptions — Settings → YouTube connection");
+    expect(upstream.recorded).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("GET /api/subscriptions — WFX2-P38: the unconfigured deployment (the deployment truth, never the connect errand)", () => {
+  beforeEach(() => {
+    delete process.env.YT_COOKIES;
+    deleteGoogleEnv(); // THIS deployment can never offer the connect flow
+    setUpstream(upstream.implPublic);
+  });
+
+  afterEach(() => {
+    deleteGoogleEnv();
+  });
+
+  test("no Google OAuth env → kind youtube-not-configured + oauthConfigured:false + the deployment notice", async () => {
+    const res = await subscriptionsRoute(req("http://localhost/api/subscriptions"));
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.channels).toEqual([]);
+    expect(data.connected).toBe(false);
+    expect(data.oauthConfigured).toBe(false);
+    expect(data.kind).toBe("youtube-not-configured");
+    expect(data.notice).toContain("isn't connected to Google yet");
+    expect(data.notice).toContain("your subscriptions will appear here once it is");
+    // NEVER the connect errand on a deployment where connecting is impossible
+    expect(data.notice).not.toContain("Connect your YouTube account");
     expect(upstream.recorded).toHaveLength(0);
   });
 });
@@ -492,6 +545,7 @@ describe("GET /api/playlists — no connected account (the honest connect ask)",
   });
 
   test("the acting user has no connection → empty playlists + the connect notice — never a login lie", async () => {
+    setGoogleEnv(); // WFX2-P38: a CONFIGURED deployment — the connect ask is the honest copy
     const res = await playlistsRoute(req("http://localhost/api/playlists"));
     expect(res.status).toBe(200);
     const data = (await res.json()) as any;
@@ -500,7 +554,61 @@ describe("GET /api/playlists — no connected account (the honest connect ask)",
     expect(data.unavailable).toBe(false);
     expect(data.session).toBe(false);
     expect(data.connected).toBe(false);
+    expect(data.oauthConfigured).toBe(true); // WFX2-P38: the deployment truth rides the envelope
     expect(data.notice).toBe("Connect your YouTube account to see your playlists — Settings → YouTube connection");
+    expect(upstream.recorded).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("GET /api/playlists — WFX2-P38: the unconfigured deployment (the deployment truth, never the connect errand)", () => {
+  beforeEach(() => {
+    delete process.env.YT_COOKIES;
+    deleteGoogleEnv(); // THIS deployment can never offer the connect flow
+    setUpstream(upstream.implPublic);
+  });
+
+  afterEach(() => {
+    deleteGoogleEnv();
+  });
+
+  test("no Google OAuth env (the page branch) → kind youtube-not-configured + oauthConfigured:false + the deployment notice", async () => {
+    const res = await playlistsRoute(req("http://localhost/api/playlists"));
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.playlists).toEqual([]);
+    expect(data.loginRequired).toBe(false);
+    expect(data.unavailable).toBe(false);
+    expect(data.connected).toBe(false);
+    expect(data.oauthConfigured).toBe(false);
+    expect(data.kind).toBe("youtube-not-configured");
+    expect(data.notice).toContain("isn't connected to Google yet");
+    expect(data.notice).toContain("your YouTube playlists will appear here once it is");
+    // NEVER the connect errand on a deployment where connecting is impossible
+    expect(data.notice).not.toContain("Connect your YouTube account");
+    expect(upstream.recorded).toHaveLength(0);
+  });
+
+  test("no Google OAuth env (the Save-dialog branch, ?videoId=) → the local Watch-later row still serves + the deployment notice", async () => {
+    const res = await playlistsRoute(
+      req("http://localhost/api/playlists?videoId=p38wl01")
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    // the local Watch-later row serves FIRST — the one save lane that works
+    expect(data.playlists).toHaveLength(1);
+    expect(data.playlists[0]).toMatchObject({
+      id: "WL",
+      name: "Watch later",
+      isWatchLater: true,
+      local: true,
+    });
+    expect(data.connected).toBe(false);
+    expect(data.oauthConfigured).toBe(false);
+    expect(data.kind).toBe("youtube-not-configured");
+    expect(data.notice).toContain("Watch later below still saves on WebFlix");
+    expect(data.notice).not.toContain("Connect your YouTube account");
     expect(upstream.recorded).toHaveLength(0);
   });
 });
@@ -1003,4 +1111,9 @@ afterAll(() => {
   else delete process.env.UPSTASH_REDIS_REST_URL;
   if (savedUpstashToken) process.env.UPSTASH_REDIS_REST_TOKEN = savedUpstashToken;
   else delete process.env.UPSTASH_REDIS_REST_TOKEN;
+  // WFX2-P38 — the Google OAuth env back to its process-original state
+  if (savedGoogleClientId !== undefined) process.env.GOOGLE_CLIENT_ID = savedGoogleClientId;
+  else delete process.env.GOOGLE_CLIENT_ID;
+  if (savedGoogleClientSecret !== undefined) process.env.GOOGLE_CLIENT_SECRET = savedGoogleClientSecret;
+  else delete process.env.GOOGLE_CLIENT_SECRET;
 });
