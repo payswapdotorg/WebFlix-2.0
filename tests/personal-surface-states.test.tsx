@@ -328,24 +328,40 @@ describe("PlaylistPage — the special lists (WL) on the playlist page route", (
     expect(ytLink!.getAttribute("href")).toBe("https://www.youtube.com/feed/liked");
   });
 
-  test("even a seam that WOULD serve rows changes nothing — no rows, no Play all/Shuffle, no ⋯ menus, no write seams", async () => {
+  test("WFX2-P37 — a WL payload (the route's LOCAL list) renders the user's OWN rows: the two-column layout, the remove affordances, the local disclosure — and the operator-browse seam never fires", async () => {
     routeParams = { id: "WL" };
-    // a pre-P36-shaped payload (the operator's WL with three rows) — the
-    // page must refuse to render it: the notice is the only honest state
+    // the P37 route's shape: the local list payload with local:true. The
+    // page renders it (the local list is the user's own saves — the route
+    // structurally never serves the operator's rows: the server-side pins
+    // in personal-routes.test.ts prove ZERO browse calls for WL).
     fetchHandler = (url) => {
       if (url.includes("/api/playlist/WL")) {
-        return Response.json(makeSpecialPage("WL", [makeVideo("v1", "Saved one"), makeVideo("v2", "Saved two")]));
+        return Response.json({
+          ...makeSpecialPage("WL", [makeVideo("v1", "Saved one"), makeVideo("v2", "Saved two")]),
+          local: true,
+        });
       }
       return Response.json({}, { status: 200 });
     };
     await render(<PlaylistPage />);
     await act(async () => {});
-    expect(q("[data-testid='playlist-special-notice']")).not.toBeNull();
-    expect(all("a[href^='/watch/']")).toHaveLength(0); // never the operator's rows
-    expect(all("[aria-label^='Actions for']")).toHaveLength(0); // no row Action menus
-    expect(win.document.body.textContent ?? "").not.toContain("Play all");
-    expect(win.document.body.textContent ?? "").not.toContain("Shuffle");
-    // and ZERO write seams fire from the page (no WL toggle, no like write)
+    // the user's own rows render (the local list — the P37 discoverability
+    // cure: the pre-P37 page hid the user's saves behind an explainer);
+    // 4 row links (thumbnail + title × 2) + the Play-all link
+    expect(all("a[href^='/watch/']")).toHaveLength(5);
+    expect(win.document.body.textContent ?? "").toContain("Saved one");
+    expect(win.document.body.textContent ?? "").toContain("Saved two");
+    expect(q("[data-testid='playlist-title']")?.textContent).toBe("Watch later");
+    expect(q("[data-testid='playlist-wl-local-note']")?.textContent).toContain(
+      "Saved on WebFlix"
+    );
+    // each row carries the ⋯ Action menu (the remove affordance) — and the
+    // special lists stay reorder-retired (no Move up/down anywhere)
+    expect(all("[aria-label^='Actions for']")).toHaveLength(2);
+    expect(win.document.body.textContent ?? "").not.toContain("Move up");
+    expect(win.document.body.textContent ?? "").not.toContain("Move down");
+    // nothing fires without a user click (the remove write seam is wired to
+    // the row menu, not to any render path)
     expect(fetchLog.filter((f) => f.method !== "GET")).toHaveLength(0);
   });
 
@@ -792,23 +808,17 @@ describe("REA-3 F3 — the special-list row Action menu is retired with the oper
     };
   }
 
-  test("WL: zero ⋯ menus, zero remove items — the WL write seam never fires from the special-list page", async () => {
+  test("WL: the local rows render with their remove affordance — the WL write seam rides the row menu (the P37 local list)", async () => {
     routeParams = { id: "WL" };
     serveSpecial("WL");
     await render(<PlaylistPage />);
     await act(async () => {});
-    // no rows render → no row Action menus at all
-    expect(all("[aria-label^='Actions for']")).toHaveLength(0);
-    expect(docAll("[data-testid='playlist-row-remove']")).toHaveLength(0);
-    const body = win.document.body.textContent ?? "";
-    expect(body).not.toContain("Remove from Watch later");
-    expect(body).not.toContain("Save to playlist");
-    expect(body).not.toContain("Move up");
-    expect(body).not.toContain("Move down");
-    // the honest notice owns the page instead
-    expect(q("[data-testid='playlist-special-notice']")).not.toBeNull();
-    // the WL toggle write seam is never dispatched (Watch later writes ride
-    // the WebFlix-local save button on the video surfaces, not this page)
+    // the local list's rows render — the ⋯ Action menus exist for them
+    expect(all("[aria-label^='Actions for']")).toHaveLength(3);
+    // the special lists stay reorder-retired: no Move up/down items
+    expect(win.document.body.textContent ?? "").not.toContain("Move up");
+    expect(win.document.body.textContent ?? "").not.toContain("Move down");
+    // no writes fire without a user click — the remove seam is menu-wired
     expect(fetchLog.filter((f) => f.url.includes("/api/playlists/watch-later"))).toHaveLength(0);
     expect(fetchLog.filter((f) => f.method !== "GET")).toHaveLength(0);
   });

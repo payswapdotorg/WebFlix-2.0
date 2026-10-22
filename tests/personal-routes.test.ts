@@ -50,6 +50,7 @@ import { GET as historyRoute, DELETE as historyDelete, PATCH as historyPatch } f
 import { GET as playlistsRoute } from "@/app/api/playlists/route";
 import { GET as playlistItemsRoute, DELETE as playlistDelete } from "@/app/api/playlists/[id]/route";
 import { GET as playlistPageRoute } from "@/app/api/playlist/[id]/route";
+import { POST as watchLaterPostRoute } from "@/app/api/playlists/watch-later/route";
 import { GET as likedRoute } from "@/app/api/liked/route";
 import { GET as meRoute } from "@/app/api/me/route";
 import { GET as notificationsRoute } from "@/app/api/notifications/route";
@@ -624,13 +625,13 @@ describe("GET /api/playlists/[id] — browse VL items", () => {
 
 // ---------------------------------------------------------------------------
 
-describe("GET /api/playlist/[id] — the special lists through the playlist PAGE route (WFX2-P36: the honest notice)", () => {
+describe("GET /api/playlist/[id] — the special lists through the playlist PAGE route (WFX2-P37: WL serves the WEBFLIX-LOCAL list)", () => {
   beforeEach(() => {
     process.env.YT_COOKIES = "SAPISID=fixture; SID=fixture";
     setUpstream(upstream.impl);
   });
 
-  const expectSpecialNotice = (data: any) => {
+  const expectGuestNotice = (data: any) => {
     expect(data).toMatchObject({
       playlist: null,
       videos: [],
@@ -640,33 +641,93 @@ describe("GET /api/playlist/[id] — the special lists through the playlist PAGE
       special: true,
     });
     expect(data.notice).toBe(
-      "YouTube's Watch Later / Liked lists have no official API — your WebFlix Watch later lives in the save button (local), and YouTube's own page has the rest"
+      "Sign in to see your WebFlix Watch later — the list lives on your account"
     );
   };
 
-  test("WL WITH a session → the honest special notice page (playlist:null — never the operator's list)", async () => {
+  test("WL WITHOUT a session → the honest sign-in notice (never a browse, never the operator's list)", async () => {
+    delete process.env.YT_COOKIES;
     const res = await playlistPageRoute(
-      req("http://localhost/api/playlist/WL"),
+      new Request("http://localhost/api/playlist/WL") as never,
       { params: Promise.resolve({ id: "WL" }) }
     );
     expect(res.status).toBe(200);
-    expectSpecialNotice(await res.json());
+    expectGuestNotice(await res.json());
     // the special-list browse (the operator's VLWL read) never fires
     expect(upstream.recorded.filter((r) => r.url.includes("/youtubei/v1/browse"))).toHaveLength(0);
   });
 
-  test("WL without a session → the SAME honest notice (the login-gated split is retired with the operator read)", async () => {
-    delete process.env.YT_COOKIES;
+  test("WL WITH a session + an empty store → the LOCAL list payload (playlist serves — the pre-P37 explainer hid the user's own saves)", async () => {
     const res = await playlistPageRoute(
       req("http://localhost/api/playlist/WL"),
       { params: Promise.resolve({ id: "WL" }) }
     );
     expect(res.status).toBe(200);
-    expectSpecialNotice(await res.json());
+    const data = (await res.json()) as any;
+    expect(data).toMatchObject({
+      special: true,
+      local: true,
+      nextCursor: null,
+    });
+    expect(data.playlist).toMatchObject({
+      id: "WL",
+      title: "Watch later",
+      channelName: "Test Operator",
+      videoCountText: "0 videos",
+    });
+    expect(data.videos).toEqual([]);
+    // the local list is a DB read — the special-list browse NEVER fires
     expect(upstream.recorded.filter((r) => r.url.includes("/youtubei/v1/browse"))).toHaveLength(0);
   });
 
-  test("an upstream that WOULD serve a WL playlist changes nothing — the notice answers with ZERO browse calls (the retired read, proven gone)", async () => {
+  test("the FULL local round-trip: save (with the display snapshot) → the WL page lists the row → remove → the row leaves", async () => {
+    // 1) the save button's write (the display snapshot rides along — P37)
+    const saved = await watchLaterPostRoute(req("http://localhost/api/playlists/watch-later", {
+      method: "POST",
+      body: JSON.stringify({
+        videoId: "p37wlvid01",
+        title: "P37 Local List Video",
+        channelName: "P37 QA Channel",
+      }),
+    }));
+    expect(saved.status).toBe(200);
+    expect(((await saved.json()) as any).added).toBe(true);
+
+    // 2) the page's list shows THE USER'S OWN row with the real title
+    const page = await playlistPageRoute(
+      req("http://localhost/api/playlist/WL"),
+      { params: Promise.resolve({ id: "WL" }) }
+    );
+    expect(page.status).toBe(200);
+    const data = (await page.json()) as any;
+    expect(data.local).toBe(true);
+    expect(data.videos).toHaveLength(1);
+    expect(data.videos[0]).toMatchObject({
+      id: "p37wlvid01",
+      title: "P37 Local List Video",
+    });
+    expect(data.videos[0].channel).toMatchObject({ name: "P37 QA Channel" });
+    expect(data.videos[0].thumbnailUrl).toContain("i.ytimg.com/vi/p37wlvid01");
+    expect(data.playlist.videoCountText).toBe("1 video");
+
+    // 3) the row menu's remove → the row leaves the list
+    const removed = await watchLaterPostRoute(req("http://localhost/api/playlists/watch-later", {
+      method: "POST",
+      body: JSON.stringify({ videoId: "p37wlvid01", add: false }),
+    }));
+    expect(((await removed.json()) as any).added).toBe(false);
+    const after = await playlistPageRoute(
+      req("http://localhost/api/playlist/WL"),
+      { params: Promise.resolve({ id: "WL" }) }
+    );
+    const afterData = (await after.json()) as any;
+    expect(afterData.videos).toEqual([]);
+    expect(afterData.playlist.videoCountText).toBe("0 videos");
+    // the local round-trip is a DB lane — the browse read NEVER fires
+    expect(upstream.recorded.filter((r) => r.url.includes("/youtubei/v1/browse"))).toHaveLength(0);
+  });
+
+  test("an upstream that WOULD serve a WL playlist changes nothing — the local list answers with ZERO browse calls (the operator read stays retired)", async () => {
     const served = load("browse_vl_public");
     setUpstream(async (url: string, init?: RequestInit) => {
       if (url.includes("/youtubei/v1/browse")) {
@@ -686,7 +747,24 @@ describe("GET /api/playlist/[id] — the special lists through the playlist PAGE
       { params: Promise.resolve({ id: "WL" }) }
     );
     expect(res.status).toBe(200);
-    expectSpecialNotice(await res.json());
+    const data = (await res.json()) as any;
+    expect(data.local).toBe(true); // the WebFlix-local list — not the upstream's
+    expect(upstream.recorded.filter((r) => r.url.includes("/youtubei/v1/browse"))).toHaveLength(0);
+  });
+
+  test("LL → the honest notice (no local liked store — likes are official-tier only)", async () => {
+    const res = await playlistPageRoute(
+      req("http://localhost/api/playlist/LL"),
+      { params: Promise.resolve({ id: "LL" }) }
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data).toMatchObject({
+      playlist: null,
+      videos: [],
+      special: true,
+    });
+    expect(data.notice).toContain("no official API");
     expect(upstream.recorded.filter((r) => r.url.includes("/youtubei/v1/browse"))).toHaveLength(0);
   });
 });
@@ -809,23 +887,41 @@ describe("POST /api/notifications/read — the honest unsupported lane (WFX2-P36
 
 // ---------------------------------------------------------------------------
 
-describe("GET /api/me — the ownedChannel seam (P22-B)", () => {
+// WFX2-P37 — the /api/me per-user truth: the operator seam (the YT_COOKIES
+// channel lookup + the operator's subscriptions feed served as "yours") is
+// RETIRED from this route. The pins below replace the pre-P37 operator-seam
+// ladder pins (the operator's channel winning, the lookup fallbacks): the
+// route now answers the ACTING user's own identity + their own connected
+// subscriptions — the operator's data can never wear another user's name.
+describe("GET /api/me — the per-user truth (P37: the operator seam retired)", () => {
   afterEach(() => {
     meLookup = null;
+    resetYoutubeConnectionStore();
+    officialCalls.length = 0;
+    officialChannelsResult = { ok: true, data: [] };
+    delete process.env.YT_COOKIES;
   });
 
-  test("public mode (no YT session) → the DB mirror fallback (the seeded demo channel)", async () => {
+  test("guest → the demo identity + the DB channel + the honest empty subscriptions (an operator lookup resolving changes NOTHING)", async () => {
     delete process.env.YT_COOKIES;
-    const res = await meRoute();
+    meLookup = {
+      browseId: "UCop",
+      handle: "@opchan",
+      header: { name: "Operator Channel" },
+      homeResponse: null,
+    };
+    const res = await meRoute(new Request("http://localhost/api/me") as never);
     expect(res.status).toBe(200);
     const data = (await res.json()) as any;
-    // the operator seam is skipped entirely without a session — the honest
-    // DB fallback (the demo account's owned channel) carries "Your channel"
+    // the demo identity's DB channel (the honest anonymous lane)
     expect(data.ownedChannel).toEqual({ handle: "codecraft", name: "CodeCraft" });
+    // the operator's subscriptions are NEVER served — even with the lookup
+    // resolved and cookies present, the guest gets the honest empty list
     expect(data.subscriptions).toEqual([]);
+    expect(officialCalls).toEqual([]);
   });
 
-  test("with a session + the operator resolved → the operator's REAL channel wins over the DB mirror", async () => {
+  test("YT_COOKIES set + the operator lookup resolved + NO signed-in user → still the DB mirror (the seam is GONE, not gated)", async () => {
     process.env.YT_COOKIES = "SAPISID=fixture; SID=fixture";
     meLookup = {
       browseId: "UCop",
@@ -833,32 +929,70 @@ describe("GET /api/me — the ownedChannel seam (P22-B)", () => {
       header: { name: "Operator Channel" },
       homeResponse: null,
     };
-    const res = await meRoute();
+    const res = await meRoute(new Request("http://localhost/api/me") as never);
     expect(res.status).toBe(200);
     const data = (await res.json()) as any;
-    expect(data.ownedChannel).toEqual({ handle: "@opchan", name: "Operator Channel" });
-  });
-
-  test("with a session + the lookup unresolved → the honest DB fallback (never a guess)", async () => {
-    process.env.YT_COOKIES = "SAPISID=fixture; SID=fixture";
-    meLookup = null;
-    const res = await meRoute();
-    expect(res.status).toBe(200);
-    const data = (await res.json()) as any;
+    // the pre-P37 pin here was "@opchan / Operator Channel wins" — the P37
+    // retirement pin: the operator's channel NEVER answers for anyone else
     expect(data.ownedChannel).toEqual({ handle: "codecraft", name: "CodeCraft" });
+    expect(data.subscriptions).toEqual([]);
   });
 
-  test("with a session + a headerless lookup → the honest DB fallback (header required)", async () => {
-    process.env.YT_COOKIES = "SAPISID=fixture; SID=fixture";
-    meLookup = {
-      browseId: "UCop",
-      handle: "@opchan",
-      header: null,
-      homeResponse: null,
+  test("signed-in + not connected → THEIR identity, no owned channel, the honest empty subscriptions", async () => {
+    delete process.env.YT_COOKIES;
+    const res = await meRoute(req("http://localhost/api/me"));
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    // the acting user's OWN shadow identity — never the demo row, never the
+    // operator's data wearing their name
+    expect(data.user.id).toBe("wf-u_wfx2_test");
+    expect(data.user.name).toBe("Test Operator");
+    expect(data.user.handle).toContain("wf_");
+    // no channel owned by the shadow user — the honest null (the row hides)
+    expect(data.ownedChannel).toBeNull();
+    // not connected → the honest empty list, and NO official call fired
+    expect(data.subscriptions).toEqual([]);
+    expect(officialCalls).toEqual([]);
+  });
+
+  test("signed-in + connected → THEIR OWN subscriptions through THEIR token (the acting-user read)", async () => {
+    delete process.env.YT_COOKIES;
+    await connectUser();
+    officialChannelsResult = {
+      ok: true,
+      data: [
+        {
+          channelId: "UCperuser1",
+          title: "Per-User Channel",
+          thumbUrl: "https://example.test/thumb.jpg",
+          subscribedAt: null,
+        },
+      ],
     };
-    const res = await meRoute();
+    const res = await meRoute(req("http://localhost/api/me"));
+    expect(res.status).toBe(200);
     const data = (await res.json()) as any;
-    expect(data.ownedChannel).toEqual({ handle: "codecraft", name: "CodeCraft" });
+    expect(data.subscriptions).toHaveLength(1);
+    expect(data.subscriptions[0]).toMatchObject({
+      id: "UCperuser1",
+      handle: "UCperuser1",
+      name: "Per-User Channel",
+      avatarUrl: "https://example.test/thumb.jpg",
+      bell: "personalized",
+    });
+    // the ACTING user's own token served the read — never the operator's
+    expect(officialCalls).toEqual(["subscriptions:access-token-u_wfx2_test"]);
+  });
+
+  test("signed-in + connected + a failed official read → the honest empty list (never the operator's, never a fabricated row)", async () => {
+    delete process.env.YT_COOKIES;
+    await connectUser();
+    officialChannelsResult = { ok: false, kind: "http-error", status: 403, message: "forbidden" };
+    const res = await meRoute(req("http://localhost/api/me"));
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.subscriptions).toEqual([]);
+    expect(officialCalls).toEqual(["subscriptions:access-token-u_wfx2_test"]);
   });
 });
 

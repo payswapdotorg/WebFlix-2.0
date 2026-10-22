@@ -82,8 +82,14 @@ export function VideoCard({ video, progress, variant = "grid", className, watche
     try {
       const res = await postJson<{ added: boolean }>("/api/playlists/watch-later", {
         videoId: video.id,
+        // WFX2-P37 — the display snapshot (the local WL list's rows) + the
+        // TRUTHFUL toggle toast: the toggle REMOVES on the second click, and
+        // the pre-P37 copy told the user "Already in Watch later" while the
+        // server deleted the row — the exact lie this lane retires.
+        title: video.title,
+        channelName: "channel" in video ? video.channel.name : undefined,
       });
-      toast.success(res.added ? "Saved to Watch later" : "Already in Watch later");
+      toast.success(res.added ? "Saved to Watch later" : "Removed from Watch later");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save");
     }

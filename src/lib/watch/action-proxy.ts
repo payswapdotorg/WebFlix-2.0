@@ -654,16 +654,23 @@ async function localWatchLaterPlaylistId(userId: string): Promise<string> {
 /**
  * Watch later — the WebFlix-local list, fully disclosed. Toggle resolves
  * server-side from the local truth; the note says exactly why it's local.
+ *
+ * WFX2-P37 — the optional display snapshot: callers that already hold the
+ * video's title/channel (the card menu, the watch Save dialog) pass it so
+ * the shadow video row — what /playlist/WL's local list renders — carries
+ * the REAL title/channel instead of the "YouTube video <id>" fallback.
+ * Absent snapshot keeps the pre-P37 honest-default shape exactly.
  */
 export async function proxyWatchLater(
   videoId: string,
   add: boolean | undefined,
   sessionUser: WebFlixSessionUser | null,
+  snapshot: CommentVideoSnapshotDto = {}
 ): Promise<WatchLaterResult> {
   if (!sessionUser) throw new ApiError(401, "sign in to save videos", "unauthenticated");
   try {
     const user = await ensureShadowUser(sessionUser);
-    await ensureShadowVideo(videoId);
+    await ensureShadowVideo(videoId, snapshot);
     const playlistId = await localWatchLaterPlaylistId(user.id);
     const existing = await db.playlistItem.findUnique({
       where: { playlistId_videoId: { playlistId, videoId } },

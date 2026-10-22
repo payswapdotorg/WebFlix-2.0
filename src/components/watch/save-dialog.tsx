@@ -159,6 +159,32 @@ export function SaveDialog({
 
   const watchLater = playlists.find((p) => p.isWatchLater);
 
+  // WFX2-P37 — the local Watch-later row, hoisted so it renders in BOTH
+  // branches: it is the one save lane that works WITHOUT a YouTube
+  // connection (the route now serves it in the not-connected envelope too);
+  // the connect prompt stays for the YouTube-side rows only.
+  const watchLaterRow = watchLater ? (
+    <button
+      key={watchLater.id}
+      type="button"
+      onClick={() => toggle(watchLater)}
+      disabled={busyId === watchLater.id}
+      aria-pressed={watchLater.containsVideo}
+      className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition hover:bg-accent disabled:opacity-50"
+    >
+      {watchLater.containsVideo ? (
+        <BookmarkCheck className="size-5 text-foreground" aria-hidden="true" />
+      ) : (
+        <Bookmark className="size-5 text-muted-foreground" aria-hidden="true" />
+      )}
+      <span className="flex-1 text-sm font-medium">
+        Watch later
+        {watchLater.containsVideo && <span className="ml-1 text-muted-foreground">Added</span>}
+      </span>
+      <span className="text-xs text-muted-foreground">{watchLater.itemCount}</span>
+    </button>
+  ) : null;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
@@ -177,23 +203,23 @@ export function SaveDialog({
           </div>
         ) : !connected ? (
           // WFX2-P36 — no connected YouTube account: the honest connect
-          // prompt replaces the rows (never the operator's playlists)
-          <div
-            className="rounded-xl border border-border bg-secondary/40 p-4"
-            data-testid="save-dialog-connect-prompt"
-          >
-            <p className="text-sm text-foreground">{data?.notice ?? "Connect your YouTube account to save to your YouTube playlists"}</p>
-            <a
-              href={connectUrl}
-              className="mt-3 inline-flex h-9 items-center justify-center rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+          // prompt for the YOUTUBE-side rows (never the operator's playlists).
+          // WFX2-P37 — the WebFlix-local Watch-later row serves FIRST.
+          <>
+            {watchLaterRow}
+            <div
+              className="rounded-xl border border-border bg-secondary/40 p-4"
+              data-testid="save-dialog-connect-prompt"
             >
-              Connect your YouTube account
-            </a>
-            <p className="mt-2 text-xs text-muted-foreground">
-              WebFlix&apos;s own Watch later stays available from the Save button on any video
-              card.
-            </p>
-          </div>
+              <p className="text-sm text-foreground">{data?.notice ?? "Connect your YouTube account to save to your YouTube playlists"}</p>
+              <a
+                href={connectUrl}
+                className="mt-3 inline-flex h-9 items-center justify-center rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+              >
+                Connect your YouTube account
+              </a>
+            </div>
+          </>
         ) : (
           <>
             {data?.notice && (
@@ -202,28 +228,7 @@ export function SaveDialog({
               </p>
             )}
             <div className="max-h-72 space-y-1 overflow-y-auto">
-              {watchLater && (
-                <button
-                  type="button"
-                  onClick={() => toggle(watchLater)}
-                  disabled={busyId === watchLater.id}
-                  aria-pressed={watchLater.containsVideo}
-                  className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition hover:bg-accent disabled:opacity-50"
-                >
-                  {watchLater.containsVideo ? (
-                    <BookmarkCheck className="size-5 text-foreground" aria-hidden="true" />
-                  ) : (
-                    <Bookmark className="size-5 text-muted-foreground" aria-hidden="true" />
-                  )}
-                  <span className="flex-1 text-sm font-medium">
-                    Watch later
-                    {watchLater.containsVideo && (
-                      <span className="ml-1 text-muted-foreground">Added</span>
-                    )}
-                  </span>
-                  <span className="text-xs text-muted-foreground">{watchLater.itemCount}</span>
-                </button>
-              )}
+              {watchLaterRow}
 
               {playlists
                 ?.filter((p) => !p.isWatchLater)

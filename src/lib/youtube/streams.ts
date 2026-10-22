@@ -417,7 +417,10 @@ export function parseStoryboardSpec(spec: unknown): StoryboardLevelDto[] {
  * context.thirdParty.embedUrl (sibling of context.client — the historical
  * embed-player shape), never inside the client object itself.
  */
-async function fetchInnertubePlayer(videoId: string): Promise<PlaybackDto | null> {
+async function fetchInnertubePlayer(
+  videoId: string,
+  io: ChainIO = {}
+): Promise<PlaybackDto | null> {
   let storyboardFallback: PlaybackDto | null = null;
   for (const client of playerClientChain()) {
     const { thirdPartyEmbedUrl, ...clientFields } = client;
@@ -430,6 +433,10 @@ async function fetchInnertubePlayer(videoId: string): Promise<PlaybackDto | null
         videoId,
         contentCheckOk: true,
         racyCheckOk: true,
+      }, {
+        ...(io.signal ? { signal: io.signal } : {}),
+        ...(io.innertubeTimeoutMs !== undefined ? { timeoutMs: io.innertubeTimeoutMs } : {}),
+        ...(io.innertubeExtraRetries !== undefined ? { extraRetries: io.innertubeExtraRetries } : {}),
       });
     } catch {
       continue; // walled answers also arrive as HTTP 200 + UNPLAYABLE — and hard errors
@@ -455,10 +462,13 @@ export function extractPlayerResponseFromHtml(html: string): Record<string, any>
 }
 
 /** Rung 2 — the watch page's ytInitialPlayerResponse (SSR fetch). Null when absent. */
-async function fetchWatchPagePlayerResponse(videoId: string): Promise<unknown | null> {
+async function fetchWatchPagePlayerResponse(
+  videoId: string,
+  timeoutMs: number = 12_000
+): Promise<unknown | null> {
   try {
     const html = await fetchPageHtml(`/watch?v=${encodeURIComponent(videoId)}&hl=en&gl=US`, {
-      timeoutMs: 12_000,
+      timeoutMs,
     });
     return extractPlayerResponseFromHtml(html);
   } catch {
@@ -512,6 +522,33 @@ export interface GetPlaybackOptions {
    * always matches.
    */
   fresh?: boolean;
+  /**
+   * WFX2-P37 — THE CHAIN BUDGET (the production 504 cure, part 2): a hard
+   * wall-clock deadline for the whole chain. The pre-P37 chain could burn
+   * MINUTES on a walled egress (7 innertube rungs × 10s timeout × 2
+   * attempts + jitter + a 12s watch-page fetch + the broker rung — measured
+   * 2026-10-22 in production: cold-cache DTO answers 504'd at the platform's
+   * 60s limit before the route's own honest degrade could run), so every
+   * route that answers within a serverless maxDuration now races the chain
+   * against a budget and answers the honest empty degrade (source: "" —
+   * never cached, the poisoning guard) when the wall eats the clock. The
+   * budget also TIGHTENS the rungs themselves (single-attempt 4s innertube
+   * calls + a 6s watch-page fetch) so the deadline aborts active requests,
+   * not just their results.
+   */
+  budgetMs?: number;
+}
+
+/** The per-rung I/O shape a budgeted chain run uses (P37). */
+interface ChainIO {
+  /** shared deadline — aborts every innertube rung through the composed signal */
+  signal?: AbortSignal;
+  /** per-rung innertube timeout (default: the innertube module's own 10s) */
+  innertubeTimeoutMs?: number;
+  /** extra retries per rung (budgeted runs pass -1: ONE attempt each) */
+  innertubeExtraRetries?: number;
+  /** the watch-page rung's fetch timeout (default 12s) */
+  pageTimeoutMs?: number;
 }
 
 export async function getPlayback(
@@ -522,31 +559,53 @@ export async function getPlayback(
     `yt:playback:${videoId}`,
     TTL.WATCH_MS,
     async () => {
-      let storyboardFallback: PlaybackDto | null = null;
-      const fromPlayer = await fetchInnertubePlayer(videoId);
-      if (fromPlayer) {
-        if (fromPlayer.streamFormats.length > 0) return fromPlayer;
-        storyboardFallback = fromPlayer; // storyboards-only — remembered, hunt continues
-      }
-      const fromPage = await fetchWatchPagePlayerResponse(videoId);
-      if (fromPage) {
-        const pageDto = parsePlayback("watch-page", fromPage);
-        if (pageDto.streamFormats.length > 0) return pageDto; // the formats hunt's rung-2 win
-        if (pageDto.storyboards.length > 0) {
-          storyboardFallback ??= pageDto;
-          return storyboardFallback; // storyboards in hand — the broker is not the last resort for these
+      // WFX2-P37 — the budgeted shape: rungs tightened (single-attempt 4s
+      // innertube calls, 6s watch page) and the WHOLE chain raced against the
+      // caller's wall-clock budget. On deadline the honest empty degrade
+      // answers (source: "" — the poisoning guard below keeps it out of the
+      // cache, so a later unwalled run still gets its chance). Unbudgeted
+      // callers keep the pre-P37 per-rung defaults exactly.
+      const io: ChainIO = opts.budgetMs
+        ? { signal: AbortSignal.timeout(opts.budgetMs), innertubeTimeoutMs: 4_000, innertubeExtraRetries: -1, pageTimeoutMs: 6_000 }
+        : {};
+      const runChain = async (): Promise<PlaybackDto> => {
+        let storyboardFallback: PlaybackDto | null = null;
+        const fromPlayer = await fetchInnertubePlayer(videoId, io);
+        if (fromPlayer) {
+          if (fromPlayer.streamFormats.length > 0) return fromPlayer;
+          storyboardFallback = fromPlayer; // storyboards-only — remembered, hunt continues
         }
-      }
-      // WFX2-4A rung 3 — the broker's page-context watch read (the logged-in
-      // session's own page); honest failure → the degrade below
-      const fromBroker = await fetchBrokerWatchPlayerResponse(videoId);
-      if (fromBroker) {
-        const brokerDto = parsePlayback("broker-watch", fromBroker);
-        if (brokerDto.streamFormats.length > 0 || brokerDto.storyboards.length > 0) {
-          return brokerDto;
+        const fromPage = await fetchWatchPagePlayerResponse(videoId, io.pageTimeoutMs ?? 12_000);
+        if (fromPage) {
+          const pageDto = parsePlayback("watch-page", fromPage);
+          if (pageDto.streamFormats.length > 0) return pageDto; // the formats hunt's rung-2 win
+          if (pageDto.storyboards.length > 0) {
+            storyboardFallback ??= pageDto;
+            return storyboardFallback; // storyboards in hand — the broker is not the last resort for these
+          }
         }
-      }
-      return storyboardFallback ?? { streamFormats: [], storyboards: [], durationSec: null, source: "" };
+        // WFX2-4A rung 3 — the broker's page-context watch read (the logged-in
+        // session's own page); honest failure → the degrade below
+        const fromBroker = await fetchBrokerWatchPlayerResponse(videoId);
+        if (fromBroker) {
+          const brokerDto = parsePlayback("broker-watch", fromBroker);
+          if (brokerDto.streamFormats.length > 0 || brokerDto.storyboards.length > 0) {
+            return brokerDto;
+          }
+        }
+        return storyboardFallback ?? { streamFormats: [], storyboards: [], durationSec: null, source: "" };
+      };
+      if (!opts.budgetMs) return runChain();
+      // P37 — the deadline race. The empty degrade resolves the race on
+      // deadline; the chain's own answer wins whenever it lands first. A
+      // losing chain keeps running until its rungs' composed signal aborts
+      // them (or the invocation ends) — the RESPONSE is bounded either way.
+      const emptyOnDeadline = new Promise<PlaybackDto>((resolve) => {
+        io.signal?.addEventListener("abort", () => {
+          resolve({ streamFormats: [], storyboards: [], durationSec: null, source: "" });
+        }, { once: true });
+      });
+      return Promise.race([runChain(), emptyOnDeadline]);
     },
     // WFX2-5 poisoning guard (the 4-c incident): the honest empty degrade is
     // NEVER cached — a wedge/wall window must not poison the key for the
