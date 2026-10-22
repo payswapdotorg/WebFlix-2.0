@@ -14,6 +14,7 @@ import {
   officialPlaylistMembership,
 } from "@/lib/youtube/official-actions";
 import { ensureShadowUser } from "@/lib/watch/local-comments";
+import { oauthConfigured } from "@/lib/youtube/oauth";
 import { db } from "@/lib/db";
 import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 import type { WebFlixSessionUser } from "@/lib/auth/types";
@@ -32,13 +33,19 @@ export const dynamic = "force-dynamic";
  *
  * Two shapes, one route:
  *  - no query — the playlists PAGE: { playlists, loginRequired, unavailable,
- *    session, connected, notice } (the page's existing top-level keys kept,
- *    connected/notice additive for the honest per-user banner).
- *  - ?videoId= — the watch-page Save dialog: { playlists, connected, notice? }
- *    with the local Watch-later row FIRST (local:true — the WebFlix list;
- *    YouTube's own WL is a system playlist the Data API cannot write) and the
- *    user's real playlists after it, each with its containsVideo membership
- *    flag read through their own token.
+ *    session, connected, oauthConfigured, notice } (the page's existing
+ *    top-level keys kept, connected/notice additive for the honest per-user
+ *    banner).
+ *  - ?videoId= — the watch-page Save dialog: { playlists, connected,
+ *    oauthConfigured, notice? } with the local Watch-later row FIRST
+ *    (local:true — the WebFlix list; YouTube's own WL is a system playlist
+ *    the Data API cannot write) and the user's real playlists after it, each
+ *    with its containsVideo membership flag read through their own token.
+ *
+ * WFX2-P38 — THE DEPLOYMENT-TRUTH LAW: an unconfigured deployment answers
+ * kind "youtube-not-configured" + oauthConfigured:false + the deployment
+ * notice ("this WebFlix deployment isn't connected to Google yet") — the
+ * connect errand is reserved for a deployment where connecting is possible.
  */
 export async function GET(req: NextRequest) {
   const sessionUser = await getSessionUser(req);
@@ -59,10 +66,26 @@ export async function GET(req: NextRequest) {
         // WebFlix list from the dialog exactly when the user had no YouTube
         // connection — the local tier is the one lane that WORKS
         // unconnected; the connect notice stays for the YouTube-side rows).
+        //
+        // WFX2-P38 — the deployment truth first: an UNCONFIGURED deployment
+        // never asks the user to connect (it's impossible here); the local
+        // row still serves and the notice says what actually works.
         const watchLaterRow = await localWatchLaterRow(videoId, sessionUser);
+        if (!oauthConfigured()) {
+          return NextResponse.json({
+            playlists: [watchLaterRow],
+            connected: false,
+            oauthConfigured: false,
+            kind: "youtube-not-configured",
+            notice:
+              "Saving to YouTube playlists needs the Google setup — Watch later below still saves on WebFlix.",
+            connectUrl: "/api/connection/youtube/oauth/start", // shape stability — a browser hit lands on the settings card
+          });
+        }
         return NextResponse.json({
           playlists: [watchLaterRow],
           connected: false,
+          oauthConfigured: true,
           kind: "youtube-not-connected",
           notice:
             "Connect your YouTube account to save to your YouTube playlists — Settings → YouTube connection",
@@ -103,12 +126,28 @@ export async function GET(req: NextRequest) {
     // ---- the playlists page (the user's own official rows) ----
     const tier = await resolveReadTier(req);
     if (!tier) {
+      // WFX2-P38 — the deployment truth when the deployment itself isn't
+      // connected to Google (never the user connect errand).
+      if (!oauthConfigured()) {
+        return NextResponse.json({
+          playlists: [] as PlaylistDTO[],
+          loginRequired: false,
+          unavailable: false,
+          session: hasSession(),
+          connected: false,
+          oauthConfigured: false,
+          kind: "youtube-not-configured",
+          notice:
+            "This WebFlix deployment isn't connected to Google yet — your YouTube playlists will appear here once it is.",
+        });
+      }
       return NextResponse.json({
         playlists: [] as PlaylistDTO[],
         loginRequired: false,
         unavailable: false,
         session: hasSession(),
         connected: false,
+        oauthConfigured: true,
         notice:
           "Connect your YouTube account to see your playlists — Settings → YouTube connection",
       });

@@ -7,7 +7,10 @@
  *
  *  - GET  /api/connection/youtube/oauth/start — guest 401, the honest
  *    not-configured 503, the 303 consent redirect carrying the signed state
- *    + the httpOnly double-submit cookie;
+ *    + the httpOnly double-submit cookie; WFX2-P38: a BROWSER navigation
+ *    (Accept includes text/html) on the unconfigured deployment → 303 to
+ *    /settings#youtube-connection (the settings card explains the deployment
+ *    truth); fetch/API clients keep the JSON 503 envelope;
  *  - GET  /api/connection/youtube/oauth/callback — the ?ytc= outcome codes
  *    (state / signin / denied / exchange / connected), the session-bound
  *    state verification, the server-side code exchange, the identity read,
@@ -128,6 +131,47 @@ describe("GET /api/connection/youtube/oauth/start", () => {
   test("OAuth not configured → the honest 503 envelope (the exact missing vars + the redirect URI to register)", async () => {
     const res = await startGet(
       req("http://localhost/api/connection/youtube/oauth/start", COOKIE_A),
+    );
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as {
+      error: string;
+      missing: string[];
+      redirectUri: string;
+      setup: string;
+    };
+    expect(body.error).toBe("youtube-oauth-not-configured");
+    expect(body.missing).toEqual(["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]);
+    expect(body.redirectUri).toBe(
+      "http://localhost/api/connection/youtube/oauth/callback",
+    );
+    expect(body.setup).toContain("GOOGLE_CLIENT_ID");
+    expect(fetchLog).toHaveLength(0);
+  });
+
+  test("WFX2-P38: not configured + a BROWSER navigation (Accept includes text/html) → 303 to the settings card — the deployment truth, never a stranded JSON 503", async () => {
+    const res = await startGet(
+      new NextRequest("http://localhost/api/connection/youtube/oauth/start", {
+        headers: {
+          cookie: COOKIE_A,
+          // a real browser's document-navigation Accept — the Connect
+          // buttons/links are plain <a href> navigations
+          accept:
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        },
+      }),
+    );
+    expect(res.status).toBe(303);
+    const location = res.headers.get("location");
+    expect(location).toBeTruthy();
+    expect(location!.endsWith("/settings#youtube-connection")).toBe(true);
+    expect(fetchLog).toHaveLength(0); // no upstream call — the settings card explains the setup state
+  });
+
+  test("WFX2-P38: not configured + a fetch/API client (no text/html in Accept) → the SAME JSON 503 envelope (tests pin it byte-for-byte)", async () => {
+    const res = await startGet(
+      new NextRequest("http://localhost/api/connection/youtube/oauth/start", {
+        headers: { cookie: COOKIE_A, accept: "*/*" },
+      }),
     );
     expect(res.status).toBe(503);
     const body = (await res.json()) as {

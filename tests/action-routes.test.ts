@@ -11,10 +11,14 @@
  *    the honest WebFlix store (local:true disclosed, the real test DB via
  *    setupTestDb) — YouTube's WL is a system playlist the Data API cannot
  *    write and feed feedback has no end-user API;
- *  - tier failures: no connection → 403 youtube-not-connected; a revoked
- *    grant → 403 youtube-needs-reauth; official failures → the honest
- *    officialFailure mapping (quota → 502 youtube-quota, 401/403 →
- *    youtube-provider-rejected, else youtube-provider-error).
+ *  - tier failures: no connection → 403 youtube-not-connected (the P38
+ *    battery sets GOOGLE_CLIENT_ID/SECRET for this pin — connecting is
+ *    possible there); a deployment WITHOUT the Google OAuth env → 503
+ *    youtube-not-configured (the WFX2-P38 deployment-truth law: never the
+ *    user connect errand where connecting is impossible); a revoked grant →
+ *    403 youtube-needs-reauth; official failures → the honest officialFailure
+ *    mapping (quota → 502 youtube-quota, 401/403 → youtube-provider-rejected,
+ *    else youtube-provider-error).
  *
  * The pre-P36 direct-first/broker-fallback pins are RETIRED with the shared
  * operator identity itself (action-proxy imports neither @/lib/broker nor
@@ -127,6 +131,25 @@ beforeAll(async () => {
 
 setupTestDb(); // the LOCAL families write the real (test) DB
 
+/* WFX2-P38 — the Google OAuth env originals, captured up front and restored
+ * in afterAll: the not-connected pins SET the pair (oauthConfigured → true),
+ * the not-configured pins DELETE it (the deployment truth). The test process
+ * itself starts without them. */
+const savedGoogleClientId = process.env.GOOGLE_CLIENT_ID;
+const savedGoogleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
+/** WFX2-P38 — make this deployment "configured" (the connect errand is real). */
+const setGoogleEnv = (): void => {
+  process.env.GOOGLE_CLIENT_ID = "p38-action-client-id";
+  process.env.GOOGLE_CLIENT_SECRET = "p38-action-client-secret";
+};
+
+/** WFX2-P38 — make this deployment UNCONFIGURED (the deployment truth). */
+const deleteGoogleEnv = (): void => {
+  delete process.env.GOOGLE_CLIENT_ID;
+  delete process.env.GOOGLE_CLIENT_SECRET;
+};
+
 /** The user's own connected account record — tokens as real encryptSecret blobs. */
 async function connectUser(userId: string, token: string): Promise<void> {
   await putYouTubeConnection({
@@ -160,6 +183,11 @@ beforeEach(async () => {
 afterAll(() => {
   mock.module("@/lib/youtube/official-actions", () => realOfficial);
   resetYoutubeConnectionStore();
+  // WFX2-P38 — the Google OAuth env back to its process-original state
+  if (savedGoogleClientId !== undefined) process.env.GOOGLE_CLIENT_ID = savedGoogleClientId;
+  else delete process.env.GOOGLE_CLIENT_ID;
+  if (savedGoogleClientSecret !== undefined) process.env.GOOGLE_CLIENT_SECRET = savedGoogleClientSecret;
+  else delete process.env.GOOGLE_CLIENT_SECRET;
 });
 
 import type { NextRequest } from "next/server";
@@ -295,6 +323,7 @@ describe("POST /api/videos/[id]/like (the per-user OFFICIAL lane — videos.rate
   });
 
   test("no connected account → 403 youtube-not-connected; ZERO official calls (isolation by construction)", async () => {
+    setGoogleEnv(); // WFX2-P38: a CONFIGURED deployment — the connect errand is the honest ask
     resetYoutubeConnectionStore(); // drop the connection
     const res = await postLike(req({ value: "like" }), ctx);
     expect(res.status).toBe(403);
@@ -304,7 +333,22 @@ describe("POST /api/videos/[id]/like (the per-user OFFICIAL lane — videos.rate
     expect(officialCalls).toEqual([]);
   });
 
+  test("WFX2-P38: deployment without Google OAuth env → 503 youtube-not-configured; ZERO official calls (the deployment-truth law — never the connect errand)", async () => {
+    deleteGoogleEnv(); // this deployment can NEVER offer the connect flow
+    resetYoutubeConnectionStore(); // drop the connection
+    const res = await postLike(req({ value: "like" }), ctx);
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { error: string; kind?: string };
+    expect(body.error).toBe(
+      "YouTube actions aren't available yet — this WebFlix deployment isn't connected to Google",
+    );
+    expect(body.kind).toBe("youtube-not-configured");
+    expect(officialCalls).toEqual([]); // isolation by construction still holds
+    setGoogleEnv(); // leave the configured state for the sibling pins
+  });
+
   test("a revoked/expired grant (status needs_reauth) → 403 youtube-needs-reauth", async () => {
+    setGoogleEnv(); // WFX2-P38: a CONFIGURED deployment for the tier-failure family
     resetYoutubeConnectionStore();
     await putYouTubeConnection({
       userId: USER_A,

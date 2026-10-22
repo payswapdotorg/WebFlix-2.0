@@ -27,6 +27,13 @@
  *
  * BY CONSTRUCTION this module imports NEITHER @/lib/broker NOR
  * @/lib/youtube-direct: no shared-operator path can serve an end-user write.
+ *
+ * WFX2-P38 — THE DEPLOYMENT-TRUTH LAW: when the deployment itself lacks the
+ * Google OAuth credentials (no GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET), the
+ * unconnected tier answers "not-configured" → 503 youtube-not-configured
+ * ("this WebFlix deployment isn't connected to Google yet") — NEVER the
+ * user-facing connect errand, which is reserved for a deployment where
+ * connecting is actually possible (oauthConfigured && !userConnection).
  */
 import { ApiError } from "./api";
 import type { CommentDto, CommentVideoSnapshotDto, LikeValue } from "./types";
@@ -37,7 +44,7 @@ import {
   markYouTubeConnectionNeedsReauth,
   putYouTubeConnection,
 } from "@/lib/auth/youtube-connection-store";
-import { decryptSecret, encryptSecret, refreshAccessToken } from "@/lib/youtube/oauth";
+import { decryptSecret, encryptSecret, oauthConfigured, refreshAccessToken } from "@/lib/youtube/oauth";
 import {
   officialCreatePlaylist,
   officialDeletePlaylist,
@@ -75,12 +82,16 @@ export function parseCompactCount(label: string | undefined | null): number | nu
 
 export type UserActionTier =
   | { ok: true; user: WebFlixSessionUser; accessToken: string; channelId: string | null }
-  | { ok: false; kind: "not-connected" | "needs-reauth" | "store-error" };
+  | { ok: false; kind: "not-connected" | "needs-reauth" | "store-error" | "not-configured" };
 
 /**
  * Resolve the acting user's YouTube action tier: the signed-in WebFlix user
  * + their OWN connected account's fresh access token. Never falls back to
  * any other identity — the P36 isolation law.
+ *
+ * WFX2-P38 — an absent connection on an UNCONFIGURED deployment answers
+ * "not-configured" (the deployment truth), not "not-connected" (the user
+ * connect errand — impossible where oauth/start would 503 anyway).
  */
 export async function resolveActionTier(req: Request): Promise<UserActionTier> {
   const user = await getSessionUser(req);
@@ -91,7 +102,9 @@ export async function resolveActionTier(req: Request): Promise<UserActionTier> {
   } catch {
     return { ok: false, kind: "store-error" };
   }
-  if (!connection) return { ok: false, kind: "not-connected" };
+  if (!connection) {
+    return { ok: false, kind: oauthConfigured() ? "not-connected" : "not-configured" };
+  }
   if (connection.status === "needs_reauth") return { ok: false, kind: "needs-reauth" };
 
   const access = await decryptSecret(connection.accessTokenEnc);
@@ -138,7 +151,18 @@ export async function resolveReadTier(
 }
 
 /** Map a tier failure onto the honest ApiError (machine-stable `kind`). */
-export function tierError(kind: "not-connected" | "needs-reauth" | "store-error"): ApiError {
+export function tierError(
+  kind: "not-connected" | "needs-reauth" | "store-error" | "not-configured",
+): ApiError {
+  // WFX2-P38 — the deployment truth FIRST: an unconfigured deployment is a
+  // 503 (the setup is the operator's, the user can't act on it at all).
+  if (kind === "not-configured") {
+    return new ApiError(
+      503,
+      "YouTube actions aren't available yet — this WebFlix deployment isn't connected to Google",
+      "youtube-not-configured",
+    );
+  }
   if (kind === "not-connected") {
     return new ApiError(
       403,

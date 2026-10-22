@@ -38,6 +38,9 @@ export type YouHistoryPayload = {
   session: boolean;
   /** WFX2-P36: the per-user truth — false → the connect link in the notice */
   connected?: boolean;
+  /** WFX2-P38: the deployment truth — false → NO connect link (the errand is
+   * impossible on a deployment without the Google OAuth env) */
+  oauthConfigured?: boolean;
   /** WFX2-P36: the honest per-user notice (no official history API — the
    *  handoff to youtube.com/feed/history) */
   notice?: string;
@@ -51,6 +54,9 @@ export type YouPlaylistsPayload = {
   session: boolean;
   /** WFX2-P36: the per-user truth — false → the connect link in the notice */
   connected?: boolean;
+  /** WFX2-P38: the deployment truth — false → NO connect link (the errand is
+   * impossible on a deployment without the Google OAuth env) */
+  oauthConfigured?: boolean;
   /** WFX2-P36: the honest per-user notice (connect ask / failed read / disclosure) */
   notice?: string;
 };
@@ -198,7 +204,9 @@ export function HistorySection({ state }: { state: ApiState<YouHistoryPayload> }
       {state.data?.notice && (
         <SectionNote>
           {state.data.notice}{" "}
-          {state.data.connected === false && (
+          {/* WFX2-P38 — the connect link ONLY on a deployment where connecting
+              is actually possible (oauthConfigured !== false) */}
+          {state.data.connected === false && state.data.oauthConfigured !== false && (
             <Link
               href="/settings"
               className="font-medium text-foreground underline underline-offset-2"
@@ -335,7 +343,9 @@ export function PlaylistsSection({ state }: { state: ApiState<YouPlaylistsPayloa
       {state.data?.notice && (
         <SectionNote>
           {state.data.notice}{" "}
-          {state.data.connected === false && (
+          {/* WFX2-P38 — the connect link ONLY on a deployment where connecting
+              is actually possible (oauthConfigured !== false) */}
+          {state.data.connected === false && state.data.oauthConfigured !== false && (
             <Link
               href="/settings"
               className="font-medium text-foreground underline underline-offset-2"

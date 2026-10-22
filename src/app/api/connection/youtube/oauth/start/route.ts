@@ -28,12 +28,28 @@ export const OAUTH_STATE_COOKIE = "wf_yt_oauth_state";
  * Not configured (missing GOOGLE_CLIENT_ID/SECRET) → the honest 503 envelope
  * with the exact missing vars + the redirect URI to register (the operator's
  * setup path — never a silent failure).
+ *
+ * WFX2-P38 — THE DEPLOYMENT-TRUTH LAW: a real BROWSER navigation here (the
+ * Connect buttons/links are plain <a href> navigations — Accept includes
+ * text/html) is 303-redirected to /settings#youtube-connection, where the
+ * YouTube connection card explains the deployment truth (the exact missing
+ * env vars + the redirect URI to register) instead of stranding the user
+ * on a JSON 503. Programmatic fetch/API clients keep today's JSON envelope
+ * byte-for-byte (tests pin it).
  */
 export async function GET(req: NextRequest) {
   const user = await getSessionUser(req);
   if (!user) return authRequiredResponse();
 
   if (!oauthConfigured()) {
+    if ((req.headers.get("accept") ?? "").includes("text/html")) {
+      // a human followed a Connect link — land them on the settings card
+      // that explains the deployment's setup state (P38 deployment truth)
+      return NextResponse.redirect(
+        new URL("/settings#youtube-connection", req.nextUrl),
+        303,
+      );
+    }
     return NextResponse.json(
       {
         error: "youtube-oauth-not-configured",
