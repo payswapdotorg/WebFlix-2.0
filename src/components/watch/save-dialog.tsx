@@ -13,6 +13,10 @@
  *    lane on their own account;
  *  - connected:false → the inline connect prompt (the OAuth start link)
  *    instead of rows, and the create affordance is gated behind it.
+ * WFX2-P38 — THE DEPLOYMENT-TRUTH LAW: connected:false + oauthConfigured:false
+ *    (the deployment itself isn't connected to Google) renders the honest
+ *    deployment row WITHOUT the connect errand — connecting is impossible
+ *    on this deployment; the local Watch-later row still serves above it.
  */
 import { useEffect, useState } from "react";
 import { Bookmark, BookmarkCheck, Check, Globe, Lock, Plus, Search } from "lucide-react";
@@ -34,6 +38,9 @@ type SaveDialogPayload = {
   playlists: PlaylistDto[];
   /** false → the inline connect prompt replaces the rows */
   connected?: boolean;
+  /** WFX2-P38: false → the DEPLOYMENT row replaces the connect prompt (the
+   * deployment itself isn't connected to Google — no connect errand) */
+  oauthConfigured?: boolean;
   /** the honest machine-stable kind when the connect is missing */
   kind?: string;
   /** the honest notice (connect ask, or a failed official read) */
@@ -205,19 +212,27 @@ export function SaveDialog({
           // WFX2-P36 — no connected YouTube account: the honest connect
           // prompt for the YOUTUBE-side rows (never the operator's playlists).
           // WFX2-P37 — the WebFlix-local Watch-later row serves FIRST.
+          // WFX2-P38 — oauthConfigured:false → the deployment row (NO connect
+          // errand — the deployment itself isn't connected to Google).
           <>
             {watchLaterRow}
             <div
               className="rounded-xl border border-border bg-secondary/40 p-4"
-              data-testid="save-dialog-connect-prompt"
+              data-testid={
+                data?.oauthConfigured === false
+                  ? "save-dialog-deployment-prompt"
+                  : "save-dialog-connect-prompt"
+              }
             >
               <p className="text-sm text-foreground">{data?.notice ?? "Connect your YouTube account to save to your YouTube playlists"}</p>
-              <a
-                href={connectUrl}
-                className="mt-3 inline-flex h-9 items-center justify-center rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
-              >
-                Connect your YouTube account
-              </a>
+              {data?.oauthConfigured === false ? null : (
+                <a
+                  href={connectUrl}
+                  className="mt-3 inline-flex h-9 items-center justify-center rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+                >
+                  Connect your YouTube account
+                </a>
+              )}
             </div>
           </>
         ) : (
