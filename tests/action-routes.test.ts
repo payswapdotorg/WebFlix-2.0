@@ -615,6 +615,90 @@ describe("POST /api/playlists/watch-later (the honest WebFlix-LOCAL list)", () =
 });
 
 // ---------------------------------------------------------------------------
+// WFX2-P39 — THE SNAPSHOT HEAL LAW: a shadow video row born GENERIC (the
+// no-snapshot fallbacks — title "YouTube video <id>", channel "ytch-unknown"
+// / "YouTube channel") is HEALED the first time a save arrives carrying real
+// display data; a row that already carries REAL data is NEVER overwritten.
+// The rows below are read exactly as /api/playlist/WL serves them (the video
+// row + its channel — what the local WL list renders).
+// ---------------------------------------------------------------------------
+
+describe("POST /api/playlists/watch-later — WFX2-P39: the snapshot HEAL law (generic rows heal; real rows never change)", () => {
+  test("(heal) save WITHOUT the snapshot, then re-save WITH {title, channelName} → the row HEALS to the real display data", async () => {
+    // the first save carries no snapshot → the generic fallback row
+    const first = await postWatchLater(req({ videoId: "wlHeal1", add: true }));
+    expect(((await first.json()) as { added: boolean }).added).toBe(true);
+    const generic = await db.video.findUniqueOrThrow({
+      where: { id: "wlHeal1" },
+      include: { channel: true },
+    });
+    expect(generic.title).toBe("YouTube video wlHeal1");
+    expect(generic.channelId).toBe("ytch-unknown");
+    expect(generic.channel.name).toBe("YouTube channel");
+
+    // the re-save carries the display snapshot (any later surface may be
+    // the one that holds it — the watch Save dialog, the shorts rail) →
+    // the generic row HEALS: real title + the real shadow channel
+    const second = await postWatchLater(req({
+      videoId: "wlHeal1",
+      add: true,
+      title: "Healed by the Snapshot",
+      channelName: "Healed Channel",
+    }));
+    const secondBody = (await second.json()) as { added: boolean; already?: boolean };
+    expect(secondBody.added).toBe(true);
+    expect(secondBody.already).toBe(true); // the row was already saved — only the heal ran
+    const healed = await db.video.findUniqueOrThrow({
+      where: { id: "wlHeal1" },
+      include: { channel: true },
+    });
+    expect(healed.title).toBe("Healed by the Snapshot");
+    expect(healed.channel.name).toBe("Healed Channel");
+    expect(healed.channelId).not.toBe("ytch-unknown"); // relinked to the real channel
+    // ONE playlist row, ONE video row (the heal updates in place)
+    const wl = await db.playlist.findFirstOrThrow({
+      where: { userId: `wf-${USER_A}`, isWatchLater: true },
+    });
+    expect(await db.playlistItem.count({ where: { playlistId: wl.id, videoId: "wlHeal1" } })).toBe(1);
+    expect(officialCalls).toEqual([]); // the local lane never touches the official seam
+  });
+
+  test("(no heal on real rows) a row saved WITH real data first KEEPS it — a later DIFFERENT snapshot never overwrites", async () => {
+    await postWatchLater(req({
+      videoId: "wlReal1",
+      add: true,
+      title: "The Real Title",
+      channelName: "The Real Channel",
+    }));
+    await postWatchLater(req({
+      videoId: "wlReal1",
+      add: true,
+      title: "A Later Wrong Title",
+      channelName: "A Later Wrong Channel",
+    }));
+    const row = await db.video.findUniqueOrThrow({
+      where: { id: "wlReal1" },
+      include: { channel: true },
+    });
+    expect(row.title).toBe("The Real Title"); // the first REAL write still owns the row
+    expect(row.channel.name).toBe("The Real Channel");
+    expect(row.channelId).not.toBe("ytch-ALaterWrongChannel"); // never relinked away from real data
+  });
+
+  test("(partial heal) a generic row + a snapshot with ONLY a title → the title heals, the channel stays generic", async () => {
+    await postWatchLater(req({ videoId: "wlTitleOnly1", add: true }));
+    await postWatchLater(req({ videoId: "wlTitleOnly1", add: true, title: "Title-Only Heal" }));
+    const row = await db.video.findUniqueOrThrow({
+      where: { id: "wlTitleOnly1" },
+      include: { channel: true },
+    });
+    expect(row.title).toBe("Title-Only Heal"); // the generic title healed
+    expect(row.channelId).toBe("ytch-unknown"); // no real channel data arrived — the channel stays generic
+    expect(row.channel.name).toBe("YouTube channel");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // P24-SEND (G12) → P36 — the feed-feedback family's route contracts: the
 // channel variant of not-interested + the shared undo, all on the honest
 // WebFlix-LOCAL signal lane (no official end-user API exists — disclosed).

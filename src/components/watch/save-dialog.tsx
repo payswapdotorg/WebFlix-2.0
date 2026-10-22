@@ -17,6 +17,10 @@
  *    (the deployment itself isn't connected to Google) renders the honest
  *    deployment row WITHOUT the connect errand — connecting is impossible
  *    on this deployment; the local Watch-later row still serves above it.
+ * WFX2-P39 — the local WL row's save carries the display snapshot: the
+ *    optional title/channelName props (threaded by the watch page from the
+ *    detail DTO) ride the POST body so /playlist/WL's row renders the real
+ *    title/channel, never the generic "YouTube video <id>" fallback.
  */
 import { useEffect, useState } from "react";
 import { Bookmark, BookmarkCheck, Check, Globe, Lock, Plus, Search } from "lucide-react";
@@ -54,11 +58,17 @@ export function SaveDialog({
   onOpenChange,
   videoId,
   onSavedChange,
+  title,
+  channelName,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   videoId: string;
   onSavedChange?: (watchLater: boolean) => void;
+  /** WFX2-P39 — the video's display title (optional; rides the local WL save). */
+  title?: string;
+  /** WFX2-P39 — the channel's display name (optional; same law as title). */
+  channelName?: string;
 }) {
   const [data, setData] = useState<SaveDialogPayload | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -119,7 +129,14 @@ export function SaveDialog({
         // response's .added is the local truth; the note discloses it)
         const result = await post<{ added: boolean; note?: string }>(
           "/api/playlists/watch-later",
-          { videoId },
+          {
+            videoId,
+            // WFX2-P39 — the display snapshot rides the local WL save (the
+            // conditional-spread idiom; absent props keep the exact
+            // pre-P39 body shape)
+            ...(title ? { title } : {}),
+            ...(channelName ? { channelName } : {}),
+          },
         );
         reconcileRow(playlist.id, result.added);
         onSavedChange?.(result.added);

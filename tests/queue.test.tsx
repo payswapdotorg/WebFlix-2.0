@@ -204,13 +204,13 @@ describe("queue store semantics", () => {
 /* ------------------------------------------------------------------ */
 
 describe("queue-actions: the WL-backed append/remove", () => {
-  test("addToQueue posts the real watch-later add FIRST, then appends", async () => {
+  test("addToQueue posts the real watch-later add FIRST, then appends (WFX2-P39: the body carries the item's display snapshot)", async () => {
     const outcome = await addToQueue(item("V1"));
     expect(outcome).toEqual({ status: "appended" });
     expect(postCalls).toEqual([
       {
         url: "/api/playlists/watch-later",
-        body: { videoId: "V1", add: true },
+        body: { videoId: "V1", add: true, title: "Title V1", channelName: "Channel V1" },
       },
     ]);
     expect(useQueueStore.getState().items.map((i) => i.videoId)).toEqual(["V1"]);

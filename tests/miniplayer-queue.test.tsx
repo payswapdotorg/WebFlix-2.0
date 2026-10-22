@@ -148,6 +148,7 @@ const { playerHost, usePlayerHost, resetPlayerHostForTests } = await import(
   "@/lib/player/player-host"
 );
 const { useQueueStore, resetQueueStoreForTests } = await import("@/lib/queue/queue-store");
+const { addToQueue } = await import("@/lib/queue/queue-actions");
 const { selectPrevBefore } = await import("@/lib/queue/queue-neighbors");
 const { QueuePanel } = await import("@/components/watch/queue-panel");
 const { AppShell } = await import("@/components/app/app-shell");
@@ -613,6 +614,29 @@ describe("drawer remove-from-queue: the real WL write, honest outcomes", () => {
     const error = toastCalls.find((t) => t.kind === "error");
     expect(error).toBeDefined();
     expect(error!.message).toContain("broker must be running");
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* 5b. The queue ADD path — the WL save carries the display snapshot    */
+/* ------------------------------------------------------------------ */
+
+// WFX2-P39: the add's watch-later post body carries the item's title +
+// channelName (QueueItem already holds them) so the WL row the same write
+// shapes renders real display data on /playlist/WL — never the generic
+// "YouTube video <id>" fallback the pre-P39 body produced.
+
+describe("queue ADD path: the WL save carries the item's display snapshot (WFX2-P39)", () => {
+  test("addToQueue posts {videoId, add:true} WITH the item's title + channelName, then appends", async () => {
+    const outcome = await addToQueue(item("V9"));
+    expect(outcome).toEqual({ status: "appended" });
+    expect(postCalls).toEqual([
+      {
+        url: "/api/playlists/watch-later",
+        body: { videoId: "V9", add: true, title: "Title V9", channelName: "Channel V9" },
+      },
+    ]);
+    expect(useQueueStore.getState().items.map((i) => i.videoId)).toEqual(["V9"]);
   });
 });
 
