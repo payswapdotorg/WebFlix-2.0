@@ -39,6 +39,8 @@ type PlaylistPagePayload = PlaylistPageDTO & {
   playlist: PlaylistPageDTO["playlist"] | null;
   /** the honest per-user notice (the WL/LL no-API handoff) */
   notice?: string;
+  /** WFX2-P37 — the WebFlix-local Watch-later list (the disclosure note) */
+  local?: boolean;
 };
 
 /**
@@ -50,18 +52,21 @@ type PlaylistPagePayload = PlaylistPageDTO & {
  *    and the compact ROW LIST on the right (index · 160px thumbnail ·
  *    title/channel text block — exactly youtube.com's playlist rows, never
  *    the wide home-grid cards);
- *  - WFX2-P36: the special lists (WL watch later / LL liked) render the
- *    HONEST per-user notice instead — YouTube's own lists have no official
- *    read API, and the pre-P36 session read served the OPERATOR's list to
- *    every signed-in user (the cross-user leak the P36 work order closes);
- *    the WebFlix-local save button owns Watch later, YouTube's own page has
- *    the rest;
+ *  - WFX2-P36: LL (Liked) renders the HONEST per-user notice — YouTube's
+ *    own list has no official read API, and the pre-P36 session read served
+ *    the OPERATOR's list to every signed-in user (the cross-user leak the
+ *    P36 work order closes);
+ *  - WFX2-P37: WL (Watch later) renders the WEBFLIX-LOCAL list — the acting
+ *    user's own saved rows (the same store the save button writes), with
+ *    the honest remove affordance. The pre-P37 explainer-only notice hid
+ *    the user's own saves behind copy about what WebFlix cannot do; the
+ *    local disclosure note rides the card panel (local: true from the
+ *    route). Guests / store failures keep the honest notice envelope;
  *  - reorder (Move up/down) stays public-playlist-only; Load more pages
  *    the browse continuation;
- *  - REA-3 F3 (pre-P36): the special-list row actions are retired with the
- *    special-list rows themselves — Download is honestly absent either way
- *    (no seam — the parity-debt ledger), and YouTube's own lists can never
- *    be reordered (the route honestly 400s).
+ *  - REA-3 F3: Download is honestly absent (no seam — the parity-debt
+ *    ledger), and the special lists' reorder stays retired (the official
+ *    lane owns reordering).
  */
 function isSpecialListId(id: string | undefined): id is "WL" | "LL" {
   return id === "WL" || id === "LL";
@@ -85,12 +90,10 @@ export default function PlaylistPage() {
   return <PlaylistContent id={raw} special={false} />;
 }
 
-/** WFX2-P36 — the special lists' honest notice state: no official read API
- * for YouTube's own Watch Later / Liked lists, and the pre-P36 session read
- * served the OPERATOR's list to every signed-in user (the cross-user leak
- * the P36 work order closes). The notice hands Watch later off to the
- * WebFlix-local save button and the rest to YouTube's own pages — never the
- * operator's rows, never a fake empty that implies a read happened. */
+/** WFX2-P36/P37 — the special lists' honest notice state: LL always (no
+ * official read API for YouTube's own Liked list), WL only when the local
+ * list could not be served (guest / store failure — playlist: null). Never
+ * the operator's rows, never a fake empty that implies a read happened. */
 function SpecialListNotice({ list }: { list: "WL" | "LL" }) {
   const label = list === "WL" ? "Watch later" : "Liked videos";
   return (
@@ -163,9 +166,32 @@ function PlaylistContent({ id, special }: { id: string; special: boolean }) {
   const [pagingMore, setPagingMore] = useState(false);
 
   const listedVideos = order ?? [...(data?.videos ?? []), ...extraVideos];
-  // the special lists render the honest P36 notice (no rows, no reordering);
+  // the special lists render the honest P36 notice ONLY when the local list
+  // was not served (LL always; WL on guest/store-failure — playlist: null);
+  // a WL payload renders the REAL local rows below (P37);
   // public playlists keep the reorder affordance
   const canReorder = !special;
+
+  // WFX2-P37 — the local Watch-later removal (the row menu's honest remove):
+  // POST /api/playlists/watch-later {videoId, add: false} → optimistic row
+  // removal; a failure reverts (the toast says what happened, never a fake).
+  async function removeFromWatchLater(videoId: string) {
+    try {
+      const res = await fetch("/api/playlists/watch-later", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videoId, add: false }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { added?: boolean; error?: string };
+      if (!res.ok || body.added !== false) {
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      setOrder(listedVideos.filter((v) => v.id !== videoId));
+      toast.success("Removed from Watch later");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to remove from Watch later");
+    }
+  }
 
   async function loadMore() {
     const cursor = moreCursor ?? data?.nextCursor ?? null;
@@ -296,11 +322,17 @@ function PlaylistContent({ id, special }: { id: string; special: boolean }) {
           </div>
         </div>
       )}
-      {/* WFX2-P36 — the special lists answer the honest notice envelope
-          (playlist: null, no rows): the notice replaces the two-column
-          layout entirely — never the operator's list, never a fake read */}
-      {data && specialList && <SpecialListNotice list={specialList} />}
-      {data && !specialList && data.playlist && (
+      {/* WFX2-P36/P37 — the special-list honest notice serves ONLY when the
+          local list was not: LL ALWAYS (no API, no local store — even a
+          legacy-shaped payload renders the notice, defense-in-depth for the
+          retired operator read), WL on guest/store-failure (playlist: null).
+          A WL payload renders the REAL local rows in the two-column layout
+          below — never the operator's list, never a fake read, and never a
+          hidden local one either. */}
+      {data && specialList && (specialList === "LL" || !data.playlist) && (
+        <SpecialListNotice list={specialList} />
+      )}
+      {data && data.playlist && specialList !== "LL" && (
         <div className="grid gap-6 px-4 py-5 sm:px-6 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
           {/* -------- the playlist card panel (youtube.com's left column) ---- */}
           <aside
@@ -379,6 +411,11 @@ function PlaylistContent({ id, special }: { id: string; special: boolean }) {
                     {data.playlist.description}
                   </p>
                 ) : null}
+                {specialList === "WL" && data.local ? (
+                  <p className="mt-2 text-xs text-muted-foreground" data-testid="playlist-wl-local-note">
+                    Saved on WebFlix — YouTube&apos;s own Watch Later has no official API
+                  </p>
+                ) : null}
                 <div className="mt-4 flex items-center gap-2">
                   {playAllHref ? (
                     <Button asChild className="gap-2 rounded-full">
@@ -420,10 +457,22 @@ function PlaylistContent({ id, special }: { id: string; special: boolean }) {
                   disableDown={i === listedVideos.length - 1 || reordering !== null}
                   onMoveUp={() => moveItem(i, i - 1)}
                   onMoveDown={() => moveItem(i, i + 1)}
-                  onRemove={null}
+                  onRemove={
+                    specialList === "WL" ? () => void removeFromWatchLater(video.id) : null
+                  }
                 />
               ))}
             </ol>
+            {specialList === "WL" && listedVideos.length === 0 && (
+              <div className="py-10 text-center" data-testid="playlist-wl-empty">
+                <p className="text-sm text-muted-foreground">
+                  Nothing saved yet — the Save button on any video adds it here.
+                </p>
+                <Button asChild className="mt-4 gap-2 rounded-full">
+                  <Link href="/">Find videos to watch</Link>
+                </Button>
+              </div>
+            )}
             {hasMore && (
               <div className="flex justify-center py-6">
                 <Button

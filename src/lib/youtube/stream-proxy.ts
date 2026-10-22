@@ -41,21 +41,46 @@ const PASSTHROUGH_HEADERS = [
   "cache-control",
 ] as const;
 
-/** One upstream attempt — the plain-fetch law googlevideo expects. */
+/**
+ * One upstream attempt — the plain-fetch law googlevideo expects.
+ *
+ * WFX2-P37 — THE HEADER-DEADLINE LAW (the production 504 cure): the abort
+ * clock applies ONLY until the upstream's response HEADERS arrive; once
+ * they have, the timer is cleared and the BODY may stream for as long as
+ * the invocation lives. The pre-P37 `AbortSignal.timeout(60_000)` shape had
+ * two measured production defects: (a) it raced the route's own
+ * `maxDuration = 60` and LOST — a tarpitting googlevideo connection (no
+ * headers, no RST — the datacenter-IP punishment class) held the fetch
+ * until the PLATFORM killed the invocation, answering the client a 504 the
+ * route never chose (measured 2026-10-22: 4/4 stream-mode 504s, every one
+ * a chain that never reached its own honest 502); and (b) on the rare
+ * answering upstream it killed long bodies MID-TRANSFER at the 60s mark.
+ * A healthy googlevideo answers headers in well under a second; 8s is the
+ * honest "this connection will never answer" verdict, and the caller's
+ * honest floor (502 → the client's embed fallback ladder) takes over.
+ */
 export async function fetchUpstream(
   upstreamUrl: URL,
-  range: string | null
+  range: string | null,
+  headerDeadlineMs = 8_000
 ): Promise<Response> {
-  return fetch(upstreamUrl, {
-    redirect: "follow",
-    headers: {
-      // googlevideo requires noReferer-ish plain fetches; a Range when present
-      ...(range ? { Range: range } : {}),
-      Accept: "*/*",
-    },
-    signal: AbortSignal.timeout(60_000),
-    cache: "no-store",
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), headerDeadlineMs);
+  try {
+    const res = await fetch(upstreamUrl, {
+      redirect: "follow",
+      headers: {
+        // googlevideo requires noReferer-ish plain fetches; a Range when present
+        ...(range ? { Range: range } : {}),
+        Accept: "*/*",
+      },
+      signal: controller.signal,
+      cache: "no-store",
+    });
+    return res; // headers are in — the timer dies in finally, the body streams
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** A usable upstream answer: 200 or 206 (partial content). */
@@ -108,7 +133,8 @@ export async function attemptChainStream(
   formats: StreamFormatDto[],
   preferItag: number | null,
   range: string | null,
-  pick: (formats: StreamFormatDto[], preferItag: number | null) => StreamFormatDto | null
+  pick: (formats: StreamFormatDto[], preferItag: number | null) => StreamFormatDto | null,
+  headerDeadlineMs = 8_000
 ): Promise<Response | null> {
   if (formats.length === 0) return null; // the walled class — no honest stream to serve
   const pool = [...formats];
@@ -119,7 +145,7 @@ export async function attemptChainStream(
     const url = isAllowedStreamUrl(fmt.url);
     if (!url) continue; // structurally impossible (our own chain) — the next ticket
     try {
-      const res = await fetchUpstream(url, range);
+      const res = await fetchUpstream(url, range, headerDeadlineMs);
       if (isUsable(res)) return res;
     } catch {
       /* dead — the next ticket */

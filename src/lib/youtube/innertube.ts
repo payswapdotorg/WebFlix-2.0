@@ -172,7 +172,12 @@ export async function innertube<T = Record<string, any>>(
         method: "POST",
         headers,
         body: payload,
-        signal: opts.signal ?? controller.signal,
+        // WFX2-P37 — the fetch ALWAYS rides the per-attempt controller; a
+        // caller-owned deadline aborts it THROUGH onOuterAbort above. (The
+        // pre-P37 `opts.signal ?? controller.signal` shape made the
+        // per-attempt timeoutMs a silent no-op whenever an outer signal was
+        // passed — the two deadlines must compose, never override.)
+        signal: controller.signal,
       });
       if (RETRY_STATUS.has(res.status) && attempt < attempts - 1) {
         lastError = new InnertubeError(endpoint, res.status, `retryable status ${res.status}`);

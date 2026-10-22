@@ -53,8 +53,15 @@ export async function GET(req: NextRequest) {
       // ---- the Save dialog's rows (the user's own lists + the local WL) ----
       const tier = await resolveReadTier(req);
       if (!tier) {
+        // WFX2-P37 — the local Watch-later row serves HERE TOO (the route's
+        // own contract: "the local Watch-later row FIRST" — the pre-P37
+        // not-connected branch answered playlists: [], which dropped the
+        // WebFlix list from the dialog exactly when the user had no YouTube
+        // connection — the local tier is the one lane that WORKS
+        // unconnected; the connect notice stays for the YouTube-side rows).
+        const watchLaterRow = await localWatchLaterRow(videoId, sessionUser);
         return NextResponse.json({
-          playlists: [] as PlaylistDto[],
+          playlists: [watchLaterRow],
           connected: false,
           kind: "youtube-not-connected",
           notice:

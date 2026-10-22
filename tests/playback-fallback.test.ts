@@ -72,6 +72,7 @@ import {
   parseStoryboardSpec,
   playerClientChain,
   playerClientContext,
+  pickProxyStreamFormat,
   PLAYER_CLIENT_ENV,
 } from "@/lib/youtube/streams";
 import { setUpstream } from "@/lib/youtube/innertube";
@@ -80,6 +81,7 @@ import { pickPreviewStreamFormat } from "@/lib/watch/playback-client";
 import { pickStreamFormat } from "@/components/player/player-fallback";
 import { GET as playbackRoute } from "@/app/api/videos/[id]/playback/route";
 import { GET as streamRoute, resetProxyRegenCache } from "@/app/api/stream/route";
+import { attemptChainStream, fetchUpstream } from "@/lib/youtube/stream-proxy";
 import type { StreamFormatDto } from "@/lib/watch/types";
 
 const FIXTURE_DIR = "tests/fixtures/yt";
@@ -1522,5 +1524,184 @@ describe("GET /api/videos/[id]/playback?stream=1 — P31-HPV5: the box-player st
     // the cached pick + BOTH fresh tickets (the two-format pool is exhausted
     // before MAX_STREAM_TICKETS) — then the honest floor, no third fetch
     expect(gvFetches.map((f) => f.url)).toEqual([URL_18, URL_18_ROTATED, URL_22]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WFX2-P37 — the timeout laws (the production 504 cure), pinned at the unit
+// seams: the HEADER-DEADLINE (an upstream that never answers headers is a
+// FAST dead ticket — the abort clock dies once headers land, so a healthy
+// body streams past the deadline), the TICKET-LOOP deadline (a hanging first
+// candidate costs its deadline, then the next ticket serves), and the CHAIN
+// BUDGET race (a walled/tarpitting chain answers the honest empty degrade —
+// source:"" — ON the deadline, never cached, so the next healthy run still
+// serves). The route-level wiring (DTO 40s / stream 22s budgets + 8s/6s
+// header deadlines) keeps every answer inside maxDuration — the platform's
+// 504 can never again speak for this route.
+// ---------------------------------------------------------------------------
+
+describe("WFX2-P37 — the header-deadline law (stream-proxy)", () => {
+  const realFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  test("an upstream that never answers HEADERS is a FAST dead ticket (the abort fires at the deadline, never at 60s)", async () => {
+    let observedSignal: AbortSignal | undefined;
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      observedSignal = init?.signal as AbortSignal;
+      // the tarpit class: the connection opens, headers NEVER arrive — and
+      // like a real fetch, the abort signal is the only thing that ends it
+      const signal = init?.signal;
+      if (signal) {
+        await new Promise<never>((_, reject) => {
+          signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+        });
+      }
+      await new Promise(() => {});
+      return new Response("unreachable");
+    }) as typeof fetch;
+    const started = Date.now();
+    await expect(
+      fetchUpstream(new URL("https://rr1.googlevideo.com/videoplayback?itag=18"), null, 60)
+    ).rejects.toThrow();
+    expect(Date.now() - started).toBeLessThan(1_000); // ~60ms + overhead, never 60s
+    expect(observedSignal?.aborted).toBe(true); // the abort is what killed it
+  });
+
+  test("headers arrived → the deadline is CLEARED: a slow body streams past it (never a mid-transfer kill)", async () => {
+    globalThis.fetch = (async (_url: string | URL | Request) => {
+      // headers land immediately; the body takes LONGER than the deadline
+      const body = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          await new Promise((r) => setTimeout(r, 150));
+          controller.enqueue(new TextEncoder().encode("SLOWBYTES"));
+          controller.close();
+        },
+      });
+      return new Response(body, { status: 200, headers: { "Content-Type": "video/mp4" } });
+    }) as typeof fetch;
+    const res = await fetchUpstream(
+      new URL("https://rr1.googlevideo.com/videoplayback?itag=18"),
+      null,
+      60
+    );
+    expect(res.status).toBe(200);
+    // the body resolves at 150ms — PAST the 60ms header deadline — because
+    // the pre-P37 whole-fetch timeout (which killed bodies mid-transfer at
+    // 60s) is gone
+    expect(await res.text()).toBe("SLOWBYTES");
+  });
+
+  test("the ticket loop: a hanging first candidate costs only its deadline — the SECOND ticket serves", async () => {
+    const hangUrl = "https://rr1.googlevideo.com/videoplayback?itag=18&hang=1";
+    const goodUrl = "https://rr2.googlevideo.com/videoplayback?itag=22";
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      const u = String(url);
+      if (u === hangUrl) {
+        // the tarpit: never answers — only the abort signal ends it
+        const signal = init?.signal;
+        if (signal) {
+          await new Promise<never>((_, reject) => {
+            signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+          });
+        }
+        await new Promise(() => {});
+      }
+      return new Response("MP4BYTES", {
+        status: 206,
+        headers: { "Content-Type": "video/mp4", "Content-Range": "bytes 0-7/8" },
+      });
+    }) as typeof fetch;
+    const formats: StreamFormatDto[] = [
+      {
+        itag: 18, url: hangUrl, mimeType: "video/mp4", qualityLabel: "360p",
+        width: 640, height: 360, fps: 30, bitrate: 500_000, contentLength: "8",
+        approxDurationMs: 8000, hasAudio: true,
+      },
+      {
+        itag: 22, url: goodUrl, mimeType: "video/mp4", qualityLabel: "720p",
+        width: 1280, height: 720, fps: 30, bitrate: 1_000_000, contentLength: "8",
+        approxDurationMs: 8000, hasAudio: true,
+      },
+    ];
+    const started = Date.now();
+    const res = await attemptChainStream(
+      formats, 18, null, pickProxyStreamFormat, 60
+    );
+    expect(res).not.toBeNull();
+    expect(res!.status).toBe(206);
+    expect(Date.now() - started).toBeLessThan(1_000); // one 60ms hang, then served
+  });
+});
+
+describe("WFX2-P37 — the chain-budget race (getPlayback)", () => {
+  const realFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    clearCache();
+  });
+
+  afterEach(() => {
+    setUpstream(null);
+    globalThis.fetch = realFetch;
+    clearCache();
+  });
+
+  test("a tarpitting chain answers the honest EMPTY degrade ON the deadline — and the empty is NEVER cached", async () => {
+    // the wall: the player rung tarpits (answers AFTER the budget), the
+    // watch page and the broker fail fast — the pre-P37 shape burned past
+    // maxDuration into the platform's 504; the P37 race answers at the budget
+    setUpstream(async (url: string) => {
+      if (url.includes("/youtubei/v1/player")) {
+        await new Promise((r) => setTimeout(r, 400)); // longer than the budget
+        return new Response(JSON.stringify(OK_PLAYER_TWO_FORMATS), {
+          status: 200, headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    const started = Date.now();
+    const dto = await getPlayback("p37budget1", { fresh: true, budgetMs: 60 });
+    expect(Date.now() - started).toBeLessThan(350); // answered ON the budget (the chain needed 400ms+)
+    expect(dto.source).toBe(""); // the honest empty degrade
+    expect(dto.streamFormats).toEqual([]);
+    // the poisoning guard: the deadline's empty is NEVER cached
+    expect(await cachePeek("yt:playback:p37budget1")).toBeNull();
+
+    // and the NEXT healthy run (no budget, the tarpit gone) serves + caches
+    setUpstream(async (url: string) => {
+      if (url.includes("/youtubei/v1/player")) {
+        return new Response(JSON.stringify(OK_PLAYER_TWO_FORMATS), {
+          status: 200, headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    const healthy = await getPlayback("p37budget1", { fresh: true });
+    expect(healthy.streamFormats.length).toBeGreaterThan(0);
+    expect(await cachePeek("yt:playback:p37budget1")).toBeDefined(); // the healthy answer caches
+  });
+
+  test("an unbudgeted call keeps the pre-P37 per-rung defaults exactly (the built-in retry survives — no single-attempt tightening)", async () => {
+    let playerCalls = 0;
+    setUpstream(async (url: string) => {
+      if (url.includes("/youtubei/v1/player")) {
+        playerCalls += 1;
+        if (playerCalls === 1) {
+          return new Response("boom", { status: 500 }); // retryable — the pre-P37 retry fires
+        }
+        return new Response(JSON.stringify(OK_PLAYER_TWO_FORMATS), {
+          status: 200, headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    const dto = await getPlayback("p37nobudget1", { fresh: true });
+    expect(dto.streamFormats.length).toBeGreaterThan(0);
+    // initial + the single built-in retry — the unbudgeted path is EXACTLY
+    // the pre-P37 shape (the budget's single-attempt tightening never leaks)
+    expect(playerCalls).toBe(2);
   });
 });

@@ -48,8 +48,12 @@ export function SearchVideoCard({ video, className }: { video: VideoDTO; classNa
     try {
       const res = await postJson<{ added: boolean }>("/api/playlists/watch-later", {
         videoId: video.id,
+        // WFX2-P37 — the display snapshot + the TRUTHFUL toggle toast (the
+        // pre-P37 copy said "Already in Watch later" while the server removed)
+        title: video.title,
+        channelName: video.channel?.name,
       });
-      toast.success(res.added ? "Saved to Watch later" : "Already in Watch later");
+      toast.success(res.added ? "Saved to Watch later" : "Removed from Watch later");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save");
     }
