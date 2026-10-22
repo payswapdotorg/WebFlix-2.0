@@ -18,6 +18,10 @@ Secret VALUES never live in the repo — only names (checked into
 | `BROKER_URL` | Production | for writes | The Tier-2 youtube-broker base URL (`mini-services/youtube-broker`, CDP-driven logged-in tab). Powers authenticated writes: comments, likes, subscriptions, playlists. Defaults to `http://127.0.0.1:3055` (local dev); production uses the sandbox's public gateway (see the broker gateway wiring below). |
 | `BROKER_QUERY` | Production | for writes | Gateway routing query appended to every broker request (`XTransformPort=3055` → `?XTransformPort=3055`) — required because the broker listens on an internal port behind the public gateway. Composed safely by `brokerEndpoint` (`src/lib/broker.ts`); a query embedded in `BROKER_URL` also still works. |
 | `BROKER_SECRET` | Production | for writes | Shared secret for broker requests. NEVER commit it. |
+| `GOOGLE_CLIENT_ID` | Production | for official actions | The Google Cloud OAuth Web-application client ID (P36 per-user OAuth spine — likes/subscriptions/playlists as the signed-in user). Pair with `GOOGLE_CLIENT_SECRET`; setup + the live-acceptance protocol: `docs/work-items/P36-ACCEPTANCE-RUNBOOK.md` §0. Client ID `165888892453-tmhdi…apps.googleusercontent.com` was delivered 2026-10-22 and live-verified by the station (token endpoint + authorize-redirect checks). |
+| `GOOGLE_CLIENT_SECRET` | Production | for official actions | The OAuth client secret (`GOCSPX-…`). NEVER commit it; enter directly in the Vercel console. Live-verified with its Client ID on 2026-10-22. |
+| `GOOGLE_OAUTH_REDIRECT_URI` | Production | optional | Overrides the derived OAuth callback (default: request origin + `/api/connection/youtube/oauth/callback`). The registered production callback is `https://webflix-2-0-one.vercel.app/api/connection/youtube/oauth/callback`. |
+| `YT_TOKEN_SECRET` | Production | optional | Dedicated AES-256-GCM token-encryption secret for stored YouTube connections (defaults to the NextAuth secret; rotating either honestly invalidates stored connections → needs-reauth). |
 
 ## Broker gateway wiring (production)
 
