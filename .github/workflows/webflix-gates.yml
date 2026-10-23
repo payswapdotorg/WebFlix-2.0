@@ -1,0 +1,84 @@
+# WebFlix 2.0 — regression gates (WFX2-CI-1)
+#
+# Purpose: prevent future work from regressing the product. These are the
+# exact merge-time gates the TL station runs before every lane merge:
+#   1. lint        — `eslint .` (the repo's own flat config)
+#   2. typecheck   — `tsc --noEmit` (after `prisma generate`, which the
+#                    @prisma/client types require)
+#   3. test        — the full 8-suite bun battery (boot / watch / liveshorts
+#                    / cutover / auth / community / notifications / p36),
+#                    each suite provisioning its own throwaway SQLite DB via
+#                    `prisma db push` + seed. All suites are hermetic
+#                    (network fetch is mocked; no real provider credentials
+#                    are needed — unconfigured-env paths are themselves
+#                    under test).
+#
+# Scope note (deliberate): `next build` is NOT a CI gate. The production
+# build is owned by the Vercel deployment (which fails closed on its own
+# build); the code-level product gates are the three above.
+#
+# Branch protection: main requires lint+typecheck+test check contexts.
+# Admins (the TL station identity) retain direct-push capability so the
+# established no-ff merge flow keeps working; everyone else must pass the
+# gates through a PR.
+
+name: webflix-gates
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: webflix-gates-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Lint (eslint .)
+        run: bun run lint
+
+  typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Generate Prisma client
+        run: bunx prisma generate
+      - name: Typecheck (tsc --noEmit)
+        run: bun run typecheck
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Generate Prisma client
+        run: bunx prisma generate
+      - name: Ensure local db directory exists (SQLite targets)
+        run: mkdir -p db
+      - name: Test battery (8 suites, throwaway SQLite per suite)
+        run: bun run test
