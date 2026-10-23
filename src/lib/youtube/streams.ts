@@ -413,6 +413,25 @@ export function parseStoryboardSpec(spec: unknown): StoryboardLevelDto[] {
  * request), and the storyboards-only answer is returned only when NO rung
  * yields formats. Null when every client is walled/empty.
  *
+ * WFX2-P40 — MUXED-FIRST (the operator's "embedding is broken again"
+ * re-file, 2026-10-23): the first-usable-wins stop was ONE RUNG TOO
+ * SHALLOW for the watch page's fallback player. Measured from the station
+ * egress that day (dQw4w9WgXcQ): WEB → UNPLAYABLE; IOS → OK with 22
+ * video-only + 5 audio-only PLAIN formats (NO muxed); ANDROID → OK with
+ * itag-18 MUXED + 23 video + 6 audio; ANDROID_VR → OK with itag-18 MUXED.
+ * Production's cached playback DTO carried the IOS answer (`c=IOS`, every
+ * format hasAudio:false) — so when the operator's browser got embed-walled
+ * (the bot-check lottery), the client's muxed-only picker
+ * (player-fallback pickStreamFormat) found NOTHING usable, the native
+ * fallback never armed, and the honest exhaustion card answered — while
+ * the muxed itag-18 sat UNREACHED one rung later. The loop is now
+ * MUXED-FIRST: an answer carrying a hasAudio format wins immediately; a
+ * formats-bearing-but-audioless answer is the remembered WEAK fallback
+ * (still fine for the hover preview / box-player video lanes) and the hunt
+ * continues — the ANDROID/ANDROID_VR rungs are exactly the muxed lottery
+ * tickets behind IOS. Walled/empty rungs still cost one FAST request each,
+ * so the deeper hunt is cheap; the P37 chain budget bounds the worst case.
+ *
  * The embed-player family's thirdParty context rides as
  * context.thirdParty.embedUrl (sibling of context.client — the historical
  * embed-player shape), never inside the client object itself.
@@ -422,6 +441,7 @@ async function fetchInnertubePlayer(
   io: ChainIO = {}
 ): Promise<PlaybackDto | null> {
   let storyboardFallback: PlaybackDto | null = null;
+  let audiolessFallback: PlaybackDto | null = null;
   for (const client of playerClientChain()) {
     const { thirdPartyEmbedUrl, ...clientFields } = client;
     const context: Record<string, unknown> = { client: { ...clientFields, hl: "en", gl: "US" } };
@@ -442,10 +462,11 @@ async function fetchInnertubePlayer(
       continue; // walled answers also arrive as HTTP 200 + UNPLAYABLE — and hard errors
     }
     const dto = parsePlayback("player", response);
-    if (dto.streamFormats.length > 0) return dto; // formats win IMMEDIATELY
+    if (dto.streamFormats.some((f) => f.hasAudio)) return dto; // MUXED wins IMMEDIATELY (the watch fallback needs audio)
+    if (dto.streamFormats.length > 0) audiolessFallback ??= dto; // formats-but-silent: remembered, hunt continues
     if (dto.storyboards.length > 0) storyboardFallback ??= dto; // remembered, never a chain-stopper
   }
-  return storyboardFallback;
+  return audiolessFallback ?? storyboardFallback;
 }
 
 const YT_INITIAL_PLAYER_RESPONSE_RE = /var ytInitialPlayerResponse\s*=\s*(\{[\s\S]*?\});\s*(?:var |<\/script>)/;
@@ -570,18 +591,31 @@ export async function getPlayback(
         : {};
       const runChain = async (): Promise<PlaybackDto> => {
         let storyboardFallback: PlaybackDto | null = null;
+        let audiolessFallback: PlaybackDto | null = null;
         const fromPlayer = await fetchInnertubePlayer(videoId, io);
         if (fromPlayer) {
-          if (fromPlayer.streamFormats.length > 0) return fromPlayer;
-          storyboardFallback = fromPlayer; // storyboards-only — remembered, hunt continues
+          // WFX2-P40 — MUXED-FIRST continues through the outer chain too: an
+          // audioless rung-1 formats answer is the remembered WEAK win; the
+          // watch-page rung 2 (progressive itag-18/22 plain URLs on walled-
+          // player cells) and the broker rung 3 are exactly the muxed
+          // sources that can still outrank it.
+          if (fromPlayer.streamFormats.some((f) => f.hasAudio)) return fromPlayer;
+          if (fromPlayer.streamFormats.length > 0) {
+            audiolessFallback = fromPlayer; // formats-but-silent — remembered, hunt continues
+          } else {
+            storyboardFallback = fromPlayer; // storyboards-only — remembered, hunt continues
+          }
         }
         const fromPage = await fetchWatchPagePlayerResponse(videoId, io.pageTimeoutMs ?? 12_000);
         if (fromPage) {
           const pageDto = parsePlayback("watch-page", fromPage);
-          if (pageDto.streamFormats.length > 0) return pageDto; // the formats hunt's rung-2 win
+          if (pageDto.streamFormats.length > 0) return pageDto; // the formats hunt's rung-2 win (progressive → muxed)
           if (pageDto.storyboards.length > 0) {
             storyboardFallback ??= pageDto;
-            return storyboardFallback; // storyboards in hand — the broker is not the last resort for these
+            // storyboards in hand — the broker is not the last resort for
+            // these; an audioless FORMATS answer still outranks a
+            // storyboards-only one (the preview lane can play video).
+            return audiolessFallback ?? storyboardFallback;
           }
         }
         // WFX2-4A rung 3 — the broker's page-context watch read (the logged-in
@@ -593,7 +627,9 @@ export async function getPlayback(
             return brokerDto;
           }
         }
-        return storyboardFallback ?? { streamFormats: [], storyboards: [], durationSec: null, source: "" };
+        return audiolessFallback
+          ?? storyboardFallback
+          ?? { streamFormats: [], storyboards: [], durationSec: null, source: "" };
       };
       if (!opts.budgetMs) return runChain();
       // P37 — the deadline race. The empty degrade resolves the race on

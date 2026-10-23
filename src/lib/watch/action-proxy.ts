@@ -645,6 +645,25 @@ export async function proxyCommentReport(
   throw unsupported("Reporting YouTube comments");
 }
 
+export interface CommentRestoreResult {
+  ok: true;
+  effect: string;
+  restored: true;
+  path?: string;
+}
+
+/**
+ * WFX2-P40 — restoring a YOUTUBE comment: unsupported (no official
+ * end-user path; a deleted YouTube comment cannot be restored through the
+ * API). Local rows take the store-backed tier in the route
+ * (localRestoreComment) and never reach this proxy.
+ */
+export async function proxyCommentRestore(
+  _commentId: string,
+): Promise<CommentRestoreResult> {
+  throw unsupported("Restoring YouTube comments");
+}
+
 /* ------------------------------------------------------------------ */
 /* Watch-later — the honest LOCAL list (YouTube's WL is a system       */
 /* playlist the Data API cannot write)                                 */

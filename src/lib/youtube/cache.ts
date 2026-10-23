@@ -29,7 +29,17 @@ export const TTL = {
   SEARCH_MS: 10 * 60_000,
   FEED_MS: 5 * 60_000,
   WATCH_MS: 10 * 60_000,
-  COMMENTS_MS: 5 * 60_000,
+  /**
+   * WFX2-P40 — 5 → 15 minutes. The operator's 2026-10-23 re-file ("when I
+   * reload, the order of comments seems to change… I wasn't able to see the
+   * comment anymore"): past the soft TTL the SWR revalidation serves a
+   * freshly re-ranked YouTube "Top" page on the NEXT reload, and a comment
+   * that falls off page 1 takes its locally-written replies with it (they
+   * nest under wherever the parent ranks). 15 minutes covers a typical
+   * watch session's reload cycle; comment pages are slow-moving data and
+   * the shared Upstash cache keeps every viewer consistent within it.
+   */
+  COMMENTS_MS: 15 * 60_000,
   SUGGEST_MS: 10 * 60_000,
   /** live-status polls every pollMs (~5s); 30s sheds upstream load honestly */
   LIVE_STATUS_MS: 30_000,

@@ -119,6 +119,9 @@ import { GET as sessionRoute } from "@/app/api/watch/session/route";
 import { POST as postComment } from "@/app/api/comments/route";
 import { GET as commentsRoute, POST as postVideoComment } from "@/app/api/videos/[id]/comments/route";
 import { GET as repliesRoute } from "@/app/api/videos/[id]/comments/[commentId]/replies/route";
+import { POST as likeCommentRoute } from "@/app/api/comments/[id]/like/route";
+import { PATCH as patchCommentRoute, DELETE as deleteCommentRoute } from "@/app/api/comments/[id]/route";
+import { POST as restoreCommentRoute } from "@/app/api/comments/[id]/restore/route";
 
 setupTestDb();
 
@@ -479,6 +482,148 @@ describe("WFX2-P6-CR — the GET merge (local rows join the live InnerTube read)
   });
 });
 
+describe("WFX2-P40 — the LOCAL-ROW ACTION TIER (like / edit / delete / restore on rows the store owns)", () => {
+  const like = (id: string, body: unknown, cookie = AUTH_COOKIE) =>
+    likeCommentRoute(
+      req(body, "POST", `http://localhost/api/comments/${id}/like`, cookie),
+      { params: Promise.resolve({ id }) } as never
+    );
+  const patch = (id: string, body: unknown, cookie = AUTH_COOKIE) =>
+    patchCommentRoute(
+      req(body, "PATCH", `http://localhost/api/comments/${id}`, cookie),
+      { params: Promise.resolve({ id }) } as never
+    );
+  const del = (id: string, body: unknown, cookie = AUTH_COOKIE) =>
+    deleteCommentRoute(
+      req(body, "DELETE", `http://localhost/api/comments/${id}`, cookie),
+      { params: Promise.resolve({ id }) } as never
+    );
+  const restore = (id: string, cookie = AUTH_COOKIE) =>
+    restoreCommentRoute(
+      req(undefined, "POST", `http://localhost/api/comments/${id}/restore`, cookie),
+      { params: Promise.resolve({ id }) } as never
+    );
+
+  /** a fresh local top-level row + its id (the author = the session's shadow user). */
+  async function createLocalRow(body: string): Promise<string> {
+    const created = await postComment(req({ videoId: VIDEO_ID, body, video: { channelId: CHANNEL_ID } }));
+    expect(created.status).toBe(201);
+    return ((await created.json()) as any).id as string;
+  }
+
+  test("like on OWN local row → the store-backed tier: local:true, honest counts, toggle semantics", async () => {
+    const id = await createLocalRow("likeable local row");
+    const first = await like(id, { value: "like" });
+    expect(first.status).toBe(200);
+    const firstBody = (await first.json()) as any;
+    expect(firstBody).toMatchObject({ ok: true, likes: 1, yourLike: "like", path: "local", local: true });
+    // toggle: the same value removes the rating
+    const second = await like(id, { value: "like" });
+    const secondBody = (await second.json()) as any;
+    expect(secondBody).toMatchObject({ ok: true, likes: 0, yourLike: null, local: true });
+    // dislike never moves the visible like count
+    const third = await like(id, { value: "dislike" });
+    const thirdBody = (await third.json()) as any;
+    expect(thirdBody).toMatchObject({ likes: 0, yourLike: "dislike" });
+    // canonical SET semantics ride too
+    const fourth = await like(id, { action: "none" });
+    expect(((await fourth.json()) as any).yourLike).toBeNull();
+  });
+
+  test("like on a YOUTUBE comment (no local row) → the honest 501 youtube-unsupported", async () => {
+    const res = await like(LIVE_PARENT_ID, { value: "like" });
+    expect(res.status).toBe(501);
+    const body = (await res.json()) as any;
+    expect(body.kind).toBe("youtube-unsupported");
+    expect(body.error).toContain("Liking YouTube comments");
+  });
+
+  test("the SHADOW-ANCHOR law: a live parent's anchor row NEVER takes the local tier (still the honest 501)", async () => {
+    // replying to a live YouTube comment creates the FK anchor (moderation "shadow")
+    const created = await postComment(
+      req({ videoId: VIDEO_ID, body: "reply under a live parent", parentId: LIVE_PARENT_ID, parentText: "live parent text" })
+    );
+    expect(created.status).toBe(201);
+    const anchor = await db.comment.findUnique({ where: { id: LIVE_PARENT_ID } });
+    expect(anchor?.moderation).toBe("shadow");
+    // the anchor stands for a YouTube comment — liking it stays unsupported
+    const res = await like(LIVE_PARENT_ID, { value: "like" });
+    expect(res.status).toBe(501);
+    expect(((await res.json()) as any).kind).toBe("youtube-unsupported");
+  });
+
+  test("edit own local row → body + edited:true, disclosed local:true; the read-back shows the new body", async () => {
+    const id = await createLocalRow("the original text");
+    const res = await patch(id, { body: "the edited text", videoId: VIDEO_ID, commentText: "the original text" });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body).toMatchObject({ ok: true, body: "the edited text", edited: true, path: "local", local: true });
+    const row = await db.comment.findUnique({ where: { id } });
+    expect(row?.body).toBe("the edited text");
+    expect(row?.edited).toBe(true);
+  });
+
+  test("edit ANOTHER user's local row → 403 (the ownership law — never another identity's row)", async () => {
+    const id = await createLocalRow("someone else will try to edit this");
+    const otherCookie = await mintSessionCookie({
+      sub: "u_wfx2_other",
+      name: "Other Viewer",
+      email: "other@webflix.test",
+      avatarSeed: 44,
+    });
+    const res = await patch(id, { body: "hijacked", videoId: VIDEO_ID }, otherCookie);
+    expect(res.status).toBe(403);
+    expect((await db.comment.findUnique({ where: { id } }))?.body).toBe("someone else will try to edit this");
+  });
+
+  test("delete + restore own local row → soft delete, then the fresh DTO back (local:true, moderation approved)", async () => {
+    const id = await createLocalRow("delete me then bring me back");
+    const delRes = await del(id, { videoId: VIDEO_ID, commentText: "delete me then bring me back" });
+    expect(delRes.status).toBe(200);
+    expect(((await delRes.json()) as any)).toMatchObject({ ok: true, deleted: true, path: "local", local: true });
+    expect((await db.comment.findUnique({ where: { id } }))?.moderation).toBe("deleted");
+    const restoreRes = await restore(id);
+    expect(restoreRes.status).toBe(200);
+    const restored = (await restoreRes.json()) as any;
+    expect(restored.local).toBe(true);
+    expect(restored.moderation).toBe("approved");
+    expect(restored.body).toBe("delete me then bring me back");
+    expect((await db.comment.findUnique({ where: { id } }))?.moderation).toBe("approved");
+  });
+
+  test("restore a YOUTUBE id → the honest 501 (no restore path for YouTube comments)", async () => {
+    const res = await restore(LIVE_PARENT_ID);
+    expect(res.status).toBe(501);
+    expect(((await res.json()) as any).kind).toBe("youtube-unsupported");
+  });
+
+  test("the parentId CHILD merge: a local reply under a SERVED depth-1 row nests with its expander count (reload reachability)", async () => {
+    serveLiveComments();
+    // a local reply whose parent is one of the live rows the parentId page serves
+    const SERVED_REPLY_ID = "UgxIOV-sXAchpKX94cB4AaABAg";
+    const created = await postComment(
+      req({ videoId: VIDEO_ID, body: "child of a served reply", parentId: SERVED_REPLY_ID, parentText: "served live reply" })
+    );
+    expect(created.status).toBe(201);
+    // the parentId page for the live parent serves the fixture's rows — the
+    // local child now nests under its served parent with the bumped count
+    const res = await commentsRoute(
+      new Request(`http://localhost/api/videos/${VIDEO_ID}/comments?parentId=${LIVE_PARENT_ID}`) as never,
+      { params: Promise.resolve({ id: VIDEO_ID }) } as never
+    );
+    const page = (await res.json()) as any;
+    const served = page.items.find((i: any) => i.id === SERVED_REPLY_ID);
+    expect(served).toBeDefined();
+    // the fixture's own toolbar count for this thread is 933 — the child
+    // merge adds exactly +1 (934) and nests the local row under it
+    expect(served.replyCount).toBe(934);
+    expect(served.replies?.map((r: any) => r.body)).toContain("child of a served reply");
+    expect(served.replies?.find((r: any) => r.local === true)?.body).toBe("child of a served reply");
+    // the top-level served rows are NOT marked local themselves (only the child is)
+    expect(served.local).toBeFalsy();
+  });
+});
+
 describe("WFX2-P6-CR — session resilience (never 500)", () => {
   test("seeded fallback viewer serves 200 with the wfx2_uid cookie", async () => {
     const res = await sessionRoute(new Request("http://localhost/api/watch/session") as never);
@@ -608,6 +753,82 @@ describe("WFX2-P6-CR UI — the WebFlix origin chip (comment-row)", () => {
     await mount(<CommentRow {...rowProps(COMMENT({ local: true }))} viewer={null} />);
     expect(text()).toContain("a local row");
     expect(all("span").some((s) => (s.textContent ?? "").trim() === "WebFlix")).toBe(true);
+    unmount();
+  });
+});
+
+describe("WFX2-P40 UI — the reply-to-a-reply append (the depth-1 own-nesting law)", () => {
+  const stubFetch201 = (response: unknown) => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify(response), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      })) as unknown as typeof fetch;
+  };
+
+  /** mount a depth-1 reply row with NO onAppendReply (the pre-P40 wiring). */
+  const mountDepth1Row = async (replyCount = 0) => {
+    const { CommentRow } = await import("@/components/watch/comment-row");
+    await mount(
+      createElement(CommentRow, {
+        comment: COMMENT({ id: "c1", parentId: "head1", body: "a live reply row", replyCount, local: false }),
+        videoId: VIDEO_ID,
+        viewer: VIEWER,
+        viewerIsCreator: false,
+        creatorName: "Rick Astley",
+        depth: 1,
+        onDeleted: () => {},
+        onReported: () => {},
+        onChanged: () => {},
+      })
+    );
+    return CommentRow;
+  };
+
+  test("a reply submitted on a depth-1 row renders under it immediately (the silent-drop regression)", async () => {
+    stubFetch201({
+      ...COMMENT({
+        id: "rr1",
+        parentId: "c1",
+        body: "the depth-two reply that must reflect",
+        local: true,
+        isOwn: true,
+      }),
+      ok: true,
+      effect: "comment-replied",
+      path: "local",
+    });
+    await mountDepth1Row(0);
+    // open the inline reply composer (the row's Reply toggle renders at depth ≤ 1)
+    const replyToggle = all("button").find((b) => (b.textContent ?? "").trim() === "Reply");
+    expect(replyToggle).toBeDefined();
+    await act(async () => {
+      replyToggle!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    const ta = q("textarea") as unknown as HTMLTextAreaElement;
+    expect(ta).toBeDefined();
+    expect(ta.getAttribute("placeholder")).toBe("Add a reply...");
+    await typeInto(ta, "the depth-two reply that must reflect");
+    // submit via the COMPOSER's Reply button (the later one in DOM order)
+    const replyButtons = all("button").filter((b) => (b.textContent ?? "").trim() === "Reply");
+    const submit = replyButtons[replyButtons.length - 1] as HTMLButtonElement;
+    expect(submit).toBeDefined();
+    await act(async () => {
+      submit.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    // THE LAW: the fresh reply renders under the row at once (pre-P40 it was
+    // silently dropped client-side — 201 server-side, nothing rendered)
+    expect(text()).toContain("the depth-two reply that must reflect");
+    // the expander count is honest before any reload: 0 live + 1 local = "1 reply"
+    const expander = all("button").find((b) => /1\s*reply/.test((b.textContent ?? "").trim()));
+    expect(expander).toBeDefined();
+    unmount();
+  });
+
+  test("a depth-1 row with live children keeps its expander (replyCount > 0 still renders the nested block)", async () => {
+    await mountDepth1Row(4);
+    const expander = all("button").find((b) => /4\s*replies/.test((b.textContent ?? "").trim()));
+    expect(expander).toBeDefined();
     unmount();
   });
 });
