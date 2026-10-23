@@ -8,6 +8,7 @@ import {
   streamOut,
 } from "@/lib/youtube/stream-proxy";
 import { rateLimit } from "@/lib/youtube/cache";
+import { resolveReadTier } from "@/lib/watch/action-proxy";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -90,11 +91,25 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     }
     const params = new URL(req.url).searchParams;
     streamMode = params.get("stream") === "1";
+    // WFX2-P41 — THE PER-USER OAUTH PLAYER RUNG wiring: when the acting
+    // user has a connected YouTube account (the P36 spine — token resolved
+    // server-side, never in the browser), BOTH modes carry their `auth` so
+    // the chain's authed ANDROID/ANDROID_VR/IOS ladder answers the bot
+    // wall's own "Sign in to confirm" demand with the user's credential and
+    // the DTO/stream answers ride the per-user cache key. Anonymous callers
+    // (no session / not connected) resolve null instantly and the shared
+    // anonymous path runs exactly as before — byte-identical to pre-P41.
+    // A tier resolution failure (store outage) degrades honestly to the
+    // anonymous path — playback never depends on the connection store.
+    const readTier = await resolveReadTier(req).catch(() => null);
+    const auth = readTier
+      ? { userId: readTier.userId, accessToken: readTier.accessToken }
+      : undefined;
     if (!streamMode) {
-      // The DTO law — byte-identical to the pre-P31 route, plus the P37
-      // budget: a cold-cache walled chain answers the honest empty degrade
-      // on deadline instead of burning past maxDuration into a platform 504.
-      return NextResponse.json(await getPlayback(id, { budgetMs: 40_000 }));
+      // The DTO law — byte-identical to the pre-P31 route for anonymous
+      // callers, plus the P37 budget (a cold-cache walled chain answers the
+      // honest empty degrade on deadline) and the P41 per-user auth merge.
+      return NextResponse.json(await getPlayback(id, { budgetMs: 40_000, ...(auth ? { auth } : {}) }));
     }
 
     // ---- P31-HPV5 — the box-player stream mode ----
@@ -108,7 +123,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     // invocation of this function — egress rotation can leave it dead.
     // P37: the header-deadline law bounds the wait — a tarpitting upstream
     // is a FAST dead ticket now, never a 60s hang the platform turns 504.
-    const cached = await getPlayback(id, { budgetMs: 22_000 });
+    const cached = await getPlayback(id, { budgetMs: 22_000, ...(auth ? { auth } : {}) });
     let upstream: Response | null = null;
     const cachedFmt = pickProxyStreamFormat(cached.streamFormats, preferItag);
     if (cachedFmt) {
@@ -133,7 +148,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     // Attempt 1 above stays the single cached pick: a cached generation's
     // URLs are dead TOGETHER.
     if (!upstream) {
-      const fresh = await getPlayback(id, { fresh: true, budgetMs: 22_000 });
+      const fresh = await getPlayback(id, {
+        fresh: true,
+        budgetMs: 22_000,
+        ...(auth ? { auth } : {}),
+      });
       upstream = await attemptChainStream(
         fresh.streamFormats,
         preferItag,

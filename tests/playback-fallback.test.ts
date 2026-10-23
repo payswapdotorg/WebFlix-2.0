@@ -73,6 +73,8 @@ import {
   playerClientChain,
   playerClientContext,
   pickProxyStreamFormat,
+  dropScrambledNFormats,
+  resetAuthRungRefusalForTests,
   PLAYER_CLIENT_ENV,
 } from "@/lib/youtube/streams";
 import { setUpstream } from "@/lib/youtube/innertube";
@@ -82,7 +84,7 @@ import { pickStreamFormat } from "@/components/player/player-fallback";
 import { GET as playbackRoute } from "@/app/api/videos/[id]/playback/route";
 import { GET as streamRoute, resetProxyRegenCache } from "@/app/api/stream/route";
 import { attemptChainStream, fetchUpstream } from "@/lib/youtube/stream-proxy";
-import type { StreamFormatDto } from "@/lib/watch/types";
+import type { StreamFormatDto, PlaybackDto } from "@/lib/watch/types";
 
 const FIXTURE_DIR = "tests/fixtures/yt";
 const load = (name: string): any => JSON.parse(readFileSync(`${FIXTURE_DIR}/${name}.json`, "utf8"));
@@ -842,6 +844,9 @@ let envBefore: string | undefined;
 
 beforeEach(() => {
   clearCache();
+  // WFX2-P41 — the auth-rung refusal sticky is module state; every test
+  // starts with the rung armed.
+  resetAuthRungRefusalForTests();
   envBefore = process.env[PLAYER_CLIENT_ENV];
   brokerCalls.length = 0;
   brokerResponse = new MockBrokerError(
@@ -1822,5 +1827,433 @@ describe("WFX2-P37 — the chain-budget race (getPlayback)", () => {
     // initial + the single built-in retry — the unbudgeted path is EXACTLY
     // the pre-P37 shape (the budget's single-attempt tightening never leaks)
     expect(playerCalls).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WFX2-P41 — the per-user OAuth player rung + the n-scrambled URL filter
+// ---------------------------------------------------------------------------
+
+describe("WFX2-P41: dropScrambledNFormats — the n-scrambled URL law (pure)", () => {
+  const fmt = (itag: number, url: string): StreamFormatDto => ({
+    itag,
+    url,
+    mimeType: 'video/mp4; codecs="avc1.42001E, mp4a.40.2"',
+    qualityLabel: "360p",
+    width: 640,
+    height: 360,
+    fps: 25,
+    bitrate: 444226,
+    contentLength: null,
+    approxDurationMs: null,
+    hasAudio: true,
+  });
+
+  test("a standalone n param marks the format dead (dropped); storyboards + duration preserved", () => {
+    const dto: PlaybackDto = {
+      streamFormats: [
+        fmt(18, "https://rr4.googlevideo.com/videoplayback?itag=18&n=t_vpcG7Jhd28K6hmIfT&c=WEB"),
+        fmt(22, "https://rr4.googlevideo.com/videoplayback?itag=22&c=WEB"),
+      ],
+      storyboards: parseStoryboardSpec(playerFixture.storyboards.playerStoryboardSpecRenderer.spec),
+      durationSec: 491,
+      source: "watch-page",
+    };
+    const filtered = dropScrambledNFormats(dto);
+    expect(filtered.streamFormats.map((f) => f.itag)).toEqual([22]);
+    expect(filtered.storyboards).toHaveLength(3);
+    expect(filtered.durationSec).toBe(491);
+    expect(filtered.source).toBe("watch-page");
+  });
+
+  test("lookalike params (mn=, initcwndbps=) are NOT the n param — the URL survives", () => {
+    const url = "https://rr4.googlevideo.com/videoplayback?itag=18&mn=sn-p5qlsnd6&initcwndbps=2361625&c=ANDROID";
+    const dto: PlaybackDto = { streamFormats: [fmt(18, url)], storyboards: [], durationSec: null, source: "watch-page" };
+    expect(dropScrambledNFormats(dto).streamFormats).toHaveLength(1);
+  });
+
+  test("an all-n-free DTO returns the SAME reference (no defensive copy)", () => {
+    const dto: PlaybackDto = { streamFormats: [fmt(18, "https://rr4.googlevideo.com/videoplayback?itag=18")], storyboards: [], durationSec: 1, source: "watch-page" };
+    expect(dropScrambledNFormats(dto)).toBe(dto);
+  });
+});
+
+describe("WFX2-P41: the chain's watch-page rung drops n-scrambled formats", () => {
+  test("the rung-2 win keeps ONLY the n-free formats; an all-scrambled answer degrades to storyboards", async () => {
+    const nBearingWatchHtml = watchHtmlFor({
+      playabilityStatus: { status: "OK" },
+      videoDetails: { videoId: "NPAGE00001", lengthSeconds: "491" },
+      storyboards: playerFixture.storyboards,
+      streamingData: {
+        formats: [
+          {
+            itag: 18,
+            mimeType: 'video/mp4; codecs="avc1.42001E, mp4a.40.2"',
+            url: "https://rr4.googlevideo.com/videoplayback?itag=18&n=t_vpcG7Jhd28K6hmIfT&c=WEB",
+            qualityLabel: "360p",
+            width: 640,
+            height: 360,
+          },
+          {
+            itag: 22,
+            mimeType: 'video/mp4; codecs="avc1.64001F, mp4a.40.2"',
+            url: "https://rr4.googlevideo.com/videoplayback?itag=22&c=WEB",
+            qualityLabel: "720p",
+            width: 1280,
+            height: 720,
+          },
+        ],
+      },
+    });
+    const { impl } = chainUpstream(WALLED_PLAYER, nBearingWatchHtml);
+    setUpstream(impl);
+    const dto = await getPlayback("NPAGE00001");
+    expect(dto.source).toBe("watch-page");
+    expect(dto.streamFormats.map((f) => f.itag)).toEqual([22]); // the n-bearing itag-18 is dead fuel — dropped
+    expect(dto.storyboards).toHaveLength(3);
+
+    // and the all-scrambled shape: formats honestly EMPTY, storyboards kept
+    const allScrambled = watchHtmlFor({
+      playabilityStatus: { status: "OK" },
+      videoDetails: { videoId: "NPAGE00002", lengthSeconds: "491" },
+      storyboards: playerFixture.storyboards,
+      streamingData: {
+        formats: [
+          {
+            itag: 18,
+            mimeType: 'video/mp4; codecs="avc1.42001E, mp4a.40.2"',
+            url: "https://rr4.googlevideo.com/videoplayback?itag=18&n=DEADnPARAM&c=WEB",
+            qualityLabel: "360p",
+            width: 640,
+            height: 360,
+          },
+        ],
+      },
+    });
+    const { impl: impl2 } = chainUpstream(WALLED_PLAYER, allScrambled);
+    setUpstream(impl2);
+    const dto2 = await getPlayback("NPAGE00002");
+    expect(dto2.source).toBe("watch-page");
+    expect(dto2.streamFormats).toEqual([]); // never a doomed native boot
+    expect(dto2.storyboards).toHaveLength(3); // the storyboard lane keeps its fuel
+  });
+});
+
+describe("WFX2-P41: the per-user OAuth player rung (getPlayback with auth)", () => {
+  /** Upstream routing on (clientName, Bearer presence) with header capture. */
+  function authAwareUpstream(opts: {
+    anonymous?: Record<string, unknown>;
+    authed?: Record<string, unknown>;
+    authedStatus?: Record<string, number>;
+    watchHtml?: string | null;
+  }) {
+    const recorded: Array<{ url: string; body: any; authorization: string | null; clientName: string }> = [];
+    const impl = async (url: string, init?: RequestInit): Promise<Response> => {
+      const body = init?.body ? JSON.parse(String(init.body)) : null;
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      const authorization = headers.Authorization ?? null;
+      const clientName = String(body?.context?.client?.clientName ?? "");
+      recorded.push({ url, body, authorization, clientName });
+      if (url.includes("/youtubei/v1/player")) {
+        if (authorization?.startsWith("Bearer ")) {
+          const status = opts.authedStatus?.[clientName];
+          const payload = opts.authed?.[clientName] ?? WALLED_PLAYER;
+          return new Response(JSON.stringify(payload), {
+            status: status ?? 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify(opts.anonymous?.[clientName] ?? WALLED_PLAYER), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("youtube.com/watch")) {
+        if (opts.watchHtml == null) return new Response("walled", { status: 403 });
+        return new Response(opts.watchHtml, { status: 200, headers: { "Content-Type": "text/html" } });
+      }
+      return new Response("not found", { status: 404 });
+    };
+    return { impl, recorded };
+  }
+
+  /** The authed ANDROID answer: n-free muxed itag-18 + video-only itag-134 (2026-10-23's measured shape). */
+  const AUTHED_ANDROID_OK = {
+    playabilityStatus: { status: "OK" },
+    videoDetails: { videoId: "PROTECTED01", lengthSeconds: "491" },
+    storyboards: playerFixture.storyboards,
+    streamingData: {
+      formats: [
+        {
+          itag: 18,
+          mimeType: 'video/mp4; codecs="avc1.42001E, mp4a.40.2"',
+          url: "https://rr5.googlevideo.com/videoplayback?itag=18&c=ANDROID",
+          qualityLabel: "360p",
+          width: 640,
+          height: 360,
+          audioQuality: "AUDIO_QUALITY_LOW",
+        },
+      ],
+      adaptiveFormats: [
+        {
+          itag: 134,
+          mimeType: 'video/mp4; codecs="avc1.4d401e"',
+          url: "https://rr5.googlevideo.com/videoplayback?itag=134&c=ANDROID",
+          qualityLabel: "360p",
+          width: 640,
+          height: 360,
+        },
+      ],
+    },
+  };
+
+  /** The anonymous IOS answer (audioless preview fuel — the pre-P40 known shape). */
+  const ANON_IOS_AUDIOLESS = {
+    playabilityStatus: { status: "OK" },
+    videoDetails: { videoId: "PROTECTED01", lengthSeconds: "491" },
+    streamingData: {
+      adaptiveFormats: [
+        {
+          itag: 134,
+          mimeType: 'video/mp4; codecs="avc1.4d401e"',
+          url: "https://rr6.googlevideo.com/videoplayback?itag=134&c=IOS",
+          qualityLabel: "360p",
+          width: 640,
+          height: 360,
+        },
+      ],
+    },
+  };
+
+  const storyboardsWatchHtml = watchHtmlFor(STORYBOARDS_ONLY_PLAYER);
+
+  test("the authed rung rides the Bearer token: ANDROID answers muxed → immediate win, merged ON TOP of the anonymous base", async () => {
+    const { impl, recorded } = authAwareUpstream({
+      anonymous: {}, // every anonymous client walled
+      authed: { ANDROID: AUTHED_ANDROID_OK },
+      watchHtml: storyboardsWatchHtml,
+    });
+    setUpstream(impl);
+    const dto = await getPlayback("PROTECTED01", { auth: { userId: "u_p41_a", accessToken: "tok_u_p41_a" } });
+    expect(dto.source).toBe("player-authed");
+    expect(dto.streamFormats.map((f) => f.itag)).toEqual([18, 134]);
+    expect(dto.storyboards).toHaveLength(3); // the base's storyboards survive the merge
+    expect(dto.durationSec).toBe(491);
+    // THE REQUEST SHAPE: the authed ANDROID call carries the Bearer token
+    const authedCalls = recorded.filter((r) => r.authorization?.startsWith("Bearer "));
+    expect(authedCalls.map((r) => r.clientName)).toEqual(["ANDROID"]); // muxed-first: the immediate win stops the ladder
+    expect(authedCalls[0].authorization).toBe("Bearer tok_u_p41_a");
+    expect(authedCalls[0].body.context.client.clientName).toBe("ANDROID");
+    // every ANONYMOUS call stays anonymous — no token ever leaks onto the shared chain
+    const anonPlayerCalls = recorded.filter((r) => r.url.includes("/youtubei/v1/player") && !r.authorization);
+    expect(anonPlayerCalls.length).toBeGreaterThan(0);
+    expect(anonPlayerCalls.every((r) => r.authorization === null)).toBe(true);
+  });
+
+  test("the merge dedupes by itag with the AUTHED URL winning; the base's anonymous audioless fuel still rides", async () => {
+    const { impl } = authAwareUpstream({
+      anonymous: { IOS: ANON_IOS_AUDIOLESS }, // the anonymous chain's weak win
+      authed: { ANDROID: AUTHED_ANDROID_OK },
+      watchHtml: storyboardsWatchHtml,
+    });
+    setUpstream(impl);
+    const dto = await getPlayback("PROTECTED02", { auth: { userId: "u_p41_b", accessToken: "tok_u_p41_b" } });
+    expect(dto.source).toBe("player-authed");
+    const itags = dto.streamFormats.map((f) => f.itag);
+    expect(itags.filter((i) => i === 134)).toHaveLength(1); // deduped — one itag-134
+    const f134 = dto.streamFormats.find((f) => f.itag === 134)!;
+    expect(f134.url).toContain("c=ANDROID"); // the AUTHED mint wins the dedupe
+  });
+
+  test("PER-USER ISOLATION: each user's authed rung carries their own token; the SHARED cache row never carries authed fuel", async () => {
+    const { impl, recorded } = authAwareUpstream({
+      anonymous: {},
+      authed: { ANDROID: AUTHED_ANDROID_OK },
+      watchHtml: storyboardsWatchHtml,
+    });
+    setUpstream(impl);
+    await getPlayback("PROTECTED03", { auth: { userId: "u_p41_c1", accessToken: "tok_c1" } });
+    await getPlayback("PROTECTED03", { auth: { userId: "u_p41_c2", accessToken: "tok_c2" } });
+    const authedCalls = recorded.filter((r) => r.authorization?.startsWith("Bearer "));
+    expect(authedCalls.map((r) => r.authorization)).toEqual(["Bearer tok_c1", "Bearer tok_c2"]);
+    // THE ISOLATION LAW: the SHARED anonymous row holds the base truth only
+    const shared = await cachePeek("yt:playback:PROTECTED03");
+    expect(shared).not.toBeNull();
+    const sharedValue = shared?.value as { source: string; streamFormats: StreamFormatDto[] };
+    expect(sharedValue.source).not.toBe("player-authed");
+    expect(sharedValue.streamFormats.every((f) => !f.url.includes("c=ANDROID"))).toBe(true);
+    // and each user's per-user row holds their own merged answer
+    const u1 = await cachePeek("yt:playback:auth:u_p41_c1:PROTECTED03");
+    const u2 = await cachePeek("yt:playback:auth:u_p41_c2:PROTECTED03");
+    expect((u1?.value as { source: string }).source).toBe("player-authed");
+    expect((u2?.value as { source: string }).source).toBe("player-authed");
+  });
+
+  test("the honest degrade: authed walled (LOGIN_REQUIRED even with the token) → the anonymous base answers; NO refusal sticky", async () => {
+    const { impl, recorded } = authAwareUpstream({
+      anonymous: {},
+      authed: {}, // every authed client walled too
+      watchHtml: storyboardsWatchHtml,
+    });
+    setUpstream(impl);
+    const dto = await getPlayback("PROTECTED04", { auth: { userId: "u_p41_d", accessToken: "tok_d" } });
+    expect(dto.source).toBe("watch-page"); // the base, unchanged
+    expect(dto.streamFormats).toEqual([]);
+    expect(dto.storyboards).toHaveLength(3);
+    // the authed ladder RAN (3 clients — walled is not refused)
+    expect(recorded.filter((r) => r.authorization?.startsWith("Bearer ")).map((r) => r.clientName)).toEqual([
+      "ANDROID",
+      "ANDROID_VR",
+      "IOS",
+    ]);
+    // no sticky: a recompute re-runs the rung
+    clearCache();
+    await getPlayback("PROTECTED04", { auth: { userId: "u_p41_d", accessToken: "tok_d" } });
+    expect(recorded.filter((r) => r.authorization?.startsWith("Bearer ")).length).toBe(6);
+  });
+
+  test("the 401 refusal sticky: every authed client refuses the token → the rung skips for a while", async () => {
+    const { impl, recorded } = authAwareUpstream({
+      anonymous: {},
+      authed: {},
+      authedStatus: { ANDROID: 401, ANDROID_VR: 401, IOS: 401 },
+      watchHtml: storyboardsWatchHtml,
+    });
+    setUpstream(impl);
+    const dto = await getPlayback("PROTECTED05", { auth: { userId: "u_p41_e", accessToken: "refused_tok" } });
+    expect(dto.source).toBe("watch-page"); // the honest degrade
+    expect(recorded.filter((r) => r.authorization?.startsWith("Bearer "))).toHaveLength(3); // 3 refused requests
+    // the sticky: a recompute skips the doomed rung entirely
+    clearCache();
+    const again = await getPlayback("PROTECTED05", { auth: { userId: "u_p41_e", accessToken: "refused_tok" } });
+    expect(again.source).toBe("watch-page");
+    expect(recorded.filter((r) => r.authorization?.startsWith("Bearer "))).toHaveLength(3); // no new requests
+  });
+
+  test("ANONYMOUS PARITY: without auth, no request ever carries an Authorization header (the pre-P41 law)", async () => {
+    const { impl, recorded } = authAwareUpstream({
+      anonymous: {},
+      watchHtml: storyboardsWatchHtml,
+    });
+    setUpstream(impl);
+    const dto = await getPlayback("PROTECTED06");
+    expect(dto.source).toBe("watch-page");
+    expect(recorded.every((r) => r.authorization === null)).toBe(true);
+  });
+});
+
+describe("WFX2-P41: GET /api/videos/[id]/playback — the route wiring (connected user)", () => {
+  test("a connected session's DTO rides the authed rung (Bearer threaded end-to-end); the anonymous row stays clean", async () => {
+    const { putYouTubeConnection, deleteYouTubeConnection } = await import("@/lib/auth/youtube-connection-store");
+    const { encryptSecret } = await import("@/lib/youtube/oauth");
+    const { mintSessionCookie } = await import("./helpers");
+    const USER = "u_p41_route";
+    await putYouTubeConnection({
+      userId: USER,
+      channelId: "UC_p41_route",
+      channelTitle: "P41 Route Channel",
+      channelThumbUrl: null,
+      scope: "https://www.googleapis.com/auth/youtube.force-ssl",
+      accessTokenEnc: await encryptSecret("tok_route_p41"),
+      refreshTokenEnc: null,
+      accessExpiresAt: Date.now() + 3_600_000,
+      status: "connected",
+      connectedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    try {
+      const recorded: Array<{ url: string; authorization: string | null; clientName: string }> = [];
+      setUpstream(async (url: string, init?: RequestInit) => {
+        const body = init?.body ? JSON.parse(String(init.body)) : null;
+        const headers = (init?.headers ?? {}) as Record<string, string>;
+        const authorization = headers.Authorization ?? null;
+        const clientName = String(body?.context?.client?.clientName ?? "");
+        recorded.push({ url, authorization, clientName });
+        if (url.includes("/youtubei/v1/player")) {
+          if (authorization?.startsWith("Bearer ")) {
+            return new Response(
+              JSON.stringify({
+                playabilityStatus: { status: "OK" },
+                videoDetails: { videoId: "ROUTEAUTH01", lengthSeconds: "491" },
+                storyboards: playerFixture.storyboards,
+                streamingData: {
+                  formats: [
+                    {
+                      itag: 18,
+                      mimeType: 'video/mp4; codecs="avc1.42001E, mp4a.40.2"',
+                      url: "https://rr7.googlevideo.com/videoplayback?itag=18&c=ANDROID",
+                      qualityLabel: "360p",
+                      width: 640,
+                      height: 360,
+                      audioQuality: "AUDIO_QUALITY_LOW",
+                    },
+                  ],
+                },
+              }),
+              { status: 200, headers: { "Content-Type": "application/json" } },
+            );
+          }
+          return new Response(JSON.stringify(WALLED_PLAYER), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        if (url.includes("youtube.com/watch")) {
+          return new Response(watchHtmlFor(STORYBOARDS_ONLY_PLAYER), {
+            status: 200,
+            headers: { "Content-Type": "text/html" },
+          });
+        }
+        return new Response("not found", { status: 404 });
+      });
+      const cookie = await mintSessionCookie({ sub: USER });
+      const res = await playbackRoute(
+        new Request("http://localhost/api/videos/ROUTEAUTH01/playback", {
+          headers: { cookie },
+        }),
+        { params: Promise.resolve({ id: "ROUTEAUTH01" }) } as any,
+      );
+      expect(res.status).toBe(200);
+      const dto = (await res.json()) as any;
+      expect(dto.source).toBe("player-authed");
+      expect(dto.streamFormats.map((f: StreamFormatDto) => f.itag)).toEqual([18]);
+      expect(dto.storyboards).toHaveLength(3);
+      // the token threaded end-to-end: the authed request carried the stored token
+      const authedCalls = recorded.filter((r) => r.authorization?.startsWith("Bearer "));
+      expect(authedCalls.length).toBeGreaterThan(0);
+      expect(authedCalls[0].authorization).toBe("Bearer tok_route_p41");
+    } finally {
+      await deleteYouTubeConnection(USER);
+    }
+  });
+
+  test("an anonymous caller's DTO is byte-identical to the pre-P41 shape (no authed requests at all)", async () => {
+    const recorded: Array<{ authorization: string | null }> = [];
+    setUpstream(async (url: string, init?: RequestInit) => {
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      recorded.push({ authorization: headers.Authorization ?? null });
+      if (url.includes("/youtubei/v1/player")) {
+        return new Response(JSON.stringify(WALLED_PLAYER), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("youtube.com/watch")) {
+        return new Response(watchHtmlFor(STORYBOARDS_ONLY_PLAYER), {
+          status: 200,
+          headers: { "Content-Type": "text/html" },
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    const res = await playbackRoute(new Request("http://localhost/api/videos/ANONONLY001/playback"), {
+      params: Promise.resolve({ id: "ANONONLY001" }),
+    } as any);
+    expect(res.status).toBe(200);
+    const dto = (await res.json()) as any;
+    expect(dto.source).toBe("watch-page");
+    expect(dto.streamFormats).toEqual([]);
+    expect(dto.storyboards).toHaveLength(3);
+    expect(recorded.every((r) => r.authorization === null)).toBe(true);
   });
 });

@@ -47,3 +47,38 @@ The code lane is complete and deployed; **the live authenticated round-trip (a r
 - The P33 "main interface" doctrine narrows honestly: WebFlix remains the interface for every action the official API supports, discloses the local lanes, and hands off the unsupported few to YouTube.
 - Personal feed surfaces (subscriptions channels, playlists) are per-user official reads; history/liked/combined-feed surfaces render honest notices (no official API) instead of one operator's data served to everyone.
 - Future lanes (candidates): the official `videos.insert` upload lane; comment moderation for one's own channel via the official endpoints.
+
+## 6. Addendum — WFX2-P41: the user's own OAuth credential on the innertube `player` READ (2026-10-23)
+
+**Context.** The playback chain (`src/lib/youtube/streams.ts`) has always read the innertube
+`player` endpoint ANONYMOUSLY (the same read surface the app's search/feed/watch-metadata
+reads already use — the ADR's sanctioned read family). Across 2026-10-20..23 YouTube's bot
+wall hardened such that the protected content class answers `LOGIN_REQUIRED` to every
+anonymous `player` client from datacenter egresses, and the remaining watch-page rung's URLs
+carry the `n` parameter googlevideo now rejects untransformed — the anonymous native playback
+lane died for the feed class (the operator's "embedding and preview broken" re-file;
+measurements in the lane record and the runbook's known-issue entry).
+
+**The lane.** When the acting user has a connected account, the chain additionally requests
+`player` with `Authorization: Bearer <the user's own access token>` over the
+ANDROID/ANDROID_VR/IOS client shapes (the wall's own "Sign in to confirm you're not a bot"
+demand, answered with the credential the user themselves granted). The result is merged
+per-user under `yt:playback:auth:<userId>:<videoId>` — never into any shared cache row.
+
+**The policy reading.** This is a READ of the same endpoint the app already consumes
+anonymously, performed with the user's own explicitly-consented OAuth credential, for the
+user's own playback, scoped to `youtube.force-ssl` exactly as consented, with no write, no
+scraping of third-party data, and no credential ever leaving the server. It is the same
+"act as the user's own client" posture the official Data API actions already take — applied
+to the read surface that must carry it when anonymous reads are walled. It is NOT the
+retired cookie-replay/CDP-broker write lane class (no operator identity, no session replay,
+no third user's data). If Google refuses the token on this surface (scope class), the rung
+degrades honestly to the anonymous answer and a short-lived refusal sticky keeps the cost at
+zero — the app never fabricates playback.
+
+**The honest residual.** Whether Google's innertube surface accepts the `youtube.force-ssl`
+token from production's egress (and whether authentication clears the datacenter wall for
+protected content) is verifiable only with a real connected account on the deployed build —
+the runbook §0 carries the operator verification steps. The station's fake-bearer probe
+(2026-10-23) established only that the endpoint parses the header (Google's own 401
+auth-layer rejection, distinct from the anonymous wall).

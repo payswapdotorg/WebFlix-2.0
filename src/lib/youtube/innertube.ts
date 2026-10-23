@@ -47,7 +47,10 @@ export function innerTubeContext(): Record<string, unknown> {
   return { context: { client: { ...WEB_CLIENT } } };
 }
 
-export function innerTubeHeaders(cookies?: string | null): Record<string, string> {
+export function innerTubeHeaders(
+  cookies?: string | null,
+  authorization?: string
+): Record<string, string> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "User-Agent": BROWSER_UA,
@@ -71,6 +74,11 @@ export function innerTubeHeaders(cookies?: string | null): Record<string, string
     const auth = sapisidhashFor(cookie, "https://www.youtube.com");
     if (auth) headers.Authorization = auth;
   }
+  // WFX2-P41 — an EXPLICIT Authorization (the acting user's OAuth Bearer
+  // token, threaded by the playback chain's per-user player rung) always
+  // wins over any cookie-derived SAPISIDHASH: the caller stated the exact
+  // credential it wants (the P36 connection's token, not the env session).
+  if (authorization) headers.Authorization = authorization;
   return headers;
 }
 
@@ -123,6 +131,19 @@ export interface InnertubeOptions {
    * body that ships its own `context` still wins (the spread order below).
    */
   gl?: string;
+  /**
+   * WFX2-P41 — an explicit Authorization header value (the acting user's
+   * `Bearer <oauth-access-token>`), threaded ONLY by the playback chain's
+   * per-user player rung (src/lib/youtube/streams.ts). Measured live
+   * 2026-10-23 from a datacenter egress: the `player` endpoint PARSES the
+   * header (a fake bearer answers Google's own 401 "Request had invalid
+   * authentication credentials" — an auth-layer rejection, distinct from
+   * the anonymous LOGIN_REQUIRED wall), so a valid token authenticates the
+   * request — the wall's own "Sign in to confirm you're not a bot" demand
+   * answered through the sanctioned P36 OAuth spine. Never set by any other
+   * caller; nothing about the anonymous transports changes.
+   */
+  authorization?: string;
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -156,7 +177,7 @@ export async function innertube<T = Record<string, any>>(
     ? { context: { client: { ...WEB_CLIENT, gl: opts.gl } } }
     : innerTubeContext();
   const payload = JSON.stringify({ ...context, ...body });
-  const headers = innerTubeHeaders(opts.cookies);
+  const headers = innerTubeHeaders(opts.cookies, opts.authorization);
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const attempts = 1 + 1 + (opts.extraRetries ?? 0); // initial + single retry (+ extras)
 
