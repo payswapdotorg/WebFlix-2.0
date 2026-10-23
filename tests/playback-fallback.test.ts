@@ -616,6 +616,125 @@ describe("P26B-HPV3 — the formats-first hunt (the operator's 2026-10-19 re-fil
   });
 });
 
+describe("WFX2-P40 — the MUXED-FIRST hunt (the operator's 2026-10-23 \"embedding is broken again\" re-file)", () => {
+  /**
+   * The measured production shape that broke the watch fallback: IOS answers
+   * OK with plain-URL VIDEO-ONLY adaptive formats (no muxed entry, no
+   * audio) — every format hasAudio:false. The old first-usable-wins loop
+   * STOPPED there; the client's muxed-only picker (player-fallback
+   * pickStreamFormat) then found nothing usable and the native fallback
+   * never armed — while ANDROID, one rung later, answers the muxed itag-18
+   * (measured 2026-10-23 from the station egress: WEB UNPLAYABLE, IOS
+   * audioless-22, ANDROID muxed+23, ANDROID_VR muxed+22).
+   */
+  const AUDIOLESS_PLAYER = {
+    playabilityStatus: { status: "OK" },
+    videoDetails: { videoId: "dQw4w9WgXcQ", lengthSeconds: "213" },
+    storyboards: playerFixture.storyboards,
+    streamingData: {
+      formats: [],
+      adaptiveFormats: [
+        {
+          itag: 313,
+          mimeType: 'video/webm; codecs="vp09.00.50.08"',
+          url: "https://rr4.googlevideo.com/videoplayback?itag=313&source=youtube",
+          qualityLabel: "2160p",
+          width: 3840,
+          height: 2160,
+        },
+        {
+          itag: 243,
+          mimeType: 'video/webm; codecs="vp09.00.50.08"',
+          url: "https://rr4.googlevideo.com/videoplayback?itag=243&source=youtube",
+          qualityLabel: "360p",
+          width: 640,
+          height: 360,
+        },
+      ],
+    },
+  };
+
+  test("an AUDIOLESS formats answer must NOT capture the loop — the MUXED rung behind it wins (the 2026-10-23 measurement)", async () => {
+    const { impl, recorded } = perClientUpstream(
+      { WEB: WALLED_PLAYER, IOS: AUDIOLESS_PLAYER, ANDROID: OK_PLAYER_WITH_FORMATS },
+      watchHtmlFor(playerFixture),
+    );
+    setUpstream(impl);
+    const dto = await getPlayback("dQw4w9WgXcQ");
+    expect(dto.source).toBe("player");
+    expect(dto.streamFormats.map((f) => f.itag)).toEqual([18]); // ANDROID's MUXED itag-18 — never IOS's silent 313/243
+    expect(dto.storyboards).toHaveLength(3);
+    const playerCalls = recorded.filter((r) => r.url.includes("/youtubei/v1/player"));
+    expect(playerCalls.map((r) => r.body.context.client.clientName)).toEqual([
+      "WEB",
+      "IOS", // audioless — remembered, hunt continues
+      "ANDROID", // muxed — the immediate win
+    ]);
+    expect(recorded.some((r) => r.url.includes("youtube.com/watch"))).toBe(false);
+  });
+
+  test("a MUXED-bearing rung wins IMMEDIATELY — IOS-muxed means ANDROID never fires (no hunt past a healthy win)", async () => {
+    const { impl, recorded } = perClientUpstream(
+      { WEB: WALLED_PLAYER, IOS: OK_PLAYER_WITH_FORMATS, ANDROID: AUDIOLESS_PLAYER },
+      watchHtmlFor(playerFixture),
+    );
+    setUpstream(impl);
+    const dto = await getPlayback("dQw4w9WgXcQ");
+    expect(dto.source).toBe("player");
+    expect(dto.streamFormats.map((f) => f.itag)).toEqual([18]);
+    const playerCalls = recorded.filter((r) => r.url.includes("/youtubei/v1/player"));
+    expect(playerCalls.map((r) => r.body.context.client.clientName)).toEqual(["WEB", "IOS"]);
+    expect(recorded.some((r) => r.url.includes("youtube.com/watch"))).toBe(false);
+  });
+
+  test("every rung audioless → the AUDIOLESS fallback serves after the full hunt (formats present, hasAudio all false — preview fuel, never a watch-fallback claim)", async () => {
+    const { impl, recorded } = perClientUpstream(
+      {
+        WEB: WALLED_PLAYER,
+        IOS: AUDIOLESS_PLAYER,
+        ANDROID: AUDIOLESS_PLAYER,
+        ANDROID_VR: AUDIOLESS_PLAYER,
+        MWEB: WALLED_PLAYER,
+        WEB_EMBEDDED_PLAYER: WALLED_PLAYER,
+        TVHTML5_SIMPLY_EMBEDDED_PLAYER: WALLED_PLAYER,
+      },
+      watchHtmlFor(playerFixture), // rung 2: storyboards-only (ciphered formats) — outranked by the audioless FORMATS answer
+    );
+    setUpstream(impl);
+    const dto = await getPlayback("dQw4w9WgXcQ");
+    expect(dto.source).toBe("player");
+    expect(dto.streamFormats.map((f) => f.itag)).toEqual([313, 243]);
+    expect(dto.streamFormats.every((f) => f.hasAudio === false)).toBe(true);
+    expect(dto.storyboards.map((l) => l.level)).toEqual([1, 2, 3]);
+    // the hunt ran the whole rung-1 chain AND probed rung 2 before settling
+    const playerCalls = recorded.filter((r) => r.url.includes("/youtubei/v1/player"));
+    expect(playerCalls).toHaveLength(7);
+    expect(recorded.some((r) => r.url.includes("youtube.com/watch?v=dQw4w9WgXcQ"))).toBe(true);
+  });
+
+  test("rung 1 audioless + rung 2 MUXED (the watch page's plain itag-18) → rung 2 wins — the outer chain hunts too", async () => {
+    const { impl, recorded } = perClientUpstream(
+      { WEB: WALLED_PLAYER, IOS: AUDIOLESS_PLAYER },
+      watchHtmlFor(OK_PLAYER_WITH_FORMATS),
+    );
+    setUpstream(impl);
+    const dto = await getPlayback("dQw4w9WgXcQ");
+    expect(dto.source).toBe("watch-page");
+    expect(dto.streamFormats.map((f) => f.itag)).toEqual([18]);
+    const playerCalls = recorded.filter((r) => r.url.includes("/youtubei/v1/player"));
+    expect(playerCalls.map((r) => r.body.context.client.clientName)).toEqual([
+      "WEB",
+      "IOS",
+      "ANDROID",
+      "ANDROID_VR",
+      "MWEB",
+      "WEB_EMBEDDED_PLAYER",
+      "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
+    ]);
+    expect(recorded.some((r) => r.url.includes("youtube.com/watch?v=dQw4w9WgXcQ"))).toBe(true);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // The chain (setUpstream seam) + routes
 // ---------------------------------------------------------------------------

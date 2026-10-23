@@ -126,6 +126,9 @@ export function CommentRow({
   const [nestedOpen, setNestedOpen] = useState(false);
   const [nestedReplies, setNestedReplies] = useState<CommentDto[]>([]);
   const [nestedLoading, setNestedLoading] = useState(false);
+  // WFX2-P40 — locally-appended replies this row took itself (the depth ≥ 1
+  // append fallback): keeps the expander's count honest before any reload.
+  const [localReplyAdds, setLocalReplyAdds] = useState(0);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
@@ -527,7 +530,18 @@ export function CommentRow({
               compact
               onSubmitted={(c) => {
                 setReplyOpen(false);
-                onAppendReply?.(c);
+                if (onAppendReply) {
+                  onAppendReply(c);
+                  return;
+                }
+                // WFX2-P40 — the reply-to-a-REPLY append: the section-level
+                // append prop stops at depth-0 rows, so THIS row owns its
+                // own nesting. Before P40 the fresh reply was silently
+                // dropped client-side (201 server-side, nothing rendered)
+                // — the exact "I replied and it didn't reflect" re-file.
+                setNestedReplies((prev) => [...prev, c]);
+                setNestedOpen(true);
+                setLocalReplyAdds((n) => n + 1);
               }}
               onCancel={() => setReplyOpen(false)}
             />
@@ -601,7 +615,7 @@ export function CommentRow({
         )}
 
         {/* deeper levels (level-2 replies that have children) collapse to expander */}
-        {depth >= 1 && comment.replyCount > 0 && (
+        {depth >= 1 && (comment.replyCount > 0 || nestedReplies.length > 0) && (
           <div className="mt-1.5">
             <button
               type="button"
@@ -613,7 +627,8 @@ export function CommentRow({
                 className={cn("size-3.5 transition-transform", nestedOpen && "rotate-180")}
                 aria-hidden="true"
               />
-              {comment.replyCount} {comment.replyCount === 1 ? "reply" : "replies"}
+              {comment.replyCount + localReplyAdds}{" "}
+              {comment.replyCount + localReplyAdds === 1 ? "reply" : "replies"}
             </button>
             {nestedOpen && (
               <div className="mt-2 space-y-3 pl-2">

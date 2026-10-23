@@ -3,7 +3,7 @@ import { json, errorResponse } from "@/lib/watch/api";
 import { resolveViewer } from "@/lib/watch/session";
 import { proxyCommentCreate, proxyCommentReply } from "@/lib/watch/action-proxy";
 import { listLiveComments, attachInlineReplies } from "@/lib/youtube/comments";
-import { mergeLocalComments, listLocalReplies, shadowUserId } from "@/lib/watch/local-comments";
+import { mergeLocalComments, listLocalReplies, mergeLocalChildReplies, shadowUserId } from "@/lib/watch/local-comments";
 import { rateLimit } from "@/lib/youtube/cache";
 import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 import type { CommentVideoSnapshotDto } from "@/lib/watch/types";
@@ -66,6 +66,14 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
         // (a local parent, or a YouTube parent whose thread never loaded)
         const local = await listLocalReplies(id, parentId, viewerIds);
         if (local.items.length > 0) items = local.items;
+      }
+      // WFX2-P40 — local replies whose parents are the SERVED rows nest
+      // under them (the depth-1 rows' own "N replies" expanders): the
+      // top-level page's merge never reaches rows that only appear on this
+      // dedicated page, so without this pass a reply to a reply goes
+      // invisible once its thread paginates past the inline set.
+      if (items.length > 0) {
+        items = await mergeLocalChildReplies({ videoId: id, items, viewerIds });
       }
       return json({ items, nextCursor: page.nextCursor });
     }

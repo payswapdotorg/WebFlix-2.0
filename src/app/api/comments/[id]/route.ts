@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { json, errorResponse } from "@/lib/watch/api";
 import { resolveViewer } from "@/lib/watch/session";
 import { proxyCommentReply, proxyCommentEdit, proxyCommentDelete } from "@/lib/watch/action-proxy";
+import { findLocalActionRow, localEditComment, localDeleteComment } from "@/lib/watch/local-comments";
 import { commentWriteBodySchema, commentDeleteBodySchema } from "@/lib/watch/validators";
 import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
 
@@ -48,19 +49,25 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 }
 
 /**
- * PATCH /api/comments/[id] — WFX2-P36: the HONEST UNSUPPORTED lane. Editing
- * YouTube comments has no official end-user API (commentThreads is
- * channel-moderation scoped), and the pre-P36 broker DOM drive is retired
- * with the shared operator identity — the proxy answers the honest 501
- * (kind "youtube-unsupported"), rendered verbatim by errorResponse.
+ * PATCH /api/comments/[id] — two honest tiers (WFX2-P40):
+ *  - a LOCAL row the store owns → the store-backed edit (own rows only,
+ *    body + edited:true, disclosed local:true);
+ *  - a YouTube comment → the HONEST UNSUPPORTED lane. Editing YouTube
+ *    comments has no official end-user API (commentThreads is
+ *    channel-moderation scoped), and the pre-P36 broker DOM drive is
+ *    retired with the shared operator identity — the proxy answers the
+ *    honest 501 (kind "youtube-unsupported"), rendered verbatim by
+ *    errorResponse.
  *
  * Request: {body, videoId, commentText?} (commentText kept for the request
  * contract; ownership on YouTube is enforced by YouTube itself).
  *
- * Response: 501 { error, kind: "youtube-unsupported" } — edit on YouTube.
+ * Response: local tier → 200 {ok, effect, body, edited:true, path:"local",
+ * local:true}; YouTube tier → 501 { error, kind: "youtube-unsupported" }.
  */
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  if (!(await getSessionUser(req))) return authRequiredResponse();
+  const sessionUser = await getSessionUser(req);
+  if (!sessionUser) return authRequiredResponse();
   try {
     const { id } = await ctx.params;
     let raw: unknown;
@@ -73,6 +80,14 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     if (!parsed.success) {
       return json({ error: parsed.error.issues[0]?.message ?? "invalid body" }, 400);
     }
+    // WFX2-P40 — the local-row tier first: a row the store owns gets a
+    // store-backed edit (own rows only); the lookup is best-effort so a
+    // store outage keeps the honest YouTube lane.
+    const localRow = await findLocalActionRow(id).catch(() => null);
+    if (localRow) {
+      const result = await localEditComment(id, sessionUser, parsed.data.body);
+      return json(result);
+    }
     const result = await proxyCommentEdit(id, parsed.data.body, {
       videoId: parsed.data.videoId,
       ...(parsed.data.commentText ? { commentText: parsed.data.commentText } : {}),
@@ -84,20 +99,23 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 }
 
 /**
- * DELETE /api/comments/[id] — WFX2-P36: the HONEST UNSUPPORTED lane.
- * Deleting YouTube comments has no official end-user API, and the pre-P36
- * broker DOM drive is retired — the proxy answers the honest 501 (kind
- * "youtube-unsupported"), rendered verbatim by errorResponse. (Deleting a
- * LOCAL WebFlix comment has its own route — the restore/delete family in
- * comment-service.)
+ * DELETE /api/comments/[id] — two honest tiers (WFX2-P40):
+ *  - a LOCAL row the store owns → the store-backed soft delete (own rows
+ *    only, moderation "deleted" — restorable via the restore route);
+ *  - a YouTube comment → the HONEST UNSUPPORTED lane. Deleting YouTube
+ *    comments has no official end-user API, and the pre-P36 broker DOM
+ *    drive is retired — the proxy answers the honest 501 (kind
+ *    "youtube-unsupported"), rendered verbatim by errorResponse.
  *
  * Request: {videoId, commentText?} (commentText kept for the request
  * contract).
  *
- * Response: 501 { error, kind: "youtube-unsupported" } — delete on YouTube.
+ * Response: local tier → 200 {ok, effect, deleted:true, path:"local",
+ * local:true}; YouTube tier → 501 { error, kind: "youtube-unsupported" }.
  */
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  if (!(await getSessionUser(req))) return authRequiredResponse();
+  const sessionUser = await getSessionUser(req);
+  if (!sessionUser) return authRequiredResponse();
   try {
     const { id } = await ctx.params;
     let raw: unknown = {};
@@ -110,6 +128,13 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
     const parsed = commentDeleteBodySchema.safeParse(raw);
     if (!parsed.success) {
       return json({ error: parsed.error.issues[0]?.message ?? "invalid body" }, 400);
+    }
+    // WFX2-P40 — the local-row tier first (own rows only, best-effort
+    // lookup — a store outage keeps the honest YouTube lane).
+    const localRow = await findLocalActionRow(id).catch(() => null);
+    if (localRow) {
+      const result = await localDeleteComment(id, sessionUser);
+      return json(result);
     }
     const result = await proxyCommentDelete(id, {
       videoId: parsed.data.videoId,

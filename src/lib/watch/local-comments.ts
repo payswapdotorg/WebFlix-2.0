@@ -319,6 +319,240 @@ async function fallbackAnchorUserId(): Promise<string> {
 }
 
 /* ------------------------------------------------------------------ */
+/* WFX2-P40 — the LOCAL-ROW ACTION TIER (like / edit / delete / restore) */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The local-row tier detector: a comment id that resolves to a WebFlix row
+ * the store OWNS (moderation "approved" or "deleted" — NEVER the "shadow"
+ * FK anchors, which stand for live YouTube comments the store does not own)
+ * is served by the LOCAL action tier below; everything else (unknown ids,
+ * shadow anchors) is a YouTube comment → the honest unsupported lane.
+ *
+ * The gap this closes (the operator's 2026-10-23 re-file): pre-P40 the
+ * like/edit/delete/restore routes answered the YouTube 501 for EVERY id —
+ * including the operator's OWN local rows, whose affordances the UI renders
+ * and whose likes the read path already models (CommentLike). A row the
+ * store owns gets store-backed actions, disclosed local:true — exactly the
+ * create/reply lane's honesty law.
+ */
+export async function findLocalActionRow(commentId: string): Promise<{
+  id: string;
+  videoId: string;
+  userId: string;
+  body: string;
+  likes: number;
+  moderation: string;
+  edited: boolean;
+  createdAt: Date;
+} | null> {
+  const row = await db.comment.findUnique({
+    where: { id: commentId },
+    select: {
+      id: true,
+      videoId: true,
+      userId: true,
+      body: true,
+      likes: true,
+      moderation: true,
+      edited: true,
+      createdAt: true,
+    },
+  });
+  if (!row) return null; // unknown id — a YouTube comment (or already gone)
+  if (row.moderation === "shadow") return null; // a live YouTube comment's anchor — never local
+  return row; // approved | deleted (restorable) | held/flagged/rejected — the store owns it
+}
+
+/** Ownership law: the row's author is THIS session's shadow user. */
+function assertOwnRow(row: { userId: string }, sessionUser: WebFlixSessionUser): void {
+  if (row.userId !== shadowUserId(sessionUser.id)) {
+    throw new ApiError(403, "You can only do this on your own comments");
+  }
+}
+
+export interface LocalLikeResult {
+  ok: true;
+  effect: string;
+  likes: number;
+  yourLike: LikeValue | null;
+  path: "local";
+  local: true;
+}
+
+/**
+ * Like/dislike a LOCAL row — the store-backed tier (the read path's
+ * viewerLikes already models it; the write path finally matches).
+ * Semantics identical to the route contract the UI sends:
+ *  - {value: "like"|"dislike"} — legacy TOGGLE (same value → remove);
+ *  - {action: "like"|"dislike"|"none"} — canonical SET.
+ * The like count moves only on like/un-like transitions (dislikes never
+ * touch the visible count — YouTube-parity honest counts).
+ */
+export async function localLikeComment(
+  commentId: string,
+  sessionUser: WebFlixSessionUser,
+  req: { value?: LikeValue; action?: "like" | "dislike" | "none" },
+): Promise<LocalLikeResult> {
+  const row = await db.comment.findUnique({ where: { id: commentId } });
+  if (!row || row.moderation !== "approved") throw new ApiError(404, "Comment not found");
+  const likerId = shadowUserId(sessionUser.id);
+
+  const existing = await db.commentLike.findUnique({
+    where: { userId_commentId: { userId: likerId, commentId } },
+  });
+  const prev = (existing?.value as LikeValue | undefined) ?? null;
+  const next: LikeValue | null =
+    req.action !== undefined
+      ? req.action === "none"
+        ? null
+        : req.action
+      : prev === req.value
+        ? null
+        : (req.value ?? null);
+
+  if (next === prev) {
+    return {
+      ok: true,
+      effect: "comment-like-unchanged",
+      likes: row.likes,
+      yourLike: prev,
+      path: "local",
+      local: true,
+    };
+  }
+
+  if (next === null) {
+    await db.commentLike.deleteMany({ where: { userId: likerId, commentId } });
+  } else {
+    await db.commentLike.upsert({
+      where: { userId_commentId: { userId: likerId, commentId } },
+      create: { userId: likerId, commentId, value: next },
+      update: { value: next },
+    });
+  }
+  const delta = prev === "like" ? -1 : next === "like" ? 1 : 0;
+  const likes = Math.max(0, row.likes + delta);
+  if (delta !== 0) {
+    await db.comment.update({ where: { id: commentId }, data: { likes } });
+  }
+  return {
+    ok: true,
+    effect: next === null ? "comment-unliked" : `comment-${next}d`,
+    likes,
+    yourLike: next,
+    path: "local",
+    local: true,
+  };
+}
+
+export interface LocalEditResult {
+  ok: true;
+  effect: string;
+  body: string;
+  edited: true;
+  path: "local";
+  local: true;
+}
+
+/** Edit own local row (body + edited flag) — the store-backed tier. */
+export async function localEditComment(
+  commentId: string,
+  sessionUser: WebFlixSessionUser,
+  text: string,
+): Promise<LocalEditResult> {
+  const trimmed = text.trim();
+  if (!trimmed) throw new ApiError(400, "Comment cannot be empty");
+  const row = await db.comment.findUnique({ where: { id: commentId } });
+  if (!row || row.moderation !== "approved") throw new ApiError(404, "Comment not found");
+  assertOwnRow(row, sessionUser);
+  await db.comment.update({
+    where: { id: commentId },
+    data: { body: trimmed, edited: true },
+  });
+  return {
+    ok: true,
+    effect: "comment-edited",
+    body: trimmed,
+    edited: true,
+    path: "local",
+    local: true,
+  };
+}
+
+export interface LocalDeleteResult {
+  ok: true;
+  effect: string;
+  deleted: true;
+  path: "local";
+  local: true;
+}
+
+/** Soft-delete own local row (moderation "deleted" — restorable). */
+export async function localDeleteComment(
+  commentId: string,
+  sessionUser: WebFlixSessionUser,
+): Promise<LocalDeleteResult> {
+  const row = await db.comment.findUnique({ where: { id: commentId } });
+  if (!row || row.moderation !== "approved") throw new ApiError(404, "Comment not found");
+  assertOwnRow(row, sessionUser);
+  await db.comment.update({ where: { id: commentId }, data: { moderation: "deleted" } });
+  return {
+    ok: true,
+    effect: "comment-deleted",
+    deleted: true,
+    path: "local",
+    local: true,
+  };
+}
+
+/** Restore own soft-deleted local row — returns the row's fresh DTO. */
+export async function localRestoreComment(
+  commentId: string,
+  sessionUser: WebFlixSessionUser,
+): Promise<CommentDto> {
+  const row = await db.comment.findUnique({
+    where: { id: commentId },
+    include: { user: { select: { id: true, handle: true, name: true, avatarUrl: true } } },
+  });
+  if (!row || row.moderation !== "deleted") throw new ApiError(404, "Comment not found");
+  assertOwnRow(row, sessionUser);
+  await db.comment.update({ where: { id: commentId }, data: { moderation: "approved" } });
+  const viewerIds = [shadowUserId(sessionUser.id)];
+  const [like, replyCount] = await Promise.all([
+    db.commentLike.findUnique({
+      where: { userId_commentId: { userId: viewerIds[0], commentId } },
+      select: { value: true },
+    }),
+    db.comment.count({ where: { parentId: commentId, moderation: "approved" } }),
+  ]);
+  return {
+    id: row.id,
+    parentId: row.parentId,
+    body: row.body,
+    likes: row.likes,
+    heartedByCreator: row.heartedByCreator,
+    pinned: row.pinned,
+    edited: row.edited,
+    moderation: "approved",
+    createdAt: row.createdAt.toISOString(),
+    author: {
+      id: row.user.id,
+      handle: row.user.handle,
+      name: row.user.name,
+      avatarUrl: row.user.avatarUrl,
+      isMember: false,
+      isCreator: false,
+    },
+    yourLike: (like?.value as LikeValue | undefined) ?? null,
+    isOwn: true,
+    replyCount,
+    totalReplyCount: replyCount,
+    local: true,
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* Read-path merge — local rows join the live InnerTube read            */
 /* ------------------------------------------------------------------ */
 
@@ -537,5 +771,49 @@ export async function listLocalReplies(
     return { items: replies, nextCursor: null };
   } catch {
     return { items: [], nextCursor: null };
+  }
+}
+
+/**
+ * WFX2-P40 — the parentId-path CHILD merge: local replies whose parents are
+ * the DEPTH-1 rows this reply page serves nest under them here (each served
+ * row's replyCount/totalReplyCount adjust honestly, so its "N replies"
+ * expander appears). The top-level page's merge only reaches depth-1 rows
+ * that ride the inline set (the first-3 top-level comments' first reply
+ * pages); a depth-1 row arriving via this dedicated page (the thread's
+ * later pages, or the first page of a comment past the inline set) would
+ * otherwise carry NO local children — the operator's "reply didn't reflect
+ * after reload" whenever the parent thread paginated. No double-serve by
+ * construction: this merge appends only children OF THE SERVED ROWS (the
+ * top-level merge appends only children of the top-level page's rows).
+ * TOTAL for reads: a DB failure passes the page through unchanged.
+ */
+export async function mergeLocalChildReplies(args: {
+  videoId: string;
+  /** the reply page's served rows (depth-1 rows under one parent) */
+  items: CommentDto[];
+  viewerIds: string[];
+}): Promise<CommentDto[]> {
+  try {
+    const ctx = await loadLocalContext(args.videoId, args.viewerIds);
+    if (!ctx) return args.items;
+    const { direct, totals } = localCounts(ctx.rows);
+    const byId = new Map(args.items.map((i) => [i.id, i]));
+    let changed = false;
+    for (const row of ctx.rows) {
+      if (row.parentId === null) continue;
+      const parent = byId.get(row.parentId);
+      if (!parent) continue; // this row's parent is not on the served page
+      parent.replies = [
+        ...(parent.replies ?? []),
+        toLocalDto(row, ctx, direct.get(row.id) ?? 0, totals.get(row.id) ?? 0),
+      ];
+      parent.replyCount = (parent.replyCount ?? 0) + 1;
+      parent.totalReplyCount = (parent.totalReplyCount ?? 0) + (totals.get(row.id) ?? 0) + 1;
+      changed = true;
+    }
+    return changed ? [...args.items] : args.items;
+  } catch {
+    return args.items; // store unreachable → live-only, honest
   }
 }
