@@ -142,12 +142,20 @@ export async function resolveActionTier(req: Request): Promise<UserActionTier> {
  * The read-only tier for state bootstraps (the watch page's like/subscribe
  * state, the shorts rail's yourLike): the user's token when connected,
  * null otherwise — NEVER the operator session's state.
+ *
+ * WFX2-P41 — the return also carries the user's id: the playback chain's
+ * per-user OAuth player rung keys its cache by userId (the isolation law —
+ * one user's authenticated playback fuel is never served to another), so
+ * the read tier reports WHOSE token it is. Additive — existing callers
+ * ignore the new field.
  */
 export async function resolveReadTier(
   req: Request,
-): Promise<{ accessToken: string; channelId: string | null } | null> {
+): Promise<{ accessToken: string; channelId: string | null; userId: string } | null> {
   const tier = await resolveActionTier(req);
-  return tier.ok ? { accessToken: tier.accessToken, channelId: tier.channelId } : null;
+  return tier.ok
+    ? { accessToken: tier.accessToken, channelId: tier.channelId, userId: tier.user.id }
+    : null;
 }
 
 /** Map a tier failure onto the honest ApiError (machine-stable `kind`). */

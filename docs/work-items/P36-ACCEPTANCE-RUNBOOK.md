@@ -11,6 +11,14 @@ ROUND-TRIP** (the human Google login no station credential can or should replace
 Until it is executed and recorded, P36 stays open: no fixture count, no green CI run, and no
 deployed SHA closes it. Per the work order: *"Do not close this task on unit tests alone."*
 
+**Progress record (2026-10-23):** subscriptions + video likes are **VERIFIED WORKING by the
+operator through the connected account** (the tester-gate fix below landed); the same-day
+re-files (comment actions, reply reflection + reload ordering, embedding/preview) were
+root-caused and fixed as P40-COMMENT-ACTIONS-EMBED (`f7cd13c`, deployed
+`dpl_GhxsHtTqvq25PHcddz9qhjWmcybw`) and P41-PLAYER-AUTH-RUNG (the wall-hardening re-file — see
+the second known-issue record in §0). What §1 still needs: the independent youtube.com-side
+verification (§1.4) + unsubscribe + cleanup + the evidence file.
+
 ---
 
 ## 0. Prerequisites (operator, one-time)
@@ -51,6 +59,8 @@ deployed SHA closes it. Per the work order: *"Do not close this task on unit tes
 the YouTube-account card must show the **not-connected** state with the Connect link (never
 a broker/direct "operator session" claim). Record the deployment SHA from the Vercel
 dashboard for the evidence file.
+
+**Known-issue record — the wall-hardening regression ("video embedding and preview… have been broken", operator-reported 2026-10-23 after the P40 deploy):** the operator's report was NOT caused by the actions work — the player/preview client code is byte-unchanged across the whole P36..P40 window (git-proven). YouTube's bot wall hardened across 2026-10-20..23 on BOTH axes (station-measured 2026-10-23): (1) the protected/trending class now answers `LOGIN_REQUIRED` to **every anonymous innertube client** (WEB/IOS/ANDROID/ANDROID_VR/MWEB/TVHTML5) from datacenter egresses — 10/10 home-feed videos, from BOTH the station and production's Vercel egress (only the watch-page HTML rung still answers OK from Vercel); (2) the watch-page rung's plain itag-18 URLs carry the WEB client's scrambled `n` query param, and googlevideo now answers **403 to the untransformed `n` even from the same invocation** that minted the URL (the stream route 502'd 10/10 feed videos; P31's 2026-10-20 era streamed these same URLs 4/4 — the enforcement hardened from throttle to hard 403). Net effect: the anonymous native playback lane (hover previews + the watch-page fallback player) died for the whole feed class, coincident with the actions window. **Fix (P41-PLAYER-AUTH-RUNG, station-executed 2026-10-23):** (a) **the per-user OAuth player rung** — the wall's own "Sign in to confirm you're not a bot" demand now answered through the P36 spine: when the acting user has a connected YouTube account, the playback chain runs an authenticated ANDROID/ANDROID_VR/IOS `player` ladder with `Authorization: Bearer <their token>` and merges the user's own n-free formats on top of the anonymous answer under a per-user cache key (the shared anonymous row never carries authed fuel — the isolation law, test-pinned); anonymous callers are byte-identical to before; (b) **the n-scrambled URL filter** — watch-page/broker URLs carrying a standalone `n` param are presumptively-dead fuel and are dropped honestly (storyboards survive; a doomed native boot never arms). **Operator verification steps (2 minutes, on the deployed build, signed in + connected):** hover a video box on the home grid ~2s → the box should PLAY the video (the muted preview, youtube.com-style); open a trending watch page → if the embed is walled the native fallback should now play with audio. If a box shows the honest "Preview unavailable" pill instead, note the video title — that is the residual per-video lottery class, not the regression.
 
 ## 1. The happy-path round-trip (the core proof)
 

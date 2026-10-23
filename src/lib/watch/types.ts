@@ -119,6 +119,11 @@ export interface StoryboardLevelDto {
  * ytInitialPlayerResponse, then the broker's page-context watch read
  * (WFX2-4A, source "broker-watch")). Empty arrays = no rung could get a
  * playable response (walled) — the honest degrade.
+ *
+ * WFX2-P41 — "player-authed": the PER-USER OAuth player rung's merged
+ * answer (the acting user's own authenticated ANDROID/ANDROID_VR/IOS
+ * formats unioned on top of the anonymous base — served only from the
+ * per-user cache key, never the shared row; see src/lib/youtube/streams.ts).
  */
 export interface PlaybackDto {
   streamFormats: StreamFormatDto[];
@@ -126,7 +131,7 @@ export interface PlaybackDto {
   /** videoDetails.lengthSeconds when the response carried it */
   durationSec: number | null;
   /** which chain rung produced the payload ("" = none served) */
-  source: "player" | "watch-page" | "broker-watch" | "";
+  source: "player" | "player-authed" | "watch-page" | "broker-watch" | "";
 }
 
 // ---- WFX2-P7-AN: watch insights DTOs (the /api/watch/insights payload) ----

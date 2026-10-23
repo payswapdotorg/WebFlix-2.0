@@ -500,7 +500,9 @@ describe("resolveReadTier (the per-user read tier)", () => {
   test("a connected user → their OWN token + channel", async () => {
     await connectUser(USER_A, TOKEN_A);
     const tier = await resolveReadTier(reqFor(COOKIE_A));
-    expect(tier).toEqual({ accessToken: TOKEN_A, channelId: `UC_own_${USER_A}` });
+    // WFX2-P41 re-point: the read tier also reports WHOSE token it is (the
+    // playback chain's per-user player rung keys its cache by userId).
+    expect(tier).toEqual({ accessToken: TOKEN_A, channelId: `UC_own_${USER_A}`, userId: USER_A });
   });
 
   test("an unconnected user → null — NEVER an operator fallback (YT_COOKIES set and still null)", async () => {

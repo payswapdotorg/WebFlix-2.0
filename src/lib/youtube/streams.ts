@@ -67,7 +67,7 @@
  *   `&sigh=<sigh>` appended (all sheet URLs verified 200 on i.ytimg.com —
  *   the CDN does NOT IP-lock, so any client browser can fetch them).
  */
-import { innertube } from "./innertube";
+import { innertube, InnertubeError } from "./innertube";
 import { fetchPageHtml } from "./ssr";
 import { cachedResilient, TTL } from "./cache";
 import { brokerFetchPage } from "@/lib/broker";
@@ -469,6 +469,164 @@ async function fetchInnertubePlayer(
   return audiolessFallback ?? storyboardFallback;
 }
 
+/**
+ * WFX2-P41 — THE PER-USER OAUTH PLAYER RUNG's client ladder. Measured
+ * 2026-10-23 from the station egress on dQw4w9WgXcQ (the loose protection
+ * class): ANDROID and ANDROID_VR both answer OK with n-free muxed itag-18;
+ * IOS answers OK with 27 n-free audioless formats (preview fuel). The
+ * protected/trending class walls EVERY client anonymously from datacenter
+ * egresses (measured same day: 10/10 home-feed videos LOGIN_REQUIRED on
+ * WEB/IOS/ANDROID/ANDROID_VR/MWEB/TVHTML5 from BOTH the station and
+ * production's Vercel egress — only the watch-page rung answered, with
+ * n-scrambled dead URLs; see the filter below). The authed rung rides the
+ * SAME client ladder with the acting user's OAuth Bearer token: the wall's
+ * own "Sign in to confirm you're not a bot" demand answered through the
+ * sanctioned P36 connection spine (the endpoint parses the Authorization
+ * header — a fake bearer answers Google's auth-layer 401, measured live
+ * 2026-10-23, distinct from the anonymous LOGIN_REQUIRED wall).
+ */
+const AUTHED_PLAYER_CLIENTS: PlayerClientContext[] = [
+  PLAYER_CLIENTS.ANDROID,
+  PLAYER_CLIENTS.ANDROID_VR,
+  PLAYER_CLIENTS.IOS,
+];
+
+/**
+ * WFX2-P41 — the auth-rung refusal sticky (per lambda instance, per user):
+ * when EVERY authed client answers 401 (the token refused — scope/consent
+ * class), the rung is skipped for AUTH_RUNG_REFUSED_MS so a refused token
+ * does not cost 3 doomed requests per playback DTO. The expiry (or a live
+ * answer once the rung runs again) is the recovery path — a re-consented
+ * token revives within the window. Test-resettable (the
+ * resetYoutubeConnectionStore precedent).
+ */
+const AUTH_RUNG_REFUSED_MS = 5 * 60_000;
+/**
+ * WFX2-P41 — the authed rung's budget reserve: 3 single-attempt 4s client
+ * requests, carved out of the caller's chain budget so the per-user path's
+ * worst case stays inside the same wall the shared path respects.
+ */
+const AUTH_RUNG_RESERVE_MS = 10_000;
+const authRungRefusedUntil = new Map<string, number>();
+
+/** Test-only: clear the per-user auth-rung refusal sticky. */
+export function resetAuthRungRefusalForTests(): void {
+  authRungRefusedUntil.clear();
+}
+
+function authRungRefused(userId: string): boolean {
+  const until = authRungRefusedUntil.get(userId);
+  if (until === undefined) return false;
+  if (Date.now() >= until) {
+    authRungRefusedUntil.delete(userId);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * WFX2-P41 — the per-user OAuth `player` rung. Identical law to the
+ * anonymous loop (MUXED-FIRST: a hasAudio answer wins immediately; an
+ * audioless formats answer is the remembered WEAK fallback; storyboards
+ * remembered) over the ANDROID/ANDROID_VR/IOS ladder, each request carrying
+ * `Authorization: Bearer <accessToken>` (innertube.ts threads it — the
+ * explicit credential always wins over the env session's SAPISIDHASH).
+ *
+ * A 401 on every attempted client marks the refusal sticky (the honest
+ * degrade for a refused token — the anonymous base answer serves). A
+ * walled-but-authenticated answer (LOGIN_REQUIRED even with the token) is
+ * NOT a refusal — the rung just returns what it found, like the anonymous
+ * chain. Never throws; null when nothing usable answered.
+ */
+async function fetchInnertubePlayerAuthed(
+  videoId: string,
+  accessToken: string,
+  userId: string,
+  io: ChainIO = {}
+): Promise<PlaybackDto | null> {
+  const authorization = `Bearer ${accessToken}`;
+  let storyboardFallback: PlaybackDto | null = null;
+  let audiolessFallback: PlaybackDto | null = null;
+  let refusedCount = 0;
+  let answeredCount = 0;
+  for (const client of AUTHED_PLAYER_CLIENTS) {
+    const { thirdPartyEmbedUrl, ...clientFields } = client;
+    const context: Record<string, unknown> = { client: { ...clientFields, hl: "en", gl: "US" } };
+    let response: unknown;
+    try {
+      response = await innertube("player", {
+        context,
+        videoId,
+        contentCheckOk: true,
+        racyCheckOk: true,
+      }, {
+        ...(io.signal ? { signal: io.signal } : {}),
+        ...(io.innertubeTimeoutMs !== undefined ? { timeoutMs: io.innertubeTimeoutMs } : {}),
+        // the authed rung is always SINGLE-ATTEMPT: each client is a lottery
+        // ticket (a refused 401 or a walled 200 answers FAST), and the
+        // built-in retry would double every doomed request's cost.
+        extraRetries: io.innertubeExtraRetries ?? -1,
+        authorization,
+      });
+    } catch (err) {
+      if (err instanceof InnertubeError && err.status === 401) refusedCount++;
+      continue; // refused/walled/hard-error rung — the ladder continues
+    }
+    answeredCount++;
+    authRungRefusedUntil.delete(userId); // a live answer clears any stale refusal
+    const dto = parsePlayback("player-authed", response);
+    if (dto.streamFormats.some((f) => f.hasAudio)) return dto; // MUXED wins IMMEDIATELY
+    if (dto.streamFormats.length > 0) audiolessFallback ??= dto; // formats-but-silent: preview fuel, remembered
+    if (dto.storyboards.length > 0) storyboardFallback ??= dto; // remembered, never a chain-stopper
+  }
+  if (answeredCount === 0 && refusedCount === AUTHED_PLAYER_CLIENTS.length) {
+    // every client refused the credential — the token itself is dead for
+    // this endpoint (scope/consent class). Skip the rung for a while.
+    authRungRefusedUntil.set(userId, Date.now() + AUTH_RUNG_REFUSED_MS);
+  }
+  return audiolessFallback ?? storyboardFallback;
+}
+
+/**
+ * WFX2-P41 — THE N-SCRAMBLED URL FILTER (the honest watch-page hygiene).
+ *
+ * Measured 2026-10-23 in production: the watch-page rung's plain itag-18
+ * URLs carry the WEB client's scrambled `n` query param (`c=WEB`, e.g.
+ * n=t_vpcG7Jhd28K6hmIfT), and googlevideo now answers 403 to the
+ * UNTRANSFORMED n even from the SAME invocation that minted the URL (the
+ * stream route's fresh re-chain 502'd 10/10 home-feed videos while dQw4's
+ * n-free ANDROID URLs 206'd through the same route — the enforcement
+ * hardened from throttle to hard 403 during 2026-10-20..23; P31's era
+ * streamed these same URLs 4/4). The real web player transforms n via the
+ * player JS (the ntsc lane — descoped by P26-HPV2's honest verdict); a
+ * server-side transform is a decipher-class lane this repo does not ship.
+ *
+ * The honest law instead: a format whose URL carries a standalone `n` param
+ * from the watch-page/broker rungs is PRESUMPTIVELY DEAD fuel — surfacing
+ * it arms a doomed native boot (the preview wastes its health-gate window,
+ * the watch fallback errors to the same card it would have shown
+ * honestly). Drop it at parse time; keep the storyboards + duration (the
+ * preview's storyboard lane + the honest floors are untouched). Scoped to
+ * the watch-page/broker rungs ONLY — the native-client player answers
+ * measure n-free today (ANDROID/ANDROID_VR/IOS, 2026-10-23) and stay
+ * untouched. If YouTube re-softens n (P31's 2026-10-20 behavior), re-measure
+ * and revert this filter — the comment is the ledger.
+ */
+function urlCarriesScrambledN(url: string): boolean {
+  try {
+    return new URL(url).searchParams.has("n");
+  } catch {
+    return false; // malformed URL — not this filter's law
+  }
+}
+
+/** Drop the n-scrambled (presumptively dead) formats from a watch-page/broker DTO. */
+export function dropScrambledNFormats(dto: PlaybackDto): PlaybackDto {
+  const kept = dto.streamFormats.filter((f) => !urlCarriesScrambledN(f.url));
+  if (kept.length === dto.streamFormats.length) return dto;
+  return { ...dto, streamFormats: kept };
+}
+
 const YT_INITIAL_PLAYER_RESPONSE_RE = /var ytInitialPlayerResponse\s*=\s*(\{[\s\S]*?\});\s*(?:var |<\/script>)/;
 
 /** Extract the watch page's embedded player response (pure — fixture-testable). */
@@ -558,6 +716,29 @@ export interface GetPlaybackOptions {
    * not just their results.
    */
   budgetMs?: number;
+  /**
+   * WFX2-P41 — THE PER-USER OAUTH PLAYER RUNG: the acting user's YouTube
+   * connection (the P36 spine's OAuth access token + their WebFlix user
+   * id). When present, the chain runs the anonymous base as always, then
+   * the authed ANDROID/ANDROID_VR/IOS `player` ladder with
+   * `Authorization: Bearer <token>` — the bot-wall's own "Sign in to
+   * confirm" demand answered with the user's own credential — and merges
+   * the user's formats ON TOP of the base under a PER-USER cache key
+   * (`yt:playback:auth:<userId>:<videoId>`): the shared anonymous row is
+   * never touched (the P36 isolation law). Absent (every anonymous
+   * caller) → the shared path, byte-identical to pre-P41.
+   *
+   * Measured context (2026-10-23, the operator's "embedding and preview
+   * broken" re-file): the wall hardened across 2026-10-20..23 — the
+   * protected/trending class now LOGIN_REQUIREDs every anonymous innertube
+   * client from datacenter egresses (station AND production Vercel), and
+   * the watch-page rung's plain URLs carry the scrambled `n` param that
+   * googlevideo 403s untransformed — the anonymous native lane died for
+   * the whole feed class. The authed rung is the revival lane for
+   * connected users; anonymous users keep the honest floors (the embed
+   * lottery + storyboards).
+   */
+  auth?: { userId: string; accessToken: string };
 }
 
 /** The per-rung I/O shape a budgeted chain run uses (P37). */
@@ -573,6 +754,75 @@ interface ChainIO {
 }
 
 export async function getPlayback(
+  videoId: string,
+  opts: GetPlaybackOptions = {}
+): Promise<PlaybackDto> {
+  // WFX2-P41 — THE PER-USER DISPATCH: without `auth` the shared path runs
+  // byte-identically to pre-P41 (the anonymous law, untouched). With `auth`
+  // the per-user merge rides its OWN cache key — the authed answer can
+  // NEVER touch the shared `yt:playback:<id>` row (the P36 isolation law:
+  // one user's authenticated playback fuel is never served to another).
+  // The key carries the userId, so every cache layer (L1 per instance, L2
+  // Upstash) isolates per user by construction.
+  if (!opts.auth) return getPlaybackShared(videoId, opts);
+  const { userId, accessToken } = opts.auth;
+  return cachedResilient(
+    `yt:playback:auth:${userId}:${videoId}`,
+    TTL.WATCH_MS,
+    async () => {
+      // WFX2-P41 — the budget law: ONE outer deadline covers the base chain
+      // AND the authed rung (the per-user answer must respect the caller's
+      // maxDuration exactly like the shared one). The base gets the budget
+      // minus the authed rung's reserve (3 single-attempt clients), so the
+      // worst case stays inside the caller's wall — the DTO route's 40s and
+      // the stream route's 22s ride unchanged.
+      const outerSignal = opts.budgetMs ? AbortSignal.timeout(opts.budgetMs) : undefined;
+      const base = await getPlaybackShared(videoId, {
+        fresh: opts.fresh,
+        ...(opts.budgetMs
+          ? { budgetMs: Math.max(opts.budgetMs - AUTH_RUNG_RESERVE_MS, 5_000) }
+          : {}),
+      });
+      if (authRungRefused(userId)) {
+        // the sticky refusal — the honest degrade: the anonymous truth
+        return base;
+      }
+      const io: ChainIO = outerSignal
+        ? { signal: outerSignal, innertubeTimeoutMs: 4_000, innertubeExtraRetries: -1 }
+        : {};
+      const authed = await fetchInnertubePlayerAuthed(videoId, accessToken, userId, io);
+      if (!authed || authed.streamFormats.length === 0) {
+        // the authed rung honestly failed (walled even authenticated /
+        // network) — the anonymous base answers unchanged
+        return base;
+      }
+      // THE MERGE LAW: the user's own authenticated formats lead the union
+      // (fresh, user-context URLs — the wall's own sign-in demand answered);
+      // the base's anonymous formats follow deduped by itag (both classes
+      // fetch same-invocation — the pickers choose, more fuel never hurts).
+      // Storyboards/duration: the richer of the two (the preview's
+      // storyboard lane + the honest floors keep their fuel).
+      const authedItags = new Set(authed.streamFormats.map((f) => f.itag));
+      const mergedFormats = [
+        ...authed.streamFormats,
+        ...base.streamFormats.filter((f) => !authedItags.has(f.itag)),
+      ];
+      return {
+        streamFormats: mergedFormats,
+        storyboards:
+          authed.storyboards.length > 0 ? authed.storyboards : base.storyboards,
+        durationSec: authed.durationSec ?? base.durationSec,
+        source: "player-authed",
+      };
+    },
+    // The same poisoning guard as the shared key: the honest empty degrade
+    // (source "" — authed failed AND the anonymous chain found nothing) is
+    // NEVER cached; a later healthy run still gets its chance.
+    { isEmpty: (v) => (v as PlaybackDto).source === "", force: opts.fresh === true }
+  );
+}
+
+async function getPlaybackShared(
   videoId: string,
   opts: GetPlaybackOptions = {}
 ): Promise<PlaybackDto> {
@@ -608,7 +858,9 @@ export async function getPlayback(
         }
         const fromPage = await fetchWatchPagePlayerResponse(videoId, io.pageTimeoutMs ?? 12_000);
         if (fromPage) {
-          const pageDto = parsePlayback("watch-page", fromPage);
+          // WFX2-P41 — the n-scrambled URL filter rides the watch-page rung's
+          // parse (the measured dead class; see dropScrambledNFormats).
+          const pageDto = dropScrambledNFormats(parsePlayback("watch-page", fromPage));
           if (pageDto.streamFormats.length > 0) return pageDto; // the formats hunt's rung-2 win (progressive → muxed)
           if (pageDto.storyboards.length > 0) {
             storyboardFallback ??= pageDto;
@@ -622,7 +874,9 @@ export async function getPlayback(
         // session's own page); honest failure → the degrade below
         const fromBroker = await fetchBrokerWatchPlayerResponse(videoId);
         if (fromBroker) {
-          const brokerDto = parsePlayback("broker-watch", fromBroker);
+          // WFX2-P41 — the broker rung's page-context URLs ride the same WEB
+          // client shape (n-scrambled) — the same filter law applies.
+          const brokerDto = dropScrambledNFormats(parsePlayback("broker-watch", fromBroker));
           if (brokerDto.streamFormats.length > 0 || brokerDto.storyboards.length > 0) {
             return brokerDto;
           }
