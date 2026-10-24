@@ -11,8 +11,24 @@
 import { createServer } from "http";
 import { Server } from "socket.io";
 import { sessionManager, parseCookieHeader } from "./session";
+import {
+  ingestBridgeCookies,
+  getIngestToken,
+  rotateIngestToken,
+  getBridgeStatus,
+} from "./ingest";
 
 const PORT = Number(process.env.NETFLIX_DESKTOP_PORT ?? 3030);
+
+const livePhase = () => {
+  const p = sessionManager.getStatus().phase;
+  return p === "ready" || p === "auth-required";
+};
+
+const withAutoAuth = () => ({
+  ...sessionManager.getStatus(),
+  autoAuth: { bridge: getBridgeStatus(), ingestTokenConfigured: true },
+});
 
 const httpServer = createServer((req, res) => {
   const url = new URL(req.url ?? "/", `http://127.0.0.1:${PORT}`);
@@ -27,11 +43,11 @@ const httpServer = createServer((req, res) => {
   };
 
   if (url.pathname === "/healthz") {
-    return json(200, { ok: true, service: "netflix-desktop", ...sessionManager.getStatus() });
+    return json(200, { ok: true, service: "netflix-desktop", ...withAutoAuth() });
   }
 
   if (url.pathname === "/session" && req.method === "GET") {
-    return json(200, sessionManager.getStatus());
+    return json(200, withAutoAuth());
   }
 
   // non-blocking: kicks provisioning/navigation in the background; poll /healthz
@@ -95,6 +111,32 @@ const httpServer = createServer((req, res) => {
         .catch((e) => console.log("[http] reharvest failed:", (e as Error).message.slice(0, 200)));
       return json(202, { ok: true, phase: "harvesting" });
     });
+  }
+
+  // P46 — the WebFlix Bridge push (automatic sign-in): the operator's own
+  // signed-in browser ships its session cookies here on rotation.
+  if (url.pathname === "/ingest" && req.method === "POST") {
+    return readBody(async (body) => {
+      try {
+        const input = body ? (JSON.parse(body) as Record<string, unknown>) : {};
+        const result = await ingestBridgeCookies(input, {
+          isSessionLive: livePhase,
+          applyLive: (cookies) => sessionManager.applyExternalCookies(cookies),
+        });
+        return json(result.code, result);
+      } catch (e) {
+        return json(400, { ok: false, applied: false, message: (e as Error).message });
+      }
+    });
+  }
+
+  // the pairing token (surfaced in the app's auto sign-in panel) + bridge status
+  if (url.pathname === "/ingest/token" && req.method === "GET") {
+    return json(200, { token: getIngestToken(), bridge: getBridgeStatus() });
+  }
+
+  if (url.pathname === "/ingest/token/rotate" && req.method === "POST") {
+    return json(200, { ok: true, token: rotateIngestToken() });
   }
 
   return json(404, { error: "not found" });
