@@ -9,22 +9,16 @@ import { postJson } from "@/hooks/use-api";
 /**
  * P42 — the My Netflix List toggle (WebFlix-LOCAL list — ADR 0002 §5: no
  * Netflix credentials anywhere, so the list lives in WebFlix's own DB, like
- * the watch lane's local Watch-Later rung).
+ * the watch lane's local Watch-Later rung). P45: the logic moved into the
+ * useMyListToggle hook so compact surfaces (the card hover sheet's + circle)
+ * share the exact same behavior.
  */
-export function MyListButton({
-  netflixId,
-  titleName,
-  initial,
-  variant = "secondary",
-  onChanged,
-}: {
-  netflixId: number;
-  titleName: string;
-  initial: boolean;
-  variant?: "secondary" | "hero";
-  onChanged?: (next: boolean) => void;
-}) {
-  const [inList, setInList] = useState(initial);
+export function useMyListToggle(
+  netflixId: number,
+  titleName: string,
+  options?: { initial?: boolean; onChanged?: (next: boolean) => void }
+) {
+  const [inList, setInList] = useState(options?.initial ?? false);
   const [busy, setBusy] = useState(false);
 
   async function toggle() {
@@ -43,7 +37,7 @@ export function MyListButton({
         setInList(true);
         toast.success(`Added “${titleName}” to My List`);
       }
-      onChanged?.(!inList);
+      options?.onChanged?.(!inList);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Something went wrong";
       if (message.includes("401")) {
@@ -55,6 +49,24 @@ export function MyListButton({
       setBusy(false);
     }
   }
+
+  return { saved: inList, busy, toggle };
+}
+
+export function MyListButton({
+  netflixId,
+  titleName,
+  initial,
+  variant = "secondary",
+  onChanged,
+}: {
+  netflixId: number;
+  titleName: string;
+  initial: boolean;
+  variant?: "secondary" | "hero";
+  onChanged?: (next: boolean) => void;
+}) {
+  const { saved: inList, busy, toggle } = useMyListToggle(netflixId, titleName, { initial, onChanged });
 
   return (
     <button

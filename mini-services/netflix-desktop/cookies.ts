@@ -41,12 +41,15 @@ export async function harvestNetflixSession(): Promise<HarvestResult> {
   const runRes = await fetch(`https://api.apify.com/v2/acts/${APIFY_ACTOR_ID}/runs?token=${APIFY_TOKEN}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
+    // P45: the v0.2 actor is a single human-paced attempt — homepage warm-up,
+    // real Sign-In click, per-keystroke typing, ONE clean submit. The measured
+    // breakthrough (NetflixId+SecureNetflixId issued where the old fast flow
+    // got the pre-validation risk-block) came from GB egress + this pacing.
     body: JSON.stringify({
-      emails: [email],
+      email,
       password,
       proxyGroup: process.env.APIFY_PROXY_GROUP ?? "BUYPROXIES94952",
-      country: process.env.APIFY_PROXY_COUNTRY ?? "US",
-      attemptsPerEmail: 3,
+      country: process.env.APIFY_PROXY_COUNTRY ?? "GB",
     }),
     signal: AbortSignal.timeout(30_000),
   });

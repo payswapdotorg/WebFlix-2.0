@@ -419,6 +419,23 @@ export default function NetflixWatchView() {
                       Retry automatic sign-in
                     </button>
                   </div>
+                  <p className="text-xs text-white/45" data-testid="netflix-watch-harvest-note">
+                    Automatic sign-in runs periodically from residential networks — measured
+                    reality (P45): Netflix issues session cookies but quarantines the login
+                    before it activates, so every harvest result is strictly validated before
+                    it&apos;s trusted. The cookie connect above is the guaranteed path.
+                  </p>
+                  {title && (
+                    <p className="text-xs">
+                      <Link
+                        href={`/netflix/t/${title.netflixId}`}
+                        className="text-white/60 underline underline-offset-2 hover:text-white"
+                        data-testid="netflix-watch-trailer-link"
+                      >
+                        Meanwhile, watch the “{title.title}” trailer right now in WebFlix →
+                      </Link>
+                    </p>
+                  )}
                   {cookiePanelOpen && (
                     <div className="mx-auto max-w-xl space-y-3 rounded-lg border border-white/15 bg-white/5 p-4 text-left" data-testid="netflix-watch-cookie-panel">
                       <label htmlFor="nf-cookie-input" className="text-xs font-semibold uppercase tracking-wide text-white/60">
