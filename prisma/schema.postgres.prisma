@@ -40,6 +40,8 @@ model User {
   videoSignals   VideoSignal[]
   liveChat       LiveChatMessage[]
   ownedChannels  Channel[]    @relation("ChannelOwner")
+  clips          Clip[]
+  netflixMyList  NetflixMyListItem[]
 }
 
 model Channel {
@@ -346,4 +348,69 @@ model VideoSignal {
   createdAt DateTime @default(now())
 
   @@unique([videoId, userId])
+}
+
+// P23-A — WebFlix-local clips (SYNCED from the sqlite schema 2026-10-24: the
+// prod variant had drifted — Clip was missing entirely since P23; the P42
+// schema-sync law now keeps both variants byte-equivalent modulo provider).
+model Clip {
+  id        String   @id @default(cuid())
+  // the SOURCE video id as the watch surface knows it (a YouTube video id)
+  videoId   String
+  title     String
+  startSec  Int
+  endSec    Int
+  creatorId String
+  creator   User     @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([videoId])
+}
+
+// ---------------------------------------------------------------------------
+// P42-NETFLIX-SOURCE — the first second-source lane (ADR 0002). ADDITIVE ONLY.
+// NetflixTitle is the catalog MIRROR (the search index the Top 10 pools feed
+// on every refresh); NetflixMyListItem is the viewer's WebFlix-LOCAL
+// "My Netflix List" (no Netflix credentials anywhere — ADR 0002 §5).
+// NOTE: no list primitives — countryRanks is a "CC:rank" CSV.
+model NetflixTitle {
+  netflixId      Int      @id
+  title          String
+  // "movie" | "series"
+  kind           String
+  synopsis       String   @default("")
+  releaseYear    Int?
+  maturityRating String?
+  posterUrl      String?
+  backdropUrl    String?
+  logoUrl        String?
+  weeklyRank     Int?
+  allTimeRank    Int?
+  weeksInTop10   Int?
+  weeklyHoursViewed Int?
+  weeklyViews    Int?
+  // YYYY-MM-DD (weekly pools); null = all-time
+  weekEndDate    String?
+  pool           String?
+  isPlayable     Boolean  @default(true)
+  // "US:1,GB:4,…" (ISO code → rank in that country's Top 10)
+  countryRanks   String   @default("")
+  updatedAt      DateTime @updatedAt
+
+  myListItems NetflixMyListItem[]
+
+  @@index([title])
+  @@index([kind])
+}
+
+model NetflixMyListItem {
+  userId    String
+  netflixId Int
+  createdAt DateTime @default(now())
+
+  user  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title NetflixTitle @relation(fields: [netflixId], references: [netflixId], onDelete: Cascade)
+
+  @@id([userId, netflixId])
+  @@index([userId])
 }

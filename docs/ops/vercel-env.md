@@ -151,3 +151,17 @@ stays client-fetched from `/api/*`, which keep `force-dynamic` by law.
 - Deploy triggers: push-based deploys are currently dead (GitHub↔Vercel integration disconnected; repo has no webhooks — reconnect via the Vercel dashboard). Working chain: v13 API `gitSource` POST → deploy hook → empty-commit push. **Vercel free-plan quota: 100 API deployments/day; rejected POSTs extend the cooldown — never hammer.** Deploy-hook jobs still build during API quota exhaustion.
 - `YT_COOKIES` re-harvested 2026-10-05 from the live session (fresh; lands on the next deployment).
 - Re-arm automation: `scripts/rearm/` (idempotent chain re-arm + 120s self-healing watchdog + prod-sync auto-deploy). See `scripts/rearm/README.md`.
+
+## 2026-10-24 — P42 schema-sync note (the build now owns the prod schema)
+
+- `vercel.json` buildCommand gains `prisma db push --skip-generate` (AFTER the
+  schema swap, BEFORE generate): every deploy syncs the Neon schema from
+  `schema.postgres.prisma` with no secrets in CI logs and no operator errand.
+  Plain `db push` (no `--accept-data-loss`): additive diffs apply silently;
+  DESTRUCTIVE diffs fail the build loudly — the operator reviews them. Never
+  add `--accept-data-loss` to this line.
+- This deploy also closes the pre-existing drift: the prod variant had been
+  missing the `Clip` table since P23 (any /clip create would have 500'd in
+  prod) — the P42 schema-sync law keeps both variants byte-equivalent modulo
+  provider, and this deploy creates Clip + NetflixTitle + NetflixMyListItem.
+- No new env vars this lane (the Netflix reads need none — ADR 0002 §6).

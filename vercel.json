@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "cp prisma/schema.postgres.prisma prisma/schema.prisma && prisma generate && next build",
+  "buildCommand": "cp prisma/schema.postgres.prisma prisma/schema.prisma && prisma db push --skip-generate && prisma generate && next build",
   "git": {
     "deploymentEnabled": {
       "main": true,
