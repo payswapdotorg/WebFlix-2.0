@@ -17,6 +17,12 @@ const SBX_TIMEOUT_MS = 30 * 60 * 1000;
 const IDLE_TTL_MS = 25 * 60 * 1000;
 const COOKIE_CACHE_PATH = "/tmp/netflix-cookies.json";
 const AUTH_STATE_PATH = "/tmp/netflix-auth-state.json";
+// P45 (account-safety): the automatic harvest hits Netflix's pre-validation
+// wall every time — retrying every 10 minutes burns Apify runs and risks
+// deepening the risk flag on the account. The automatic ladder now waits
+// out a long cooldown after a failure; the operator's retry button stays
+// on-demand (an explicit human choice).
+const HARVEST_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 
 interface AuthState {
   lastHarvestFailedAt?: number;
@@ -237,10 +243,10 @@ export class NetflixSessionManager {
     if (!desktop) return false;
     let cookies = this.loadCookieCache();
     if (!cookies || !hasAuthCookies(cookies)) {
-      // a harvest that failed <10 min ago stays failed — don't burn runs
-      const failedAt = this.lastHarvestFailedAt ?? readAuthState().lastHarvestFailedAt ?? 0;
-      if (Date.now() - failedAt < 10 * 60_000) {
-        console.log("[session] skipping harvest (recent failure)");
+      // a failed automatic harvest cools down for hours (P45) — don't burn runs
+      const failedAt = this.lastHarvestFailedAt || readAuthState().lastHarvestFailedAt || 0;
+      if (Date.now() - failedAt < HARVEST_COOLDOWN_MS) {
+        console.log("[session] skipping harvest (cooldown after failure)");
         return false;
       }
       console.log("[session] no cached cookies — harvesting via Apify");
@@ -265,7 +271,14 @@ export class NetflixSessionManager {
       const signedIn = await this.checkSignedIn(cdp);
       console.log(`[session] post-inject signedIn=${signedIn}`);
       if (!signedIn) {
-        // stale cache — re-harvest once
+        // stale cache — re-harvest once, but only outside the failure cooldown
+        // (the strict check already told us the cache is dead; a burned run
+        // every restore would hammer the account — P45)
+        const failedAt = this.lastHarvestFailedAt || readAuthState().lastHarvestFailedAt || 0;
+        if (Date.now() - failedAt < HARVEST_COOLDOWN_MS) {
+          console.log("[session] stale cache — re-harvest suppressed by cooldown");
+          return false;
+        }
         const res = await harvestNetflixSession();
         if (res.ok && res.cookies) {
           this.saveCookieCache(res.cookies);
@@ -274,6 +287,9 @@ export class NetflixSessionManager {
           await sleep(8_000);
           return this.checkSignedIn(cdp);
         }
+        // record the failure so the ladder cools down (P45)
+        this.lastHarvestFailedAt = Date.now();
+        writeAuthState({ lastHarvestFailedAt: this.lastHarvestFailedAt });
         return false;
       }
       return true;
