@@ -41,6 +41,7 @@ model User {
   liveChat       LiveChatMessage[]
   ownedChannels  Channel[]    @relation("ChannelOwner")
   clips          Clip[]
+  netflixMyList  NetflixMyListItem[]
 }
 
 model Channel {
@@ -371,4 +372,54 @@ model Clip {
   createdAt DateTime @default(now())
 
   @@index([videoId])
+}
+
+// ---------------------------------------------------------------------------
+// P42-NETFLIX-SOURCE — the first second-source lane (ADR 0002). ADDITIVE ONLY:
+// every youtube surface stays byte-identical. NetflixTitle is the catalog
+// MIRROR (the search index the Top 10 pools feed on every refresh — the live
+// pools stay the source of truth); NetflixMyListItem is the viewer's
+// WebFlix-LOCAL "My Netflix List" (Netflix's own list API needs a Netflix
+// login — ADR 0002 §5 forbids that, so the list lives here, honestly local).
+// NOTE: SQLite carries no list primitives — countryRanks is a "CC:rank" CSV.
+model NetflixTitle {
+  netflixId      Int      @id
+  title          String
+  // "movie" | "series"
+  kind           String
+  synopsis       String   @default("")
+  releaseYear    Int?
+  maturityRating String?
+  posterUrl      String?
+  backdropUrl    String?
+  logoUrl        String?
+  weeklyRank     Int?
+  allTimeRank    Int?
+  weeksInTop10   Int?
+  weeklyHoursViewed Int?
+  weeklyViews    Int?
+  // YYYY-MM-DD (weekly pools); null = all-time
+  weekEndDate    String?
+  pool           String?
+  isPlayable     Boolean  @default(true)
+  // "US:1,GB:4,…" (ISO code → rank in that country's Top 10)
+  countryRanks   String   @default("")
+  updatedAt      DateTime @updatedAt
+
+  myListItems NetflixMyListItem[]
+
+  @@index([title])
+  @@index([kind])
+}
+
+model NetflixMyListItem {
+  userId    String
+  netflixId Int
+  createdAt DateTime @default(now())
+
+  user  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title NetflixTitle @relation(fields: [netflixId], references: [netflixId], onDelete: Cascade)
+
+  @@id([userId, netflixId])
+  @@index([userId])
 }

@@ -585,15 +585,21 @@ describe("SidebarNav + SidebarRail — the You section at youtube.com's guide pa
 
   // REA-3 — the station pack's guide ladder (measured logged-in
   // youtube.com 2026-10-17): Home, Shorts, Subscriptions, You, History, …
-  test("the guide ladder at the pack's order: Home, Shorts, Subscriptions, You(→ /you) — Trending never rides the main rung", async () => {
+  // P42-NETFLIX-SOURCE deviation (ADR 0002 §6, deliberate): the second
+  // source's hub rides the main rung AFTER Subscriptions — youtube-parity
+  // PLUS the Netflix destination, never replacing a youtube row.
+  test("the guide ladder at the pack's order: Home, Shorts, Subscriptions, Netflix(P42), You(→ /you) — Trending never rides the main rung", async () => {
     serveMe(null);
     await render(<SidebarNav onNavigate={() => {}} />);
     await act(async () => {});
     const links = all("nav a");
     const labels = links.map((a) => (a.textContent ?? "").trim());
-    // the main rung: exactly Home, Shorts, Subscriptions (the pack's ladder;
-    // Trending moved to the Explore section — youtube.com's own placement)
-    expect(labels.slice(0, 4)).toEqual(["Home", "Shorts", "Subscriptions", "You"]);
+    // the main rung: exactly Home, Shorts, Subscriptions, Netflix (the pack's
+    // ladder + the P42 second-source row; Trending stays in Explore —
+    // youtube.com's own placement)
+    expect(labels.slice(0, 5)).toEqual(["Home", "Shorts", "Subscriptions", "Netflix", "You"]);
+    const netflixRow = links.find((a) => (a.textContent ?? "").trim() === "Netflix");
+    expect(netflixRow?.getAttribute("href")).toBe("/netflix");
     const youRow = links.find((a) => (a.textContent ?? "").trim() === "You");
     expect(youRow?.getAttribute("href")).toBe("/you");
     // the You family follows directly (the pack: You, History, Playlists, …)
@@ -615,7 +621,8 @@ describe("SidebarNav + SidebarRail — the You section at youtube.com's guide pa
     await act(async () => {});
     const links = all("nav a");
     const labels = links.map((a) => (a.textContent ?? "").trim());
-    expect(labels.slice(0, 4)).toEqual(["Home", "Shorts", "Subscriptions", "You"]);
+    // P42: the collapsed rail mirrors the extended main rung (Netflix rides)
+    expect(labels.slice(0, 5)).toEqual(["Home", "Shorts", "Subscriptions", "Netflix", "You"]);
     const youRow = links.find((a) => (a.textContent ?? "").trim() === "You");
     expect(youRow?.getAttribute("href")).toBe("/you");
     expect(labels).toContain("Your videos");

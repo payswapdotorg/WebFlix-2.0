@@ -11,6 +11,7 @@ import { SearchVideoCard } from "@/components/search/search-video-card";
 import { useHoverPreview } from "@/components/video/video-hover-preview";
 import { ChannelResultCard } from "@/components/search/channel-result-card";
 import { PlaylistResultCard } from "@/components/search/playlist-result-card";
+import { NetflixSearchShelf } from "@/components/search/netflix-search-shelf";
 import {
   filtersFromParams,
   hasActiveFilters,
@@ -295,6 +296,11 @@ function SearchContent() {
           <div className="px-4 py-3 sm:px-6">
             <AppliedFilterChips state={state} onChange={onFiltersChange} />
           </div>
+
+          {/* P42 — the Netflix shelf (additive, second-source lane): rides the
+              same query over Netflix's own Top 10 catalog; renders only when
+              the mirror answers with real titles (the honest absence). */}
+          <NetflixSearchShelf q={q} />
 
           {/* P23-B (G3) — the AI answer card, ABOVE the results grid. Fires
               only for conversational queries (the heuristic); stays hidden

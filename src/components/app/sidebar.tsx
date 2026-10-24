@@ -31,6 +31,7 @@ import {
   SquarePlay,
   ThumbsUp,
   Trophy,
+  TvMinimalPlay,
   UserRound,
   Download,
   MessageSquarePlus,
@@ -53,6 +54,9 @@ const MAIN_NAV: NavItem[] = [
   { href: "/", label: "Home", icon: Home },
   { href: "/shorts", label: "Shorts", icon: SquarePlay },
   { href: "/subscriptions", label: "Subscriptions", icon: Layers },
+  // P42-NETFLIX-SOURCE — the second source's hub (ADR 0002): Netflix's own
+  // Top 10 data browsed natively; playback hands off to Netflix's player.
+  { href: "/netflix", label: "Netflix", icon: TvMinimalPlay },
 ];
 
 /**
