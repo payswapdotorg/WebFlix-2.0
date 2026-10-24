@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Play } from "lucide-react";
+import { ArrowLeft, ExternalLink, Play } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlayHandoffDialog } from "@/components/netflix/play-handoff";
@@ -115,14 +115,22 @@ export default function NetflixTitleView() {
               ))}
             </p>
             <div className="flex flex-wrap items-center gap-3 pt-1">
-              <button
-                type="button"
-                onClick={() => setHandoffOpen(true)}
+              <Link
+                href={`/netflix/watch/${title.netflixId}`}
                 data-testid="netflix-title-play"
                 className="flex h-11 items-center gap-2 rounded-md bg-[#e50914] px-6 text-sm font-semibold transition-colors hover:bg-[#c4080f]"
               >
                 <Play className="size-4 fill-current" aria-hidden="true" />
-                Play on Netflix
+                Play
+              </Link>
+              <button
+                type="button"
+                onClick={() => setHandoffOpen(true)}
+                data-testid="netflix-title-handoff"
+                className="flex h-11 items-center gap-2 rounded-md border border-white/20 px-5 text-sm font-medium text-white/85 transition-colors hover:bg-white/5"
+              >
+                <ExternalLink className="size-4" aria-hidden="true" />
+                Open on netflix.com
               </button>
               <MyListButton
                 netflixId={title.netflixId}

@@ -13,13 +13,12 @@ import { netflixTitleUrl, netflixWatchUrl } from "@/lib/netflix/deeplink";
 import type { NetflixTitleDTO } from "@/lib/netflix/types";
 
 /**
- * P42 — the play hand-off (ADR 0002 §1 is this component, made UI).
+ * P43 — the external hand-off: the SECONDARY playback path.
  *
- * The playback policy: Netflix titles play through Netflix's own official
- * deep link, never through a faked player. The dialog says so honestly —
- * what WebFlix can't do (DRM-licensed playback outside Netflix's apps), what
- * it does instead (hand the viewer to Netflix's own player), and the exact
- * destination URL. No dark patterns: the deep link is a plain outbound anchor.
+ * In-app playback now rides the WebFlix Netflix Desktop session
+ * (/netflix/watch/<id>). This dialog is for viewers who prefer their own
+ * device: it hands off through Netflix's official deep link — the same
+ * pattern Apple TV/Google TV use. No DRM is touched.
  */
 export function PlayHandoffDialog({
   title,
@@ -62,9 +61,8 @@ export function PlayHandoffDialog({
             Ready to play on Netflix
           </DialogTitle>
           <DialogDescription className="text-sm leading-relaxed text-white/60">
-            Netflix protects its streams with DRM and licenses them for playback inside
-            its own apps only — so WebFlix hands you to Netflix&apos;s own player instead
-            of faking one. Your browsing, search, and lists stay here.
+            Prefer your own device or app? WebFlix hands you to Netflix&apos;s own player
+            through the official per-title deep link — no DRM touched, no detour.
           </DialogDescription>
         </DialogHeader>
 
