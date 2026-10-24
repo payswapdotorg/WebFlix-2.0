@@ -16,6 +16,27 @@ import { harvestNetflixSession, hasAuthCookies, type NetflixCookie } from "./coo
 const SBX_TIMEOUT_MS = 30 * 60 * 1000;
 const IDLE_TTL_MS = 25 * 60 * 1000;
 const COOKIE_CACHE_PATH = "/tmp/netflix-cookies.json";
+const AUTH_STATE_PATH = "/tmp/netflix-auth-state.json";
+
+interface AuthState {
+  lastHarvestFailedAt?: number;
+}
+
+function readAuthState(): AuthState {
+  try {
+    return JSON.parse(readFileSync(AUTH_STATE_PATH, "utf8")) as AuthState;
+  } catch {
+    return {};
+  }
+}
+
+function writeAuthState(s: AuthState) {
+  try {
+    writeFileSync(AUTH_STATE_PATH, JSON.stringify(s));
+  } catch {
+    /* best effort */
+  }
+}
 
 export type SessionPhase =
   | "idle"
@@ -118,12 +139,15 @@ export class NetflixSessionManager {
 
   private async bootstrap(): Promise<Sandbox> {
     this.setPhase("provisioning", "starting cloud desktop");
+    let desktop: Sandbox | null = null;
     try {
-      // fresh sandbox
-      const desktop = await Sandbox.create({
-        timeoutMs: SBX_TIMEOUT_MS,
-        resolution: [1280, 720],
-      });
+      // fresh sandbox (the create call itself can hang on platform concurrency — race it)
+      desktop = await Promise.race([
+        Sandbox.create({ timeoutMs: SBX_TIMEOUT_MS, resolution: [1280, 720] }),
+        new Promise<never>((_, rej) =>
+          setTimeout(() => rej(new Error("sandbox creation timed out (platform busy or quota)")), 120_000),
+        ),
+      ]);
       this.desktop = desktop;
       this.videoId = null;
       this.lastActivity = Date.now();
@@ -183,6 +207,15 @@ export class NetflixSessionManager {
       return desktop;
     } catch (e) {
       this.setPhase("error", (e as Error).message.slice(0, 300));
+      // never leak a half-bootstrapped sandbox
+      if (desktop) {
+        try {
+          await desktop.kill();
+        } catch {
+          /* noop */
+        }
+        this.desktop = null;
+      }
       throw e;
     }
   }
@@ -194,7 +227,8 @@ export class NetflixSessionManager {
     let cookies = this.loadCookieCache();
     if (!cookies || !hasAuthCookies(cookies)) {
       // a harvest that failed <10 min ago stays failed — don't burn runs
-      if (Date.now() - (this.lastHarvestFailedAt ?? 0) < 10 * 60_000) {
+      const failedAt = this.lastHarvestFailedAt ?? readAuthState().lastHarvestFailedAt ?? 0;
+      if (Date.now() - failedAt < 10 * 60_000) {
         console.log("[session] skipping harvest (recent failure)");
         return false;
       }
@@ -202,6 +236,7 @@ export class NetflixSessionManager {
       const res = await harvestNetflixSession();
       if (!res.ok || !res.cookies) {
         this.lastHarvestFailedAt = Date.now();
+        writeAuthState({ lastHarvestFailedAt: this.lastHarvestFailedAt });
         console.log(`[session] harvest failed: ${res.reason}`);
         return false;
       }
@@ -377,8 +412,10 @@ export class NetflixSessionManager {
       };
       if (String(o.href ?? "").includes("/login")) return false;
       if (o.player) return true;
-      // signed-out watch/title pages carry a prominent sign-in wall
-      return !/enter your info to sign in|sign in to watch|sign in to continue/i.test(String(o.text ?? ""));
+      // signed-out deep links land on the marketing title page (Sign In / Join Now)
+      return !/join now|enter your info to sign in|sign in to watch|sign in to continue/i.test(
+        String(o.text ?? ""),
+      );
     } catch {
       return false;
     }
@@ -467,6 +504,7 @@ export class NetflixSessionManager {
       /* noop */
     }
     this.lastHarvestFailedAt = 0;
+    writeAuthState({});
     const res = await harvestNetflixSession();
     if (res.ok && res.cookies) {
       this.saveCookieCache(res.cookies);
