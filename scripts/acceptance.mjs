@@ -14,10 +14,13 @@
  *      comments, related, shorts, live surface, autocomplete/suggest, channel
  *      tabs (+ in-channel search), live-status shape;
  *   C. 5 honest-degradation checks — personal surfaces WITHOUT a session must
- *      answer loginRequired=true with zero rows (never fake rows). When the
- *      deployment DOES carry the operator session (YT_COOKIES set), the check
- *      passes only if real rows are present — an empty payload with
- *      loginRequired=false is the fake-data failure signature and fails.
+ *      answer the P2-AU auth gate: HTTP 401 {"error":"unauthenticated"} (the
+ *      signed-out contract since the auth wave). Dev deployments running
+ *      without auth env keep the pre-P2-AU contract: 200 + loginRequired=true
+ *      + zero rows (never fake rows). When the deployment DOES carry an
+ *      authenticated session, the check passes only if real rows are present
+ *      — an empty payload with loginRequired=false is the fake-data failure
+ *      signature and fails.
  *
  * Exit code: 0 iff every check passes. This is the ONLY live-network tool in
  * the repo (bun test never runs it; --selftest binds 127.0.0.1 only).
@@ -28,7 +31,7 @@ import { createServer } from "node:http";
 
 const require = createRequire(import.meta.url);
 
-const PRODUCTION_URL = "https://webflix-2-0-3l2mqi5ti.vercel.app";
+const PRODUCTION_URL = "https://webflix-2-0-one.vercel.app";
 const PAGE_TIMEOUT_MS = 20_000;
 const API_TIMEOUT_MS = 15_000;
 const selftest = process.argv.includes("--selftest");
@@ -54,7 +57,10 @@ const PAGE_CHECKS = [
   { path: "/playlists", title: "Playlists · WebFlix" },
   { path: "/liked", title: "Liked videos · WebFlix" },
   { path: "/channel/@RickAstley", title: "WebFlix — Watch & Share Videos" },
-  { path: "/studio", title: "Studio · WebFlix" },
+  // P48 — /studio is deployment truth: the shell redirects (307) to the
+  // standalone Studio app (STUDIO_APP_URL → studio-webflix.vercel.app). The
+  // page check therefore accepts the redirect when it lands on that host.
+  { path: "/studio", title: "Studio · WebFlix", allowRedirectHost: "studio-webflix.vercel.app" },
   { path: "/upload", title: "Upload · WebFlix" },
 ];
 
@@ -226,10 +232,12 @@ const API_CHECKS = [
 ];
 
 /**
- * Honest-degradation checks. PASS: loginRequired=true + zero rows (the
- * no-session contract). PASS (noted): loginRequired falsy + non-empty rows
- * (the deployment carries the operator session — real rows, not fake).
- * FAIL: loginRequired falsy + empty rows (the fake-empty signature).
+ * Honest-degradation checks (P48 contract). PASS: the P2-AU auth gate —
+ * HTTP 401 {"error":"unauthenticated"} (the signed-out shape since the auth
+ * wave). PASS (legacy, dev without auth env): 200 + loginRequired=true +
+ * zero rows. PASS (noted): loginRequired falsy + non-empty rows (the
+ * deployment carries an authenticated session — real rows, not fake).
+ * FAIL: anything else (the fake-empty signature included).
  */
 const DEGRADE_CHECKS = [
   { name: "history honest w/o session", path: "/api/history", rows: (j) => n(j.groups), label: "groups" },
@@ -255,6 +263,15 @@ async function fetchWithTimeout(url, timeoutMs) {
 
 async function runPageCheck(target, check) {
   const res = await fetchWithTimeout(target + check.path, PAGE_TIMEOUT_MS);
+  // P48 — a 3xx is honest deployment truth when it lands on the host the
+  // check names (the /studio → standalone-app redirect)
+  if (check.allowRedirectHost && res.status >= 300 && res.status < 400) {
+    const loc = res.headers.get("location") ?? "";
+    if (!loc.includes(check.allowRedirectHost)) {
+      throw new Error(`HTTP ${res.status} → ${loc || "(no location)"} (want host ${check.allowRedirectHost})`);
+    }
+    return `HTTP ${res.status} → ${loc}`;
+  }
   if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
   const html = await res.text();
   const m = /<title[^>]*>([^<]*)<\/title>/i.exec(html);
@@ -277,11 +294,16 @@ async function runApiCheck(target, check) {
 
 async function runDegradeCheck(target, check) {
   const res = await fetchWithTimeout(target + check.path, API_TIMEOUT_MS);
+  const json = await res.json().catch(() => ({}));
+  // P48 — the P2-AU gate: signed-out personalized surfaces answer 401
+  // {"error":"unauthenticated"} — the honest no-session contract
+  if (res.status === 401 && json.error === "unauthenticated") {
+    return `401 unauthenticated (the auth gate — honest)`;
+  }
   if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
-  const json = await res.json();
   const rows = check.rows(json);
   if (json.loginRequired === true && rows === 0) {
-    return `loginRequired=true ${check.label}=0 (honest)`;
+    return `loginRequired=true ${check.label}=0 (honest, pre-auth contract)`;
   }
   if (json.loginRequired !== true && rows > 0) {
     return `session present — ${check.label}=${rows} real rows`;
@@ -393,6 +415,11 @@ function startMockServer() {
     const json = (obj) => send(200, JSON.stringify(obj), "application/json");
 
     if (req.method === "GET" && titles.has(path)) {
+      // P48 — /studio redirects to the standalone Studio app (deployment truth)
+      if (path === "/studio") {
+        res.writeHead(307, { Location: "https://studio-webflix.vercel.app/" });
+        return res.end();
+      }
       return send(
         200,
         `<!doctype html><html><head><title>${titles.get(path)}</title></head><body>shell</body></html>`,
@@ -505,19 +532,20 @@ function startMockServer() {
       });
     }
     if (path === "/api/history") {
-      return json({ groups: [], nextCursor: null, loginRequired: true, watchHistoryPaused: false, searchHistoryPaused: false, total: 0, session: false });
+      // P48 — the mock serves the CURRENT contract: the P2-AU auth gate
+      return send(401, JSON.stringify({ error: "unauthenticated" }), "application/json");
     }
     if (path === "/api/subscriptions") {
-      return json({ channels: [], videos: [], nextCursor: null, loginRequired: true, session: false });
+      return send(401, JSON.stringify({ error: "unauthenticated" }), "application/json");
     }
     if (path === "/api/playlists") {
-      return json({ playlists: [], loginRequired: true, session: false });
+      return send(401, JSON.stringify({ error: "unauthenticated" }), "application/json");
     }
     if (path === "/api/notifications") {
-      return json({ unread: 0, items: [], pollIntervalMs: 300000, loginRequired: true, session: false });
+      return send(401, JSON.stringify({ error: "unauthenticated" }), "application/json");
     }
     if (path === "/api/liked") {
-      return json({ videos: [], playlist: null, nextCursor: null, loginRequired: true, session: false });
+      return send(401, JSON.stringify({ error: "unauthenticated" }), "application/json");
     }
     return json({ error: "mock miss", path });
   });

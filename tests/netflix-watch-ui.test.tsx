@@ -247,6 +247,35 @@ describe("the Netflix watch view — the honest session states", () => {
     expect(text()).toContain("Restart the session");
   });
 
+  test("P48 — a generic error still hands off to netflix.com (the handoff left the unreachable-only lane)", async () => {
+    brokerStatus = { phase: "error", message: "cloud desktop gone" };
+    await render(createElement(NetflixWatchView));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(q('[data-testid="netflix-watch-unreachable-handoff"]')).not.toBeNull();
+  });
+
+  test("P48 — the keyed snag (no E2B key) renders the operator setup wizard", async () => {
+    brokerStatus = {
+      phase: "error",
+      message:
+        "API key is required, please visit the API Keys tab at https://e2b.dev/dashboard?tab=keys to get your API key. You can either set the environment variable `E2B_API_KEY` …",
+    };
+    await render(createElement(NetflixWatchView));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    // the wizard replaces the generic snag copy
+    expect(q('[data-testid="netflix-watch-snag-keyed"]')).not.toBeNull();
+    expect(text()).toContain("Playback needs an E2B key on this server.");
+    // the fix is one click away + the movie is never blocked
+    expect(q('[data-testid="netflix-watch-snag-e2b-link"]')?.getAttribute("href")).toContain("e2b.dev/dashboard");
+    expect(q('[data-testid="netflix-watch-unreachable-handoff"]')).not.toBeNull();
+    // and the pairing lane still lives right there (the P47 surface)
+    expect(q('[data-testid="netflix-watch-error-autoauth-toggle"]')).not.toBeNull();
+  });
+
   test("P47 — the error state still surfaces the automatic sign-in lane (pair now, validate on the next bootstrap)", async () => {
     brokerStatus = { phase: "error", message: "E2B key missing" };
     await render(createElement(NetflixWatchView));
