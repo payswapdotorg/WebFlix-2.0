@@ -189,9 +189,20 @@ export class NetflixSessionManager {
       await desktop.launch("netflix-app", "https://www.netflix.com/");
       await sleep(14_000);
 
-      // interactive stream
+      // interactive stream (P45: the platform can throw a transient
+      // CommandExitError on stream.start — retry once before giving up)
       this.setPhase("stream-ready", "starting live stream");
-      await desktop.stream.start({ requireAuth: true });
+      try {
+        await desktop.stream.start({ requireAuth: true });
+      } catch (e) {
+        console.log(`[session] stream.start failed (${(e as Error).message.slice(0, 80)}) — retrying once`);
+        await sleep(6_000);
+        try {
+          await desktop.stream.start({ requireAuth: true });
+        } catch (e2) {
+          if (!/already/i.test((e2 as Error).message)) throw e2;
+        }
+      }
       const authKey = desktop.stream.getAuthKey();
       this.streamUrl = desktop.stream.getUrl({ authKey: authKey ?? undefined });
 
