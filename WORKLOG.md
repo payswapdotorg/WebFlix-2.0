@@ -1,6 +1,23 @@
 # Worklog
 
 ---
+Task ID: P48-ACCEPTANCE-TRUTH-SNAG-WIZARD
+Agent: Z.ai Code (resident TL station, continued session — operator: "go")
+Task: verify the P47 deploy in production, heal the acceptance gate's stale contracts, prove the bridge's public path, and turn the keyed snag into a self-service setup wizard.
+
+Work Log:
+- PRODUCTION VERIFIED: scripts/acceptance.mjs against the live Vercel deployment — the hardcoded PRODUCTION_URL was stale (404s; now webflix-2-0-one.vercel.app). First live run 31/38; triaged every failure: NONE were P47 regressions.
+- THE GATE HEALED (stale contracts to the current designed shapes): (1) the five "honest degrade w/o session" checks expected the pre-auth 200+loginRequired shape — the P2-AU wave made signed-out personalized APIs answer 401 {"error":"unauthenticated"} BY DESIGN; the runner now accepts the auth gate (401 shape) AND the legacy dev contract; the selftest mock serves the 401 shape. (2) /studio expected 200 — deployment truth is the 307 redirect to the standalone Studio app; runPageCheck gained allowRedirectHost and the mock serves the redirect. Live + selftest now both 38/38 (the one transient search wobble passed on re-run).
+- THE BRIDGE'S PUBLIC PATH PROVEN: through the sandbox gateway (:81), /healthz?XTransformPort=3030 reaches the broker, /api/netflix/watch/autoauth serves the real pairing token, the ingest route answers — the operator can pair the WebFlix Bridge against the preview origin TODAY (the lane's origin line shows window.location.origin, which IS the right value on their side).
+- THE SNAG WIZARD (watch lane): the keyed snag — broker up, no E2B_API_KEY (the SDK's "API key is required" shape) — no longer renders the raw error dump; it renders the operator setup wizard (netflix-watch-snag-keyed): what is missing, "Get an E2B API key" (e2b.dev/dashboard), "Retry after setting the key", the netflix.com handoff, and the P47 pairing toggle right there. The netflix.com handoff left the unreachable-only lane — EVERY failure state now hands off (a dead desktop never blocks the movie). Pinned: +3 pins in netflix-watch-ui (94/0 in the battery).
+- Gates: tsc clean; eslint 0e on touched files; test:netflix 94/0; acceptance selftest 38/38; live acceptance 38/38 (prod); full battery 2275/0 (2273 + the 2 net pins).
+- Honest residuals: unchanged — E2B_API_KEY + the operator's first real bridge push remain the two operator-side keys to full playback; the wizard + pairing lane now serve both directly from the failure state.
+
+Stage Summary:
+- The acceptance harness speaks the current contracts and the production deployment is verified green post-P47 (38/38).
+- The failure UX is self-service: the operator sees exactly what to provision (E2B key) and can pair the bridge + reach the movie in the same screen.
+
+---
 Task ID: P47-NETFLIX-LIVE-WIRING
 Agent: the resident TL station (operator: "go" — continue from the P46 residual: bring the chain live and close the production seam)
 Task: the netflix-desktop production wiring seam + the first-contact operator surface + the live sandbox verification of the whole Netflix lane.

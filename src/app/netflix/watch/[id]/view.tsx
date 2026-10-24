@@ -343,6 +343,15 @@ export default function NetflixWatchView() {
 
   const live = status?.phase === "ready" && !!status.streamUrl && !streamError;
 
+  // P48 — the keyed snag: the broker is up but the deployment has no E2B key
+  // (every desktop spawn fails with the SDK's "API key is required" shape).
+  // That failure is an operator-setup problem with a known fix — the snag
+  // becomes a setup wizard instead of a dead end.
+  const keyedSnag = useMemo(() => {
+    if (status?.phase !== "error") return false;
+    return /E2B_API_KEY|API Keys tab|API key is required/i.test(status?.message ?? "");
+  }, [status]);
+
   // ---- the audio tap (webm/opus over socket.io → MSE) ----
   useEffect(() => {
     if (!live || !audioOn) return;
@@ -746,6 +755,74 @@ export default function NetflixWatchView() {
         ) : (
           <div className="flex h-full min-h-[420px] flex-col items-center justify-center gap-4 px-6 text-center">
             {status?.phase === "error" || status?.phase === "unreachable" ? (
+              keyedSnag ? (
+                /* P48 — the keyed snag: an operator-setup wizard, not a dead end */
+                <div className="w-full max-w-lg space-y-4" data-testid="netflix-watch-snag-keyed">
+                  <p className="text-lg font-semibold">Playback needs an E2B key on this server.</p>
+                  <p className="text-sm leading-relaxed text-white/60">
+                    The playback broker is up, but this deployment has no <code className="rounded bg-black/40 px-1">E2B_API_KEY</code> —
+                    the private cloud desktop that runs Netflix cannot start without it. Set the key on the
+                    broker host, then restart the session; everything else (session cache, the bridge,
+                    the pairing token) already works.
+                  </p>
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <a
+                      href="https://e2b.dev/dashboard?tab=keys"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex h-10 items-center gap-2 rounded-md border border-white/20 px-5 text-sm font-medium hover:bg-white/5"
+                      data-testid="netflix-watch-snag-e2b-link"
+                    >
+                      <ExternalLink className="size-4" aria-hidden="true" />
+                      Get an E2B API key
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => void restartSession()}
+                      className="flex h-10 items-center gap-2 rounded-md bg-[#e50914] px-5 text-sm font-semibold hover:bg-[#c4080f]"
+                    >
+                      <RotateCcw className="size-4" aria-hidden="true" /> Retry after setting the key
+                    </button>
+                    <a
+                      href={`https://www.netflix.com/watch/${netflixId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex h-10 items-center gap-2 rounded-md border border-white/20 px-5 text-sm font-medium hover:bg-white/5"
+                      data-testid="netflix-watch-unreachable-handoff"
+                    >
+                      <ExternalLink className="size-4" aria-hidden="true" />
+                      Play on netflix.com instead
+                    </a>
+                  </div>
+                  {/* P47 surface carried into the wizard — pairing works while
+                      the desktop is down; the candidate validates on bootstrap */}
+                  <div className="w-full">
+                    <button
+                      type="button"
+                      onClick={() => setErrorAutoOpen((v) => !v)}
+                      aria-expanded={errorAutoOpen}
+                      className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-white/20 px-5 text-sm font-medium hover:bg-white/5"
+                      data-testid="netflix-watch-error-autoauth-toggle"
+                    >
+                      <Puzzle className="size-4" aria-hidden="true" />
+                      {errorAutoOpen ? "Hide automatic sign-in setup" : "Set up automatic sign-in while you wait"}
+                    </button>
+                    {errorAutoOpen && (
+                      <div className="mt-3" data-testid="netflix-watch-error-autoauth">
+                        <AutoAuthLane
+                          autoAuth={autoAuth}
+                          origin={origin}
+                          tokenCopied={tokenCopied}
+                          rotateBusy={rotateBusy}
+                          onCopyToken={() => void copyToken()}
+                          onRotateToken={() => void rotateToken()}
+                          statusLine={bridgeStatusLine}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
               <>
                 <p className="text-lg font-semibold">The playback session hit a snag.</p>
                 <p className="max-w-md text-sm text-white/60">{status?.message ?? "The cloud desktop is not responding."}</p>
@@ -757,18 +834,18 @@ export default function NetflixWatchView() {
                   >
                     <RotateCcw className="size-4" aria-hidden="true" /> Restart the session
                   </button>
-                  {status?.phase === "unreachable" && (
-                    <a
-                      href={`https://www.netflix.com/watch/${netflixId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex h-10 items-center gap-2 rounded-md border border-white/20 px-5 text-sm font-medium hover:bg-white/5"
-                      data-testid="netflix-watch-unreachable-handoff"
-                    >
-                      <ExternalLink className="size-4" aria-hidden="true" />
-                      Play on netflix.com instead
-                    </a>
-                  )}
+                  {/* P48 — the handoff rides EVERY failure state now (it was
+                      unreachable-only): a dead desktop never blocks the movie */}
+                  <a
+                    href={`https://www.netflix.com/watch/${netflixId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex h-10 items-center gap-2 rounded-md border border-white/20 px-5 text-sm font-medium hover:bg-white/5"
+                    data-testid="netflix-watch-unreachable-handoff"
+                  >
+                    <ExternalLink className="size-4" aria-hidden="true" />
+                    Play on netflix.com instead
+                  </a>
                 </div>
                 {/* P47 — pair the bridge even while the desktop is down: the
                     candidate law stores the push and validates it on the next
@@ -799,6 +876,7 @@ export default function NetflixWatchView() {
                   )}
                 </div>
               </>
+              )
             ) : (
               <>
                 <Loader2 className="size-8 animate-spin text-[#e50914]" aria-hidden="true" />
