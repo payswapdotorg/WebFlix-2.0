@@ -19,6 +19,19 @@ Every read surface is **live youtube.com data** — InnerTube (search / browse /
 - `scripts/acceptance.mjs` — the 38-check end-to-end acceptance harness (14 page routes + titles, 19 live-data API checks, 5 honest-degradation checks; `--selftest` runs it hermetically against an in-process mock server).
 - ISR: the twelve page shells (sidebar nav, category chips) revalidate hourly; all `/api/*` routes stay `force-dynamic`.
 
+## The second source: Netflix (P42, ADR 0002)
+
+`/netflix` — netflix.com browsed natively: Netflix's own public Top 10 + Most
+Popular data (the 8 bounded Tudum pool URLs through the shared Upstash cache,
+~93-country rank truth), ranked rails, per-title pages, the WebFlix-local My
+Netflix List, and an additive shelf on /search. **Playback = the official
+deep-link hand-off** (`netflix.com/watch/<id>` — Netflix's own player, the
+Apple TV / Google TV pattern); in-app trailers ride the existing YouTube lane.
+No DRM is touched, no Netflix credentials exist anywhere, robots.txt is
+respected. The source-adapter seams (`src/lib/netflix/*`, `nf:*` cache keys,
+provenance `source` fields) are the template for every future source. Policy:
+`docs/adr/0002-multi-source-netflix-policy.md`.
+
 ## Stack (binding)
 
 - Next.js 16 (App Router) + TypeScript strict — single app in `src/`
@@ -76,3 +89,4 @@ From the WebFlix reference (sidebar + topbar + views):
 14. Notifications — bell menu, per-channel prefs, read states
 15. Memberships — tiers, join, member-only videos, badges
 16. Settings, Premium, Report history, Help, Send feedback
+17. Netflix hub (P42) — Netflix's Top 10 + Most Popular browsed natively: hero, ranked rails (weekly + all-time, films + series, English + non-English, Global/US), title pages (metadata, where-it-ranks, trailer via the YouTube lane, related), My Netflix List (WebFlix-local), play hand-off to Netflix's own player, search shelf

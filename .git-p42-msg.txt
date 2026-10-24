@@ -1,0 +1,11 @@
+wfx2/p42-netflix-source: P42-NETFLIX-SOURCE — netflix.com becomes WebFlix's second source (the first source adapter, ADR 0002)
+
+Netflix's own public Tudum Top 10 + Most Popular data (8 bounded unauthenticated pool URLs, the netflix.reactContext SSR-cache parser with the escape-aware literal scanner, ~93-country rank truth) browsed natively through the /netflix hub (hero, ranked rails, Global/US views, the WebFlix-local My List rail), per-title pages with where-it-ranks + the in-app trailer through the EXISTING YouTube lane, playback by official deep-link hand-off (netflix.com/watch/<id> — the Apple TV/Google TV pattern; no DRM touched, no credentials anywhere, robots respected: zero /title//search fetches), an additive search shelf on /search, the Prisma mirror (NetflixTitle) + per-user My Netflix List (NetflixMyListItem) — additive tables only.
+
+The sidebar guide gains the Netflix row (the P42 deviation, tests re-pinned to the extended ladder).
+
+Gates: 2212/0 (31 new pins: the parser battery on the real captured fixture tests/fixtures/netflix/top10-films.html, the route battery incl. the my-list roundtrip + honest 404/400/degrade shapes, the hub/hand-off UI battery), tsc clean, lint 0e on touched files.
+
+Docs: docs/research/2026-10-24-netflix-integration-options.md + docs/adr/0002-multi-source-netflix-policy.md + docs/work-items/P42-NETFLIX-SOURCE.md.
+
+The honest residual: catalog depth = Netflix's own tracked Top 10 universe (~140 titles, refreshed weekly by Netflix); full-catalog browse/search awaits a TMDB/uNoGS key (P43+). The rejected paths (Browserbase streaming, DRM extraction, credential automation) are documented with reasons in the research record.
