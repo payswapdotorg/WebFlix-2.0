@@ -3,12 +3,13 @@
  * clock stays honest (called when the watch view unmounts).
  */
 import { NextResponse } from "next/server";
+import { netflixBrokerEndpoint } from "@/lib/netflix/broker";
 
-const BROKER = process.env.NETFLIX_DESKTOP_URL ?? "http://127.0.0.1:3030";
+const BROKER = netflixBrokerEndpoint;
 
 export async function POST() {
   try {
-    await fetch(`${BROKER}/session/release`, {
+    await fetch(BROKER("/session/release"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "{}",

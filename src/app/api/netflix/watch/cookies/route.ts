@@ -6,8 +6,9 @@
  * session and caches it.
  */
 import { NextResponse } from "next/server";
+import { netflixBrokerEndpoint } from "@/lib/netflix/broker";
 
-const BROKER = process.env.NETFLIX_DESKTOP_URL ?? "http://127.0.0.1:3030";
+const BROKER = netflixBrokerEndpoint;
 
 export async function POST(request: Request) {
   try {
@@ -15,7 +16,7 @@ export async function POST(request: Request) {
     if (!body?.cookies || (typeof body.cookies !== "string" && !Array.isArray(body.cookies))) {
       return NextResponse.json({ ok: false, message: "Provide `cookies` (raw Cookie header string or JSON array)." }, { status: 400 });
     }
-    const res = await fetch(`${BROKER}/cookies`, {
+    const res = await fetch(BROKER("/cookies"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ cookies: body.cookies }),

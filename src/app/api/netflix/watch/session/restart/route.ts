@@ -5,12 +5,13 @@
  * through its own phase machine if the teardown fails).
  */
 import { NextResponse } from "next/server";
+import { netflixBrokerEndpoint } from "@/lib/netflix/broker";
 
-const BROKER = process.env.NETFLIX_DESKTOP_URL ?? "http://127.0.0.1:3030";
+const BROKER = netflixBrokerEndpoint;
 
 export async function POST() {
   try {
-    await fetch(`${BROKER}/session/restart`, {
+    await fetch(BROKER("/session/restart"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "{}",

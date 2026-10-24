@@ -64,6 +64,98 @@ interface AutoAuthInfo {
   message?: string;
 }
 
+/**
+ * P47 — the automatic sign-in lane, extracted so BOTH places that need pairing
+ * can render it: the auth-required overlay (the original P46 surface) and the
+ * error state's collapsible panel — because the bridge's candidate law was
+ * designed for exactly this: pair NOW, the candidate validates on the next
+ * successful bootstrap (nothing unvalidated ever reaches playback).
+ * All testids are the P46 ones — the auth-required DOM is unchanged.
+ */
+function AutoAuthLane(props: {
+  autoAuth: AutoAuthInfo | null;
+  origin: string;
+  tokenCopied: boolean;
+  rotateBusy: boolean;
+  onCopyToken: () => void;
+  onRotateToken: () => void;
+  statusLine: string;
+}) {
+  const { autoAuth, origin, tokenCopied, rotateBusy, onCopyToken, onRotateToken, statusLine } = props;
+  return (
+    <div className="mx-auto max-w-xl space-y-3 rounded-lg border border-white/15 bg-white/5 p-4 text-left" data-testid="netflix-watch-autoauth-lane">
+      <ol className="space-y-2 text-xs leading-relaxed text-white/55">
+        <li>
+          <span className="font-semibold text-white/80">1.</span>{" "}
+          <a href="/netflix-bridge.zip" download className="text-white/85 underline underline-offset-2 hover:text-white" data-testid="netflix-watch-autoauth-download">
+            Download the WebFlix Bridge
+          </a>{" "}
+          and unzip it.
+        </li>
+        <li>
+          <span className="font-semibold text-white/80">2.</span> In Chrome, open{" "}
+          <code className="rounded bg-black/40 px-1">chrome://extensions</code>, enable <b>Developer mode</b>, click{" "}
+          <b>Load unpacked</b> and pick the unzipped folder.
+        </li>
+        <li>
+          <span className="font-semibold text-white/80">3.</span> Open the bridge&apos;s <b>Options</b>, paste{" "}
+          <code className="rounded bg-black/40 px-1">{origin || "this WebFlix URL"}</code> as the WebFlix
+          URL and this pairing token:
+        </li>
+      </ol>
+      <div className="flex items-center gap-2">
+        <code
+          className="min-w-0 flex-1 select-all overflow-x-auto whitespace-nowrap rounded-md border border-white/15 bg-black/50 px-2 py-2 font-mono text-[11px] text-emerald-300"
+          data-testid="netflix-watch-autoauth-token"
+        >
+          {autoAuth?.token ?? "loading…"}
+        </code>
+        <button
+          type="button"
+          onClick={onCopyToken}
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-white/10 px-3 text-xs font-medium hover:bg-white/20"
+          data-testid="netflix-watch-autoauth-copy"
+        >
+          {tokenCopied ? <Check className="size-3.5" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}
+          {tokenCopied ? "Copied" : "Copy"}
+        </button>
+        <button
+          type="button"
+          onClick={onRotateToken}
+          disabled={rotateBusy}
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-white/20 px-3 text-xs font-medium hover:bg-white/5 disabled:opacity-60"
+          aria-label="Rotate the pairing token (old bridges stop working until re-paired)"
+          data-testid="netflix-watch-autoauth-rotate"
+        >
+          {rotateBusy ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : <RotateCcw className="size-3.5" aria-hidden="true" />}
+          Rotate
+        </button>
+      </div>
+      <p className="text-xs leading-relaxed text-white/55">
+        <span className="font-semibold text-white/80">4.</span> Then just keep using{" "}
+        <code className="rounded bg-black/40 px-1">netflix.com</code> in that browser — the bridge ships
+        your session the moment it sees one (and after every Netflix cookie rotation), and
+        playback connects by itself.
+      </p>
+      <p
+        className={`rounded-md border px-3 py-2 text-xs leading-relaxed ${
+          autoAuth?.bridge?.lastRejection
+            ? "border-amber-500/30 bg-amber-500/10 text-amber-200/90"
+            : "border-white/10 bg-black/40 text-white/70"
+        }`}
+        data-testid="netflix-watch-autoauth-status"
+      >
+        {statusLine}
+      </p>
+      <p className="text-[11px] leading-relaxed text-white/35">
+        The bridge talks only to this WebFlix server. Pushed sessions are validated
+        against Netflix before they are ever trusted — an invalid push can never reach
+        playback.
+      </p>
+    </div>
+  );
+}
+
 export default function NetflixWatchView() {
   const params = useParams<{ id: string }>();
   const rawId = Array.isArray(params?.id) ? params.id[0] : params?.id;
@@ -96,6 +188,9 @@ export default function NetflixWatchView() {
   const cookieLooksValid = /(?<![A-Za-z])NetflixId\s*=/.test(cookieInput);
   const [authRetryBusy, setAuthRetryBusy] = useState(false);
   const [streamError, setStreamError] = useState(false);
+  // P47 — the error state's collapsible automatic sign-in lane (pair now, the
+  // candidate validates on the next successful bootstrap)
+  const [errorAutoOpen, setErrorAutoOpen] = useState(false);
 
   // audio state
   const [audioOn, setAudioOn] = useState(true);
@@ -137,7 +232,11 @@ export default function NetflixWatchView() {
   }, []);
 
   useEffect(() => {
-    if (status?.phase !== "auth-required") return;
+    // P47 — the pairing surface exists in TWO states now: the auth-required
+    // overlay AND the error state's collapsible lane (pair now, validate on
+    // the next bootstrap). Poll whenever either is on screen.
+    const wanted = status?.phase === "auth-required" || errorAutoOpen;
+    if (!wanted) return;
     // deferred (not synchronous in the effect body) — same pattern as the poll
     const first = setTimeout(() => void fetchAutoAuth(), 0);
     const t = setInterval(() => void fetchAutoAuth(), 5000);
@@ -145,7 +244,7 @@ export default function NetflixWatchView() {
       clearTimeout(first);
       clearInterval(t);
     };
-  }, [status?.phase, fetchAutoAuth]);
+  }, [status?.phase, errorAutoOpen, fetchAutoAuth]);
 
   const copyToken = useCallback(async () => {
     if (!autoAuth?.token) return;
@@ -522,76 +621,15 @@ export default function NetflixWatchView() {
                     </button>
                   </div>
                   {authLane === "auto" && !cookiePanelOpen && (
-                    <div className="mx-auto max-w-xl space-y-3 rounded-lg border border-white/15 bg-white/5 p-4 text-left" data-testid="netflix-watch-autoauth-lane">
-                      <ol className="space-y-2 text-xs leading-relaxed text-white/55">
-                        <li>
-                          <span className="font-semibold text-white/80">1.</span>{" "}
-                          <a href="/netflix-bridge.zip" download className="text-white/85 underline underline-offset-2 hover:text-white" data-testid="netflix-watch-autoauth-download">
-                            Download the WebFlix Bridge
-                          </a>{" "}
-                          and unzip it.
-                        </li>
-                        <li>
-                          <span className="font-semibold text-white/80">2.</span> In Chrome, open{" "}
-                          <code className="rounded bg-black/40 px-1">chrome://extensions</code>, enable <b>Developer mode</b>, click{" "}
-                          <b>Load unpacked</b> and pick the unzipped folder.
-                        </li>
-                        <li>
-                          <span className="font-semibold text-white/80">3.</span> Open the bridge&apos;s <b>Options</b>, paste{" "}
-                          <code className="rounded bg-black/40 px-1">{origin || "this WebFlix URL"}</code> as the WebFlix
-                          URL and this pairing token:
-                        </li>
-                      </ol>
-                      <div className="flex items-center gap-2">
-                        <code
-                          className="min-w-0 flex-1 select-all overflow-x-auto whitespace-nowrap rounded-md border border-white/15 bg-black/50 px-2 py-2 font-mono text-[11px] text-emerald-300"
-                          data-testid="netflix-watch-autoauth-token"
-                        >
-                          {autoAuth?.token ?? "loading…"}
-                        </code>
-                        <button
-                          type="button"
-                          onClick={() => void copyToken()}
-                          className="flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-white/10 px-3 text-xs font-medium hover:bg-white/20"
-                          data-testid="netflix-watch-autoauth-copy"
-                        >
-                          {tokenCopied ? <Check className="size-3.5" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}
-                          {tokenCopied ? "Copied" : "Copy"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void rotateToken()}
-                          disabled={rotateBusy}
-                          className="flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-white/20 px-3 text-xs font-medium hover:bg-white/5 disabled:opacity-60"
-                          aria-label="Rotate the pairing token (old bridges stop working until re-paired)"
-                          data-testid="netflix-watch-autoauth-rotate"
-                        >
-                          {rotateBusy ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : <RotateCcw className="size-3.5" aria-hidden="true" />}
-                          Rotate
-                        </button>
-                      </div>
-                      <p className="text-xs leading-relaxed text-white/55">
-                        <span className="font-semibold text-white/80">4.</span> Then just keep using{" "}
-                        <code className="rounded bg-black/40 px-1">netflix.com</code> in that browser — the bridge ships
-                        your session the moment it sees one (and after every Netflix cookie rotation), and
-                        playback connects by itself.
-                      </p>
-                      <p
-                        className={`rounded-md border px-3 py-2 text-xs leading-relaxed ${
-                          autoAuth?.bridge?.lastRejection
-                            ? "border-amber-500/30 bg-amber-500/10 text-amber-200/90"
-                            : "border-white/10 bg-black/40 text-white/70"
-                        }`}
-                        data-testid="netflix-watch-autoauth-status"
-                      >
-                        {bridgeStatusLine}
-                      </p>
-                      <p className="text-[11px] leading-relaxed text-white/35">
-                        The bridge talks only to this WebFlix server. Pushed sessions are validated
-                        against Netflix before they are ever trusted — an invalid push can never reach
-                        playback.
-                      </p>
-                    </div>
+                    <AutoAuthLane
+                      autoAuth={autoAuth}
+                      origin={origin}
+                      tokenCopied={tokenCopied}
+                      rotateBusy={rotateBusy}
+                      onCopyToken={() => void copyToken()}
+                      onRotateToken={() => void rotateToken()}
+                      statusLine={bridgeStatusLine}
+                    />
                   )}
                   {cookiePanelOpen && (
                     <div className="mx-auto max-w-xl space-y-3 rounded-lg border border-white/15 bg-white/5 p-4 text-left" data-testid="netflix-watch-cookie-panel">
@@ -730,6 +768,34 @@ export default function NetflixWatchView() {
                       <ExternalLink className="size-4" aria-hidden="true" />
                       Play on netflix.com instead
                     </a>
+                  )}
+                </div>
+                {/* P47 — pair the bridge even while the desktop is down: the
+                    candidate law stores the push and validates it on the next
+                    successful bootstrap, so pairing is never wasted time. */}
+                <div className="w-full max-w-md">
+                  <button
+                    type="button"
+                    onClick={() => setErrorAutoOpen((v) => !v)}
+                    aria-expanded={errorAutoOpen}
+                    className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-white/20 px-5 text-sm font-medium hover:bg-white/5"
+                    data-testid="netflix-watch-error-autoauth-toggle"
+                  >
+                    <Puzzle className="size-4" aria-hidden="true" />
+                    {errorAutoOpen ? "Hide automatic sign-in setup" : "Set up automatic sign-in while you wait"}
+                  </button>
+                  {errorAutoOpen && (
+                    <div className="mt-3" data-testid="netflix-watch-error-autoauth">
+                      <AutoAuthLane
+                        autoAuth={autoAuth}
+                        origin={origin}
+                        tokenCopied={tokenCopied}
+                        rotateBusy={rotateBusy}
+                        onCopyToken={() => void copyToken()}
+                        onRotateToken={() => void rotateToken()}
+                        statusLine={bridgeStatusLine}
+                      />
+                    </div>
                   )}
                 </div>
               </>

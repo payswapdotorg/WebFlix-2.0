@@ -7,8 +7,9 @@
  * it as a strictly-validated candidate for the next play.
  */
 import { NextResponse } from "next/server";
+import { netflixBrokerEndpoint } from "@/lib/netflix/broker";
 
-const BROKER = process.env.NETFLIX_DESKTOP_URL ?? "http://127.0.0.1:3030";
+const BROKER = netflixBrokerEndpoint;
 
 export async function POST(request: Request) {
   try {
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
       );
     }
     // 90s: the live-apply path boots nothing but does validate against Netflix
-    const res = await fetch(`${BROKER}/ingest`, {
+    const res = await fetch(BROKER("/ingest"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ token: body.token, cookies: body.cookies, device: body.device }),
