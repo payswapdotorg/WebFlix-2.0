@@ -38,8 +38,13 @@ const httpServer = createServer((req, res) => {
   if (url.pathname === "/session" && req.method === "POST") {
     return readBody((body) => {
       try {
-        const { videoId } = body ? (JSON.parse(body) as { videoId?: number }) : {};
-        if (videoId) {
+        const { videoId, path } = body ? (JSON.parse(body) as { videoId?: number; path?: string }) : {};
+        if (typeof path === "string" && path) {
+          // Netflix Live: navigate the streamed chrome to a netflix.com path
+          void sessionManager.openPath(path).catch((e) =>
+            console.log("[http] openPath failed:", (e as Error).message.slice(0, 200)),
+          );
+        } else if (videoId) {
           void sessionManager.watch(Number(videoId)).catch((e) =>
             console.log("[http] watch failed:", (e as Error).message.slice(0, 200)),
           );

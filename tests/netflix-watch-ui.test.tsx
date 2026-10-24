@@ -58,10 +58,11 @@ Object.defineProperty(globalThis, "localStorage", {
 
 // ---- module mocks ----
 let useApiData: unknown = null;
+let mockParams: Record<string, string> = { id: "81757047" };
 mock.module("@/hooks/use-api", () => ({
   useApi: (url: string | null) => {
     // the my-list lane rides the same hook on the title page; the watch view
-    // only pulls the title payload
+    // only pulls the title payload (and nothing at all in Netflix Live mode)
     return { data: useApiData, loading: false, error: null, reload: () => {} };
   },
   postJson: async () => ({}),
@@ -70,7 +71,7 @@ mock.module("next/navigation", () => ({
   usePathname: () => "/netflix/watch/81757047",
   useRouter: () => ({ push: () => {}, replace: () => {}, refresh: () => {} }),
   useSearchParams: () => new URLSearchParams(),
-  useParams: () => ({ id: "81757047" }),
+  useParams: () => mockParams,
 }));
 mock.module("next/link", () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) =>
@@ -169,6 +170,7 @@ beforeEach(() => {
   } satisfies NetflixTitlePageDTO;
   brokerStatus = { phase: "provisioning" };
   postCalls = [];
+  mockParams = { id: "81757047" };
   mockFetch();
 });
 
@@ -243,5 +245,55 @@ describe("the Netflix watch view — the honest session states", () => {
     });
     expect(text()).toContain("hit a snag");
     expect(text()).toContain("Restart the session");
+  });
+
+  test("Netflix Live mode kicks the browse lane instead of a title deep link (P44)", async () => {
+    mockParams = { id: "live" };
+    useApiData = null; // live mode pulls no title payload
+    await render(createElement(NetflixWatchView));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(postCalls.some((b) => b.includes('"path":"/browse"'))).toBe(true);
+    expect(postCalls.some((b) => b.includes("videoId"))).toBe(false);
+    expect(q('[data-testid="netflix-watch-title"]')?.textContent).toContain("Netflix Live");
+  });
+
+  test("the cookie panel gives instant paste feedback on the two session cookies (P44)", async () => {
+    brokerStatus = {
+      phase: "auth-required",
+      message: "sign in to netflix inside the secure window",
+      sandboxId: "sbx1",
+      streamUrl: "https://6080-sbx1.e2b.app/vnc.html?autoconnect=true",
+    };
+    await render(createElement(NetflixWatchView));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    await act(async () => {
+      (q('[data-testid="netflix-watch-cookie-connect"]') as HTMLElement)?.click();
+    });
+    const input = q('[data-testid="netflix-watch-cookie-input"]') as unknown as HTMLTextAreaElement;
+    expect(input).not.toBeNull();
+    // type the way a user would — the repo-verified sequence (comment-composer):
+    // focusin first, then the prototype's native value setter + keyup
+    const typeInto = async (text: string) => {
+      await act(async () => {
+        input.dispatchEvent(new win.Event("focusin", { bubbles: true }) as unknown as Event);
+      });
+      const desc = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), "value");
+      desc?.set?.call(input, text);
+      await act(async () => {
+        input.dispatchEvent(new win.Event("keyup", { bubbles: true }) as unknown as Event);
+      });
+    };
+    // a paste without NetflixId warns honestly
+    await typeInto("SecureNetflixId=v%3D2; other=1");
+    expect(q('[data-testid="netflix-watch-cookie-hint"]')?.textContent).toContain("No NetflixId");
+    // adding NetflixId flips the hint green
+    await typeInto("NetflixId=v%3D3; SecureNetflixId=v%3D2");
+    expect(q('[data-testid="netflix-watch-cookie-hint"]')?.textContent).toContain("Looks right");
+    // the privacy note stays honest
+    expect(text()).toContain("stay on this server only");
   });
 });
