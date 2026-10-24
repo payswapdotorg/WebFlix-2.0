@@ -113,3 +113,15 @@ export interface NetflixSearchResultsDTO {
   /** Honest scope note surfaced by the UI (the Top-10 universe, not all of Netflix). */
   note: string | null;
 }
+
+/**
+ * P49 — one lean Netflix row in the GLOBAL search suggest dropdown (the
+ * topbar box): a title + badge, not a rail. Scored from the mirror by
+ * catalog.suggestNetflixTitles.
+ */
+export interface NetflixCatalogSuggestion {
+  netflixId: number;
+  title: string;
+  releaseYear: number | null;
+  kind: "movie" | "series";
+}

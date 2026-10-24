@@ -31,6 +31,21 @@ export function PlayHandoffDialog({
 }) {
   const [artBroken, setArtBroken] = useState(false);
   const watchUrl = netflixWatchUrl(title.netflixId);
+
+  // P49 — watching on netflix.com through the hand-off is still a play:
+  // it lands in the same WebFlix-local Continue Watching row. Fire-and-forget
+  // — a failed write never blocks the hand-off.
+  const recordHandoffPlay = () => {
+    void fetch("/api/netflix/progress", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ netflixId: title.netflixId }),
+      keepalive: true,
+    }).catch(() => {
+      /* the rail is a memory, not a gate */
+    });
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md overflow-hidden border-white/10 bg-[#141418] p-0 text-white sm:max-w-lg">
@@ -71,6 +86,7 @@ export function PlayHandoffDialog({
             href={watchUrl}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={recordHandoffPlay}
             data-testid="netflix-handoff-link"
             className="flex h-11 w-full items-center justify-center gap-2 rounded-md bg-[#e50914] text-sm font-semibold text-white transition-colors hover:bg-[#c4080f]"
           >

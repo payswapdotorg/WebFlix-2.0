@@ -20,6 +20,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Clock, Search, Trash2 } from "lucide-react";
+import type { NetflixCatalogSuggestion } from "@/lib/netflix/types";
 
 export const RECENTS_STORAGE_KEY = "webflix-recent-searches";
 export const RECENTS_CAP = 10;
@@ -32,10 +33,25 @@ export function suggestOptionId(index: number): string {
   return `webflix-search-suggest-option-${index}`;
 }
 
-export type SuggestRow = {
-  kind: "recent" | "suggestion";
-  text: string;
-};
+export type SuggestRow =
+  | { kind: "recent" | "suggestion"; text: string }
+  | { kind: "netflix"; text: string; netflixId: number };
+
+/**
+ * P49 — the staleness guard for Netflix rows: a list that landed for an
+ * older prefix may not ride a newer query. A row survives only when the
+ * current query is still inside it (full query or every token) — the same
+ * "no mismatched rows" law the YouTube rows run, adapted to a scored
+ * contains-search instead of a prefix match.
+ */
+export function netflixRowMatches(title: string, query: string): boolean {
+  const t = title.toLowerCase();
+  const q = query.trim().toLowerCase();
+  if (!q) return false;
+  if (t.includes(q)) return true;
+  const tokens = q.split(/\s+/).filter(Boolean);
+  return tokens.length > 0 && tokens.every((tok) => t.includes(tok));
+}
 
 // ---------------------------------------------------------------------------
 // Recents — localStorage, honest: corrupt or unavailable storage degrades to
@@ -108,6 +124,10 @@ export interface UseSuggestDropdownOptions {
   query: string;
   /** Called with the committed text; the parent navigates to the search page. */
   onCommit: (query: string) => void;
+  /** P49 — a Netflix badge row commits straight to the title page.
+   * Absent → the row falls back to onCommit (the search page), where the
+   * Netflix shelf answers anyway. */
+  onNetflixCommit?: (netflixId: number, title: string) => void;
   /** Test seam — production default 150ms. */
   debounceMs?: number;
 }
@@ -117,6 +137,8 @@ export function useSuggestDropdown(opts: UseSuggestDropdownOptions): SuggestCont
   const [open, setOpenState] = useState(false);
   /** The last suggestion list landed (kept with its query — derived away below). */
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  /** P49 — the last Netflix match list landed (same fetch, same staleness law). */
+  const [netflix, setNetflix] = useState<NetflixCatalogSuggestion[]>([]);
   const [recents, setRecents] = useState<string[]>([]);
   /** Keyboard navigation: the active row + the query it belongs to (derived
    * away when the query changes — no reset effect, no stale index). */
@@ -156,16 +178,38 @@ export function useSuggestDropdown(opts: UseSuggestDropdownOptions): SuggestCont
           if (stale) return;
           if (!res.ok) {
             setSuggestions([]); // honest empty — a refused suggest is not an error surface
+            setNetflix([]);
             return;
           }
-          const body = (await res.json().catch(() => null)) as { suggestions?: unknown } | null;
+          const body = (await res.json().catch(() => null)) as {
+            suggestions?: unknown;
+            netflix?: unknown;
+          } | null;
           const list = Array.isArray(body?.suggestions)
             ? body.suggestions.filter((s): s is string => typeof s === "string" && s.length > 0)
             : [];
-          if (!stale) setSuggestions(list);
+          // P49 — the additive Netflix lane: validated defensively, honest-empty
+          // on any unexpected shape (the same never-fakes law as the text rows)
+          const nf = Array.isArray(body?.netflix)
+            ? body.netflix.filter(
+                (s): s is NetflixCatalogSuggestion =>
+                  typeof s === "object" &&
+                  s !== null &&
+                  typeof (s as NetflixCatalogSuggestion).netflixId === "number" &&
+                  typeof (s as NetflixCatalogSuggestion).title === "string" &&
+                  (s as NetflixCatalogSuggestion).title.length > 0
+              )
+            : [];
+          if (!stale) {
+            setSuggestions(list);
+            setNetflix(nf);
+          }
         })
         .catch(() => {
-          if (!stale) setSuggestions([]); // aborted or refused — honest empty
+          if (!stale) {
+            setSuggestions([]); // aborted or refused — honest empty
+            setNetflix([]);
+          }
         });
     }, debounceMs);
     return () => {
@@ -177,8 +221,12 @@ export function useSuggestDropdown(opts: UseSuggestDropdownOptions): SuggestCont
 
   // Rows (derived): with input → prefix-matched recents + suggestions that
   // prefix-match the CURRENT query (a stale list for an older prefix keeps
-  // showing — youtube.com's own behavior — but never a mismatched one);
-  // with an empty box → the recents themselves.
+  // showing — youtube.com's own behavior — but never a mismatched one) + the
+  // P49 Netflix badge rows. The Netflix rows dedupe only against THEMSELVES
+  // (one row per title) and the staleness guard — NEVER against YouTube
+  // texts: a suggestion and a badge row with the same words go to different
+  // destinations (the search page vs the title page), so hiding one behind
+  // the other would hide the destination, not a duplicate.
   const rows = useMemo<SuggestRow[]>(() => {
     if (!open) return [];
     const q = query.trim().toLowerCase();
@@ -192,11 +240,22 @@ export function useSuggestDropdown(opts: UseSuggestDropdownOptions): SuggestCont
             (s) => s.toLowerCase().startsWith(q) && !shown.has(s.toLowerCase())
           )
         : [];
+    const nfSeen = new Set<string>();
+    const nfRows: SuggestRow[] = [];
+    if (q) {
+      for (const s of netflix) {
+        const key = s.title.toLowerCase();
+        if (nfSeen.has(key) || !netflixRowMatches(s.title, query)) continue;
+        nfSeen.add(key);
+        nfRows.push({ kind: "netflix", text: s.title, netflixId: s.netflixId });
+      }
+    }
     return [
       ...recentMatches.map((text): SuggestRow => ({ kind: "recent", text })),
       ...fresh.map((text): SuggestRow => ({ kind: "suggestion", text })),
+      ...nfRows,
     ];
-  }, [open, query, recents, suggestions]);
+  }, [open, query, recents, suggestions, netflix]);
 
   const active =
     nav && nav.query === query && nav.index >= 0 && nav.index < rows.length ? nav.index : -1;
@@ -205,6 +264,18 @@ export function useSuggestDropdown(opts: UseSuggestDropdownOptions): SuggestCont
     (index: number) => {
       const row = rows[index];
       if (!row) return;
+      if (row.kind === "netflix") {
+        // P49 — a title is not a search: it navigates straight to the title
+        // page and stays OUT of the recent-searches store (no pollution).
+        setOpenState(false);
+        setNav(null);
+        if (opts.onNetflixCommit) {
+          opts.onNetflixCommit(row.netflixId, row.text);
+        } else {
+          opts.onCommit(row.text); // absent handler → the search page answers
+        }
+        return;
+      }
       const next = pushRecent(recents, row.text);
       writeRecents(safeStorage(), next);
       setRecents(next);
@@ -212,7 +283,7 @@ export function useSuggestDropdown(opts: UseSuggestDropdownOptions): SuggestCont
       setNav(null);
       opts.onCommit(row.text);
     },
-    [rows, recents, opts.onCommit]
+    [rows, recents, opts.onCommit, opts.onNetflixCommit]
   );
 
   const recordRecent = useCallback(
@@ -312,10 +383,11 @@ export function SuggestDropdown({ control }: { control: SuggestController }) {
       >
         {rows.map((row, i) => (
           <li
-            key={`${i}:${row.text}`}
+            key={`${i}:${row.kind}:${row.text}`}
             id={suggestOptionId(i)}
             role="option"
             aria-selected={i === activeIndex}
+            aria-label={row.kind === "netflix" ? `${row.text} — on Netflix` : undefined}
             onMouseDown={(e) => {
               e.preventDefault(); // commit before the input blurs
               control.commitRow(i);
@@ -326,10 +398,26 @@ export function SuggestDropdown({ control }: { control: SuggestController }) {
           >
             {row.kind === "recent" ? (
               <Clock className="size-4 shrink-0 text-muted-foreground" />
+            ) : row.kind === "netflix" ? (
+              <span
+                aria-hidden="true"
+                data-testid="netflix-suggest-badge"
+                className="flex size-4 shrink-0 items-center justify-center rounded-sm bg-[#e50914] text-[9px] font-black leading-none text-white"
+              >
+                N
+              </span>
             ) : (
               <Search className="size-4 shrink-0 text-muted-foreground" />
             )}
             <span className="truncate">{row.text}</span>
+            {row.kind === "netflix" && (
+              <span
+                className="ml-auto shrink-0 pl-2 text-[11px] font-medium text-[#e50914]"
+                data-testid="netflix-suggest-label"
+              >
+                On Netflix
+              </span>
+            )}
           </li>
         ))}
       </ul>

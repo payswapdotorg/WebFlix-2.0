@@ -60,13 +60,17 @@ Object.defineProperty(globalThis, "localStorage", {
 // ---- module mocks (captured + swapped, the lane idiom) --------------------
 let useApiData: unknown = null;
 let useApiUrls: (string | null)[] = [];
+// P49 — the Continue Watching lane answers through the same mock, URL-aware
+let progressData: unknown = { items: [] };
 mock.module("@/hooks/use-api", () => ({
   useApi: (url: string | null) => {
     useApiUrls.push(url);
     // URL-aware: the my-list lane gets its own honest empty payload
     const data = url?.includes("/api/netflix/my-list")
       ? { items: [] }
-      : useApiData;
+      : url?.includes("/api/netflix/progress")
+        ? progressData
+        : useApiData;
     return { data, loading: false, error: null, reload: () => {} };
   },
   postJson: async () => ({}),
@@ -88,6 +92,7 @@ mock.module("sonner", () => ({
 const { default: NetflixHubView } = await import("@/app/netflix/view");
 const { PlayHandoffDialog } = await import("@/components/netflix/play-handoff");
 const { MyListButton } = await import("@/components/netflix/my-list-button");
+const { lastPlayedLabel } = await import("@/components/netflix/continue-watching-rail");
 import type { NetflixHomeDTO, NetflixTitleDTO } from "@/lib/netflix/types";
 
 let root: Root | null = null;
@@ -170,6 +175,7 @@ const fixtureHome: NetflixHomeDTO = {
 beforeEach(() => {
   useApiData = null;
   useApiUrls = [];
+  progressData = { items: [] };
 });
 
 afterEach(() => {
@@ -304,5 +310,98 @@ describe("the My List toggle", () => {
     expect(btn).not.toBeNull();
     expect(btn?.getAttribute("aria-pressed")).toBe("false");
     expect(btn?.textContent).toContain("My List");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P49 — the Continue Watching rail (the hub's personalized row)
+// ---------------------------------------------------------------------------
+
+const progressItem = (overrides: Partial<{ netflixId: number; lastPlayedAt: string; playCount: number }> = {}) => ({
+  title: { ...fixtureTitle, netflixId: overrides.netflixId ?? 81757047 },
+  lastPlayedAt: overrides.lastPlayedAt ?? new Date(Date.now() - 90 * 60_000).toISOString(),
+  playCount: overrides.playCount ?? 1,
+});
+
+describe("the Continue Watching rail (P49)", () => {
+  const realFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  test("renders with the resume link, the honest meta line, and the remove affordance", async () => {
+    progressData = { items: [progressItem(), progressItem({ netflixId: 82023496, playCount: 3 })] };
+    useApiData = fixtureHome;
+    await render(createElement(NetflixHubView));
+    const rail = one('[data-testid="netflix-continue-rail"]');
+    expect(rail).not.toBeNull();
+    expect(rail?.textContent).toContain("Continue Watching");
+    const cards = all('[data-testid="netflix-continue-card"]');
+    expect(cards.length).toBe(2);
+    // the honest meta: last-played time + the replay count — NO fake progress bar
+    const metas = all('[data-testid="netflix-continue-meta"]');
+    expect(metas[0]?.textContent).toContain("Last watched");
+    expect(metas[1]?.textContent).toContain("3×");
+    expect(rail?.querySelector("progress")).toBeNull();
+    // the play rides the in-app watch lane directly
+    const playLink = cards[0]?.querySelector<HTMLAnchorElement>('a[href="/netflix/watch/81757047"]');
+    expect(playLink).not.toBeNull();
+    expect(playLink?.getAttribute("aria-label")).toContain("Resume");
+    // every card carries the remove affordance
+    expect(all('[data-testid="netflix-continue-remove"]').length).toBe(2);
+  });
+
+  test("remove issues the DELETE to the progress lane", async () => {
+    const deletes: string[] = [];
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === "DELETE") {
+        deletes.push(String(url instanceof Request ? url.url : url));
+        return new Response(JSON.stringify({ recorded: false }), { status: 200 });
+      }
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof fetch;
+    progressData = { items: [progressItem()] };
+    useApiData = fixtureHome;
+    await render(createElement(NetflixHubView));
+    const remove = one('[data-testid="netflix-continue-remove"]')!;
+    await act(async () => {
+      remove.click();
+    });
+    expect(deletes.length).toBe(1);
+    expect(deletes[0]).toContain("/api/netflix/progress?netflixId=81757047");
+  });
+
+  test("stays absent for anonymous/empty rows — an honest absence", async () => {
+    progressData = { items: [] };
+    useApiData = fixtureHome;
+    await render(createElement(NetflixHubView));
+    expect(one('[data-testid="netflix-continue-rail"]')).toBeNull();
+  });
+
+  test("the progress lane is queried on every hub render", async () => {
+    useApiData = fixtureHome;
+    await render(createElement(NetflixHubView));
+    expect(useApiUrls).toContain("/api/netflix/progress");
+  });
+});
+
+describe("lastPlayedLabel (P49) — the pure relative-time law", () => {
+  const NOW = Date.parse("2026-10-26T12:00:00.000Z");
+  const iso = (minsAgo: number) => new Date(NOW - minsAgo * 60_000).toISOString();
+
+  test("sub-minute → just now; minutes → m; hours → h; days → d; weeks → w", () => {
+    expect(lastPlayedLabel(iso(0.2), NOW)).toBe("just now");
+    expect(lastPlayedLabel(iso(5), NOW)).toBe("5m ago");
+    expect(lastPlayedLabel(iso(90), NOW)).toBe("1h ago");
+    expect(lastPlayedLabel(iso(3 * 24 * 60), NOW)).toBe("3d ago");
+    expect(lastPlayedLabel(iso(14 * 24 * 60), NOW)).toBe("2w ago");
+  });
+
+  test("older than five weeks → the locale date; garbage → empty (never a fake)", () => {
+    const old = lastPlayedLabel("2026-01-02T00:00:00.000Z", NOW);
+    expect(old.length).toBeGreaterThan(0);
+    expect(old).not.toContain("ago");
+    expect(lastPlayedLabel("not-a-date", NOW)).toBe("");
   });
 });

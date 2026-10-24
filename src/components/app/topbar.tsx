@@ -32,11 +32,16 @@ export function Topbar() {
 
   // P3-SG: youtube.com autocomplete parity — suggestions + recents dropdown
   // under the search box (additive; the form submit + voice dialog are untouched).
+  // P49: a Netflix badge row commits straight to the title page (a title is
+  // not a search; the /search shelf stays the fallback for plain queries).
   const suggest = useSuggestDropdown({
     query,
     onCommit: (text) => {
       setQuery(text);
       router.push(`/search?q=${encodeURIComponent(text)}`);
+    },
+    onNetflixCommit: (netflixId) => {
+      router.push(`/netflix/t/${netflixId}`);
     },
   });
 
