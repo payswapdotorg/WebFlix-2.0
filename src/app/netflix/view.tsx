@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { NetflixBillboard } from "@/components/netflix/netflix-hero";
 import { NetflixRail } from "@/components/netflix/netflix-rail";
 import { NetflixCard } from "@/components/netflix/netflix-card";
+import { ContinueWatchingRail } from "@/components/netflix/continue-watching-rail";
 import { cn } from "@/lib/utils";
 import type { NetflixHomeDTO, NetflixTitleDTO } from "@/lib/netflix/types";
 
@@ -161,6 +162,10 @@ function HubContent() {
               </div>
             </div>
           </div>
+
+          {/* P49 — Continue Watching rides FIRST (Netflix's own placement for
+              the personalized rows), then My List */}
+          <ContinueWatchingRail />
 
           <MyListRail />
 

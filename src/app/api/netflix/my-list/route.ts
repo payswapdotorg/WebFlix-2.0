@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { mirrorRowToDTO, getNetflixTitle } from "@/lib/netflix/catalog";
 import { rateLimit } from "@/lib/youtube/cache";
-import { resolveViewer } from "@/lib/watch/session";
+import { netflixViewerId } from "@/lib/netflix/viewer";
 import type { NetflixTitleDTO } from "@/lib/netflix/types";
 
 export const dynamic = "force-dynamic";
@@ -10,9 +10,10 @@ export const dynamic = "force-dynamic";
 /**
  * My Netflix List (P42) — the viewer's WebFlix-LOCAL list (ADR 0002 §5: no
  * Netflix credentials anywhere, so the list lives in WebFlix's own DB, exactly
- * like the watch lane's local Watch-Later rung). Identity = the watch lane's
- * `resolveViewer` (the demo fallback keeps the clone usable logged-out; the
- * honest-anonymous viewer gets an empty list / 401 on writes).
+ * like the watch lane's local Watch-Later rung). P49: identity =
+ * `netflixViewerId` — the signed-in WebFlix account first (its shadow user,
+ * the same bridge the local comment rung rides), then the watch-lane demo
+ * fallback (the honest-anonymous viewer gets an empty list / 401 on writes).
  *
  * GET            → { items: NetflixTitleDTO[] } (newest first)
  * POST {netflixId} → { myList: true }
@@ -32,11 +33,11 @@ export async function GET(req: Request) {
     if (!(await rateLimit(`netflix:mylist:${req.headers.get("x-forwarded-for") ?? "local"}`))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
-    const viewer = await resolveViewer(req.headers);
-    if (!viewer.id) {
+    const viewerId = await netflixViewerId(req);
+    if (!viewerId) {
       return NextResponse.json({ items: [], source: "netflix-my-list" });
     }
-    const items = await listItems(viewer.id);
+    const items = await listItems(viewerId);
     return NextResponse.json({ items, source: "netflix-my-list" });
   } catch (err) {
     console.error("GET /api/netflix/my-list failed", err);
@@ -49,8 +50,8 @@ export async function POST(req: Request) {
     if (!(await rateLimit(`netflix:mylist:post:${req.headers.get("x-forwarded-for") ?? "local"}`))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
-    const viewer = await resolveViewer(req.headers);
-    if (!viewer.id) {
+    const viewerId = await netflixViewerId(req);
+    if (!viewerId) {
       return NextResponse.json({ error: "Sign in to build your Netflix list" }, { status: 401 });
     }
     const body = (await req.json().catch(() => ({}))) as { netflixId?: unknown };
@@ -90,8 +91,8 @@ export async function POST(req: Request) {
       update: {},
     });
     await db.netflixMyListItem.upsert({
-      where: { userId_netflixId: { userId: viewer.id, netflixId } },
-      create: { userId: viewer.id, netflixId },
+      where: { userId_netflixId: { userId: viewerId, netflixId } },
+      create: { userId: viewerId, netflixId },
       update: {},
     });
     return NextResponse.json({ myList: true });
@@ -106,8 +107,8 @@ export async function DELETE(req: Request) {
     if (!(await rateLimit(`netflix:mylist:del:${req.headers.get("x-forwarded-for") ?? "local"}`))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
-    const viewer = await resolveViewer(req.headers);
-    if (!viewer.id) {
+    const viewerId = await netflixViewerId(req);
+    if (!viewerId) {
       return NextResponse.json({ error: "Sign in to manage your Netflix list" }, { status: 401 });
     }
     const netflixId = Number(new URL(req.url).searchParams.get("netflixId"));
@@ -115,7 +116,7 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: "netflixId required" }, { status: 400 });
     }
     await db.netflixMyListItem.deleteMany({
-      where: { userId: viewer.id, netflixId },
+      where: { userId: viewerId, netflixId },
     });
     return NextResponse.json({ myList: false });
   } catch (err) {

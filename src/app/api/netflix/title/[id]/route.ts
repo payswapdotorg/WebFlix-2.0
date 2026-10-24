@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getNetflixTitlePage } from "@/lib/netflix/catalog";
 import { rateLimit } from "@/lib/youtube/cache";
-import { resolveViewer } from "@/lib/watch/session";
+import { netflixViewerId } from "@/lib/netflix/viewer";
 
 export const dynamic = "force-dynamic";
 
@@ -21,8 +21,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     if (!Number.isInteger(netflixId) || netflixId <= 0 || String(netflixId).length > 10) {
       return NextResponse.json({ error: "Invalid Netflix title id" }, { status: 400 });
     }
-    const viewer = await resolveViewer(req.headers);
-    const page = await getNetflixTitlePage(netflixId, viewer.id || null);
+    const viewerId = await netflixViewerId(req);
+    const page = await getNetflixTitlePage(netflixId, viewerId || null);
     if (!page) {
       return NextResponse.json(
         { error: "Title not in the tracked Netflix catalog" },

@@ -30,6 +30,7 @@ import {
   RECENTS_STORAGE_KEY,
   SUGGEST_LISTBOX_ID,
   SuggestDropdown,
+  netflixRowMatches,
   pushRecent,
   readRecents,
   suggestOptionId,
@@ -139,16 +140,18 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 interface HarnessProps {
   onCommit?: (query: string) => void;
+  onNetflixCommit?: (netflixId: number, title: string) => void;
   onFormSubmit?: (query: string) => void;
   debounceMs?: number;
 }
 
 /** Mirrors the topbar wiring exactly (focus/blur/keydown/submit laws). */
-function SuggestHarness({ onCommit, onFormSubmit, debounceMs }: HarnessProps) {
+function SuggestHarness({ onCommit, onNetflixCommit, onFormSubmit, debounceMs }: HarnessProps) {
   const [query, setQuery] = useState("");
   const suggest = useSuggestDropdown({
     query,
     onCommit: onCommit ?? (() => {}),
+    onNetflixCommit,
     debounceMs,
   });
   return (
@@ -652,5 +655,138 @@ describe("search page — did-you-mean parity", () => {
     const instead = links.find((a) => (a.textContent ?? "").includes("Search instead for lofi hio"));
     expect(instead).toBeDefined();
     expect(instead!.getAttribute("href")).toBe("/search?q=lofi%20hio&verbatim=1");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P49 — the Netflix lane in the global suggest (badge rows + commit laws)
+// ---------------------------------------------------------------------------
+
+describe("P49 — netflixRowMatches (the staleness guard, pure)", () => {
+  test("full-query includes and every-token matches survive", () => {
+    expect(netflixRowMatches("Animals", "animal")).toBe(true);
+    expect(netflixRowMatches("Doing Life", "doing life")).toBe(true);
+    expect(netflixRowMatches("Doing Life", "life doing")).toBe(true); // token order free
+    expect(netflixRowMatches("Doing Life", "doing")).toBe(true);
+  });
+
+  test("a mismatched (stale) query drops the row; empty query drops everything", () => {
+    expect(netflixRowMatches("Animals", "zzz")).toBe(false);
+    expect(netflixRowMatches("Doing Life", "doing zzz")).toBe(false); // one token misses
+    expect(netflixRowMatches("Animals", "")).toBe(false);
+    expect(netflixRowMatches("Animals", "   ")).toBe(false);
+  });
+});
+
+describe("P49 — the dropdown's Netflix badge rows", () => {
+  test("netflix matches render as badge rows with the On Netflix label", async () => {
+    responders.push(async () =>
+      jsonRes({
+        suggestions: ["animals documentary"],
+        netflix: [
+          { netflixId: 81757047, title: "Animals", releaseYear: 2026, kind: "movie" },
+        ],
+      })
+    );
+    await renderHarness({ debounceMs: 25 });
+    await typeText("animals");
+    await act(async () => {
+      await sleep(70);
+    });
+    // the badge row's raw text carries the N + label glyphs — pin the clean
+    // labels via aria-label (the netflix row's accessible name)
+    const rowNames = all('[role="option"]').map(
+      (el) => el.getAttribute("aria-label") ?? (el.textContent ?? "").trim()
+    );
+    expect(rowNames).toEqual(["animals documentary", "Animals — on Netflix"]);
+    expect(all('[data-testid="netflix-suggest-badge"]').length).toBe(1);
+    expect(all('[data-testid="netflix-suggest-label"]')[0]?.textContent).toBe("On Netflix");
+  });
+
+  test("committing a Netflix row navigates to the title page — NOT the search, NOT a recent", async () => {
+    const commits: string[] = [];
+    const netflixCommits: { id: number; title: string }[] = [];
+    responders.push(async () =>
+      jsonRes({
+        suggestions: [],
+        netflix: [{ netflixId: 81757047, title: "Animals", releaseYear: 2026, kind: "movie" }],
+      })
+    );
+    await renderHarness({
+      onCommit: (t) => commits.push(t),
+      onNetflixCommit: (id, title) => netflixCommits.push({ id, title }),
+      debounceMs: 25,
+    });
+    await typeText("animals");
+    await act(async () => {
+      await sleep(70);
+    });
+    const row = all('[role="option"]')[0]!;
+    await act(async () => {
+      row.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    });
+    expect(netflixCommits).toEqual([{ id: 81757047, title: "Animals" }]);
+    expect(commits).toEqual([]);
+    expect(optionTexts()).toEqual([]); // closed
+    // a title is not a search — the recents store stays clean
+    expect(win.localStorage.getItem(RECENTS_STORAGE_KEY)).toBeNull();
+  });
+
+  test("no onNetflixCommit handler → the row falls back to the search-page commit", async () => {
+    const commits: string[] = [];
+    responders.push(async () =>
+      jsonRes({
+        suggestions: [],
+        netflix: [{ netflixId: 81757047, title: "Animals", releaseYear: 2026, kind: "movie" }],
+      })
+    );
+    await renderHarness({ onCommit: (t) => commits.push(t), debounceMs: 25 });
+    await typeText("animals");
+    await act(async () => {
+      await sleep(70);
+    });
+    const row = all('[role="option"]')[0]!;
+    await act(async () => {
+      row.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    });
+    expect(commits).toEqual(["Animals"]);
+  });
+
+  test("a YT suggestion with the same words does NOT hide the badge row (different destinations); stale rows drop", async () => {
+    responders.push(async () =>
+      jsonRes({
+        suggestions: ["Animals"],
+        netflix: [{ netflixId: 81757047, title: "Animals", releaseYear: 2026, kind: "movie" }],
+      })
+    );
+    await renderHarness({ debounceMs: 25 });
+    await typeText("animals");
+    await act(async () => {
+      await sleep(70);
+    });
+    // both rows show — the suggestion searches, the badge row goes to the title
+    const rowNames = all('[role="option"]').map(
+      (el) => el.getAttribute("aria-label") ?? (el.textContent ?? "").trim()
+    );
+    expect(rowNames).toEqual(["Animals", "Animals — on Netflix"]);
+    expect(all('[data-testid="netflix-suggest-badge"]').length).toBe(1);
+    // ...and a stale mismatched query keeps neither mismatched netflix row
+    await typeText("animals zzz");
+    await act(async () => {
+      await sleep(70);
+    });
+    // the responder was consumed — the second fetch hits the default responder
+    // (suggestions only), and netflixRowMatches would drop the stale row anyway
+    expect(all('[data-testid="netflix-suggest-badge"]').length).toBe(0);
+  });
+
+  test("the YouTube contract stays byte-identical when the netflix lane is absent", async () => {
+    await renderHarness({ debounceMs: 25 }); // default responder: suggestions only, no netflix key
+    await typeText("lo");
+    await act(async () => {
+      await sleep(70);
+    });
+    expect(optionTexts()).toEqual(DEFAULT_SUGGESTIONS);
+    expect(all('[data-testid="netflix-suggest-badge"]').length).toBe(0);
   });
 });

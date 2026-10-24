@@ -18,6 +18,7 @@ import type {
   NetflixSource,
   NetflixTitleDTO,
   NetflixTitlePageDTO,
+  NetflixCatalogSuggestion,
 } from "./types";
 
 /** Countries the hub rails render by default (Global is always first). */
@@ -217,6 +218,60 @@ export async function getNetflixTitlePage(
     unavailable: false,
     unavailableReason: null,
   };
+}
+
+/**
+ * P49 — the lean suggest query for the GLOBAL search box: the same scoring
+ * law as searchNetflixCatalog, but a small, cheap, DTO-light shape (the
+ * suggest dropdown renders a title + badge, not a rail). Returns [] on any
+ * mirror trouble — the suggest lane never blocks on Netflix.
+ */
+export type { NetflixCatalogSuggestion } from "./types";
+
+export async function suggestNetflixTitles(
+  q: string,
+  cap: number = 3
+): Promise<NetflixCatalogSuggestion[]> {
+  const query = q.trim();
+  if (!query) return [];
+  const needle = query.toLowerCase();
+  const tokens = needle.split(/\s+/).filter(Boolean).slice(0, 6);
+  try {
+    const rows = await db.netflixTitle.findMany({
+      where: {
+        OR: [
+          { title: { contains: needle } },
+          ...tokens.map((t) => ({ title: { contains: t } })),
+        ],
+      },
+      take: 24,
+    });
+    return rows
+      .map(mirrorRowToDTO)
+      .map((t) => {
+        const titleLower = t.title.toLowerCase();
+        let score = 0;
+        if (titleLower === needle) score += 100;
+        if (titleLower.startsWith(needle)) score += 50;
+        if (titleLower.includes(needle)) score += 25;
+        for (const tok of tokens) if (titleLower.includes(tok)) score += 5;
+        // currently-ranking titles answer first (the hub's live truth)
+        if (t.weeklyRank !== null) score += 10;
+        if (t.allTimeRank !== null) score += 5;
+        return { t, score };
+      })
+      .filter((s) => s.score > 0)
+      .sort((a, b) => b.score - a.score || a.t.title.localeCompare(b.t.title))
+      .slice(0, cap)
+      .map((s) => ({
+        netflixId: s.t.netflixId,
+        title: s.t.title,
+        releaseYear: s.t.releaseYear,
+        kind: s.t.kind,
+      }));
+  } catch {
+    return [];
+  }
 }
 
 /**

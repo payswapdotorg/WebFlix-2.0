@@ -306,10 +306,26 @@ export default function NetflixWatchView() {
     [isLive, netflixId]
   );
 
+  // P49 — a play intent becomes a Continue Watching row (WebFlix-local,
+  // honest-local; a failed write never blocks playback). The Live lane
+  // records nothing — there is no single title to remember.
+  const recordPlay = useCallback(() => {
+    if (isLive || !Number.isInteger(netflixId) || netflixId <= 0) return;
+    void fetch("/api/netflix/progress", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ netflixId }),
+      keepalive: true,
+    }).catch(() => {
+      /* the rail is a memory, not a gate */
+    });
+  }, [isLive, netflixId]);
+
   // kick the session once, then poll until terminal-ish phases
   useEffect(() => {
     if (!valid || kickedRef.current) return;
     kickedRef.current = true;
+    recordPlay();
     void (async () => {
       try {
         await fetch("/api/netflix/watch/session", {
@@ -322,7 +338,7 @@ export default function NetflixWatchView() {
       }
       void poll();
     })();
-  }, [valid, netflixId, poll, kickBody]);
+  }, [valid, netflixId, poll, kickBody, recordPlay]);
 
   useEffect(() => {
     if (!valid) return;
@@ -455,6 +471,7 @@ export default function NetflixWatchView() {
 
   const restartSession = useCallback(async () => {
     setStreamError(false);
+    recordPlay(); // a replay is still a play — the rail stays honest
     await fetch("/api/netflix/watch/session/restart", { method: "POST" }).catch(() => {});
     await fetch("/api/netflix/watch/session", {
       method: "POST",
@@ -462,7 +479,7 @@ export default function NetflixWatchView() {
       body: JSON.stringify(kickBody()),
     }).catch(() => {});
     void poll();
-  }, [kickBody, poll]);
+  }, [kickBody, poll, recordPlay]);
 
   const retryAuth = useCallback(async () => {
     setAuthRetryBusy(true);
