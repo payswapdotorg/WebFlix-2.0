@@ -16,6 +16,10 @@ import {
   ExternalLink,
   Minus,
   Plus,
+  Copy,
+  Check,
+  Puzzle,
+  Download,
 } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
 import type { NetflixTitlePageDTO } from "@/lib/netflix/types";
@@ -46,6 +50,20 @@ const PHASE_STEPS: Array<{ key: string; label: string }> = [
   { key: "ready", label: "Ready" },
 ];
 
+/** P46 — what the broker reports about the automatic sign-in bridge. */
+interface BridgeStatus {
+  lastBridgePushAt: number | null;
+  lastBridgeDevice: string | null;
+  candidatePending: boolean;
+  lastRejection: { at: number; reason: string } | null;
+}
+
+interface AutoAuthInfo {
+  token: string | null;
+  bridge: BridgeStatus | null;
+  message?: string;
+}
+
 export default function NetflixWatchView() {
   const params = useParams<{ id: string }>();
   const rawId = Array.isArray(params?.id) ? params.id[0] : params?.id;
@@ -62,6 +80,12 @@ export default function NetflixWatchView() {
 
   const [status, setStatus] = useState<WatchSessionStatus | null>(null);
   const kickedRef = useRef(false);
+  // P46 — the auth overlay has two lanes: the WebFlix Bridge (automatic,
+  // primary) and the one-off cookie paste (manual, still first-class).
+  const [authLane, setAuthLane] = useState<"auto" | "manual">("auto");
+  const [autoAuth, setAutoAuth] = useState<AutoAuthInfo | null>(null);
+  const [tokenCopied, setTokenCopied] = useState(false);
+  const [rotateBusy, setRotateBusy] = useState(false);
   const [cookiePanelOpen, setCookiePanelOpen] = useState(false);
   const [cookieInput, setCookieInput] = useState("");
   const [cookieResult, setCookieResult] = useState<string | null>(null);
@@ -99,6 +123,82 @@ export default function NetflixWatchView() {
       /* transient */
     }
   }, []);
+
+  // P46 — pairing token + bridge push status for the automatic lane
+  const fetchAutoAuth = useCallback(async () => {
+    try {
+      const res = await fetch("/api/netflix/watch/autoauth", { cache: "no-store" });
+      if (!res.ok) return;
+      const next = (await res.json()) as AutoAuthInfo;
+      setAutoAuth((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+    } catch {
+      /* transient */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (status?.phase !== "auth-required") return;
+    // deferred (not synchronous in the effect body) — same pattern as the poll
+    const first = setTimeout(() => void fetchAutoAuth(), 0);
+    const t = setInterval(() => void fetchAutoAuth(), 5000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(t);
+    };
+  }, [status?.phase, fetchAutoAuth]);
+
+  const copyToken = useCallback(async () => {
+    if (!autoAuth?.token) return;
+    try {
+      await navigator.clipboard.writeText(autoAuth.token);
+      setTokenCopied(true);
+      setTimeout(() => setTokenCopied(false), 2000);
+    } catch {
+      /* clipboard blocked — the token stays selectable */
+    }
+  }, [autoAuth]);
+
+  const rotateToken = useCallback(async () => {
+    setRotateBusy(true);
+    try {
+      const res = await fetch("/api/netflix/watch/autoauth", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "rotate" }),
+      });
+      const out = (await res.json()) as { token?: string };
+      if (out.token) {
+        setAutoAuth((prev) => (prev ? { ...prev, token: out.token as string } : prev));
+      }
+    } catch {
+      /* transient */
+    } finally {
+      setRotateBusy(false);
+    }
+  }, []);
+
+  // the WebFlix URL the bridge options page wants — set from an external-system
+  // callback (rAF), not synchronously in the effect body
+  const [origin, setOrigin] = useState("");
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setOrigin(window.location.origin));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  const bridgeStatusLine = useMemo(() => {
+    if (!autoAuth) return "Auto sign-in status unavailable right now.";
+    const b = autoAuth.bridge;
+    if (!b) return autoAuth.message ?? "No bridge information available yet.";
+    if (b.candidatePending)
+      return "Session received from your browser — it connects automatically on your next play.";
+    if (b.lastRejection)
+      return `Netflix rejected the last pushed session (${b.lastRejection.reason}) — make sure that browser is still signed in; the bridge re-pushes on its next rotation.`;
+    if (b.lastBridgePushAt)
+      return `Bridge last seen ${new Date(b.lastBridgePushAt).toLocaleTimeString()}${
+        b.lastBridgeDevice ? ` · ${b.lastBridgeDevice}` : ""
+      } — watching for changes.`;
+    return "No bridge push seen yet — finish the pairing above, then open netflix.com in that browser.";
+  }, [autoAuth]);
 
   // what we ask the broker for on entry/restart: the deep link for a title,
   // the browse lane for Netflix Live
@@ -390,51 +490,108 @@ export default function NetflixWatchView() {
                 data-testid="netflix-watch-frame"
               />
               <div className="absolute inset-x-0 top-0 flex justify-center p-3" data-testid="netflix-watch-auth-overlay">
-                <div className="w-full max-w-2xl space-y-3 rounded-xl border border-white/15 bg-black/85 p-5 text-center shadow-2xl backdrop-blur">
+                <div className="max-h-[92vh] w-full max-w-2xl space-y-3 overflow-y-auto rounded-xl border border-white/15 bg-black/85 p-5 text-center shadow-2xl backdrop-blur">
                   <KeyRound className="mx-auto size-6 text-[#e50914]" aria-hidden="true" />
                   <p className="text-base font-semibold">Connect your Netflix account</p>
                   <p className="text-sm leading-relaxed text-white/65">
                     Netflix&apos;s anti-bot wall blocks automated sign-ins from cloud networks —
-                    so the reliable path is connecting your existing session (below). You can also
-                    try signing in by hand inside the live window behind this panel, though the
-                    wall usually stops that too.
+                    so WebFlix connects <b>your existing session</b> instead. The bridge makes
+                    that automatic: sign into Netflix once in your own browser and every session
+                    — including future cookie rotations — reaches this window by itself.
                   </p>
-                  <div className="flex flex-wrap items-center justify-center gap-2">
+                  <div className="flex flex-wrap items-center justify-center gap-2" role="tablist" aria-label="Sign-in method">
                     <button
                       type="button"
-                      onClick={() => setCookiePanelOpen((v) => !v)}
-                      className="flex h-10 items-center gap-2 rounded-md bg-[#e50914] px-4 text-sm font-semibold hover:bg-[#c4080f]"
+                      role="tab"
+                      aria-selected={authLane === "auto"}
+                      onClick={() => { setAuthLane("auto"); setCookiePanelOpen(false); }}
+                      className={`flex h-10 items-center gap-2 rounded-md px-4 text-sm font-semibold ${authLane === "auto" ? "bg-[#e50914] hover:bg-[#c4080f]" : "border border-white/20 hover:bg-white/5"}`}
+                      data-testid="netflix-watch-autoauth-tab"
+                    >
+                      <Puzzle className="size-4" aria-hidden="true" /> Automatic (bridge)
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={authLane === "manual"}
+                      onClick={() => { setAuthLane("manual"); setCookiePanelOpen(true); }}
+                      className={`flex h-10 items-center gap-2 rounded-md px-4 text-sm font-semibold ${authLane === "manual" ? "bg-[#e50914] hover:bg-[#c4080f]" : "border border-white/20 hover:bg-white/5"}`}
                       data-testid="netflix-watch-cookie-connect"
                     >
-                      <KeyRound className="size-4" aria-hidden="true" /> Connect with session cookies
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void retryAuth()}
-                      disabled={authRetryBusy}
-                      className="flex h-10 items-center gap-2 rounded-md border border-white/20 px-4 text-sm font-medium hover:bg-white/5 disabled:opacity-60"
-                      data-testid="netflix-watch-retry-auth"
-                    >
-                      {authRetryBusy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <RotateCcw className="size-4" aria-hidden="true" />}
-                      Retry automatic sign-in
+                      <KeyRound className="size-4" aria-hidden="true" /> Paste cookies manually
                     </button>
                   </div>
-                  <p className="text-xs text-white/45" data-testid="netflix-watch-harvest-note">
-                    Automatic sign-in runs periodically from residential networks — measured
-                    reality (P45): Netflix issues session cookies but quarantines the login
-                    before it activates, so every harvest result is strictly validated before
-                    it&apos;s trusted. The cookie connect above is the guaranteed path.
-                  </p>
-                  {title && (
-                    <p className="text-xs">
-                      <Link
-                        href={`/netflix/t/${title.netflixId}`}
-                        className="text-white/60 underline underline-offset-2 hover:text-white"
-                        data-testid="netflix-watch-trailer-link"
+                  {authLane === "auto" && !cookiePanelOpen && (
+                    <div className="mx-auto max-w-xl space-y-3 rounded-lg border border-white/15 bg-white/5 p-4 text-left" data-testid="netflix-watch-autoauth-lane">
+                      <ol className="space-y-2 text-xs leading-relaxed text-white/55">
+                        <li>
+                          <span className="font-semibold text-white/80">1.</span>{" "}
+                          <a href="/netflix-bridge.zip" download className="text-white/85 underline underline-offset-2 hover:text-white" data-testid="netflix-watch-autoauth-download">
+                            Download the WebFlix Bridge
+                          </a>{" "}
+                          and unzip it.
+                        </li>
+                        <li>
+                          <span className="font-semibold text-white/80">2.</span> In Chrome, open{" "}
+                          <code className="rounded bg-black/40 px-1">chrome://extensions</code>, enable <b>Developer mode</b>, click{" "}
+                          <b>Load unpacked</b> and pick the unzipped folder.
+                        </li>
+                        <li>
+                          <span className="font-semibold text-white/80">3.</span> Open the bridge&apos;s <b>Options</b>, paste{" "}
+                          <code className="rounded bg-black/40 px-1">{origin || "this WebFlix URL"}</code> as the WebFlix
+                          URL and this pairing token:
+                        </li>
+                      </ol>
+                      <div className="flex items-center gap-2">
+                        <code
+                          className="min-w-0 flex-1 select-all overflow-x-auto whitespace-nowrap rounded-md border border-white/15 bg-black/50 px-2 py-2 font-mono text-[11px] text-emerald-300"
+                          data-testid="netflix-watch-autoauth-token"
+                        >
+                          {autoAuth?.token ?? "loading…"}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() => void copyToken()}
+                          className="flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-white/10 px-3 text-xs font-medium hover:bg-white/20"
+                          data-testid="netflix-watch-autoauth-copy"
+                        >
+                          {tokenCopied ? <Check className="size-3.5" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}
+                          {tokenCopied ? "Copied" : "Copy"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void rotateToken()}
+                          disabled={rotateBusy}
+                          className="flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-white/20 px-3 text-xs font-medium hover:bg-white/5 disabled:opacity-60"
+                          aria-label="Rotate the pairing token (old bridges stop working until re-paired)"
+                          data-testid="netflix-watch-autoauth-rotate"
+                        >
+                          {rotateBusy ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : <RotateCcw className="size-3.5" aria-hidden="true" />}
+                          Rotate
+                        </button>
+                      </div>
+                      <p className="text-xs leading-relaxed text-white/55">
+                        <span className="font-semibold text-white/80">4.</span> Then just keep using{" "}
+                        <code className="rounded bg-black/40 px-1">netflix.com</code> in that browser — the bridge ships
+                        your session the moment it sees one (and after every Netflix cookie rotation), and
+                        playback connects by itself.
+                      </p>
+                      <p
+                        className={`rounded-md border px-3 py-2 text-xs leading-relaxed ${
+                          autoAuth?.bridge?.lastRejection
+                            ? "border-amber-500/30 bg-amber-500/10 text-amber-200/90"
+                            : "border-white/10 bg-black/40 text-white/70"
+                        }`}
+                        data-testid="netflix-watch-autoauth-status"
                       >
-                        Meanwhile, watch the “{title.title}” trailer right now in WebFlix →
-                      </Link>
-                    </p>
+                        {bridgeStatusLine}
+                      </p>
+                      <p className="text-[11px] leading-relaxed text-white/35">
+                        The bridge talks only to this WebFlix server. Pushed sessions are validated
+                        against Netflix before they are ever trusted — an invalid push can never reach
+                        playback.
+                      </p>
+                    </div>
                   )}
                   {cookiePanelOpen && (
                     <div className="mx-auto max-w-xl space-y-3 rounded-lg border border-white/15 bg-white/5 p-4 text-left" data-testid="netflix-watch-cookie-panel">
@@ -496,6 +653,35 @@ export default function NetflixWatchView() {
                         anywhere else.
                       </p>
                     </div>
+                  )}
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void retryAuth()}
+                      disabled={authRetryBusy}
+                      className="flex h-10 items-center gap-2 rounded-md border border-white/20 px-4 text-sm font-medium hover:bg-white/5 disabled:opacity-60"
+                      data-testid="netflix-watch-retry-auth"
+                    >
+                      {authRetryBusy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <RotateCcw className="size-4" aria-hidden="true" />}
+                      Retry harvest sign-in
+                    </button>
+                  </div>
+                  <p className="text-xs text-white/45" data-testid="netflix-watch-harvest-note">
+                    The background harvest (automated login from residential networks) stays armed but
+                    slow — measured reality (P45): Netflix issues session cookies yet quarantines the
+                    login before it activates. The bridge above never touches that wall because it is
+                    simply you, signing in normally; the manual paste remains as the one-off fallback.
+                  </p>
+                  {title && (
+                    <p className="text-xs">
+                      <Link
+                        href={`/netflix/t/${title.netflixId}`}
+                        className="text-white/60 underline underline-offset-2 hover:text-white"
+                        data-testid="netflix-watch-trailer-link"
+                      >
+                        Meanwhile, watch the “{title.title}” trailer right now in WebFlix →
+                      </Link>
+                    </p>
                   )}
                 </div>
               </div>

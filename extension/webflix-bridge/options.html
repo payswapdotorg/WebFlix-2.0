@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>WebFlix Bridge — Options</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font: 14px/1.6 system-ui, sans-serif; max-width: 560px; margin: 2rem auto; padding: 0 1rem; }
+      h1 { font-size: 18px; } .muted { opacity: .65; font-size: 12px; }
+      label { display: block; font-weight: 600; margin: 14px 0 4px; }
+      input { width: 100%; box-sizing: border-box; padding: 8px; font: 13px ui-monospace, monospace; }
+      button { margin-top: 14px; padding: 8px 14px; border-radius: 8px; border: 0; background: #e50914; color: #fff; font-weight: 600; cursor: pointer; }
+      button.secondary { background: #666; }
+      #status { margin-top: 12px; font-size: 12px; white-space: pre-wrap; }
+      code { background: rgba(127,127,127,.15); padding: 1px 4px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>WebFlix Bridge</h1>
+    <p class="muted">
+      Sign into <code>netflix.com</code> in this browser as usual. The bridge ships your
+      Netflix session cookies to your WebFlix server so in-app playback connects
+      automatically — including every future cookie rotation.
+    </p>
+    <label for="baseUrl">WebFlix URL</label>
+    <input id="baseUrl" placeholder="https://your-webflix.example.com" spellcheck="false" />
+    <label for="token">Pairing token</label>
+    <input id="token" placeholder="paste from WebFlix → Netflix → Play → Automatic sign-in" spellcheck="false" />
+    <button id="save">Save &amp; allow this WebFlix</button>
+    <button id="test" class="secondary">Test connection</button>
+    <div id="status" role="status"></div>
+    <script src="options.js" type="module"></script>
+  </body>
+</html>

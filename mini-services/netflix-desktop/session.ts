@@ -12,6 +12,8 @@ import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { connectChromePage, type CdpConnection } from "./cdp";
 import { CDP_RELAY_PY } from "./cdp-relay";
 import { harvestNetflixSession, hasAuthCookies, type NetflixCookie } from "./cookies";
+import { buildEgressPlan, egressBootstrap } from "./egress";
+import { readBridgeCandidate, clearBridgeCandidate, type BridgeCandidate } from "./ingest";
 
 const SBX_TIMEOUT_MS = 30 * 60 * 1000;
 const IDLE_TTL_MS = 25 * 60 * 1000;
@@ -62,14 +64,18 @@ export interface SessionStatus {
   audioRunning: boolean;
 }
 
-const NETFLIX_APP_DESKTOP = `[Desktop Entry]
+// P46: the Exec line is built at bootstrap so the optional residential-egress
+// proxy flag (validated first — fails open to direct) can ride along.
+function netflixDesktopEntry(extraChromeFlags: string): string {
+  return `[Desktop Entry]
 Version=1.0
 Name=Netflix App
-Exec=/usr/bin/google-chrome --no-first-run --no-default-browser-check --hide-crash-restore-bubble --start-maximized --autoplay-policy=no-user-gesture-required --user-data-dir=/home/user/chrome-profile-netflix --remote-debugging-port=9222 --remote-allow-origins=* --app=%u
+Exec=/usr/bin/google-chrome --no-first-run --no-default-browser-check --hide-crash-restore-bubble --start-maximized --autoplay-policy=no-user-gesture-required --user-data-dir=/home/user/chrome-profile-netflix --remote-debugging-port=9222 --remote-allow-origins=*${extraChromeFlags} --app=%u
 Terminal=false
 Type=Application
 MimeType=x-scheme-handler/https;
 `;
+}
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -154,6 +160,9 @@ export class NetflixSessionManager {
           setTimeout(() => rej(new Error("sandbox creation timed out (platform busy or quota)")), 120_000),
         ),
       ]);
+      if (!desktop) throw new Error("sandbox creation failed");
+      // the run helper captures the sandbox in a closure — pin the narrowed type
+      const box: Sandbox = desktop;
       this.desktop = desktop;
       this.videoId = null;
       this.lastActivity = Date.now();
@@ -161,7 +170,7 @@ export class NetflixSessionManager {
 
       const run = async (cmd: string, timeoutMs = 30_000) => {
         try {
-          return await desktop.commands.run(cmd, { timeoutMs });
+          return await box.commands.run(cmd, { timeoutMs });
         } catch (e) {
           console.log(`[session] cmd failed: ${cmd.slice(0, 80)} → ${(e as Error).message.slice(0, 120)}`);
           return null;
@@ -176,6 +185,23 @@ export class NetflixSessionManager {
         30_000,
       );
 
+      // P46: optional residential egress (env-gated, fails OPEN to direct).
+      // The proxy flag only reaches Chrome after the tunnel proves itself.
+      let chromeEgressFlags = "";
+      const egress = buildEgressPlan();
+      if (egress.mode === "apify-residential") {
+        this.setPhase("provisioning", "starting residential egress");
+        const boot = egressBootstrap(egress);
+        const started = boot ? await run(boot.script, 15_000) : null;
+        const ip = started && boot ? ((await run(boot.healthCheck, 60_000))?.stdout ?? "").trim() : "";
+        if (/^\d+\.\d+\.\d+\.\d+$/.test(ip)) {
+          chromeEgressFlags = egress.chromeFlags.length ? ` ${egress.chromeFlags.join(" ")}` : "";
+          console.log(`[session] residential egress active (exit ip ${ip})`);
+        } else {
+          console.log("[session] egress forwarder unhealthy — falling back to direct");
+        }
+      }
+
       // CDP relay
       await desktop.files.write("/home/user/cdp-relay.py", CDP_RELAY_PY);
       const relay = await desktop.commands.run(
@@ -184,10 +210,10 @@ export class NetflixSessionManager {
       );
       relay?.disconnect?.();
 
-      // chrome desktop file (app mode + CDP flags)
+      // chrome desktop file (app mode + CDP flags + validated egress flags)
       await desktop.files.write(
         "/home/user/.local/share/applications/netflix-app.desktop",
-        NETFLIX_APP_DESKTOP,
+        netflixDesktopEntry(chromeEgressFlags),
       );
 
       // launch chrome to netflix
@@ -237,10 +263,42 @@ export class NetflixSessionManager {
     }
   }
 
+  /**
+   * P46: a bridge candidate (the operator's own-browser cookies) is validated
+   * BEFORE the cache/harvest ladder — promoted to the trusted cache only on a
+   * strict pass, dropped (never cached) on a failure. Poison-proof by design.
+   */
+  private async validateAndPromoteCandidate(candidate: BridgeCandidate): Promise<boolean> {
+    const desktop = this.desktop;
+    if (!desktop) return false;
+    console.log(`[session] bridge candidate present (${candidate.cookies.length} cookies) — validating`);
+    const cdp = await connectChromePage(desktop.sandboxId, { preferUrlIncludes: "netflix" });
+    try {
+      await this.injectCookies(cdp, candidate.cookies);
+      await cdp.send("Page.navigate", { url: "https://www.netflix.com/browse" }, 20_000);
+      await sleep(8_000);
+      if (await this.checkSignedIn(cdp)) {
+        this.saveCookieCache(candidate.cookies);
+        clearBridgeCandidate();
+        console.log("[session] bridge candidate PROMOTED to the trusted cache");
+        return true;
+      }
+      clearBridgeCandidate();
+      console.log("[session] bridge candidate rejected by the strict check — dropped");
+      return false;
+    } finally {
+      cdp.close();
+    }
+  }
+
   /** Inject cached/harvested cookies via CDP and verify the session. */
   private async restoreAuth(): Promise<boolean> {
     const desktop = this.desktop;
     if (!desktop) return false;
+    const candidate = readBridgeCandidate();
+    if (candidate && (await this.validateAndPromoteCandidate(candidate))) {
+      return true;
+    }
     let cookies = this.loadCookieCache();
     if (!cookies || !hasAuthCookies(cookies)) {
       // a failed automatic harvest cools down for hours (P45) — don't burn runs
@@ -461,20 +519,33 @@ export class NetflixSessionManager {
     }
   }
 
+  private b64Remainder = "";
+
   /** Start the PulseAudio monitor → Opus/WebM stdout pipeline. */
   async startAudio() {
     const desktop = this.desktop;
     if (!desktop || this.audioRunning) return;
     this.audioRunning = true;
+    this.b64Remainder = "";
     console.log("[audio] starting pulse monitor capture");
-    // non-background run: onStdout streams live (verified); the promise stays
-    // pending while ffmpeg runs — termination is via pkill in stopAudio().
+    // P46 fix: the E2B SDK UTF-8-decodes stdout (TextDecoder) — raw Opus/WebM
+    // bytes through that channel are LOSSY (invalid sequences → U+FFFD). The
+    // tap now base64-encodes inside the sandbox and decodes on 4-char
+    // boundaries here, so binary survives intact. The promise stays pending
+    // while ffmpeg runs — termination is via pkill in stopAudio().
     const p = desktop.commands.run(
-      "ffmpeg -hide_banner -loglevel error -f pulse -i netflix_sink.monitor -c:a libopus -b:a 128k -frame_duration 20 -f webm pipe:1",
+      "ffmpeg -hide_banner -loglevel error -f pulse -i netflix_sink.monitor -c:a libopus -b:a 128k -frame_duration 20 -f webm pipe:1 | base64 -w 0",
       {
         timeoutMs: 24 * 60 * 60 * 1000,
-        onStdout: (data: Uint8Array) => {
-          if (this.onAudioChunk) this.onAudioChunk(Buffer.from(data));
+        onStdout: (data: string) => {
+          if (!this.onAudioChunk) return;
+          this.b64Remainder += data;
+          const usable = Math.floor(this.b64Remainder.length / 4) * 4;
+          if (usable === 0) return;
+          const chunk = this.b64Remainder.slice(0, usable);
+          this.b64Remainder = this.b64Remainder.slice(usable);
+          const buf = Buffer.from(chunk, "base64");
+          if (buf.length) this.onAudioChunk(buf);
         },
       },
     ).catch((e: Error) => {
@@ -517,7 +588,6 @@ export class NetflixSessionManager {
     this.desktop = null;
     this.streamUrl = null;
     this.audioRunning = false;
-    this.audioHandle = null;
     this.videoId = null;
     if (this.phase !== "idle") this.setPhase("idle", "session ended");
   }

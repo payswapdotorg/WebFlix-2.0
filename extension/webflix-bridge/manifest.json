@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "WebFlix Bridge",
+  "version": "1.0.0",
+  "description": "Pairs your own signed-in Netflix browser with WebFlix: pushes your session cookies to YOUR WebFlix server so playback connects automatically. The cookies go to your server only — nowhere else.",
+  "permissions": ["cookies", "storage", "alarms"],
+  "host_permissions": ["*://*.netflix.com/*"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "options_page": "options.html",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "WebFlix Bridge"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
