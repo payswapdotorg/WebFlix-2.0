@@ -247,20 +247,12 @@ export class NetflixSessionManager {
     const cdp = await connectChromePage(desktop.sandboxId, { preferUrlIncludes: "netflix" });
     try {
       await this.injectCookies(cdp, cookies);
-      // navigate to netflix and evaluate login state
+      // navigate to netflix and evaluate login state (strict check — the
+      // signed-out marketing page sometimes serves WITHOUT a /login bounce)
       await cdp.send("Page.navigate", { url: "https://www.netflix.com/browse" }, 20_000);
       await sleep(8_000);
-      const check = await cdp.send<{ result: { value?: string } }>(
-        "Runtime.evaluate",
-        {
-          expression: "location.href",
-          returnByValue: true,
-        },
-        10_000,
-      );
-      const href = String(check?.result?.value ?? "");
-      const signedIn = !href.includes("/login");
-      console.log(`[session] post-inject href=${href.slice(0, 100)} signedIn=${signedIn}`);
+      const signedIn = await this.checkSignedIn(cdp);
+      console.log(`[session] post-inject signedIn=${signedIn}`);
       if (!signedIn) {
         // stale cache — re-harvest once
         const res = await harvestNetflixSession();
@@ -269,12 +261,7 @@ export class NetflixSessionManager {
           await this.injectCookies(cdp, res.cookies);
           await cdp.send("Page.navigate", { url: "https://www.netflix.com/browse" }, 20_000);
           await sleep(8_000);
-          const check2 = await cdp.send<{ result: { value?: string } }>(
-            "Runtime.evaluate",
-            { expression: "location.href", returnByValue: true },
-            10_000,
-          );
-          return !String(check2?.result?.value ?? "").includes("/login");
+          return this.checkSignedIn(cdp);
         }
         return false;
       }
@@ -329,13 +316,9 @@ export class NetflixSessionManager {
       await this.injectCookies(cdp, cookies);
       await cdp.send("Page.navigate", { url: "https://www.netflix.com/browse" }, 20_000);
       await sleep(8_000);
-      const check = await cdp.send<{ result: { value?: string } }>(
-        "Runtime.evaluate",
-        { expression: "location.href", returnByValue: true },
-        10_000,
-      );
-      const href = String(check?.result?.value ?? "");
-      if (!href.includes("/login")) {
+      // strict validation — a garbage NetflixId can land on the signed-OUT
+      // marketing page without a /login bounce; require real session signals
+      if (await this.checkSignedIn(cdp)) {
         this.saveCookieCache(cookies);
         this.setPhase("ready", "netflix session active (operator cookies)");
         // land on the requested title if one is queued
@@ -393,6 +376,35 @@ export class NetflixSessionManager {
     return this.getStatus();
   }
 
+  /**
+   * Navigate the streamed chrome to a whitelisted netflix.com path — the
+   * Netflix Live lane (the full real Netflix UI inside WebFlix: browse,
+   * search, my-list, trailers). Not just deep links.
+   */
+  async openPath(path: string): Promise<SessionStatus> {
+    const safe = /^\/[A-Za-z0-9/_?=&.~-]*$/.test(path) ? path : "/browse";
+    const desktop = await this.ensure();
+    this.lastActivity = Date.now();
+    this.videoId = null;
+    try {
+      const cdp = await connectChromePage(desktop.sandboxId, { preferUrlIncludes: "netflix" });
+      try {
+        await cdp.send("Page.navigate", { url: `https://www.netflix.com${safe}` }, 20_000);
+        await sleep(8_000);
+        if (await this.checkSignedIn(cdp)) {
+          this.setPhase("ready", `netflix session active (${safe})`);
+        } else {
+          this.setPhase("auth-required", "netflix session missing");
+        }
+      } finally {
+        cdp.close();
+      }
+    } catch (e) {
+      this.setPhase("error", (e as Error).message.slice(0, 200));
+    }
+    return this.getStatus();
+  }
+
   /** Strict signed-in check: not on /login AND Netflix's player root present. */
   private async checkSignedIn(cdp: CdpConnection): Promise<boolean> {
     try {
@@ -412,8 +424,9 @@ export class NetflixSessionManager {
       };
       if (String(o.href ?? "").includes("/login")) return false;
       if (o.player) return true;
-      // signed-out deep links land on the marketing title page (Sign In / Join Now)
-      return !/join now|enter your info to sign in|sign in to watch|sign in to continue/i.test(
+      // signed-out deep links land on the marketing title page / login wall
+      // (measured: "Enter your info to sign in", "Get started", reCAPTCHA note)
+      return !/join now|enter your info to sign in|sign in to watch|sign in to continue|get started|protected by google recaptcha/i.test(
         String(o.text ?? ""),
       );
     } catch {
@@ -525,10 +538,15 @@ export class NetflixSessionManager {
   }
 }
 
-/** Parse a raw `Cookie:` header into cookie objects (netflix.com defaults). */
+/**
+ * Parse a raw `Cookie:` header into cookie objects (netflix.com defaults).
+ * Tolerant of the operator pasting: the full header, `k=v; k2=v2` pairs, or
+ * one pair per line — and of a leading `Cookie:` prefix.
+ */
 export function parseCookieHeader(header: string): NetflixCookie[] {
   return header
-    .split(";")
+    .replace(/^\s*cookie\s*:\s*/i, "")
+    .split(/[;\n]+/)
     .map((pair) => pair.trim())
     .filter(Boolean)
     .map((pair) => {

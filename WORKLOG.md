@@ -1,6 +1,22 @@
 # Worklog
 
 ---
+Task ID: P44-NETFLIX-LIVE
+Agent: the resident TL station (operator follow-up: "go" on the P43 residual — make the Netflix tab actually replace Netflix's UX)
+Task: the Netflix Live lane (the full real Netflix interface streamed in-app, not just per-title deep links) + the auth-flow hardening.
+
+Work Log:
+- THE LIVE LANE: /netflix/watch/live — the watch view accepts the literal id "live" (no title payload; the kick POSTs {path:"/browse"}; header "Netflix Live — the real Netflix, right here"); broker openPath() navigates the streamed chrome to WHITELISTED netflix.com paths (regex allowlist, no open redirect) with the strict signed-in check — the window IS netflix.com (rows, search, profiles, the real player) once connected; the hub gains the Netflix Live band ("Browse Netflix Live" -> the lane) and the copy now says browsed AND played here.
+- AUTH FLOW HARDENED (live-verified end to end): cookie-connect promoted to the PRIMARY lane (the honest one) with a 3-step DevTools guide asking for exactly NetflixId + SecureNetflixId, a live paste hint (NetflixId as a STANDALONE name — /(?<![A-Za-z])NetflixId\s*=/; a bare SecureNetflixId= paste is correctly flagged insufficient — found by the new UI pin), and a server-only privacy note; parseCookieHeader tolerates header/pairs/lines/"Cookie:" prefix; the restart button's missing route EXISTS now (POST /api/netflix/watch/session/restart — P43 shipped the caller without the callee); the 2.5s poll got a change-guard (no re-render churn under interaction).
+- STRICT SESSION VALIDATION (measured): a garbage NetflixId FALSE-PASSED the old href-only check once live (200 then, 422 minutes later — netflix sometimes serves the signed-OUT marketing page without the /login bounce); applyExternalCookies + restoreAuth now run checkSignedIn (player root OR no marketing-wall text; wall phrases measured today: "Enter your info to sign in", "Get started", reCAPTCHA note); verified live: fake cookies -> honest "Netflix rejected these cookies (redirected to sign-in).", NO cache write, panel stays open with the typed value.
+- MEASURED REALITY (harvest lane): today's actor runs reproduce the A/B block (wrongpass and goodpass IDENTICAL "Something went wrong" + reCAPTCHA — the block still precedes credential validation); the 10-min cooldown held; no valid cookie set obtainable in-session (the floor stays the operator cookie-connect — now with the two-cookie guide).
+- OPS LESSON: hot-reloading the broker mid-bootstrap wedges the phase machine (the in-flight coroutine dies with the old module) and leaks the sandbox — leaked sandboxes cleaned via DELETE /sandboxes/<id>; restart the process instead of trusting a mid-flight bun --hot.
+- GATES: tsc clean (app + broker), lint 0e touched, test:netflix 53/0 (7 new pins: restart proxy x2, path forwarding + non-whitelisted refusal, hub Live band, watch-view live kick, cookie-hint both ways). Browser-verified: hub band -> live lane ladder -> auth overlay over the LIVE window -> cookie panel hint flip -> strict rejection; title lane header intact (81757047 "Animals", videoId forwarded); mobile 375px no overflow. Evidence: evidence/wfx2p44/.
+
+Stage Summary:
+- WebFlix's Netflix tab is now a REAL Netflix interface candidate: the Live lane streams the actual netflix.com for full browsing once a session connects, deep links remain first-class, and the auth floor is a 60-second two-cookie connect with honest validation. Residual unchanged: a VALID session cookie set (harvest-retry stays automatic; cookie-connect is the guaranteed inch).
+
+---
 Task ID: P43-NETFLIX-DESKTOP
 Agent: the resident TL station (operator follow-up: "the current netflix tab cannot replace the netflix UX for users — you can't even play the movies from the app directly, research ways to improve that and proceed with the implementation")
 Task: real in-app Netflix playback — superseding ADR 0002 §1's deep-link-only posture at the operator's direction (ADR 0003).

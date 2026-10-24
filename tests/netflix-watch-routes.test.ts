@@ -16,6 +16,7 @@ import {
 import { POST as cookiesPost } from "@/app/api/netflix/watch/cookies/route";
 import { POST as releasePost } from "@/app/api/netflix/watch/release/route";
 import { POST as retryAuthPost } from "@/app/api/netflix/watch/retry-auth/route";
+import { POST as sessionRestartPost } from "@/app/api/netflix/watch/session/restart/route";
 
 type Handler = (req: Request, init?: { method: string; body: string }) => Promise<Response>;
 
@@ -121,6 +122,41 @@ describe("POST /api/netflix/watch/session — the kick", () => {
     );
     expect(res.status).toBe(202);
     expect(brokerRequests[0]?.body).toBe("{}");
+  });
+
+  test("forwards the Netflix Live browse path (P44)", async () => {
+    installBroker(async () => new Response(JSON.stringify({ phase: "provisioning" }), { status: 202 }));
+    const res = await watchSessionPost(
+      postReq("http://localhost:3000/api/netflix/watch/session", { path: "/browse" }),
+    );
+    expect(res.status).toBe(202);
+    expect(brokerRequests[0]?.body).toContain("/browse");
+  });
+
+  test("a non-whitelisted path never reaches the broker (no open redirect)", async () => {
+    installBroker(async () => new Response(JSON.stringify({ phase: "idle" }), { status: 202 }));
+    const res = await watchSessionPost(
+      postReq("http://localhost:3000/api/netflix/watch/session", { path: "https://evil.example/x" }),
+    );
+    expect(res.status).toBe(202);
+    expect(brokerRequests[0]?.body).toBe("{}");
+  });
+});
+
+describe("POST /api/netflix/watch/session/restart — the P44 restart lane", () => {
+  test("forwards the teardown to the broker", async () => {
+    installBroker(async () =>
+      new Response(JSON.stringify({ ok: true, phase: "restarting" }), { status: 202 }),
+    );
+    const res = await sessionRestartPost();
+    expect(res.status).toBe(200);
+    expect(brokerRequests[0]?.url).toContain("/session/restart");
+  });
+
+  test("survives a dead broker (best effort — the view re-kicks)", async () => {
+    installBroker(null);
+    const res = await sessionRestartPost();
+    expect(res.status).toBe(200);
   });
 });
 

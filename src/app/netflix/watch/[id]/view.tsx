@@ -50,10 +50,13 @@ export default function NetflixWatchView() {
   const params = useParams<{ id: string }>();
   const rawId = Array.isArray(params?.id) ? params.id[0] : params?.id;
   const netflixId = Number(rawId);
-  const valid = Number.isInteger(netflixId) && netflixId > 0;
+  // P44 — the Netflix Live lane: rawId "live" streams the full real Netflix UI
+  // (browse/search/my-list) instead of a single title deep link.
+  const isLive = rawId === "live";
+  const valid = isLive || (Number.isInteger(netflixId) && netflixId > 0);
 
   const { data: titleData } = useApi<NetflixTitlePageDTO>(
-    valid ? `/api/netflix/title/${netflixId}` : null
+    valid && !isLive ? `/api/netflix/title/${netflixId}` : null
   );
   const title = titleData?.title ?? null;
 
@@ -63,6 +66,10 @@ export default function NetflixWatchView() {
   const [cookieInput, setCookieInput] = useState("");
   const [cookieResult, setCookieResult] = useState<string | null>(null);
   const [cookieBusy, setCookieBusy] = useState(false);
+  // instant paste feedback: Netflix only truly needs the two session cookies.
+  // `NetflixId` must be a STANDALONE name — a bare `SecureNetflixId=` paste
+  // (which contains "NetflixId" as a substring) is NOT enough on its own.
+  const cookieLooksValid = /(?<![A-Za-z])NetflixId\s*=/.test(cookieInput);
   const [authRetryBusy, setAuthRetryBusy] = useState(false);
   const [streamError, setStreamError] = useState(false);
 
@@ -81,11 +88,24 @@ export default function NetflixWatchView() {
   const poll = useCallback(async () => {
     try {
       const res = await fetch("/api/netflix/watch/session", { cache: "no-store" });
-      if (res.ok) setStatus((await res.json()) as WatchSessionStatus);
+      if (!res.ok) return;
+      const next = (await res.json()) as WatchSessionStatus;
+      // change-guard: the poll ticks every 2.5s — re-render only on a real
+      // phase/status change (keeps the room chrome steady under interaction)
+      setStatus((prev) =>
+        prev && JSON.stringify(prev) === JSON.stringify(next) ? prev : next
+      );
     } catch {
       /* transient */
     }
   }, []);
+
+  // what we ask the broker for on entry/restart: the deep link for a title,
+  // the browse lane for Netflix Live
+  const kickBody = useCallback(
+    () => (isLive ? { path: "/browse" } : { videoId: netflixId }),
+    [isLive, netflixId]
+  );
 
   // kick the session once, then poll until terminal-ish phases
   useEffect(() => {
@@ -96,14 +116,14 @@ export default function NetflixWatchView() {
         await fetch("/api/netflix/watch/session", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ videoId: netflixId }),
+          body: JSON.stringify(kickBody()),
         });
       } catch {
         /* poll will surface unreachable */
       }
       void poll();
     })();
-  }, [valid, netflixId, poll]);
+  }, [valid, netflixId, poll, kickBody]);
 
   useEffect(() => {
     if (!valid) return;
@@ -231,10 +251,10 @@ export default function NetflixWatchView() {
     await fetch("/api/netflix/watch/session", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ videoId: netflixId }),
+      body: JSON.stringify(kickBody()),
     }).catch(() => {});
     void poll();
-  }, [netflixId, poll]);
+  }, [kickBody, poll]);
 
   const retryAuth = useCallback(async () => {
     setAuthRetryBusy(true);
@@ -297,7 +317,7 @@ export default function NetflixWatchView() {
       <header className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <Link
-            href={title ? `/netflix/t/${title.netflixId}` : "/netflix"}
+            href={title && !isLive ? `/netflix/t/${title.netflixId}` : "/netflix"}
             className="flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-white/10 px-3 text-xs font-medium hover:bg-white/20"
             aria-label="Back to browse"
           >
@@ -305,7 +325,7 @@ export default function NetflixWatchView() {
             Back
           </Link>
           <p className="truncate text-sm font-semibold" data-testid="netflix-watch-title">
-            {title ? title.title : `Netflix #${netflixId}`}
+            {isLive ? "Netflix Live — the real Netflix, right here" : title ? title.title : `Netflix #${netflixId}`}
             <span className="ml-2 rounded bg-[#e50914] px-1 py-0.5 text-[10px] font-black uppercase">Netflix</span>
           </p>
         </div>
@@ -344,7 +364,7 @@ export default function NetflixWatchView() {
             </>
           )}
           <a
-            href={`https://www.netflix.com/watch/${netflixId}`}
+            href={isLive ? "https://www.netflix.com/browse" : `https://www.netflix.com/watch/${netflixId}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex h-9 items-center gap-1.5 rounded-md bg-white/10 px-3 text-xs font-medium hover:bg-white/20"
@@ -374,50 +394,72 @@ export default function NetflixWatchView() {
                   <KeyRound className="mx-auto size-6 text-[#e50914]" aria-hidden="true" />
                   <p className="text-base font-semibold">Connect your Netflix account</p>
                   <p className="text-sm leading-relaxed text-white/65">
-                    Netflix blocks automated sign-ins from cloud networks, so the secure window
-                    needs your session. You can also try signing in directly inside the window
-                    behind this panel — it is live.
+                    Netflix&apos;s anti-bot wall blocks automated sign-ins from cloud networks —
+                    so the reliable path is connecting your existing session (below). You can also
+                    try signing in by hand inside the live window behind this panel, though the
+                    wall usually stops that too.
                   </p>
                   <div className="flex flex-wrap items-center justify-center gap-2">
                     <button
                       type="button"
-                      onClick={() => void retryAuth()}
-                      disabled={authRetryBusy}
-                      className="flex h-10 items-center gap-2 rounded-md bg-[#e50914] px-4 text-sm font-semibold hover:bg-[#c4080f] disabled:opacity-60"
-                      data-testid="netflix-watch-retry-auth"
-                    >
-                      {authRetryBusy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <RotateCcw className="size-4" aria-hidden="true" />}
-                      Try automatic sign-in
-                    </button>
-                    <button
-                      type="button"
                       onClick={() => setCookiePanelOpen((v) => !v)}
-                      className="flex h-10 items-center gap-2 rounded-md border border-white/20 px-4 text-sm font-medium hover:bg-white/5"
+                      className="flex h-10 items-center gap-2 rounded-md bg-[#e50914] px-4 text-sm font-semibold hover:bg-[#c4080f]"
                       data-testid="netflix-watch-cookie-connect"
                     >
                       <KeyRound className="size-4" aria-hidden="true" /> Connect with session cookies
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => void retryAuth()}
+                      disabled={authRetryBusy}
+                      className="flex h-10 items-center gap-2 rounded-md border border-white/20 px-4 text-sm font-medium hover:bg-white/5 disabled:opacity-60"
+                      data-testid="netflix-watch-retry-auth"
+                    >
+                      {authRetryBusy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <RotateCcw className="size-4" aria-hidden="true" />}
+                      Retry automatic sign-in
+                    </button>
                   </div>
                   {cookiePanelOpen && (
-                    <div className="mx-auto max-w-xl space-y-2 rounded-lg border border-white/15 bg-white/5 p-4 text-left">
+                    <div className="mx-auto max-w-xl space-y-3 rounded-lg border border-white/15 bg-white/5 p-4 text-left" data-testid="netflix-watch-cookie-panel">
                       <label htmlFor="nf-cookie-input" className="text-xs font-semibold uppercase tracking-wide text-white/60">
                         Netflix session cookies
                       </label>
-                      <p className="text-xs leading-relaxed text-white/50">
-                        From a browser signed into Netflix: open DevTools → Network → any www.netflix.com
-                        request → copy the entire <code className="rounded bg-black/40 px-1">Cookie:</code> header
-                        value (or export cookies with an extension and paste the JSON). Must include
-                        <code className="mx-1 rounded bg-black/40 px-1">NetflixId</code>.
-                      </p>
+                      <ol className="space-y-1.5 text-xs leading-relaxed text-white/55" data-testid="netflix-watch-cookie-steps">
+                        <li>
+                          <span className="font-semibold text-white/80">1.</span> In a browser signed into Netflix, open DevTools
+                          (<code className="rounded bg-black/40 px-1">F12</code>) → <b>Application</b> → <b>Cookies</b> →
+                          <code className="mx-1 rounded bg-black/40 px-1">https://www.netflix.com</code>
+                        </li>
+                        <li>
+                          <span className="font-semibold text-white/80">2.</span> Copy the values of
+                          <code className="mx-1 rounded bg-black/40 px-1">NetflixId</code>and
+                          <code className="mx-1 rounded bg-black/40 px-1">SecureNetflixId</code>— the two cookies Netflix checks
+                        </li>
+                        <li>
+                          <span className="font-semibold text-white/80">3.</span> Paste them below as
+                          <code className="mx-1 rounded bg-black/40 px-1">Name=Value</code>— one pair or the whole
+                          <code className="mx-1 rounded bg-black/40 px-1">Cookie:</code>header both work
+                        </li>
+                      </ol>
                       <textarea
                         id="nf-cookie-input"
                         value={cookieInput}
                         onChange={(e) => setCookieInput(e.target.value)}
                         rows={4}
-                        placeholder="NetflixId=v%3D3%26…; SecureNetflixId=…; …"
+                        placeholder="NetflixId=v%3D3%26…; SecureNetflixId=…"
                         className="w-full rounded-md border border-white/15 bg-black/50 p-2 font-mono text-xs text-white placeholder:text-white/25"
                         data-testid="netflix-watch-cookie-input"
                       />
+                      {cookieInput.trim().length > 0 && (
+                        <p
+                          className={`text-xs ${cookieLooksValid ? "text-emerald-400/90" : "text-amber-400/90"}`}
+                          data-testid="netflix-watch-cookie-hint"
+                        >
+                          {cookieLooksValid
+                            ? "Looks right — NetflixId detected. Connecting verifies it live against Netflix."
+                            : "No NetflixId in that paste yet — Netflix needs it to restore your session."}
+                        </p>
+                      )}
                       <div className="flex items-center justify-between gap-2">
                         <button
                           type="button"
@@ -431,6 +473,11 @@ export default function NetflixWatchView() {
                         </button>
                         {cookieResult && <p className="text-xs text-white/70" data-testid="netflix-watch-cookie-result">{cookieResult}</p>}
                       </div>
+                      <p className="text-[11px] leading-relaxed text-white/35">
+                        The cookies stay on this server only — injected into your private cloud
+                        desktop and cached for future sessions. Nothing is copied or replayed
+                        anywhere else.
+                      </p>
                     </div>
                   )}
                 </div>

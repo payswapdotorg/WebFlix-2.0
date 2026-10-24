@@ -25,10 +25,14 @@ export async function GET() {
 
 export async function POST(request: Request) {
   let videoId: number | null = null;
+  let path: string | null = null;
   try {
-    const body = (await request.json()) as { videoId?: unknown };
+    const body = (await request.json()) as { videoId?: unknown; path?: unknown };
     const n = Number(body?.videoId);
     if (Number.isInteger(n) && n > 0) videoId = n;
+    if (typeof body?.path === "string" && /^\/[A-Za-z0-9/_?=&.~-]*$/.test(body.path)) {
+      path = body.path; // Netflix Live lane (whitelisted netflix.com path)
+    }
   } catch {
     /* empty body = just ensure the session */
   }
@@ -36,7 +40,7 @@ export async function POST(request: Request) {
     const res = await fetch(`${BROKER}/session`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(videoId ? { videoId } : {}),
+      body: JSON.stringify(path ? { path } : videoId ? { videoId } : {}),
       signal: AbortSignal.timeout(8_000),
     });
     const body = await res.json();

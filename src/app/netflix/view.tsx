@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from "react";
 import Link from "next/link";
+import { Play } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NetflixHero } from "@/components/netflix/netflix-hero";
@@ -68,7 +69,7 @@ function HubContent() {
             <div>
               <h1 className="text-xl font-bold leading-tight sm:text-2xl">Netflix on WebFlix</h1>
               <p className="text-xs text-white/50 sm:text-sm">
-                Netflix&apos;s official Top 10 &amp; Most Popular — browsed here, played on Netflix.
+                Netflix&apos;s official Top 10 &amp; Most Popular — browsed and played right here.
               </p>
             </div>
           </div>
@@ -92,6 +93,36 @@ function HubContent() {
           </div>
         </div>
       </div>
+
+      {/* the Netflix Live band — the real Netflix interface, streamed */}
+      <section
+        aria-label="Netflix Live"
+        className="mx-4 mt-5 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-white/10 bg-gradient-to-r from-[#e50914]/15 via-[#141418] to-[#101014] p-5 sm:mx-6"
+        data-testid="netflix-live-band"
+      >
+        <div className="min-w-0 flex-1">
+          <p className="flex items-center gap-2 text-sm font-semibold text-white">
+            <span className="flex size-6 items-center justify-center rounded bg-[#e50914] text-xs font-black">L</span>
+            Netflix Live
+            <span className="rounded border border-white/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/60">
+              full interface
+            </span>
+          </p>
+          <p className="mt-1 max-w-xl text-xs leading-relaxed text-white/55 sm:text-sm">
+            Open the actual Netflix — every row, search, and the real player — streamed live from
+            your private cloud desktop inside WebFlix. Connect your Netflix session once, then it
+            all plays here.
+          </p>
+        </div>
+        <Link
+          href="/netflix/watch/live"
+          data-testid="netflix-live-open"
+          className="flex h-11 shrink-0 items-center gap-2 rounded-md bg-[#e50914] px-6 text-sm font-semibold text-white transition-colors hover:bg-[#c4080f]"
+        >
+          <Play className="size-4 fill-current" aria-hidden="true" />
+          Browse Netflix Live
+        </Link>
+      </section>
 
       {loading && (
         <div aria-busy="true" data-testid="netflix-hub-skeleton">
@@ -137,7 +168,7 @@ function HubContent() {
           ))}
           <p className="px-4 pt-8 text-center text-xs text-white/35 sm:px-6" data-testid="netflix-source-note">
             Data: Netflix&apos;s own public Top 10 &amp; Most Popular (Tudum) · {data.catalogSize} tracked titles ·
-            playback hands off to Netflix&apos;s official player · <Link href="/help" className="underline underline-offset-2 hover:text-white/60">why</Link>
+            playback streams Netflix&apos;s own player into WebFlix via your secure cloud desktop · <Link href="/help" className="underline underline-offset-2 hover:text-white/60">why</Link>
           </p>
         </>
       )}

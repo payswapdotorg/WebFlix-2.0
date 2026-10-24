@@ -186,6 +186,15 @@ describe("the Netflix hub (/netflix)", () => {
     expect(one('[data-testid="netflix-source-note"]')?.textContent).toContain("Netflix");
   });
 
+  test("the Netflix Live band links into the streamed full-interface lane (P44)", async () => {
+    useApiData = fixtureHome;
+    await render(createElement(NetflixHubView));
+    const band = one('[data-testid="netflix-live-band"]');
+    expect(band).not.toBeNull();
+    expect(band?.textContent).toContain("Netflix Live");
+    expect(one('[data-testid="netflix-live-open"]')?.getAttribute("href")).toBe("/netflix/watch/live");
+  });
+
   test("the unavailable state degrades honestly (no fake rows)", async () => {
     useApiData = { ...fixtureHome, rails: [], unavailable: true, unavailableReason: "Netflix upstream unreachable." };
     await render(createElement(NetflixHubView));
