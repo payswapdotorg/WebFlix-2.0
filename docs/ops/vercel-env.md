@@ -62,6 +62,44 @@ curl -s -X POST -H 'x-session-id: webflix-producer' -H 'x-broker-secret: <secret
 #   a missing x-session-id or query
 ```
 
+## Netflix playback broker wiring (P47 — the second gateway seam)
+
+The in-app Netflix playback (`/netflix/watch/*`) proxies the
+**netflix-desktop** broker (`mini-services/netflix-desktop`, port 3030) — a
+long-lived process (E2B cloud desktops + a socket.io audio fanout), so it
+ships BESIDE the app, never on Vercel. Dev talks to it directly
+(`NETFLIX_DESKTOP_URL` unset → `http://127.0.0.1:3030`); production composes
+the gateway query on every request via `netflixBrokerEndpoint`
+(`src/lib/netflix/broker.ts`) — the same law as `brokerEndpoint`, covered by
+`tests/netflix-broker-seam.test.ts`:
+
+| var | dev default | production shape |
+| --- | --- | --- |
+| `NETFLIX_DESKTOP_URL` | `http://127.0.0.1:3030` | the sandbox/gateway base hosting the broker, e.g. `https://<host>` |
+| `NETFLIX_DESKTOP_QUERY` | *(unset)* | the routing query appended to EVERY netflix broker request, e.g. `XTransformPort=3030` |
+
+The broker host itself needs:
+
+- `E2B_API_KEY` — without it every session spawn fails with the honest
+  "API key is required" snag state (the watch lane's error branch, P47 adds
+  the automatic sign-in pairing lane right there — pairing works while the
+  desktop is down; the candidate validates on the next successful bootstrap).
+- optional: `APIFY_TOKEN` (the harvest ladder), `APIFY_PROXY_PASSWORD`
+  (residential egress; absent → DIRECT, fail-open).
+- the pairing token auto-mints at first boot (`/tmp/netflix-ingest-token.json`)
+  — the app surfaces it on `/api/netflix/watch/autoauth` and in the watch
+  lane's automatic sign-in lane.
+
+Sanity probe (from the broker host or anywhere that reaches the gateway):
+
+```bash
+curl -s "https://<host>/healthz?XTransformPort=3030"
+# → 200 {"ok":true,"service":"netflix-desktop",…,"autoAuth":{…}}
+curl -s "https://<host>/ingest/token?XTransformPort=3030"
+# → 200 {"token":"…","bridge":{…}} — the app's /api/netflix/watch/autoauth
+#   proxies exactly this; keep it behind the same origin trust as the app.
+```
+
 ## Session cookie strategy
 
 - **YouTube side** — there is no YouTube login in WebFlix; the operator

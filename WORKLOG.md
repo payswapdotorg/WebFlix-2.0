@@ -1,6 +1,53 @@
 # Worklog
 
 ---
+Task ID: P47-NETFLIX-LIVE-WIRING
+Agent: the resident TL station (operator: "go" — continue from the P46 residual: bring the chain live and close the production seam)
+Task: the netflix-desktop production wiring seam + the first-contact operator surface + the live sandbox verification of the whole Netflix lane.
+
+Work Log:
+- THE SEAM: src/lib/netflix/broker.ts — netflixBrokerEndpoint(path), the exact composition law the YouTube write broker already had (brokerEndpoint): NETFLIX_DESKTOP_URL (default http://127.0.0.1:3030, query-embedded tolerated) + NETFLIX_DESKTOP_QUERY (e.g. "XTransformPort=3030") composed safely (single "?", "&"-joined, trailing slashes stripped, path always "/…"). All seven /api/netflix/watch/* routes now ride it (session, session/restart, cookies, retry-auth, release, ingest, autoauth) — production (Vercel) can finally point NETFLIX_DESKTOP_URL at a gateway host instead of 503-ing forever. Runbook: docs/ops/vercel-env.md "Netflix playback broker wiring (P47)".
+- THE FIRST-CONTACT SURFACE: the watch view's AutoAuthLane extracted (same DOM, all P46 testids preserved) and rendered in a SECOND place — the error state's collapsible "Set up automatic sign-in while you wait" panel (netflix-watch-error-autoauth-toggle / -autoauth). The candidate law was designed for exactly this: pair NOW while the desktop is down (e.g. E2B key missing), the push queues as a candidate and validates on the next successful bootstrap. The autoauth poll runs in both states now.
+- LIVE SANDBOX VERIFIED (this sandbox, browser-verified): broker :3030 up (healthz ok, token minted); app on :3000 serving the real product; hub renders the live Tudum billboard/rails; watch lane + live lane degrade honestly at the missing E2B key; the ingest ladder measured live through the APP origin: 401 bad token → 422 no-NetworkId → 200 candidate queued with the real pairing token → the UI's 5s status line flipped to "Session received from your browser…" by itself; factory reset (store cleared) propagated to the UI the same way. Mobile 375px: 0px horizontal overflow on hub/watch/live/error-lane.
+- Gates: tsc clean, eslint 0 errors on touched files, test:netflix 92/0 (+9 seam pins in tests/netflix-broker-seam.test.ts, +1 error-state lane pin in netflix-watch-ui), full battery 2273/0 (the 2263 + the 10 new pins).
+- Honest residuals: E2B_API_KEY/APIFY_TOKEN not provisioned in THIS sandbox (spawns fail honestly — the snag state + the pairing lane are the designed behavior); the operator's first REAL bridge push still awaits their own signed-in browser (the lane + token now serve it directly from the error state).
+
+Stage Summary:
+- The Netflix chain is now deployable end-to-end: app (Vercel) → gateway (XTransformPort) → netflix-desktop broker → E2B desktop — with env names documented and every seam pinned.
+- The automatic sign-in has an operator surface that works even before any cloud desktop exists; the bridge candidate law carries the session across bootstraps.
+
+---
+Task ID: P46-NETFLIX-AUTOAUTH
+Agent: the resident TL station (operator: "explore automatic sign in solutions")
+Task: make Netflix sign-in AUTOMATIC without touching the risk engine P44/P45 measured — nothing unvalidated ever reaches playback.
+
+Work Log:
+- THE WEBFLIX BRIDGE (extension/webflix-bridge/): a one-time-install MV3 extension for the operator's own signed-in browser — chrome.cookies.onChanged (3s debounce) + a 30-min alarm watch the .netflix.com jar; pushes on first sight, on every NetflixId/SecureNetflixId rotation, and a 6h keepalive (pure logic.js, pinned). Options pair it with the WebFlix origin (URL + token); popup/options report watching/queued/applied/rejected/bad-token/unreachable — all honest. Packed to public/netflix-bridge.zip by scripts/pack-bridge.mjs.
+- THE INGEST LADDER (mini-services/netflix-desktop/ingest.ts): pairing token minted at first boot, persisted, timing-safe compared, rotatable (POST /ingest/token/rotate); POST /ingest — 401 bad token → 422 no standalone NetflixId → LIVE sandbox: apply through the strict checkSignedIn path immediately → IDLE sandbox: queue a CANDIDATE. Candidate law: validated BEFORE the cache/harvest ladder on the next bootstrap, promoted on a strict pass, DROPPED on failure — a bridge can never poison the cache (the P45 lesson, structural now).
+- THE APP SURFACE: /api/netflix/watch/ingest + /api/netflix/watch/autoauth (GET token+status, POST rotate) with honest 502/503 degrades; the watch-lane auth overlay became two lanes — Automatic (bridge) primary (download → 3-step install → copy/rotate token → live 5s status incl. the amber honest-rejection state), the manual paste demoted to the secondary tab (all P44 testids preserved).
+- Residential egress (dormant, fail-open): egress.ts — with APIFY_PROXY_PASSWORD the sandbox Chrome rides a session-sticky Apify residential forwarder (health-checked inside the sandbox before the flag reaches Chrome); without it DIRECT (measured: proxy.apify.com 407s every out-of-actor auth shape).
+- TWO LATENT BUGS FIXED en route: the audio tap was binary-lossy (the E2B SDK UTF-8-decodes stdout — the Opus/WebM tap now base64-encodes in-sandbox, decodes on 4-char boundaries in the broker); the broker's pre-existing tsc failures gone (app AND broker tsc clean).
+- Gates: tsc clean (app+broker), lint 0e, test:netflix 82/0 (26 new pins), full battery 2263/0; browser-verified live (overlay auto lane, fake-cookie push → 422 amber, no candidate left, /netflix-bridge.zip 200, mobile 375px).
+- Residuals: the first REAL bridge connect awaited the operator's own signed-in browser; Vercel watch lane 502/503 until the broker ships beside the app (→ closed by P47's seam).
+
+Stage Summary:
+- Automatic sign-in shipped as the bridge + the poison-proof ingest ladder; the account-safety rule held (zero automated Netflix logins attempted).
+
+---
+Task ID: P45-NETFLIX-GRADE
+Agent: the resident TL station (operator: "research ways to improve that and proceed with the implementation" — the UX and the auth wall)
+Task: the hub becomes Netflix's own landing; the auth wall measured to its floor.
+
+Work Log:
+- THE HUB: the rotating billboard (full-bleed backdrop crossfade through the day's top 5, N FILM/N SERIES kicker, logo-art treatment, TOP #1 badge line, white Play + More Info, vertical dots, reduced-motion honored), TOP 10 rows as Netflix's own silhouette (portrait backdrop art center-cropped with the giant outlined rank numerals + red TOP 10 tags), hover chevron paging, hover-expand 16:9 cards with the sibling-overlay info sheet carrying the DIRECT in-app play link (/netflix/watch/<id>) + the shared useMyListToggle, the sticky Netflix-style sub-nav (All/Movies/TV Shows) beside the Global/US chips.
+- THE AUTH WALL MEASURED: homepage warm-up → real Sign-In click → per-keystroke human pacing → ONE clean submit on GB residential still hits the PRE-VALIDATION wall ("Something went wrong") 3/3; Netflix QUARANTINES the login while issuing the full cookie family (NetflixId+SecureNetflixId+flwssn+gsid) — /browse bounces to /login?nextpage; cookies-present ≠ session-live. The broker's strict checkSignedIn rejected the quarantined set live (the layered defense proven). Automated attempts STOPPED (account safety); the honest-status v0.3 actor shipped as the harvester + GB default + stream.start transient retry.
+- Gates: tsc clean app+broker, lint 0e, test:netflix 56/0 (3 new pins), full battery 2237/0; docs: research 2026-10-24-p45-auth-quarantine + P45 work item.
+
+Stage Summary:
+- The hub is Netflix-grade; the auth wall is measured to its floor (the block precedes credential validation) — the account-safety rule (no more automated login attempts) and the bridge direction (P46) both come from this measurement.
+
+---
+---
 Task ID: P44-NETFLIX-LIVE
 Agent: the resident TL station (operator follow-up: "go" on the P43 residual — make the Netflix tab actually replace Netflix's UX)
 Task: the Netflix Live lane (the full real Netflix interface streamed in-app, not just per-title deep links) + the auth-flow hardening.

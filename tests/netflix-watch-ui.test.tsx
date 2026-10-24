@@ -247,6 +247,25 @@ describe("the Netflix watch view — the honest session states", () => {
     expect(text()).toContain("Restart the session");
   });
 
+  test("P47 — the error state still surfaces the automatic sign-in lane (pair now, validate on the next bootstrap)", async () => {
+    brokerStatus = { phase: "error", message: "E2B key missing" };
+    await render(createElement(NetflixWatchView));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    // collapsed by default — no lane, no duplicate testids with the overlay
+    expect(q('[data-testid="netflix-watch-error-autoauth"]')).toBeNull();
+    await act(async () => {
+      (q('[data-testid="netflix-watch-error-autoauth-toggle"]') as HTMLElement)?.click();
+    });
+    expect(q('[data-testid="netflix-watch-error-autoauth"]')).not.toBeNull();
+    // the SAME P46 lane: token block, copy, rotate, honest status line
+    expect(q('[data-testid="netflix-watch-autoauth-lane"]')).not.toBeNull();
+    expect(q('[data-testid="netflix-watch-autoauth-copy"]')).not.toBeNull();
+    expect(q('[data-testid="netflix-watch-autoauth-rotate"]')).not.toBeNull();
+    expect(text()).toContain("pairing token");
+  });
+
   test("Netflix Live mode kicks the browse lane instead of a title deep link (P44)", async () => {
     mockParams = { id: "live" };
     useApiData = null; // live mode pulls no title payload

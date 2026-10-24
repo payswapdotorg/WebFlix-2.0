@@ -7,12 +7,13 @@
  * GET  : current session status (phase, streamUrl, sandboxId).
  */
 import { NextResponse } from "next/server";
+import { netflixBrokerEndpoint } from "@/lib/netflix/broker";
 
-const BROKER = process.env.NETFLIX_DESKTOP_URL ?? "http://127.0.0.1:3030";
+const BROKER = netflixBrokerEndpoint;
 
 export async function GET() {
   try {
-    const res = await fetch(`${BROKER}/healthz`, { signal: AbortSignal.timeout(5_000) });
+    const res = await fetch(BROKER("/healthz"), { signal: AbortSignal.timeout(5_000) });
     const body = await res.json();
     return NextResponse.json(body, { status: res.ok ? 200 : 502 });
   } catch (e) {
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
     /* empty body = just ensure the session */
   }
   try {
-    const res = await fetch(`${BROKER}/session`, {
+    const res = await fetch(BROKER("/session"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(path ? { path } : videoId ? { videoId } : {}),

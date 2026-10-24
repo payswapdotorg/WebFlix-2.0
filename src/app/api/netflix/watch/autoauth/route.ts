@@ -7,12 +7,13 @@
  *         recovery); old bridges stop being accepted until re-paired.
  */
 import { NextResponse } from "next/server";
+import { netflixBrokerEndpoint } from "@/lib/netflix/broker";
 
-const BROKER = process.env.NETFLIX_DESKTOP_URL ?? "http://127.0.0.1:3030";
+const BROKER = netflixBrokerEndpoint;
 
 export async function GET() {
   try {
-    const res = await fetch(`${BROKER}/ingest/token`, { signal: AbortSignal.timeout(5_000) });
+    const res = await fetch(BROKER("/ingest/token"), { signal: AbortSignal.timeout(5_000) });
     const body = await res.json();
     return NextResponse.json(body, { status: res.ok ? 200 : 502 });
   } catch (e) {
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: "Unknown action — use { action: \"rotate\" }." }, { status: 400 });
   }
   try {
-    const res = await fetch(`${BROKER}/ingest/token/rotate`, {
+    const res = await fetch(BROKER("/ingest/token/rotate"), {
       method: "POST",
       signal: AbortSignal.timeout(5_000),
     });

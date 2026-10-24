@@ -3,12 +3,13 @@
  * lane). Non-blocking; poll the session status for the outcome.
  */
 import { NextResponse } from "next/server";
+import { netflixBrokerEndpoint } from "@/lib/netflix/broker";
 
-const BROKER = process.env.NETFLIX_DESKTOP_URL ?? "http://127.0.0.1:3030";
+const BROKER = netflixBrokerEndpoint;
 
 export async function POST() {
   try {
-    const res = await fetch(`${BROKER}/auth/retry`, {
+    const res = await fetch(BROKER("/auth/retry"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "{}",
