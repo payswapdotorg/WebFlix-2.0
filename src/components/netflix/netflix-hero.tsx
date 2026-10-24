@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Play } from "lucide-react";
+import Link from "next/link";
+import { ExternalLink, Play } from "lucide-react";
 import { MyListButton } from "./my-list-button";
 import { PlayHandoffDialog } from "./play-handoff";
 import type { NetflixTitleDTO } from "@/lib/netflix/types";
@@ -56,14 +57,22 @@ export function NetflixHero({ title, myListInitial }: { title: NetflixTitleDTO; 
             </p>
           )}
           <div className="flex flex-wrap items-center gap-3 pt-1">
-            <button
-              type="button"
-              onClick={() => setHandoffOpen(true)}
+            <Link
+              href={`/netflix/watch/${title.netflixId}`}
               data-testid="netflix-hero-play"
               className="flex h-11 items-center gap-2 rounded-md bg-[#e50914] px-6 text-sm font-semibold text-white transition-colors hover:bg-[#c4080f]"
             >
               <Play className="size-4 fill-current" aria-hidden="true" />
               Play
+            </Link>
+            <button
+              type="button"
+              onClick={() => setHandoffOpen(true)}
+              data-testid="netflix-hero-handoff"
+              className="flex h-11 items-center gap-2 rounded-md border border-white/25 px-5 text-sm font-medium text-white/90 transition-colors hover:bg-white/10"
+            >
+              <ExternalLink className="size-4" aria-hidden="true" />
+              Open on Netflix
             </button>
             <MyListButton
               netflixId={title.netflixId}

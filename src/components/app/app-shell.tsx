@@ -30,6 +30,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // height under the topbar (aspect parity: the taller the 9:16 box, the
   // closer to youtube.com's own player geometry).
   const isShorts = pathname === "/shorts" || pathname.startsWith("/shorts/");
+  // P43: the Netflix watch surface is a cinema lane — netflix.com's own player
+  // fills the room; the sidebar and topbar stay out of the way.
+  const isNetflixWatch = pathname.startsWith("/netflix/watch/");
 
   // 2026-10-16 operator pass (hover speed): warm the YouTube IFrame API at
   // shell mount instead of on first hover — youtube.com's previews feel
@@ -63,11 +66,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       disableTransitionOnChange
     >
       <div className="flex h-dvh flex-col overflow-hidden bg-background">
-        <Suspense fallback={<div className="h-14 shrink-0" />}>
-          <Topbar />
-        </Suspense>
+        {isNetflixWatch ? null : (
+          <Suspense fallback={<div className="h-14 shrink-0" />}>
+            <Topbar />
+          </Suspense>
+        )}
         <div className="flex min-h-0 flex-1">
-          <Sidebar collapsed={collapsed} />
+          {isNetflixWatch ? null : <Sidebar collapsed={collapsed} />}
           <main
             id="content"
             className="min-w-0 flex-1 overflow-y-auto slim-scrollbar"
@@ -78,7 +83,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div className="flex-1">{children}</div>
               {/* youtube.com's shorts page is full-bleed (no footer) — hiding it
                   here lets the 9:16 player column take the whole viewport height */}
-              {isShorts ? null : <SiteFooter />}
+              {isShorts || isNetflixWatch ? null : <SiteFooter />}
             </div>
           </main>
         </div>

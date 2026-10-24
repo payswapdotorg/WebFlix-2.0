@@ -1,0 +1,16 @@
+{
+  "name": "netflix-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "WebFlix Netflix Playback Session — cloud desktop (E2B) running a real Chrome with a signed-in Netflix session, streamed interactively into WebFlix.",
+  "scripts": {
+    "dev": "bun --hot index.ts",
+    "start": "bun index.ts",
+    "probe": "bun probe.ts"
+  },
+  "dependencies": {
+    "@e2b/desktop": "2.5.0",
+    "socket.io": "^4.8.4"
+  }
+}
