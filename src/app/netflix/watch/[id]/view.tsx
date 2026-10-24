@@ -461,13 +461,27 @@ export default function NetflixWatchView() {
               <>
                 <p className="text-lg font-semibold">The playback session hit a snag.</p>
                 <p className="max-w-md text-sm text-white/60">{status?.message ?? "The cloud desktop is not responding."}</p>
-                <button
-                  type="button"
-                  onClick={() => void restartSession()}
-                  className="flex h-10 items-center gap-2 rounded-md bg-[#e50914] px-5 text-sm font-semibold hover:bg-[#c4080f]"
-                >
-                  <RotateCcw className="size-4" aria-hidden="true" /> Restart the session
-                </button>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void restartSession()}
+                    className="flex h-10 items-center gap-2 rounded-md bg-[#e50914] px-5 text-sm font-semibold hover:bg-[#c4080f]"
+                  >
+                    <RotateCcw className="size-4" aria-hidden="true" /> Restart the session
+                  </button>
+                  {status?.phase === "unreachable" && (
+                    <a
+                      href={`https://www.netflix.com/watch/${netflixId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex h-10 items-center gap-2 rounded-md border border-white/20 px-5 text-sm font-medium hover:bg-white/5"
+                      data-testid="netflix-watch-unreachable-handoff"
+                    >
+                      <ExternalLink className="size-4" aria-hidden="true" />
+                      Play on netflix.com instead
+                    </a>
+                  )}
+                </div>
               </>
             ) : (
               <>
