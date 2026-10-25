@@ -1,6 +1,29 @@
 # Worklog
 
 ---
+Task ID: P53-OPERATOR-SECRETS
+Agent: Z.ai Code (resident TL station — operator delivered the credential batch: Neon ×4, OpenRouter, Vercel ×2, E2B, Apify, the payswap PAT + fallback, Composio ×2, Upstash, Cloudflare/R2, and the Upstash agent-skills directive)
+Task: persist the operator's secrets securely, verify every credential live, and close the operator-side rungs the P52 stage summary left open (E2B on the broker host, the Vercel broker env, the Neon probe) without breaking anything.
+
+Work Log:
+- THE VAULT: /home/z/.secrets/webflix.env (0600, OUTSIDE the repo) holds every provided value; ~/.bashrc + ~/.bash_profile source it. Git rides the payswap PAT via the credential store (~/.git-credentials, 0600). No secret value ever entered the repo — only names and dates.
+- STRANDED PUSH RECOVERED FIRST: the PAT's first `git ls-remote` revealed origin/main still at e70d517 (P51) while local HEAD carried the unpushed P52 commit (31145f7) — the previous session died before its push. Re-ran the fast gates (tsc clean; test:netflix 139/0 across 11 files) and pushed: origin/main == 31145f7.
+- CREDENTIAL VERDICTS (all measured live, masked): GH primary + fallback PATs → payswapdotorg (push proven). Vercel #1 → ekonplacide-5312 (team_4KOoA5CgtYaOF85yFXPeMXLt); Vercel #2 → 403 invalidToken. Neon #1/#2 → ekontetevi (0 projects), #3 → ekonplacide (0 projects), #4 → a working ORG key (org routes only; connection_uri denied for org keys) whose org holds ONLY unicom-console — the DB of the separate unicom-console Vercel project, NOT webflix. E2B → verified via the SDK (Sandbox.list) AND a real desktop lifecycle. Apify → prestigious_peanut. OpenRouter → valid (limit unbounded). R2 S3 keys → ListBuckets OK (18 buckets incl. webflix-media). DEAD: the Cloudflare API token ("Invalid API Token"), the Upstash pair's URL (NXDOMAIN — confirmed via DoH against upstash.io's own NS, the instance is gone), Composio (v1 410-deprecated, v3 paths 404 from this egress, api.composio.dev NXDOMAIN here — keys stored verbatim, surface unverified).
+- E2B/APIFY ON THE BROKER (the P52 operator rung, CLOSED AND LIVE-PROVEN): mini-services/netflix-desktop/.env (0600, gitignored — Bun auto-loads it) with E2B_API_KEY + APIFY_TOKEN; broker restarted; then the REAL chain: POST /session → E2B spawn → "opening netflix in chrome" → stream-ready → cookie-restore attempt → the Apify harvest rung correctly reporting "NETFLIX_EMAIL/PASSWORD missing" → the DESIGNED honest auth-required ("sign in to netflix inside the secure window" with its real e2b.app VNC URL) → POST /session/restart teardown → phase idle → "sandboxes remaining: 0" through the E2B API. One honest transient recorded: the FIRST post-restart spawn crashed the broker process silently (empty responses, no stack); the restart + immediate retry ran the full lifecycle clean — watch for recurrence.
+- VERCEL ENV AUDIT (names only, nothing overwritten): webflix-2-0 (prj_QY8FWgOOcEHAXnkpeyqBFidsHlhj, latest READY) carries 18 envs — GOOGLE_*, DATABASE_URL + a separate NEON_DATABASE_URL, YT_COOKIES, BROKER_URL/SECRET, UPSTASH_REDIS_REST_URL/TOKEN (its OWN pair — the chat-provided one is dead, so prod may hold a live pair; overwriting with a dead URL would be destructive, left untouched), R2_*, LIVEKIT_* — all SET. NETFLIX_DESKTOP_URL/NETFLIX_DESKTOP_QUERY are NOT set: the recorded public FC gateway now answers an HTML challenge page (even with a browser UA) on :3030 AND :3055, so a prod pair cannot be honestly verified from here — the watch lane keeps its designed unreachable degrade, and the same challenge may be degrading the YouTube broker's prod writes (operator verification rung).
+- PROD HEALTH SNAPSHOT: /api/netflix/search answers `catalogSize: 79` from the live Neon mirror (the P42+ mirror table real in production) and anonymous /api/netflix/progress holds its 200 honest-empty contract.
+- NO-OPS DONE HONESTLY: the dead Upstash URL wired NOWHERE (the adapter's own law: absent env → L1 in-memory; a dead URL would poison every cache op with 4s timeouts) — both tokens are vaulted with a ready drop-in block for the re-created instance; the app's .env.local stays absent for the same reason; NETFLIX_EMAIL/PASSWORD remain unset (rotation still operator-side — the old fragments live in git history, P51/E1-E2).
+- AGENT TOOLING: the operator-directed `npx -y skills add upstash/skills --global -y` succeeded — 13 Upstash skills installed under ~/.claude/skills/upstash* and ~/.agents/skills/upstash* (the Eve/PromptScript targets decline global install; recorded). The remote MCP (mcp.upstash.com/mcp) needs a first-use OAuth browser flow — operator-side.
+- DOCS: docs/ops/vercel-env.md carries the dated station status (E2B + APIFY provisioned and live-verified; NETFLIX_DESKTOP_URL honestly unset with the gateway-challenge evidence; the Apify harvest ladder's credential verdict).
+
+Gates: tsc clean; test:netflix 139/0 (the push re-verification); docs-only commit beyond that; dev server and broker both live through the session (healthz ok, phase idle).
+
+Stage Summary:
+- Every credential the operator delivered is now either live-wired where the project consumes it (E2B + APIFY on the broker; the PAT on git), vaulted for the consumers that exist (Neon, Vercel, OpenRouter, R2, Composio), or honestly recorded as dead with the evidence (Cloudflare token, the Upstash URL, Vercel #2) — nothing fake, nothing overwritten that might be live.
+- The P52 operator rung list shrinks by two: E2B_API_KEY on the broker host is CLOSED with a live desktop lifecycle, and the Neon probe is answered as far as the provided keys allow (the webflix DB is provably NOT under any provided Neon identity; the mirror is proven live through prod's own API). Still operator-side: the verified public gateway host for NETFLIX_DESKTOP_URL, Netflix credential rotation (+ history purge), a Neon key scoped to the account that actually holds the webflix project, the TMDB key (P43 lane), and the viewer-counting decision.
+
+
+---
 Task ID: P52-DEFERRED-TAIL
 Agent: Z.ai Code (resident TL station — operator: "go" on the P51 report's deferred tail)
 Task: implement everything the P51 audit report deferred that is code — the broker restart mutex (A3 broker half), the pairing-lockdown rung (B3 full fix, §4 rung 5), the warmer's Netflix keyspace (§4 rung 7), the image pipeline (§4 rung 8 + S6), and the acceptance-gate extension over the new surfaces.
@@ -157,8 +180,6 @@ Work Log:
 
 Stage Summary:
 - WebFlix 2.0 now PLAYS netflix titles in-app: browse, search, detail, My List (P42) + the cloud-desktop playback lane (P43) with honest session states and three auth paths. The engine is a mini-service (like youtube-broker); prod (Vercel) degrades to the deep-link handoff honestly until the service is deployed beside it. Residual: the operator's session cookie connect (or a cooled-down harvest) is the final inch to first playback.
-
-# Worklog
 
 ---
 Task ID: P35-LIKE-STATE

@@ -84,11 +84,26 @@ The broker host itself needs:
   "API key is required" snag state (the watch lane's error branch, P47 adds
   the automatic sign-in pairing lane right there — pairing works while the
   desktop is down; the candidate validates on the next successful bootstrap).
-- optional: `APIFY_TOKEN` (the harvest ladder), `APIFY_PROXY_PASSWORD`
-  (residential egress; absent → DIRECT, fail-open).
+  **Station status 2026-10-26: the key IS provisioned on the station's broker
+  and live-verified end-to-end** (E2B spawn → netflix.com in Chrome → the
+  designed honest `auth-required` with the secure sign-in window — the
+  operator's Netflix credentials are deliberately NOT stored, per the P42
+  rotation law → clean teardown, 0 sandboxes remaining, verified through the
+  E2B API itself).
+- optional: `APIFY_TOKEN` (the harvest ladder — also provisioned on the
+  station broker 2026-10-26; the harvest rung correctly reports the missing
+  `NETFLIX_EMAIL`/`NETFLIX_PASSWORD` and degrades to the sign-in window),
+  `APIFY_PROXY_PASSWORD` (residential egress; absent → DIRECT, fail-open).
 - the pairing token auto-mints at first boot (`/tmp/netflix-ingest-token.json`)
   — the app surfaces it on `/api/netflix/watch/autoauth` and in the watch
   lane's automatic sign-in lane.
+- **`NETFLIX_DESKTOP_URL`/`NETFLIX_DESKTOP_QUERY` remain UNSET on the Vercel
+  project (2026-10-26):** the recorded public FC gateway answers an HTML
+  challenge page (even with a browser UA) to the station's egress on both
+  `:3030` and `:3055`, so a production pair cannot be honestly verified from
+  here — the watch lane keeps its designed unreachable degrade. Operator
+  rung: verify/rotate the public gateway host that fronts the broker machine,
+  then set the pair (`https://<host>` + `XTransformPort=3030`).
 
 Sanity probe (from the broker host or anywhere that reaches the gateway):
 
