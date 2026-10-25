@@ -19,7 +19,12 @@ export async function GET(req: Request) {
     const raw = new URL(req.url).searchParams.get("country") ?? "Global";
     const country = /^[A-Za-z]{2}$/.test(raw) ? raw.toUpperCase() : "Global";
     const home = await getNetflixHome(country);
-    return NextResponse.json(home);
+    // P51-AUDIT (S4): the rails move on 6h/24h pool TTLs — a short shared
+    // cache (+ SWR) keeps the CDN honest without hammering the composition
+    // layer; my-list/progress stay dynamic (per-viewer)
+    return NextResponse.json(home, {
+      headers: { "Cache-Control": "s-maxage=300, stale-while-revalidate=86400" },
+    });
   } catch (err) {
     console.error("GET /api/netflix failed", err);
     return NextResponse.json({ error: "Failed to load the Netflix hub" }, { status: 502 });

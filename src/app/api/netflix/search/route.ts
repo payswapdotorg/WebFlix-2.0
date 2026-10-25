@@ -15,9 +15,17 @@ export async function GET(req: Request) {
     if (!(await rateLimit(`netflix:search:${req.headers.get("x-forwarded-for") ?? "local"}`))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
-    const q = (new URL(req.url).searchParams.get("q") ?? "").slice(0, 120);
-    const results = await searchNetflixCatalog(q);
-    return NextResponse.json(results);
+    const url = new URL(req.url);
+    const q = (url.searchParams.get("q") ?? "").slice(0, 120);
+    // P51-AUDIT (S2): optional kind filter, applied server-side BEFORE the
+    // 20-row cap (the client tabs used to fight the answered set only)
+    const kindParam = url.searchParams.get("kind");
+    const kind = kindParam === "movie" || kindParam === "series" ? kindParam : null;
+    const results = await searchNetflixCatalog(q, kind);
+    // P51-AUDIT (S4): the mirror refreshes on the pool TTLs — short shared cache
+    return NextResponse.json(results, {
+      headers: { "Cache-Control": "s-maxage=300, stale-while-revalidate=86400" },
+    });
   } catch (err) {
     console.error("GET /api/netflix/search failed", err);
     return NextResponse.json({ error: "Failed to search the Netflix catalog" }, { status: 502 });

@@ -56,5 +56,5 @@ risk-block cools) → operator cookie-connect (guaranteed). Details in
 ## Keys/env (operator-provided, server-side only)
 
 `E2B_API_KEY`, `APIFY_TOKEN`, `APIFY_ACTOR_ID`, `APIFY_PROXY_GROUP`, `APIFY_PROXY_COUNTRY`,
-`NETFLIX_EMAIL` (= `***REDACTED***` — the credential string in chat is
-not a valid email; the account accepted the gmail form), `NETFLIX_PASSWORD`.
+`NETFLIX_EMAIL` (= the operator's gmail login — REDACTED per the P51 audit; the credential
+string in chat is not a valid email; the account accepted the gmail form), `NETFLIX_PASSWORD`.

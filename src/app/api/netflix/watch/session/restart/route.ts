@@ -6,10 +6,14 @@
  */
 import { NextResponse } from "next/server";
 import { netflixBrokerEndpoint } from "@/lib/netflix/broker";
+import { watchGate } from "@/lib/netflix/watch-guard";
 
 const BROKER = netflixBrokerEndpoint;
 
-export async function POST() {
+export async function POST(request: Request) {
+  // P51-AUDIT (B3/M7): restart drives Sandbox kill+create — direct E2B spend
+  const gate = await watchGate(request, "restart", { limit: 10 });
+  if (gate) return gate;
   try {
     await fetch(BROKER("/session/restart"), {
       method: "POST",

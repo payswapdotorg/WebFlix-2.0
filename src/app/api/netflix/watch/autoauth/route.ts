@@ -8,10 +8,15 @@
  */
 import { NextResponse } from "next/server";
 import { netflixBrokerEndpoint } from "@/lib/netflix/broker";
+import { watchGate } from "@/lib/netflix/watch-guard";
 
 const BROKER = netflixBrokerEndpoint;
 
-export async function GET() {
+export async function GET(request: Request) {
+  // P51-AUDIT (B3): the pairing surface is the operator's tool — readable
+  // (the watch lane renders it) but no longer unthrottled
+  const gate = await watchGate(request, "autoauth:get", { limit: 60 });
+  if (gate) return gate;
   try {
     const res = await fetch(BROKER("/ingest/token"), { signal: AbortSignal.timeout(5_000) });
     const body = await res.json();
@@ -25,6 +30,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  // P51-AUDIT (B3): token rotation is privileged — same-origin + throttled
+  const gate = await watchGate(request, "autoauth:rotate", { limit: 10 });
+  if (gate) return gate;
   let action: string | null = null;
   try {
     const body = (await request.json()) as { action?: string };

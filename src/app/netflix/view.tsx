@@ -59,7 +59,7 @@ interface MyListDTO {
 }
 
 function MyListRail() {
-  const { data } = useApi<MyListDTO>("/api/netflix/my-list");
+  const { data, reload } = useApi<MyListDTO>("/api/netflix/my-list");
   const items = data?.items ?? [];
   if (items.length === 0) return null;
   return (
@@ -70,7 +70,14 @@ function MyListRail() {
       </div>
       <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto px-4 py-4 sm:gap-3.5 sm:px-[4vw]">
         {items.map((title) => (
-          <NetflixCard key={title.netflixId} title={title} />
+          <NetflixCard
+            key={title.netflixId}
+            title={title}
+            // P51-AUDIT (S3): an in-rail unsave re-reads the rail's truth —
+            // the removed card no longer lingers until the next hub refetch
+            // (the same law Continue Watching already rides)
+            onListChanged={() => reload()}
+          />
         ))}
       </div>
     </section>

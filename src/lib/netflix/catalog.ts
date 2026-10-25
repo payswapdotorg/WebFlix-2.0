@@ -244,7 +244,7 @@ export async function suggestNetflixTitles(
           ...tokens.map((t) => ({ title: { contains: t } })),
         ],
       },
-      take: 24,
+      take: 100,
     });
     return rows
       .map(mirrorRowToDTO)
@@ -279,7 +279,10 @@ export async function suggestNetflixTitles(
  * every refresh). Honest scope note: this is Netflix's own Top-10 universe,
  * not the full catalog (research record §5).
  */
-export async function searchNetflixCatalog(q: string): Promise<NetflixSearchResultsDTO> {
+export async function searchNetflixCatalog(
+  q: string,
+  kind?: "movie" | "series" | null
+): Promise<NetflixSearchResultsDTO> {
   const query = q.trim();
   if (!query) {
     return { q, titles: [], catalogSize: 0, source: "netflix-catalog", note: null };
@@ -287,6 +290,10 @@ export async function searchNetflixCatalog(q: string): Promise<NetflixSearchResu
   const needle = query.toLowerCase();
   const tokens = needle.split(/\s+/).filter(Boolean).slice(0, 6);
   try {
+    // P51-AUDIT (F4): the candidate window used to close at 40 rows in
+    // rowid order — a common token could crowd the best match out BEFORE
+    // scoring ran. The mirror is bounded (the Top-10 union), so a wide
+    // window is cheap; scoring + the 20-cap still own the final answer.
     const rows = await db.netflixTitle.findMany({
       where: {
         OR: [
@@ -295,10 +302,14 @@ export async function searchNetflixCatalog(q: string): Promise<NetflixSearchResu
           { synopsis: { contains: needle } },
         ],
       },
-      take: 40,
+      take: 200,
     });
     const scored = rows
       .map(mirrorRowToDTO)
+      // P51-AUDIT (S2): the kind filter runs BEFORE the cap — the old
+      // client-side-only tab could show 0 while matching titles existed
+      // past the 20-row slice
+      .filter((t) => (kind ? t.kind === kind : true))
       .map((t) => {
         const titleLower = t.title.toLowerCase();
         let score = 0;

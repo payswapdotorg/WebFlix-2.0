@@ -176,7 +176,7 @@ describe("GET /api/netflix/search — the mirror search", () => {
 });
 
 describe("My Netflix List — the WebFlix-local list lane", () => {
-  test("the demo-fallback viewer round-trips add → list → remove", async () => {
+  test("an explicit viewer (the header lane) round-trips add → list → remove", async () => {
     const { demo } = await fixtures();
     const headers = { "x-wfx2-user": demo.id };
 
@@ -212,18 +212,16 @@ describe("My Netflix List — the WebFlix-local list lane", () => {
     ).not.toContain(81757047);
   });
 
-  test("writes without an identity answer the honest 401", async () => {
-    // the seeded DB always resolves the demo fallback — no-identity writes
-    // are exercised through a bogus header instead (no such user, no demo
-    // fallback bypass: resolveViewer falls back to demo only when NO header
-    // resolves, so a bad header still lands on demo; assert the honest gate
-    // via the ANON degrade: point the header at nothing AND make the DB
-    // unreachable is not possible here — so this pin rides the demo reality:
-    // the demo identity CAN write. The 401 path is the env-clean no-DB rung
-    // pinned by the watch-lane suite.)
-    const { demo } = await fixtures();
-    const post = await myListPost(postReq("http://localhost:3000/api/netflix/my-list", { netflixId: 81757047 }, { "x-wfx2-user": demo.handle }));
-    expect(post.status).toBe(200);
+  test("writes without an identity answer the honest 401 (P51-AUDIT F2)", async () => {
+    // P51: the demo fallback ENDS at the Netflix seam — no session, no
+    // wfx2_uid cookie, no x-wfx2-user header → the honest anonymous viewer:
+    // reads answer empty, writes gate on 401. This pin used to assert 200
+    // (the seeded demo user answered every anonymous request); now the
+    // contract the route comments always claimed is actually true and pinned.
+    const post = await myListPost(postReq("http://localhost:3000/api/netflix/my-list", { netflixId: 81757047 }));
+    expect(post.status).toBe(401);
+    const anonGet = await myListGet(req("http://localhost:3000/api/netflix/my-list"));
+    expect(((await anonGet.json()) as { items: unknown[] }).items).toEqual([]);
   });
 
   test("rejects a malformed netflixId with 400", async () => {

@@ -7,10 +7,15 @@
  */
 import { NextResponse } from "next/server";
 import { netflixBrokerEndpoint } from "@/lib/netflix/broker";
+import { watchGate } from "@/lib/netflix/watch-guard";
 
 const BROKER = netflixBrokerEndpoint;
 
 export async function POST(request: Request) {
+  // P51-AUDIT (B3): session-cookie submission is a privileged write —
+  // throttled + same-origin (the paste form is the only legit caller)
+  const gate = await watchGate(request, "cookies", { limit: 10 });
+  if (gate) return gate;
   try {
     const body = (await request.json()) as { cookies?: unknown };
     if (!body?.cookies || (typeof body.cookies !== "string" && !Array.isArray(body.cookies))) {

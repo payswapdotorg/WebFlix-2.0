@@ -526,9 +526,18 @@ export async function getTop10Pool(poolKey: NetflixPoolKey): Promise<ParsedPool 
     pool.ttlMs,
     async () => {
       const html = await fetchPoolPage(pool);
-      if (!html) return null;
+      if (!html) {
+        // P51-AUDIT (F3): staleness used to be silent — the last-good window
+        // (48h/7d) hid the failure from everyone but the viewers. Operators
+        // get a warn line per failed pool (the warmer/alerting rung reads these).
+        console.warn(`[netflix] pool ${poolKey}: fetch failed (walled or changed) — serving last-good while it lasts`);
+        return null;
+      }
       const parsed = parseTop10Page(html, poolKey);
-      if (!parsed) return null;
+      if (!parsed) {
+        console.warn(`[netflix] pool ${poolKey}: page fetched but the SSR cache shape did not parse — Netflix may have changed the page; serving last-good while it lasts`);
+        return null;
+      }
       await mirrorTitles(parsed.titles);
       return parsed;
     },

@@ -27,7 +27,7 @@ const livePhase = () => {
 
 const withAutoAuth = () => ({
   ...sessionManager.getStatus(),
-  autoAuth: { bridge: getBridgeStatus(), ingestTokenConfigured: true },
+  autoAuth: { bridge: getBridgeStatus(), ingestTokenConfigured: getIngestToken().length > 0 },
 });
 
 const httpServer = createServer((req, res) => {
@@ -43,6 +43,11 @@ const httpServer = createServer((req, res) => {
   };
 
   if (url.pathname === "/healthz") {
+    // P51-AUDIT (report §3.1 A1): a live status poll IS playback activity —
+    // without this heartbeat the idle clock killed the desktop ~25 min into
+    // any long title. heartbeat() is internally bounded (live phase + 4h
+    // lifetime cap), so an abandoned open tab can't hold the sandbox forever.
+    if (livePhase()) sessionManager.heartbeat();
     return json(200, { ok: true, service: "netflix-desktop", ...withAutoAuth() });
   }
 

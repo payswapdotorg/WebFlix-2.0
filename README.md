@@ -23,14 +23,21 @@ Every read surface is **live youtube.com data** — InnerTube (search / browse /
 
 `/netflix` — netflix.com browsed natively: Netflix's own public Top 10 + Most
 Popular data (the 8 bounded Tudum pool URLs through the shared Upstash cache,
-~93-country rank truth), ranked rails, per-title pages, the WebFlix-local My
-Netflix List, and an additive shelf on /search. **Playback = the official
-deep-link hand-off** (`netflix.com/watch/<id>` — Netflix's own player, the
-Apple TV / Google TV pattern); in-app trailers ride the existing YouTube lane.
-No DRM is touched, no Netflix credentials exist anywhere, robots.txt is
-respected. The source-adapter seams (`src/lib/netflix/*`, `nf:*` cache keys,
-provenance `source` fields) are the template for every future source. Policy:
-`docs/adr/0002-multi-source-netflix-policy.md`.
+~93-country rank truth), ranked rails, the 14-market aisle, in-hub search
+(`/netflix/search`), per-title pages (server metadata + sitemap), My List and
+Continue Watching (both WebFlix-local to the signed-in account), and an
+additive shelf on /search. **Playback = the in-app cloud-desktop session**
+(ADR 0003, operator-directed): a real Chrome + Widevine inside a private E2B
+desktop, streamed into `/netflix/watch/<id>`, signed in through the WebFlix
+Bridge (the operator's own browser pushes its Netflix session — validated
+strictly before it is ever trusted). DRM stays intact end to end; no Netflix
+credential ever enters this repo or the client; the read lane stays
+read-only and unauthenticated against the 8 bounded Tudum URLs (fetched
+despite `Disallow: /` — bounded, cache-first, a handful of fetches/day; see
+ADR 0002 §2's robots note and the P51 audit correction). The source-adapter
+seams (`src/lib/netflix/*`, `nf:*` cache keys, provenance `source` fields)
+are the template for every future source. Policy: ADR 0002 (reads) + ADR
+0003 (playback) + `docs/research/2026-10-26-netflix-integration-audit.md`.
 
 ## Stack (binding)
 

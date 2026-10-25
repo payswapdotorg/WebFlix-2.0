@@ -237,6 +237,33 @@ describe("the Netflix watch view — the honest session states", () => {
     expect(text()).toContain("netflix.com");
   });
 
+  test("P51-AUDIT A2 — a 503 phase body reaches the UI (the unreachable state finally renders)", async () => {
+    // the broker-down answer is 503 + {phase:"unreachable"}; the old poll
+    // threw the body away on !res.ok and the lane spun forever. The mock
+    // returns the exact shape the app proxy emits on a dead broker.
+    brokerStatus = { phase: "unreachable", message: "netflix-desktop service unreachable: connect ECONNREFUSED" };
+    const prevFetch = globalThis.fetch as unknown as typeof fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/netflix/watch/session") && init?.method !== "POST") {
+        return new Response(JSON.stringify(brokerStatus), { status: 503 });
+      }
+      return prevFetch(input, init);
+    }) as typeof fetch;
+    try {
+      await render(createElement(NetflixWatchView));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      expect(text()).toContain("hit a snag");
+      expect(text()).toContain("unreachable");
+      // the honest state still carries the restart lane + the netflix.com handoff
+      expect(q('[data-testid="netflix-watch-unreachable-handoff"]')).not.toBeNull();
+    } finally {
+      globalThis.fetch = prevFetch;
+    }
+  });
+
   test("error state offers the restart lane", async () => {
     brokerStatus = { phase: "error", message: "cloud desktop gone" };
     await render(createElement(NetflixWatchView));

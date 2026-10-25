@@ -62,7 +62,7 @@ function loadStore(): IngestStore {
 
 function saveStore(s: IngestStore) {
   try {
-    writeFileSync(INGEST_TOKEN_PATH, JSON.stringify(s));
+    writeFileSync(INGEST_TOKEN_PATH, JSON.stringify(s), { mode: 0o600 }); // P51-AUDIT B4: the pairing token is a secret
   } catch {
     /* best effort */
   }
@@ -159,7 +159,7 @@ export function readBridgeCandidate(): BridgeCandidate | null {
 
 export function saveBridgeCandidate(c: BridgeCandidate) {
   try {
-    writeFileSync(BRIDGE_CANDIDATE_PATH, JSON.stringify(c));
+    writeFileSync(BRIDGE_CANDIDATE_PATH, JSON.stringify(c), { mode: 0o600 }); // P51-AUDIT B4: raw Netflix cookies
   } catch {
     /* best effort */
   }

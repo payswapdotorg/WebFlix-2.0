@@ -4,10 +4,14 @@
  */
 import { NextResponse } from "next/server";
 import { netflixBrokerEndpoint } from "@/lib/netflix/broker";
+import { watchGate } from "@/lib/netflix/watch-guard";
 
 const BROKER = netflixBrokerEndpoint;
 
-export async function POST() {
+export async function POST(request: Request) {
+  // P51-AUDIT (B3): the Apify harvest costs real runs — throttled like the rest
+  const gate = await watchGate(request, "retry-auth", { limit: 10 });
+  if (gate) return gate;
   try {
     const res = await fetch(BROKER("/auth/retry"), {
       method: "POST",

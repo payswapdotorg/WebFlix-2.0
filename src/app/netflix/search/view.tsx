@@ -81,7 +81,9 @@ function SearchContent() {
   const q = debounced.trim();
   const enabled = q.length > 0;
   const { data, loading, error } = useApi<NetflixSearchResultsDTO>(
-    enabled ? `/api/netflix/search?q=${encodeURIComponent(q)}` : null
+    // P51-AUDIT (S2): the kind tab rides the server filter (before the
+    // 20-row cap); the client-side filter below stays as belt-and-braces
+    enabled ? `/api/netflix/search?q=${encodeURIComponent(q)}${kind === "all" ? "" : `&kind=${kind}`}` : null
   );
 
   const titles = useMemo(() => {

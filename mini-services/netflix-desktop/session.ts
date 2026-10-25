@@ -8,6 +8,7 @@
  * cookies are harvested via the residential Apify actor and injected over CDP.
  */
 import { Sandbox } from "@e2b/desktop";
+import { randomBytes } from "node:crypto";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { connectChromePage, type CdpConnection } from "./cdp";
 import { CDP_RELAY_PY } from "./cdp-relay";
@@ -17,6 +18,15 @@ import { readBridgeCandidate, clearBridgeCandidate, type BridgeCandidate } from 
 
 const SBX_TIMEOUT_MS = 30 * 60 * 1000;
 const IDLE_TTL_MS = 25 * 60 * 1000;
+/**
+ * P51-AUDIT (report §3.1 A1): the idle TTL used to kill the desktop ~25 min
+ * into any long title — the watch lane's status poll never touched
+ * `lastActivity`, so continuous playback looked like idleness. The poll now
+ * heartbeats while a live stream is up, but ONLY within a bounded lifetime
+ * window (a watch lane left open in an abandoned tab must not hold a paid
+ * sandbox forever — after the cap the idle clock wins again).
+ */
+const HEARTBEAT_MAX_LIFETIME_MS = 4 * 60 * 60 * 1000;
 const COOKIE_CACHE_PATH = "/tmp/netflix-cookies.json";
 const AUTH_STATE_PATH = "/tmp/netflix-auth-state.json";
 // P45 (account-safety): the automatic harvest hits Netflix's pre-validation
@@ -40,7 +50,7 @@ function readAuthState(): AuthState {
 
 function writeAuthState(s: AuthState) {
   try {
-    writeFileSync(AUTH_STATE_PATH, JSON.stringify(s));
+    writeFileSync(AUTH_STATE_PATH, JSON.stringify(s), { mode: 0o600 });
   } catch {
     /* best effort */
   }
@@ -57,7 +67,9 @@ export type SessionPhase =
 
 export interface SessionStatus {
   phase: SessionPhase;
-  sandboxId: string | null;
+  // P51-AUDIT (B1): no `sandboxId` here — the status body is proxied to the
+  // public web, and the id addresses the sandbox's CDP relay. Internal CDP
+  // calls read `this.desktop.sandboxId` directly.
   streamUrl: string | null;
   message: string | null;
   videoId: number | null;
@@ -88,6 +100,9 @@ export class NetflixSessionManager {
   private videoId: number | null = null;
   private streamUrl: string | null = null;
   private lastActivity = 0;
+  private bootedAt = 0;
+  /** P51-AUDIT (B2): per-boot secret the sandbox CDP relay demands (fail-closed). */
+  private relayToken = "";
   private lastWatchAt = 0;
   private lastHarvestFailedAt = 0;
   private ensurePromise: Promise<Sandbox> | null = null;
@@ -96,14 +111,30 @@ export class NetflixSessionManager {
   onAudioChunk: ((chunk: Buffer) => void) | null = null;
 
   getStatus(): SessionStatus {
+    // P51-AUDIT (report §3.2 B1): `sandboxId` used to ride every status
+    // response — the app proxies this body to ANY visitor, and the id is the
+    // only address an attacker needs to reach the sandbox's public CDP relay.
+    // The broker connects through `this.desktop.sandboxId` internally; the
+    // status surface stays sandbox-id-free.
     return {
       phase: this.phase,
-      sandboxId: this.desktop?.sandboxId ?? null,
       streamUrl: this.streamUrl,
       message: this.message,
       videoId: this.videoId,
       audioRunning: this.audioRunning,
     };
+  }
+
+  /**
+   * P51-AUDIT (A1): the watch lane's poll calls this every 2.5 s while a
+   * live stream exists — playback IS activity. Bounded by the 4h lifetime
+   * cap so an abandoned open tab can't hold the sandbox forever.
+   */
+  heartbeat() {
+    const live = this.phase === "ready" || this.phase === "auth-required";
+    if (!live || !this.bootedAt) return;
+    if (Date.now() - this.bootedAt > HEARTBEAT_MAX_LIFETIME_MS) return;
+    this.lastActivity = Date.now();
   }
 
   private setPhase(p: SessionPhase, message?: string) {
@@ -123,7 +154,7 @@ export class NetflixSessionManager {
 
   private saveCookieCache(cookies: NetflixCookie[]) {
     try {
-      writeFileSync(COOKIE_CACHE_PATH, JSON.stringify(cookies));
+      writeFileSync(COOKIE_CACHE_PATH, JSON.stringify(cookies), { mode: 0o600 }); // P51-AUDIT B4: the Netflix session cache is a secret
     } catch {
       /* best effort */
     }
@@ -166,6 +197,7 @@ export class NetflixSessionManager {
       this.desktop = desktop;
       this.videoId = null;
       this.lastActivity = Date.now();
+      this.bootedAt = Date.now();
       this.startKeepalive();
 
       const run = async (cmd: string, timeoutMs = 30_000) => {
@@ -202,10 +234,13 @@ export class NetflixSessionManager {
         }
       }
 
-      // CDP relay
+      // CDP relay — per-boot shared secret (P51-AUDIT B2: the relay is on the
+      // sandbox's PUBLIC host; without the token anyone could drive the
+      // signed-in Chrome over raw CDP). Hex charset = injection-safe here.
+      this.relayToken = randomBytes(24).toString("hex");
       await desktop.files.write("/home/user/cdp-relay.py", CDP_RELAY_PY);
       const relay = await desktop.commands.run(
-        "setsid nohup python3 /home/user/cdp-relay.py >/tmp/relay.log 2>&1 < /dev/null & echo RELAY_STARTED",
+        `RELAY_TOKEN=${this.relayToken} setsid nohup python3 /home/user/cdp-relay.py >/tmp/relay.log 2>&1 < /dev/null & echo RELAY_STARTED`,
         { timeoutMs: 10_000, background: true },
       );
       relay?.disconnect?.();
@@ -272,7 +307,10 @@ export class NetflixSessionManager {
     const desktop = this.desktop;
     if (!desktop) return false;
     console.log(`[session] bridge candidate present (${candidate.cookies.length} cookies) — validating`);
-    const cdp = await connectChromePage(desktop.sandboxId, { preferUrlIncludes: "netflix" });
+    const cdp = await connectChromePage(desktop.sandboxId, {
+        preferUrlIncludes: "netflix",
+        relayToken: this.relayToken,
+      });
     try {
       await this.injectCookies(cdp, candidate.cookies);
       await cdp.send("Page.navigate", { url: "https://www.netflix.com/browse" }, 20_000);
@@ -319,7 +357,10 @@ export class NetflixSessionManager {
       this.saveCookieCache(cookies);
     }
 
-    const cdp = await connectChromePage(desktop.sandboxId, { preferUrlIncludes: "netflix" });
+    const cdp = await connectChromePage(desktop.sandboxId, {
+        preferUrlIncludes: "netflix",
+        relayToken: this.relayToken,
+      });
     try {
       await this.injectCookies(cdp, cookies);
       // navigate to netflix and evaluate login state (strict check — the
@@ -396,7 +437,10 @@ export class NetflixSessionManager {
     if (!auth.some((c) => c.name === "NetflixId")) {
       return { ok: false, message: "No NetflixId cookie found in the payload." };
     }
-    const cdp = await connectChromePage(desktop.sandboxId, { preferUrlIncludes: "netflix" });
+    const cdp = await connectChromePage(desktop.sandboxId, {
+        preferUrlIncludes: "netflix",
+        relayToken: this.relayToken,
+      });
     try {
       await this.injectCookies(cdp, cookies);
       await cdp.send("Page.navigate", { url: "https://www.netflix.com/browse" }, 20_000);
@@ -429,7 +473,10 @@ export class NetflixSessionManager {
     this.videoId = videoId;
     this.lastWatchAt = now;
     try {
-      const cdp = await connectChromePage(desktop.sandboxId, { preferUrlIncludes: "netflix" });
+      const cdp = await connectChromePage(desktop.sandboxId, {
+        preferUrlIncludes: "netflix",
+        relayToken: this.relayToken,
+      });
       try {
         await cdp.send("Page.navigate", { url: `https://www.netflix.com/watch/${videoId}` }, 20_000);
         await sleep(9_000);
@@ -472,7 +519,10 @@ export class NetflixSessionManager {
     this.lastActivity = Date.now();
     this.videoId = null;
     try {
-      const cdp = await connectChromePage(desktop.sandboxId, { preferUrlIncludes: "netflix" });
+      const cdp = await connectChromePage(desktop.sandboxId, {
+        preferUrlIncludes: "netflix",
+        relayToken: this.relayToken,
+      });
       try {
         await cdp.send("Page.navigate", { url: `https://www.netflix.com${safe}` }, 20_000);
         await sleep(8_000);
@@ -629,7 +679,14 @@ export class NetflixSessionManager {
     return false;
   }
 
-  /** Called when the last viewer leaves — schedule idle teardown. */
+  /**
+   * P51-AUDIT (A1) — honest semantics: called when a watch-lane viewer
+   * LEAVES. This deliberately refreshes the idle window once (a ~25 min
+   * grace so the next visit reuses the warm desktop instead of paying a
+   * cold boot); teardown then happens on schedule unless a NEW viewer's
+   * poll heartbeats first. It does NOT end the session — nothing does,
+   * except the idle clock, the restart route, or the 4h lifetime cap.
+   */
   markActivity() {
     this.lastActivity = Date.now();
   }

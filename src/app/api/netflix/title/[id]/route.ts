@@ -29,7 +29,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
         { status: 404 }
       );
     }
-    return NextResponse.json(page);
+    // P51-AUDIT (S4): title pages move on the pool TTLs — short shared cache
+    return NextResponse.json(page, {
+      headers: { "Cache-Control": "s-maxage=300, stale-while-revalidate=86400" },
+    });
   } catch (err) {
     console.error("GET /api/netflix/title/[id] failed", err);
     return NextResponse.json({ error: "Failed to load the title" }, { status: 502 });

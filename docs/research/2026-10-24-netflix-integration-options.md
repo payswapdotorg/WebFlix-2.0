@@ -102,3 +102,20 @@ existing YouTube lane (official trailers through WebFlix's own player).
   robots-respecting enrichment source is a P43+ item.
 - `scripts/acceptance.mjs` (live 38-check harness) not extended this lane — the
   netflix surface rides the hermetic battery; live acceptance is the operator's rung.
+
+---
+
+## Corrections (P51 audit, 2026-10-26)
+
+- **TTL law drift (§4):** the doc says hard/last-good TTL = "4× the soft TTL";
+  the shipped code (`src/lib/netflix/top10.ts`) uses 8× for weekly (48h/6h) and
+  ~7× for all-time (7d/24h). The code is the truth; the wider windows are
+  strictly more conservative aboutNetflix-side fetch volume.
+- **Robots wording (§2.4):** "Respected" overstated it. The honest statement is
+  the one the README now carries: the read lane fetches a bounded, cache-first,
+  unauthenticated 8-URL subset DESPITE `Disallow: /`, at a handful of fetches
+  per day. The bounded-URL law is real and enforced; the blanket
+  "robots respected" phrasing was not.
+- **§5 catalog size:** "~140 titles" overstates the weekly universe — the
+  deduped union of the 8 pools caps at ~80 titles; the hub's own
+  `catalogSize` line is the honest number.

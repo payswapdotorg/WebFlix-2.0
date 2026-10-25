@@ -12,8 +12,9 @@ export const dynamic = "force-dynamic";
  * Netflix credentials anywhere, so the list lives in WebFlix's own DB, exactly
  * like the watch lane's local Watch-Later rung). P49: identity =
  * `netflixViewerId` — the signed-in WebFlix account first (its shadow user,
- * the same bridge the local comment rung rides), then the watch-lane demo
- * fallback (the honest-anonymous viewer gets an empty list / 401 on writes).
+ * the same bridge the local comment rung rides). P51-AUDIT (F2): the demo
+ * fallback ends at the Netflix seam — anonymous is the honest-empty list /
+ * the 401 write gate, exactly as this contract always claimed.
  *
  * GET            → { items: NetflixTitleDTO[] } (newest first)
  * POST {netflixId} → { myList: true }

@@ -12,6 +12,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, rmSync, readFileSync } from "node:fs";
 import { NextRequest } from "next/server";
+import { setUpstream } from "@/lib/youtube/innertube";
 
 // hermetic paths MUST be set before the broker module is imported
 process.env.NETFLIX_INGEST_TOKEN_PATH = "/tmp/nf-test-ingest-token.json";
@@ -53,6 +54,13 @@ function bridgePayload(overrides: Partial<Record<string, unknown>> = {}) {
 
 beforeEach(() => {
   clearBridgeCandidate();
+  // P51: the ingest/autoauth routes are rate-limited like every other
+  // netflix route — the battery stands the limiter down (house idiom)
+  setUpstream(async () => new Response("{}", { status: 200 }));
+});
+
+afterEach(() => {
+  setUpstream(null);
 });
 
 afterEach(() => {
@@ -258,6 +266,10 @@ function installBroker(handler: ((req: Request) => Promise<Response>) | null) {
   };
 }
 
+function req(url: string): Request {
+  return new NextRequest(new URL(url, "http://localhost:3000"));
+}
+
 function postReq(url: string, body: unknown): Request {
   return new NextRequest(new URL(url, "http://localhost:3000"), {
     method: "POST",
@@ -295,7 +307,7 @@ describe("the app ingest/autoauth proxies", () => {
 
   test("autoauth GET surfaces the pairing token + bridge status", async () => {
     installBroker(async (req) => Response.json({ token: "the-token", bridge: { candidatePending: false, lastBridgePushAt: null, lastBridgeDevice: null, lastRejection: null } }));
-    const res = await autoauthGet();
+    const res = await autoauthGet(req("http://localhost:3000/api/netflix/watch/autoauth"));
     expect(res.status).toBe(200);
     expect(brokerCalls[0].url.endsWith("/ingest/token")).toBe(true);
     expect((await res.json()).token).toBe("the-token");
@@ -303,7 +315,7 @@ describe("the app ingest/autoauth proxies", () => {
 
   test("autoauth GET degrades honestly (503) with a null token when unreachable", async () => {
     installBroker(null);
-    const res = await autoauthGet();
+    const res = await autoauthGet(req("http://localhost:3000/api/netflix/watch/autoauth"));
     expect(res.status).toBe(503);
     expect((await res.json()).token).toBeNull();
   });

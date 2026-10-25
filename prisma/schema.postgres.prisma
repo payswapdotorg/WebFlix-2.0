@@ -42,6 +42,7 @@ model User {
   ownedChannels  Channel[]    @relation("ChannelOwner")
   clips          Clip[]
   netflixMyList  NetflixMyListItem[]
+  netflixWatchEvents NetflixWatchEvent[]
 }
 
 model Channel {
@@ -398,6 +399,7 @@ model NetflixTitle {
   updatedAt      DateTime @updatedAt
 
   myListItems NetflixMyListItem[]
+  watchEvents NetflixWatchEvent[]
 
   @@index([title])
   @@index([kind])
@@ -413,4 +415,27 @@ model NetflixMyListItem {
 
   @@id([userId, netflixId])
   @@index([userId])
+}
+
+// P49-CONTINUE-WATCHING — the viewer's WebFlix-LOCAL play history for Netflix
+// titles (ADR 0002 §5: no Netflix credentials anywhere, so playback memory
+// lives here, honestly local — the same law as NetflixMyListItem). One row
+// per (viewer, title): the hub's "Continue Watching" rail reads it, the
+// watch lane's kick and the hand-off deep link write it. playCount is the
+// honest "you pressed play N times"; NO fake percent-watched (the streamed
+// player gives WebFlix no position, and a fabricated bar would be a lie).
+// P51-AUDIT: this model MUST stay in lockstep with prisma/schema.prisma —
+// the vercel build pushes THIS file, and a missing model here 502s prod
+// (tests/netflix-schema-parity.test.ts pins the lockstep).
+model NetflixWatchEvent {
+  userId       String
+  netflixId    Int
+  lastPlayedAt DateTime @default(now())
+  playCount    Int      @default(1)
+
+  user  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title NetflixTitle @relation(fields: [netflixId], references: [netflixId], onDelete: Cascade)
+
+  @@id([userId, netflixId])
+  @@index([userId, lastPlayedAt])
 }

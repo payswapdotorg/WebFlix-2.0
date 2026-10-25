@@ -109,18 +109,30 @@ export function sandboxHost(sandboxId: string, port: number, domain = "e2b.app")
 
 /**
  * Connect to the Chrome page target inside the sandbox through the relay.
+ *
+ * P51-AUDIT (B2): the relay demands the per-boot `relayToken` (the sandbox's
+ * public CDP port is otherwise a takeover path) — carried on BOTH legs: the
+ * /json/list fetch (query + header) and the WS upgrade (query; the relay
+ * strips it before Chrome sees the request).
  */
 export async function connectChromePage(
   sandboxId: string,
-  opts: { domain?: string; preferUrlIncludes?: string } = {},
+  opts: { domain?: string; preferUrlIncludes?: string; relayToken?: string } = {},
 ): Promise<CdpConnection> {
   const domain = opts.domain ?? "e2b.app";
-  const base = `https://${sandboxHost(sandboxId, 9223, domain)}`;
+  const host = sandboxHost(sandboxId, 9223, domain);
+  const token = opts.relayToken ?? "";
+  if (!token) throw new Error("cdp relay token missing (refusing an unauthenticated relay)");
+  const tokenQuery = `token=${encodeURIComponent(token)}`;
+  const tokenHeaders = { "x-nf-relay-token": token } as Record<string, string>;
   // list targets (retry until chrome's debug port is accepting)
   let targets: CdpTargetInfo[] = [];
   for (let i = 0; i < 30; i++) {
     try {
-      const res = await fetch(`${base}/json/list`, { signal: AbortSignal.timeout(4000) });
+      const res = await fetch(`https://${host}/json/list?${tokenQuery}`, {
+        headers: tokenHeaders,
+        signal: AbortSignal.timeout(4000),
+      });
       if (res.ok) {
         targets = (await res.json()) as CdpTargetInfo[];
         break;
@@ -134,8 +146,9 @@ export async function connectChromePage(
   const chosen =
     (opts.preferUrlIncludes ? pages.find((t) => t.url.includes(opts.preferUrlIncludes!)) : undefined) ?? pages[0];
   if (!chosen) throw new Error("no chrome page target found");
-  // rewrite ws(s)://<anything>/path → wss://<public host>/path
+  // rewrite ws(s)://<anything>/path → wss://<public host>/path (+ relay token)
   const u = new URL(chosen.webSocketDebuggerUrl);
-  const wsUrl = `wss://${sandboxHost(sandboxId, 9223, domain)}${u.pathname}${u.search}`;
+  const existing = u.search ? `${u.search}&${tokenQuery}` : `?${tokenQuery}`;
+  const wsUrl = `wss://${host}${u.pathname}${existing}`;
   return CdpConnection.connect(wsUrl);
 }

@@ -3,7 +3,7 @@ import View from "./view";
 export const revalidate = 3600;
 
 export const metadata = {
-  title: "Netflix on WebFlix",
+  title: { absolute: "Netflix on WebFlix" },
   description:
     "Browse Netflix's official Top 10 and Most Popular titles, build your list, and play through Netflix's own player.",
 };

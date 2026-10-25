@@ -4,18 +4,25 @@
  * POST : { videoId? } — kick provisioning + navigate to the watch deep link
  *        (non-blocking; poll GET for phase). Proxies the netflix-desktop
  *        mini-service (cloud desktop with a signed-in Netflix session).
- * GET  : current session status (phase, streamUrl, sandboxId).
+ * GET  : current session status (phase, streamUrl).
+ *
+ * P51-AUDIT (report §3.2 B3/B1): rate-limited + same-origin like every other
+ * netflix route, and the proxied status NEVER carries `sandboxId` — the id
+ * addresses the sandbox's public CDP relay.
  */
 import { NextResponse } from "next/server";
 import { netflixBrokerEndpoint } from "@/lib/netflix/broker";
+import { watchGate, stripSandboxId } from "@/lib/netflix/watch-guard";
 
 const BROKER = netflixBrokerEndpoint;
 
-export async function GET() {
+export async function GET(request: Request) {
+  const gate = await watchGate(request, "session:get", { limit: 120 });
+  if (gate) return gate;
   try {
     const res = await fetch(BROKER("/healthz"), { signal: AbortSignal.timeout(5_000) });
-    const body = await res.json();
-    return NextResponse.json(body, { status: res.ok ? 200 : 502 });
+    const body = (await res.json()) as object;
+    return NextResponse.json(stripSandboxId(body), { status: res.ok ? 200 : 502 });
   } catch (e) {
     return NextResponse.json(
       { phase: "unreachable", message: `netflix-desktop service unreachable: ${(e as Error).message}` },
@@ -25,6 +32,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const gate = await watchGate(request, "session:post", { limit: 20 });
+  if (gate) return gate;
   let videoId: number | null = null;
   let path: string | null = null;
   try {
@@ -44,8 +53,8 @@ export async function POST(request: Request) {
       body: JSON.stringify(path ? { path } : videoId ? { videoId } : {}),
       signal: AbortSignal.timeout(8_000),
     });
-    const body = await res.json();
-    return NextResponse.json(body, { status: res.status });
+    const body = (await res.json()) as object;
+    return NextResponse.json(stripSandboxId(body), { status: res.status });
   } catch (e) {
     return NextResponse.json(
       { phase: "unreachable", message: `netflix-desktop service unreachable: ${(e as Error).message}` },

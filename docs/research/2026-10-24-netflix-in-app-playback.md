@@ -53,9 +53,12 @@ Netflix blocks **login** from cloud infrastructure:
 | Same, **headful + puppeteer-stealth + human pacing + fresh IP per attempt** (×4) | silent bounce, identical for a deliberately WRONG password — i.e. not a password failure, a risk-block |
 | A/B diagnostic (wrong vs right password, residential IP, stealth) | **identical generic error** → the block is evaluated before credential validation |
 
-Also learned: the operator credential string `***REDACTED***` is not a valid
-email (client-side rejected: "Please enter a valid email"); the account accepted
-**`***REDACTED***`** (proceeded to the password step every time).
+Also learned (P51-AUDIT redaction): the operator's login identifier was recorded here in
+plain text — it has been REDACTED. What the measurement established still holds: the
+operator's credential string is not a valid email (client-side rejected), while the
+account's gmail form was accepted (proceeded to the password step every time). The
+identifier lives only in the operator's secret store. [Operator rung: rotate the
+credential; git history retains old blobs until a history purge.]
 
 Consequence — **the layered auth design** (all three shipped):
 1. **Cookie cache** — valid cookies (`NetflixId`+`SecureNetflixId`…) injected over CDP; cached

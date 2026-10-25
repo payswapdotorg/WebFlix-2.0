@@ -30,7 +30,10 @@ export default function NetflixTitleView() {
     valid ? `/api/netflix/title/${netflixId}` : null
   );
   const [handoffOpen, setHandoffOpen] = useState(false);
-  const [artBroken, setArtBroken] = useState(false);
+  // P51-AUDIT (S6): one broken-art flag used to hide BOTH the backdrop and a
+  // healthy logo — they degrade independently now.
+  const [backdropBroken, setBackdropBroken] = useState(false);
+  const [logoBroken, setLogoBroken] = useState(false);
 
   const title = data?.title ?? null;
   const trailerQuery = title
@@ -46,7 +49,7 @@ export default function NetflixTitleView() {
       <div className="min-h-[60vh] bg-[#0a0a0c] px-4 py-24 text-center text-white sm:px-6">
         <p className="text-lg font-semibold">{error ?? "Invalid Netflix title id"}</p>
         <p className="mt-2 text-sm text-white/50">
-          {error && error.includes("404")
+          {error && /not in the tracked|not found|404/i.test(error)
             ? "This title is not in Netflix's currently tracked Top 10 universe — the hub only carries what Netflix itself publishes."
             : "The title could not be loaded."}
         </p>
@@ -87,12 +90,12 @@ export default function NetflixTitleView() {
       {/* the backdrop hero */}
       <div className="relative mx-4 mt-4 overflow-hidden rounded-2xl sm:mx-6" data-testid="netflix-title-hero">
         <div className="relative min-h-[300px] bg-gradient-to-br from-[#1b1b22] to-[#101014] sm:min-h-[420px]">
-          {title.backdropUrl && !artBroken && (
+          {title.backdropUrl && !backdropBroken && (
             <img
               src={title.backdropUrl}
               alt=""
               className="absolute inset-0 h-full w-full object-cover"
-              onError={() => setArtBroken(true)}
+              onError={() => setBackdropBroken(true)}
             />
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0c] via-[#0a0a0c]/50 to-transparent" />
@@ -104,8 +107,13 @@ export default function NetflixTitleView() {
               <ArrowLeft className="size-3.5" aria-hidden="true" />
               Netflix hub
             </Link>
-            {title.logoUrl && !artBroken ? (
-              <img src={title.logoUrl} alt={title.title} className="max-h-16 w-auto max-w-[70%] object-contain drop-shadow-lg" />
+            {title.logoUrl && !logoBroken ? (
+              <img
+                src={title.logoUrl}
+                alt={title.title}
+                className="max-h-16 w-auto max-w-[70%] object-contain drop-shadow-lg"
+                onError={() => setLogoBroken(true)}
+              />
             ) : (
               <h1 className="text-2xl font-black drop-shadow sm:text-4xl">{title.title}</h1>
             )}

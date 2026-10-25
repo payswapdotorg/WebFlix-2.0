@@ -13,6 +13,12 @@ export function netflixWatchUrl(netflixId: number): string {
   return `https://www.netflix.com/watch/${netflixId}`;
 }
 
+/** The browse lane (Netflix Live hand-off — P51-AUDIT A6: the watch view
+ * built this inline; the deeplink law owns every netflix.com URL). */
+export function netflixBrowseUrl(): string {
+  return "https://www.netflix.com/browse";
+}
+
 export function netflixTitleUrl(netflixId: number): string {
   return `https://www.netflix.com/title/${netflixId}`;
 }

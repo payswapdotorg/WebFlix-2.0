@@ -8,10 +8,16 @@
  */
 import { NextResponse } from "next/server";
 import { netflixBrokerEndpoint } from "@/lib/netflix/broker";
+import { watchGate } from "@/lib/netflix/watch-guard";
 
 const BROKER = netflixBrokerEndpoint;
 
 export async function POST(request: Request) {
+  // P51-AUDIT (B3): the Bridge pushes from the operator's browser (a
+  // chrome-extension:// service worker — allow-listed) or the site itself;
+  // any other cross-site origin is rejected and the burst rate is bounded.
+  const gate = await watchGate(request, "ingest", { limit: 30, allowExtension: true });
+  if (gate) return gate;
   try {
     const body = (await request.json()) as { token?: unknown; cookies?: unknown; device?: unknown };
     if (!body || typeof body.token !== "string" || !body.cookies) {

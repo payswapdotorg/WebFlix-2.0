@@ -8,16 +8,23 @@
  *     bridges to its shadow prisma User via `ensureShadowUser` — the exact
  *     bridge the local comment rung rides. Netflix rows belong to the
  *     account, not to whoever the demo fallback happens to be.
- *  2. THE WATCH-LANE FALLBACK: `resolveViewer` (the wfx2_uid cookie /
- *     x-wfx2-user header lanes and the seeded demo user) — the pre-P49
- *     behavior, preserved for dev/test and the logged-out clone.
+ *  2. THE WATCH-LANE HEADER/COOKIE LANES: the `wfx2_uid` cookie and the
+ *     `x-wfx2-user` header (dev/test + the logged-out clone's explicit
+ *     identity) — a REAL user row must resolve, never a fallback.
  *
- * Returns "" when nobody is home (the honest anonymous viewer) — callers
- * answer honest-empty reads / the 401 writes exactly as before.
+ * P51-AUDIT (report §3.3 F2): the demo fallback ENDS at the Netflix seam.
+ * The old law fell through to `resolveViewer`, whose @demo/@you fallback
+ * resolves on production too (seed-prod seeds them) — every signed-out
+ * visitor then shared one read+write identity on every personal Netflix
+ * surface. Anonymous is honest-empty reads / 401 writes, exactly as the
+ * routes' contracts always claimed.
+ *
+ * Returns "" when nobody is home — callers answer honest-empty reads / the
+ * 401 writes exactly as before.
  */
 import { getSessionUser } from "@/lib/auth/session";
 import { ensureShadowUser } from "@/lib/watch/local-comments";
-import { resolveViewer } from "@/lib/watch/session";
+import { resolveViewerFromHeaders } from "@/lib/watch/session";
 
 export async function netflixViewerId(req: Request): Promise<string> {
   try {
@@ -27,8 +34,12 @@ export async function netflixViewerId(req: Request): Promise<string> {
       return shadow.id;
     }
   } catch {
-    // auth/DB trouble below → fall through to the legacy lanes
+    // auth/DB trouble below → fall through to the header lanes
   }
-  const viewer = await resolveViewer(req.headers);
-  return viewer.id;
+  try {
+    const viewer = await resolveViewerFromHeaders(req.headers);
+    return viewer?.id ?? "";
+  } catch {
+    return "";
+  }
 }

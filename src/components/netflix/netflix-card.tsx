@@ -25,12 +25,16 @@ export function NetflixCard({
   rank,
   variant = "default",
   className,
+  onListChanged,
 }: {
   title: NetflixTitleDTO;
   /** 1-based rank for the Top-10 numeral (null hides it). */
   rank?: number | null;
   variant?: "default" | "ranked";
   className?: string;
+  /** P51-AUDIT (S3): fired after a save/unsave so hosting rails can re-read
+   * their truth (My List removes the card; Continue Watching reorders). */
+  onListChanged?: (next: boolean) => void;
 }) {
   const rankOf = rank ?? title.weeklyRank ?? title.allTimeRank ?? null;
   const ranked = variant === "ranked" && rankOf !== null;
@@ -65,7 +69,10 @@ export function NetflixCard({
         >
           {(ranked ? title.backdropUrl ?? title.posterUrl : title.posterUrl) ? (
             <img
-              src={(ranked ? title.backdropUrl : title.posterUrl) ?? ""}
+              // P51-AUDIT (S5): the src must ride the SAME fallback the
+              // condition above checks — a ranked card with poster-but-no-
+              // backdrop used to render src=""
+              src={(ranked ? title.backdropUrl ?? title.posterUrl : title.posterUrl) ?? ""}
               alt=""
               loading="lazy"
               className="absolute inset-0 h-full w-full object-cover"
@@ -104,7 +111,7 @@ export function NetflixCard({
             >
               <Play className="size-3.5 fill-current" aria-hidden="true" />
             </Link>
-            <MyListPlus netflixId={title.netflixId} titleName={title.title} />
+            <MyListPlus netflixId={title.netflixId} titleName={title.title} onChanged={onListChanged} />
             <span
               aria-hidden="true"
               className="ml-auto flex size-7 items-center justify-center rounded-full border border-white/40 text-white/90"
@@ -113,7 +120,14 @@ export function NetflixCard({
             </span>
           </div>
           <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-white/75">
-            <span className="font-semibold text-[#46d369]">Top 10</span>
+            {/* P51-AUDIT (S6): the badge answers the title's own provenance —
+                an all-time Most-Popular title is not a "Top 10" row this week,
+                and a mirror-only row with neither rank stays silent */}
+            {(title.weeklyRank !== null || title.allTimeRank !== null) && (
+              <span className="font-semibold text-[#46d369]">
+                {title.weeklyRank !== null ? "Top 10" : "Most Popular"}
+              </span>
+            )}
             {metaBits.length > 0 && <span className="truncate">{metaBits.join(" · ")}</span>}
           </p>
           {title.synopsis && (
@@ -148,8 +162,16 @@ export function NetflixCard({
  * compact visual. Kept separate from MyListButton (the full-size buttons
  * carry their own labels and layouts).
  */
-function MyListPlus({ netflixId, titleName }: { netflixId: number; titleName: string }) {
-  const { saved, busy, toggle } = useMyListToggle(netflixId, titleName);
+function MyListPlus({
+  netflixId,
+  titleName,
+  onChanged,
+}: {
+  netflixId: number;
+  titleName: string;
+  onChanged?: (next: boolean) => void;
+}) {
+  const { saved, busy, toggle } = useMyListToggle(netflixId, titleName, { onChanged });
   return (
     <button
       type="button"

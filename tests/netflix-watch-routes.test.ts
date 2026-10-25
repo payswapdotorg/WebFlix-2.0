@@ -9,6 +9,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { NextRequest } from "next/server";
+import { setUpstream } from "@/lib/youtube/innertube";
 import {
   GET as watchSessionGet,
   POST as watchSessionPost,
@@ -57,10 +58,14 @@ function postReq(url: string, body: unknown): Request {
 
 beforeEach(() => {
   installBroker(null);
+  // P51: the watch routes are rate-limited like every other netflix route —
+  // the battery stands the limiter down via the test-upstream idiom
+  setUpstream(async () => new Response("{}", { status: 200 }));
 });
 
 afterEach(() => {
   installBroker(null);
+  setUpstream(null);
   globalThis.fetch = originalFetch;
 });
 
@@ -79,7 +84,7 @@ describe("GET /api/netflix/watch/session — status proxy", () => {
         { status: 200 },
       ),
     );
-    const res = await watchSessionGet();
+    const res = await watchSessionGet(req("http://localhost:3000/api/netflix/watch/session"));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { phase: string; streamUrl: string };
     expect(body.phase).toBe("ready");
@@ -89,11 +94,48 @@ describe("GET /api/netflix/watch/session — status proxy", () => {
 
   test("degrades honestly when the mini-service is unreachable", async () => {
     installBroker(null);
-    const res = await watchSessionGet();
+    const res = await watchSessionGet(req("http://localhost:3000/api/netflix/watch/session"));
     expect(res.status).toBe(503);
     const body = (await res.json()) as { phase: string; message: string };
     expect(body.phase).toBe("unreachable");
     expect(body.message).toContain("unreachable");
+  });
+
+  test("never discloses the sandbox id (P51-AUDIT B1)", async () => {
+    // the id is the ADDRESS of the sandbox's public CDP relay — an older
+    // broker build that still sends it must not leak through the proxy
+    installBroker(async () =>
+      new Response(
+        JSON.stringify({ ok: true, phase: "ready", sandboxId: "sbx-leak", streamUrl: "https://x/vnc.html" }),
+        { status: 200 },
+      ),
+    );
+    const res = await watchSessionGet(req("http://localhost:3000/api/netflix/watch/session"));
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.sandboxId).toBeUndefined();
+  });
+
+  test("rejects a cross-site Origin on the kick (P51-AUDIT B3)", async () => {
+    installBroker(async () => new Response(JSON.stringify({ phase: "provisioning" }), { status: 202 }));
+    const evil = new NextRequest(new URL("http://localhost:3000/api/netflix/watch/session"), {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://evil.example" },
+      body: JSON.stringify({ videoId: 81757047 }),
+    });
+    const res = await watchSessionPost(evil);
+    expect(res.status).toBe(403);
+    expect(brokerRequests).toHaveLength(0); // nothing reached the broker
+  });
+
+  test("a same-site Origin rides through (the app's own pages)", async () => {
+    installBroker(async () => new Response(JSON.stringify({ phase: "provisioning" }), { status: 202 }));
+    const own = new NextRequest(new URL("http://localhost:3000/api/netflix/watch/session"), {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "http://localhost:3000" },
+      body: JSON.stringify({ videoId: 81757047 }),
+    });
+    const res = await watchSessionPost(own);
+    expect(res.status).toBe(202);
   });
 });
 
@@ -148,14 +190,14 @@ describe("POST /api/netflix/watch/session/restart — the P44 restart lane", () 
     installBroker(async () =>
       new Response(JSON.stringify({ ok: true, phase: "restarting" }), { status: 202 }),
     );
-    const res = await sessionRestartPost();
+    const res = await sessionRestartPost(req("http://localhost:3000/api/netflix/watch/session/restart"));
     expect(res.status).toBe(200);
     expect(brokerRequests[0]?.url).toContain("/session/restart");
   });
 
   test("survives a dead broker (best effort — the view re-kicks)", async () => {
     installBroker(null);
-    const res = await sessionRestartPost();
+    const res = await sessionRestartPost(req("http://localhost:3000/api/netflix/watch/session/restart"));
     expect(res.status).toBe(200);
   });
 });
@@ -201,20 +243,20 @@ describe("POST /api/netflix/watch/cookies — operator connect", () => {
 describe("POST /api/netflix/watch/release + retry-auth", () => {
   test("release is best-effort and always 200", async () => {
     installBroker(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
-    const res = await releasePost();
+    const res = await releasePost(req("http://localhost:3000/api/netflix/watch/release"));
     expect(res.status).toBe(200);
     expect(brokerRequests[0]?.url).toContain("/session/release");
   });
 
   test("release survives a dead broker", async () => {
     installBroker(null);
-    const res = await releasePost();
+    const res = await releasePost(req("http://localhost:3000/api/netflix/watch/release"));
     expect(res.status).toBe(200);
   });
 
   test("retry-auth kicks the harvest lane", async () => {
     installBroker(async () => new Response(JSON.stringify({ ok: true, phase: "harvesting" }), { status: 202 }));
-    const res = await retryAuthPost();
+    const res = await retryAuthPost(req("http://localhost:3000/api/netflix/watch/retry-auth"));
     expect(res.status).toBe(202);
     expect(brokerRequests[0]?.url).toContain("/auth/retry");
   });

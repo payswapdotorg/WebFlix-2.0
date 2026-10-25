@@ -19,9 +19,9 @@ import {
   Copy,
   Check,
   Puzzle,
-  Download,
 } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
+import { netflixWatchUrl, netflixBrowseUrl } from "@/lib/netflix/deeplink";
 import type { NetflixTitlePageDTO } from "@/lib/netflix/types";
 
 /**
@@ -36,7 +36,9 @@ import type { NetflixTitlePageDTO } from "@/lib/netflix/types";
 
 interface WatchSessionStatus {
   phase: "idle" | "provisioning" | "stream-ready" | "restoring-session" | "auth-required" | "ready" | "error" | "unreachable";
-  sandboxId?: string | null;
+  // P51-AUDIT (B1): no `sandboxId` — the id addresses the sandbox's CDP relay
+  // and must never reach the client (the broker stopped disclosing it; the
+  // app proxy strips it defensively).
   streamUrl?: string | null;
   message?: string | null;
   videoId?: number | null;
@@ -47,7 +49,6 @@ const PHASE_STEPS: Array<{ key: string; label: string }> = [
   { key: "provisioning", label: "Starting the secure cloud desktop" },
   { key: "stream-ready", label: "Opening Netflix in Chrome" },
   { key: "restoring-session", label: "Restoring your Netflix session" },
-  { key: "ready", label: "Ready" },
 ];
 
 /** P46 — what the broker reports about the automatic sign-in bridge. */
@@ -188,6 +189,10 @@ export default function NetflixWatchView() {
   const cookieLooksValid = /(?<![A-Za-z])NetflixId\s*=/.test(cookieInput);
   const [authRetryBusy, setAuthRetryBusy] = useState(false);
   const [streamError, setStreamError] = useState(false);
+  // P51-AUDIT (A3): a restart that is still in flight must not be re-fired —
+  // the broker tears the old desktop down ASYNC, and a second kick mid-teardown
+  // can adopt the dying sandbox (the audit's destroy/bootstrap race).
+  const [restartBusy, setRestartBusy] = useState(false);
   // P47 — the error state's collapsible automatic sign-in lane (pair now, the
   // candidate validates on the next successful bootstrap)
   const [errorAutoOpen, setErrorAutoOpen] = useState(false);
@@ -207,8 +212,18 @@ export default function NetflixWatchView() {
   const poll = useCallback(async () => {
     try {
       const res = await fetch("/api/netflix/watch/session", { cache: "no-store" });
-      if (!res.ok) return;
-      const next = (await res.json()) as WatchSessionStatus;
+      // P51-AUDIT (A2): the broker-down 503 body IS the honest
+      // `{phase:"unreachable"}` shape — throwing it away on !res.ok left the
+      // lane on the eternal "Preparing…" spinner. A phase-bearing JSON body
+      // is adopted whatever the status code.
+      let body: unknown = null;
+      try {
+        body = await res.json();
+      } catch {
+        return; // non-JSON and non-ok → nothing honest to adopt
+      }
+      if (!body || typeof body !== "object" || !("phase" in body)) return;
+      const next = body as WatchSessionStatus;
       // change-guard: the poll ticks every 2.5s — re-render only on a real
       // phase/status change (keeps the room chrome steady under interaction)
       setStatus((prev) =>
@@ -369,18 +384,24 @@ export default function NetflixWatchView() {
   }, [status]);
 
   // ---- the audio tap (webm/opus over socket.io → MSE) ----
+  // P51-AUDIT (A5): the pipeline lives for the whole `live` window — the mute
+  // toggle no longer tears it down (muting is just `el.muted`), the object URL
+  // is revoked on teardown, and socket death now downgrades `audioOk` instead
+  // of leaving the "Connecting audio…" pill hiding a dead stream.
   useEffect(() => {
-    if (!live || !audioOn) return;
-    if (typeof MediaSource === "undefined" || typeof io === "undefined") return;
+    if (!live) return;
+    if (typeof MediaSource === "undefined") return;
     let disposed = false;
     const el = audioRef.current;
     if (!el) return;
 
     // MediaSource pipeline first — chunks can arrive any moment
+    let objUrl: string | null = null;
     try {
       const ms = new MediaSource();
       mediaSourceRef.current = ms;
-      el.src = URL.createObjectURL(ms);
+      objUrl = URL.createObjectURL(ms);
+      el.src = objUrl;
       ms.addEventListener("sourceopen", () => {
         if (disposed) return;
         try {
@@ -408,6 +429,10 @@ export default function NetflixWatchView() {
       // fresh tap for this viewer
       socket.emit("resync");
     });
+    // a dead socket must never look like healthy audio
+    const markDead = () => setAudioOk(false);
+    socket.on("disconnect", markDead);
+    socket.on("connect_error", markDead);
 
     function pump() {
       const sb = sourceBufRef.current;
@@ -460,9 +485,15 @@ export default function NetflixWatchView() {
       mediaSourceRef.current = null;
       sourceBufRef.current = null;
       queueRef.current = [];
+      if (objUrl) URL.revokeObjectURL(objUrl);
       setAudioOk(false);
     };
-  }, [live, audioOn]);
+  }, [live]);
+
+  // mute rides the element, not the pipeline (P51-AUDIT A5)
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.muted = !audioOn;
+  }, [audioOn, live]);
 
   const offsetBy = (delta: number) => {
     offsetRef.current += delta;
@@ -470,25 +501,38 @@ export default function NetflixWatchView() {
   };
 
   const restartSession = useCallback(async () => {
+    if (restartBusy) return; // P51-AUDIT (A3): one teardown in flight at a time
+    setRestartBusy(true);
     setStreamError(false);
     recordPlay(); // a replay is still a play — the rail stays honest
-    await fetch("/api/netflix/watch/session/restart", { method: "POST" }).catch(() => {});
-    await fetch("/api/netflix/watch/session", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(kickBody()),
-    }).catch(() => {});
-    void poll();
-  }, [kickBody, poll, recordPlay]);
+    try {
+      await fetch("/api/netflix/watch/session/restart", { method: "POST" }).catch(() => {});
+      await fetch("/api/netflix/watch/session", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(kickBody()),
+      }).catch(() => {});
+      await poll();
+    } finally {
+      setRestartBusy(false);
+    }
+  }, [kickBody, poll, recordPlay, restartBusy]);
 
   const retryAuth = useCallback(async () => {
     setAuthRetryBusy(true);
     try {
-      await fetch("/api/netflix/watch/retry-auth", { method: "POST" });
+      const res = await fetch("/api/netflix/watch/retry-auth", { method: "POST" });
+      if (!res.ok) {
+        // P51-AUDIT (L7): a failed retry used to fail silently — surface it
+        // by polling (the phase/message renders the honest state)
+        void poll();
+      }
+    } catch {
+      void poll();
     } finally {
       setAuthRetryBusy(false);
     }
-  }, []);
+  }, [poll]);
 
   const submitCookies = useCallback(async () => {
     setCookieBusy(true);
@@ -589,7 +633,7 @@ export default function NetflixWatchView() {
             </>
           )}
           <a
-            href={isLive ? "https://www.netflix.com/browse" : `https://www.netflix.com/watch/${netflixId}`}
+            href={isLive ? netflixBrowseUrl() : netflixWatchUrl(netflixId)}
             target="_blank"
             rel="noopener noreferrer"
             className="flex h-9 items-center gap-1.5 rounded-md bg-white/10 px-3 text-xs font-medium hover:bg-white/20"
@@ -796,12 +840,13 @@ export default function NetflixWatchView() {
                     <button
                       type="button"
                       onClick={() => void restartSession()}
-                      className="flex h-10 items-center gap-2 rounded-md bg-[#e50914] px-5 text-sm font-semibold hover:bg-[#c4080f]"
+                      disabled={restartBusy}
+                      className="flex h-10 items-center gap-2 rounded-md bg-[#e50914] px-5 text-sm font-semibold hover:bg-[#c4080f] disabled:opacity-60"
                     >
-                      <RotateCcw className="size-4" aria-hidden="true" /> Retry after setting the key
+                      {restartBusy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <RotateCcw className="size-4" aria-hidden="true" />} Retry after setting the key
                     </button>
                     <a
-                      href={`https://www.netflix.com/watch/${netflixId}`}
+                      href={netflixWatchUrl(netflixId)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex h-10 items-center gap-2 rounded-md border border-white/20 px-5 text-sm font-medium hover:bg-white/5"
@@ -847,14 +892,15 @@ export default function NetflixWatchView() {
                   <button
                     type="button"
                     onClick={() => void restartSession()}
-                    className="flex h-10 items-center gap-2 rounded-md bg-[#e50914] px-5 text-sm font-semibold hover:bg-[#c4080f]"
+                    disabled={restartBusy}
+                    className="flex h-10 items-center gap-2 rounded-md bg-[#e50914] px-5 text-sm font-semibold hover:bg-[#c4080f] disabled:opacity-60"
                   >
-                    <RotateCcw className="size-4" aria-hidden="true" /> Restart the session
+                    {restartBusy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <RotateCcw className="size-4" aria-hidden="true" />} Restart the session
                   </button>
                   {/* P48 — the handoff rides EVERY failure state now (it was
                       unreachable-only): a dead desktop never blocks the movie */}
                   <a
-                    href={`https://www.netflix.com/watch/${netflixId}`}
+                    href={netflixWatchUrl(netflixId)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex h-10 items-center gap-2 rounded-md border border-white/20 px-5 text-sm font-medium hover:bg-white/5"
