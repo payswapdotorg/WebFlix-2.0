@@ -2,7 +2,8 @@
 
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
-import { Play } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Play, Search } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NetflixBillboard } from "@/components/netflix/netflix-hero";
@@ -21,11 +22,28 @@ import type { NetflixHomeDTO, NetflixTitleDTO } from "@/lib/netflix/types";
  * sub-nav (All / Movies / TV). Every Play enters the in-app watch lane
  * (/netflix/watch/<id> — the streamed Netflix player); Netflix Live stays
  * one click away.
+ *
+ * P50 — the native affordances Netflix's own nav carries: the search entry
+ * (into /netflix/search) and the country aisle — the pools carry per-country
+ * ranks for the markets Tudum publishes, so the chips ride them; a country
+ * with no published rows today gets the honest empty note, never fake rails.
  */
 
 const COUNTRIES = [
   { id: "Global", label: "Global" },
   { id: "US", label: "United States" },
+  { id: "GB", label: "United Kingdom" },
+  { id: "IN", label: "India" },
+  { id: "BR", label: "Brazil" },
+  { id: "DE", label: "Germany" },
+  { id: "FR", label: "France" },
+  { id: "JP", label: "Japan" },
+  { id: "KR", label: "South Korea" },
+  { id: "MX", label: "Mexico" },
+  { id: "ES", label: "Spain" },
+  { id: "IT", label: "Italy" },
+  { id: "AU", label: "Australia" },
+  { id: "CA", label: "Canada" },
 ] as const;
 
 const KIND_TABS = [
@@ -62,6 +80,9 @@ function MyListRail() {
 function HubContent() {
   const [country, setCountry] = useState<string>("Global");
   const [kind, setKind] = useState<KindTab>("all");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchText, setSearchText] = useState("");
+  const router = useRouter();
   const { data, loading, error } = useApi<NetflixHomeDTO>(`/api/netflix?country=${country}`);
 
   const rails = useMemo(
@@ -142,23 +163,83 @@ function HubContent() {
                   </button>
                 ))}
               </nav>
-              <div role="group" aria-label="Country view" className="flex gap-2" data-testid="netflix-country-chips">
-                {COUNTRIES.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    aria-pressed={country === c.id}
-                    onClick={() => setCountry(c.id)}
-                    className={cn(
-                      "h-8 rounded-full px-3 text-xs font-medium transition-colors",
-                      country === c.id
-                        ? "bg-white/15 text-white ring-1 ring-white/40"
-                        : "text-white/60 hover:text-white"
-                    )}
-                  >
-                    {c.label}
-                  </button>
-                ))}
+              {/* P50 — the search entry, then the country aisle (scrollable on
+                  mobile — 375px must stay overflow-free) */}
+              <div className="flex min-w-0 items-center gap-2">
+                <form
+                  role="search"
+                  className="flex min-w-0 items-center"
+                  data-testid="netflix-subnav-search"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const q = searchText.trim();
+                    if (q) {
+                      router.push(`/netflix/search?q=${encodeURIComponent(q)}`);
+                      setSearchOpen(false);
+                      setSearchText("");
+                    }
+                  }}
+                >
+                  {searchOpen ? (
+                    <div className="flex h-8 min-w-0 items-center gap-1.5 rounded-full border border-white/25 bg-white/5 pl-2.5 pr-1">
+                      <Search className="size-3.5 shrink-0 text-white/50" aria-hidden="true" />
+                      <input
+                        value={searchText}
+                        onChange={(e) => setSearchText(e.target.value)}
+                        placeholder="Search Netflix…"
+                        aria-label="Search Netflix titles"
+                        data-testid="netflix-subnav-search-input"
+                        autoFocus
+                        className="w-28 bg-transparent text-xs outline-none placeholder:text-white/35 sm:w-40"
+                      />
+                      <button
+                        type="button"
+                        aria-label="Close the Netflix search box"
+                        onClick={() => {
+                          setSearchOpen(false);
+                          setSearchText("");
+                        }}
+                        className="flex size-6 shrink-0 items-center justify-center rounded-full text-white/60 hover:bg-white/10 hover:text-white"
+                      >
+                        <Search className="size-3" aria-hidden="true" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      aria-label="Search Netflix titles"
+                      aria-expanded={searchOpen}
+                      onClick={() => setSearchOpen(true)}
+                      className="flex size-8 items-center justify-center rounded-full text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+                      data-testid="netflix-subnav-search-toggle"
+                    >
+                      <Search className="size-4" aria-hidden="true" />
+                    </button>
+                  )}
+                </form>
+                <div
+                  role="group"
+                  aria-label="Country view"
+                  className="no-scrollbar flex min-w-0 gap-2 overflow-x-auto"
+                  data-testid="netflix-country-chips"
+                >
+                  {COUNTRIES.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      aria-pressed={country === c.id}
+                      onClick={() => setCountry(c.id)}
+                      className={cn(
+                        "h-8 shrink-0 rounded-full px-3 text-xs font-medium transition-colors",
+                        country === c.id
+                          ? "bg-white/15 text-white ring-1 ring-white/40"
+                          : "text-white/60 hover:text-white"
+                      )}
+                    >
+                      {c.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -207,6 +288,24 @@ function HubContent() {
           {rails.map((rail) => (
             <NetflixRail key={`${country}-${kind}-${rail.key}`} rail={rail} />
           ))}
+
+          {/* P50 — the honest empty aisle: a country/kind cut Netflix isn't
+              publishing today leaves the aisle empty, never fake rows */}
+          {!loading && rails.length === 0 && (
+            <div
+              className="mx-4 mt-8 rounded-xl border border-white/10 bg-white/5 p-6 text-center sm:mx-[4vw]"
+              data-testid="netflix-empty-rails"
+            >
+              <p className="text-sm font-medium text-white/80">
+                No Top 10 rows for this view right now
+              </p>
+              <p className="mx-auto mt-2 max-w-md text-sm text-white/50">
+                Netflix publishes per-country rankings only where titles are tracking today —
+                this cut is empty on Netflix&apos;s own side, so the hub stays honest rather
+                than showing fake rows. Try another country or kind.
+              </p>
+            </div>
+          )}
 
           <p className="px-4 pt-8 text-center text-xs text-white/35 sm:px-6" data-testid="netflix-source-note">
             Data: Netflix&apos;s own public Top 10 &amp; Most Popular (Tudum) · {data.catalogSize} tracked titles ·

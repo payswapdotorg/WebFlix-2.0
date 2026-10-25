@@ -62,6 +62,8 @@ let useApiData: unknown = null;
 let useApiUrls: (string | null)[] = [];
 // P49 — the Continue Watching lane answers through the same mock, URL-aware
 let progressData: unknown = { items: [] };
+// P50 — the sub-nav search commits through router.push; capture it
+let routerPushes: string[] = [];
 mock.module("@/hooks/use-api", () => ({
   useApi: (url: string | null) => {
     useApiUrls.push(url);
@@ -77,7 +79,11 @@ mock.module("@/hooks/use-api", () => ({
 }));
 mock.module("next/navigation", () => ({
   usePathname: () => "/netflix",
-  useRouter: () => ({ push: () => {}, replace: () => {}, refresh: () => {} }),
+  useRouter: () => ({
+    push: (href: string) => routerPushes.push(href),
+    replace: () => {},
+    refresh: () => {},
+  }),
   useSearchParams: () => new URLSearchParams(),
   useParams: () => ({ id: "81757047" }),
 }));
@@ -176,6 +182,7 @@ beforeEach(() => {
   useApiData = null;
   useApiUrls = [];
   progressData = { items: [] };
+  routerPushes = [];
 });
 
 afterEach(() => {
@@ -199,7 +206,8 @@ describe("the Netflix hub (/netflix)", () => {
     expect(one('[data-testid="netflix-rail-weekly-films"]')).not.toBeNull();
     // rank numerals: the billboard badge is TOP #1 in Movies/TV Today (P45)
     expect(one('[data-testid="netflix-hero"]')?.textContent).toContain("#1 in Movies Today");
-    expect(all('[data-testid="netflix-country-chips"] button').length).toBe(2);
+    // P50 — the country aisle rides the markets Tudum tracks (Global, US + 12)
+    expect(all('[data-testid="netflix-country-chips"] button').length).toBe(14);
     // the honest source note rides the DOM
     expect(one('[data-testid="netflix-source-note"]')?.textContent).toContain("Netflix");
   });
@@ -273,6 +281,51 @@ describe("the Netflix hub (/netflix)", () => {
       us.click();
     });
     expect(useApiUrls.some((u) => u === "/api/netflix?country=US")).toBe(true);
+  });
+
+  test("P50 — a new market chip re-queries with its country code", async () => {
+    useApiData = fixtureHome;
+    await render(createElement(NetflixHubView));
+    // the third chip is the United Kingdom
+    const gb = all('[data-testid="netflix-country-chips"] button')[2];
+    expect(gb.textContent).toContain("United Kingdom");
+    await act(async () => {
+      gb.click();
+    });
+    expect(useApiUrls.some((u) => u === "/api/netflix?country=GB")).toBe(true);
+  });
+
+  test("P50 — an empty cut renders the honest empty-aisle note, never fake rails", async () => {
+    useApiData = { ...fixtureHome, rails: [] };
+    await render(createElement(NetflixHubView));
+    expect(one('[data-testid="netflix-empty-rails"]')).not.toBeNull();
+    expect(one('[data-testid="netflix-empty-rails"]')?.textContent).toContain("No Top 10 rows");
+  });
+
+  test("P50 — the sub-nav search entry commits into /netflix/search", async () => {
+    useApiData = fixtureHome;
+    await render(createElement(NetflixHubView));
+    const toggle = one('[data-testid="netflix-subnav-search-toggle"]');
+    expect(toggle).toBeTruthy();
+    await act(async () => {
+      toggle!.click();
+    });
+    const input = one('[data-testid="netflix-subnav-search-input"]') as HTMLInputElement | null;
+    expect(input).toBeTruthy();
+    // the house value-tracker sequence for controlled inputs
+    const desc = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input!), "value");
+    await act(async () => {
+      desc?.set?.call(input, "doing life");
+      input!.dispatchEvent(new win.Event("input", { bubbles: true }));
+      input!.dispatchEvent(new win.Event("keyup", { bubbles: true }));
+    });
+    const form = one('[data-testid="netflix-subnav-search"]');
+    await act(async () => {
+      form!.dispatchEvent(new win.Event("submit", { bubbles: true, cancelable: true }));
+    });
+    expect(routerPushes.some((href) => href === `/netflix/search?q=${encodeURIComponent("doing life")}`)).toBe(true);
+    // the box closes and clears after commit
+    expect(one('[data-testid="netflix-subnav-search-input"]')).toBeNull();
   });
 });
 

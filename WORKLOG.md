@@ -1,6 +1,22 @@
 # Worklog
 
 ---
+Task ID: P50-NETFLIX-SEARCH-PAGE
+Agent: Z.ai Code (resident TL station, continued session — operator: "go" on "work further on integrating netflix videos")
+Task: the two native Netflix browsing affordances the hub still lacked — Netflix's own search page inside the Netflix hub, and the country aisle the pools already carry.
+
+Work Log:
+- OPS FORENSICS FIRST (the display-ghost): the session opened on what looked like a torn declaration ("const andoffOpen…") in netflix-hero.tsx + the title view — bash displays showed it, tsc/tests/node/Read-tool said fine. Proven with node hex of the exact line (bytes were "const [handoffOpen…") + blob-hash equality (hash-object == HEAD == origin/main, re-fetched from GitHub): the BASH OUTPUT CHANNEL EATS "[h" SEQUENCES — the repo was never broken, no fix commit needed. Law recorded in the work item: verify suspicious "corruption" via hex + blob-hash before touching anything.
+- THE SEARCH PAGE (/netflix/search, page.tsx + view.tsx): the query lives in the URL (shareable; the box initializes from ?q= — the topbar suggest and the YT-shelf can deep-link in), debounced 300ms live search (Netflix's own box searches as you type) through router.replace, results as the hub's own NetflixCards (the Play sibling stays the direct in-app watch link), a count line, the DTO's honest scope note, kind tabs (All/Movies/TV) filtering the ANSWERED set client-side, and honest states only: the no-query prompt, the honest empty note naming the Top-10 scope + pointing at the hub/Netflix Live, the error line, the skeleton grid — and NO API hit at all while the query is empty (useApi(null)).
+- THE HUB'S NATIVE NAV: a magnifier toggle in the sticky sub-nav expanding into an inline box — Enter commits to /netflix/search?q=… and the box closes and clears; the country aisle grew 2 → 14 chips (Global, US + GB, IN, BR, DE, FR, JP, KR, MX, ES, IT, AU, CA — the markets Tudum tracks) riding the EXISTING per-country re-rank (zero API change; rails carry the "· GB" tag), horizontally scrollable so 375px stays overflow-free; and the honest empty-aisle note (netflix-empty-rails) for a country/kind cut Netflix isn't publishing today — never fake rails.
+- GATES: tsc clean; eslint 0 errors on touched files; test:netflix 122/0 across 9 files (+7 search-page pins — the new battery tests/netflix-search-page.test.tsx wired into the test:netflix file list — +3 hub pins: market chip re-query, empty aisle, subnav search commit; the chips-count pin moved 2 → 14); full battery 2310/0 across 9 suites.
+- LIVE (browser-verified): search prompt → "doing" → URL committed → 1 real card with the /netflix/watch/82023496 Play link; garbage query → the honest empty note (multi-token queries honestly match per-token — "zzqqxx no such title" answers 6 real titles: recall, not a bug); ?q=us → 20 real titles with art; hub magnifier → "doing" → Enter → /netflix/search?q=doing; United Kingdom/Japan chips → localized rails with the country tags; mobile 375px → 0px overflow on hub AND search. Evidence: evidence/wfx2p50/.
+
+Stage Summary:
+- The Netflix hub now carries the two nav affordances Netflix's own product has: a real search page (shareable URLs, live debounced results, honest scope) and a 14-market country aisle riding the pools' per-country truth — both additive, YouTube untouched, the honest-degrade law held everywhere.
+- Residuals: search depth stays the Top-10 mirror universe (a TMDB/uNoGS key widens it — P43 lane); the sub-nav box is commit-into-the-page, the global suggest remains the typeahead.
+
+---
 Task ID: P48-ACCEPTANCE-TRUTH-SNAG-WIZARD
 Agent: Z.ai Code (resident TL station, continued session — operator: "go")
 Task: verify the P47 deploy in production, heal the acceptance gate's stale contracts, prove the bridge's public path, and turn the keyed snag into a self-service setup wizard.
