@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Play, X } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
@@ -70,11 +71,15 @@ function ContinueCard({
         className="relative block aspect-video w-full overflow-hidden rounded-md bg-[#1b1b22] ring-1 ring-white/10 transition-all duration-200 group-hover:scale-[1.04] group-hover:ring-2 group-hover:ring-white/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e50914]"
       >
         {title.backdropUrl ?? title.posterUrl ? (
-          <img
+          // P52 — the optimizer lane (report §4 rung 8): sized thumb variants
+          // instead of full-res CDN art; the src keeps the S5 fallback law.
+          <Image
             src={(title.backdropUrl ?? title.posterUrl) ?? ""}
             alt=""
+            fill
+            sizes="(min-width: 640px) 232px, 200px"
             loading="lazy"
-            className="absolute inset-0 h-full w-full object-cover"
+            className="object-cover"
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#1b1b22] to-[#101014] px-3 text-center">

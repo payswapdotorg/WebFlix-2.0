@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useParams } from "next/navigation";
 import { ArrowLeft, ExternalLink, Play } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
@@ -91,10 +92,15 @@ export default function NetflixTitleView() {
       <div className="relative mx-4 mt-4 overflow-hidden rounded-2xl sm:mx-6" data-testid="netflix-title-hero">
         <div className="relative min-h-[300px] bg-gradient-to-br from-[#1b1b22] to-[#101014] sm:min-h-[420px]">
           {title.backdropUrl && !backdropBroken && (
-            <img
+            // P52 — the optimizer lane (report §4 rung 8): the title hero's
+            // full-bleed backdrop rides sized variants; onError still degrades
+            // to the gradient + logo/text fallback.
+            <Image
               src={title.backdropUrl}
               alt=""
-              className="absolute inset-0 h-full w-full object-cover"
+              fill
+              sizes="100vw"
+              className="object-cover"
               onError={() => setBackdropBroken(true)}
             />
           )}

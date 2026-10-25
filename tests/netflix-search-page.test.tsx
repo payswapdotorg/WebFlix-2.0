@@ -13,7 +13,11 @@ import { act } from "react";
 
 // ---- happy-dom as the global DOM (the netflix-ui setup) --------------------
 const dom = await import("happy-dom");
-const win = new dom.Window() as unknown as typeof globalThis;
+// P52 — the app origin as the Window base: next/image (the P52 optimizer
+// lane) renders RELATIVE /_next/image URLs, and a base-less happy-dom
+// window (about:blank) cannot parse them — the real document always has
+// an origin, so the test window does too.
+const win = new dom.Window({ url: "http://localhost:3000" }) as unknown as typeof globalThis;
 const domProps = [
   "window",
   "document",

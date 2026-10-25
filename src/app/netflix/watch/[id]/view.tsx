@@ -78,13 +78,31 @@ function AutoAuthLane(props: {
   origin: string;
   tokenCopied: boolean;
   rotateBusy: boolean;
+  /** P52 — the route answered the house 401: NETFLIX_PAIRING_LOCKDOWN is on
+   * and this visitor is signed out. An honest note replaces the token row. */
+  locked?: boolean;
   onCopyToken: () => void;
   onRotateToken: () => void;
   statusLine: string;
 }) {
-  const { autoAuth, origin, tokenCopied, rotateBusy, onCopyToken, onRotateToken, statusLine } = props;
+  const { autoAuth, origin, tokenCopied, rotateBusy, locked, onCopyToken, onRotateToken, statusLine } = props;
   return (
     <div className="mx-auto max-w-xl space-y-3 rounded-lg border border-white/15 bg-white/5 p-4 text-left" data-testid="netflix-watch-autoauth-lane">
+      {locked ? (
+        <p
+          className="rounded-md border border-white/10 bg-black/40 px-3 py-2 text-xs leading-relaxed text-white/70"
+          data-testid="netflix-watch-autoauth-locked"
+        >
+          Automatic sign-in is{" "}
+          <span className="font-semibold text-white/85">locked down</span> on this
+          deployment — pairing is limited to signed-in viewers.{" "}
+          <a href="/signin" className="text-white/85 underline underline-offset-2 hover:text-white">
+            Sign in to WebFlix
+          </a>{" "}
+          and reopen this page to pair the bridge.
+        </p>
+      ) : (
+        <>
       <ol className="space-y-2 text-xs leading-relaxed text-white/55">
         <li>
           <span className="font-semibold text-white/80">1.</span>{" "}
@@ -153,6 +171,8 @@ function AutoAuthLane(props: {
         against Netflix before they are ever trusted — an invalid push can never reach
         playback.
       </p>
+        </>
+      )}
     </div>
   );
 }
@@ -177,6 +197,10 @@ export default function NetflixWatchView() {
   // primary) and the one-off cookie paste (manual, still first-class).
   const [authLane, setAuthLane] = useState<"auto" | "manual">("auto");
   const [autoAuth, setAutoAuth] = useState<AutoAuthInfo | null>(null);
+  // P52 — the pairing route's lockdown rung: a 401 from /autoauth under
+  // NETFLIX_PAIRING_LOCKDOWN means this signed-out visitor may not read the
+  // token; the lane says so honestly instead of spinning on "loading…".
+  const [pairingLocked, setPairingLocked] = useState(false);
   const [tokenCopied, setTokenCopied] = useState(false);
   const [rotateBusy, setRotateBusy] = useState(false);
   const [cookiePanelOpen, setCookiePanelOpen] = useState(false);
@@ -238,7 +262,13 @@ export default function NetflixWatchView() {
   const fetchAutoAuth = useCallback(async () => {
     try {
       const res = await fetch("/api/netflix/watch/autoauth", { cache: "no-store" });
+      // P52 — the lockdown 401 IS the honest answer: stop polling, say why.
+      if (res.status === 401) {
+        setPairingLocked(true);
+        return;
+      }
       if (!res.ok) return;
+      setPairingLocked(false);
       const next = (await res.json()) as AutoAuthInfo;
       setAutoAuth((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
     } catch {
@@ -249,8 +279,9 @@ export default function NetflixWatchView() {
   useEffect(() => {
     // P47 — the pairing surface exists in TWO states now: the auth-required
     // overlay AND the error state's collapsible lane (pair now, validate on
-    // the next bootstrap). Poll whenever either is on screen.
-    const wanted = status?.phase === "auth-required" || errorAutoOpen;
+    // the next bootstrap). Poll whenever either is on screen. P52 — never
+    // poll a locked pairing route (the 401 is the answer, not a transient).
+    const wanted = (status?.phase === "auth-required" || errorAutoOpen) && !pairingLocked;
     if (!wanted) return;
     // deferred (not synchronous in the effect body) — same pattern as the poll
     const first = setTimeout(() => void fetchAutoAuth(), 0);
@@ -259,7 +290,7 @@ export default function NetflixWatchView() {
       clearTimeout(first);
       clearInterval(t);
     };
-  }, [status?.phase, errorAutoOpen, fetchAutoAuth]);
+  }, [status?.phase, errorAutoOpen, pairingLocked, fetchAutoAuth]);
 
   const copyToken = useCallback(async () => {
     if (!autoAuth?.token) return;
@@ -280,6 +311,11 @@ export default function NetflixWatchView() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ action: "rotate" }),
       });
+      // P52 — rotation under lockdown without a session: the honest 401 note
+      if (res.status === 401) {
+        setPairingLocked(true);
+        return;
+      }
       const out = (await res.json()) as { token?: string };
       if (out.token) {
         setAutoAuth((prev) => (prev ? { ...prev, token: out.token as string } : prev));
@@ -696,6 +732,7 @@ export default function NetflixWatchView() {
                       origin={origin}
                       tokenCopied={tokenCopied}
                       rotateBusy={rotateBusy}
+                      locked={pairingLocked}
                       onCopyToken={() => void copyToken()}
                       onRotateToken={() => void rotateToken()}
                       statusLine={bridgeStatusLine}
@@ -876,6 +913,7 @@ export default function NetflixWatchView() {
                           origin={origin}
                           tokenCopied={tokenCopied}
                           rotateBusy={rotateBusy}
+                          locked={pairingLocked}
                           onCopyToken={() => void copyToken()}
                           onRotateToken={() => void rotateToken()}
                           statusLine={bridgeStatusLine}
@@ -931,6 +969,7 @@ export default function NetflixWatchView() {
                         origin={origin}
                         tokenCopied={tokenCopied}
                         rotateBusy={rotateBusy}
+                        locked={pairingLocked}
                         onCopyToken={() => void copyToken()}
                         onRotateToken={() => void rotateToken()}
                         statusLine={bridgeStatusLine}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import {
   Dialog,
   DialogContent,
@@ -51,10 +52,15 @@ export function PlayHandoffDialog({
       <DialogContent className="max-w-md overflow-hidden border-white/10 bg-[#141418] p-0 text-white sm:max-w-lg">
         <div className="relative h-36 w-full bg-gradient-to-br from-[#1b1b22] to-[#101014] sm:h-44">
           {title.backdropUrl && !artBroken && (
-            <img
+            // P52 — the optimizer lane (report §4 rung 8): the hand-off
+            // banner's backdrop rides sized variants; onError still degrades
+            // to the gradient + title-text fallback.
+            <Image
               src={title.backdropUrl}
               alt=""
-              className="absolute inset-0 h-full w-full object-cover opacity-80"
+              fill
+              sizes="(min-width: 640px) 512px, 448px"
+              className="object-cover opacity-80"
               onError={() => setArtBroken(true)}
             />
           )}

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Info, Play } from "lucide-react";
 import { MyListButton } from "./my-list-button";
 import { PlayHandoffDialog } from "./play-handoff";
@@ -60,14 +61,19 @@ export function NetflixBillboard({ titles }: { titles: NetflixTitleDTO[] }) {
     >
       <div className="relative h-[62vw] max-h-[560px] min-h-[380px] w-full overflow-hidden bg-[#101014] sm:h-[56vw]">
         {list.map((t, i) => (
-          <img
+          // P52 — the optimizer lane (report §4 rung 8): the billboard's
+          // full-bleed art rides sized variants (100vw) instead of raw CDN
+          // bytes; the first slide is priority (the LCP image), the rest lazy.
+          <Image
             key={t.netflixId}
             src={t.backdropUrl ?? t.posterUrl ?? ""}
             alt=""
             aria-hidden={i !== idx}
-            loading={i === 0 ? "eager" : "lazy"}
+            fill
+            priority={i === 0}
+            sizes="100vw"
             className={cn(
-              "absolute inset-0 h-full w-full object-cover transition-opacity duration-1000",
+              "object-cover transition-opacity duration-1000",
               i === idx ? "opacity-100" : "opacity-0"
             )}
           />

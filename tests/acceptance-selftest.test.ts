@@ -12,7 +12,7 @@ const TIMEOUT = 120_000;
 
 describe("scripts/acceptance.mjs --selftest", () => {
   test(
-    "runs the full 38-check suite against the mock server and exits 0",
+    "runs the full 46-check suite against the mock server and exits 0",
     async () => {
       const proc = Bun.spawn(["bun", "scripts/acceptance.mjs", "--selftest"], {
         stdout: "pipe",
@@ -22,7 +22,7 @@ describe("scripts/acceptance.mjs --selftest", () => {
       const code = await proc.exited;
       expect(code).toBe(0);
       expect(out).toContain("SELFTEST");
-      expect(out).toContain("38/38 checks passed");
+      expect(out).toContain("46/46 checks passed");
       // the three suites all reported
       expect(out).toContain("PAGES — shell + title");
       expect(out).toContain("API — live data");
@@ -42,7 +42,7 @@ describe("scripts/acceptance.mjs --selftest", () => {
       const out = await new Response(proc.stdout).text();
       const code = await proc.exited;
       expect(code).toBe(1);
-      expect(out).toContain("0/38 checks passed");
+      expect(out).toContain("0/46 checks passed");
       expect(out).toContain("FAILURES:");
     },
     TIMEOUT,

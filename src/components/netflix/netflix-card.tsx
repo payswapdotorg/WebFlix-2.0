@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { Info, Play, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useMyListToggle } from "./my-list-button";
@@ -68,14 +69,17 @@ export function NetflixCard({
           )}
         >
           {(ranked ? title.backdropUrl ?? title.posterUrl : title.posterUrl) ? (
-            <img
-              // P51-AUDIT (S5): the src must ride the SAME fallback the
-              // condition above checks — a ranked card with poster-but-no-
-              // backdrop used to render src=""
+            // P52 — the optimizer lane (report §4 rung 8): the 200px thumb
+            // stops fetching the full-res 1200×675 art; sized variants come
+            // from the real `sizes` hint per variant. P51-AUDIT (S5) still
+            // holds: the src rides the SAME fallback the condition checks.
+            <Image
               src={(ranked ? title.backdropUrl ?? title.posterUrl : title.posterUrl) ?? ""}
               alt=""
+              fill
+              sizes={ranked ? "(min-width: 640px) 170px, 150px" : "(min-width: 640px) 232px, 200px"}
               loading="lazy"
-              className="absolute inset-0 h-full w-full object-cover"
+              className="object-cover"
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#1b1b22] to-[#101014] px-3 text-center">

@@ -10,14 +10,18 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { NextRequest } from "next/server";
 import { setUpstream } from "@/lib/youtube/innertube";
+import { setupTestDb, fixtures } from "./helpers";
 import {
   GET as watchSessionGet,
   POST as watchSessionPost,
 } from "@/app/api/netflix/watch/session/route";
+import { GET as autoauthGet, POST as autoauthPost } from "@/app/api/netflix/watch/autoauth/route";
 import { POST as cookiesPost } from "@/app/api/netflix/watch/cookies/route";
 import { POST as releasePost } from "@/app/api/netflix/watch/release/route";
 import { POST as retryAuthPost } from "@/app/api/netflix/watch/retry-auth/route";
 import { POST as sessionRestartPost } from "@/app/api/netflix/watch/session/restart/route";
+
+setupTestDb();
 
 type Handler = (req: Request, init?: { method: string; body: string }) => Promise<Response>;
 
@@ -44,8 +48,8 @@ function installBroker(handler: Handler | null) {
   };
 }
 
-function req(url: string): Request {
-  return new NextRequest(new URL(url, "http://localhost:3000"));
+function req(url: string, headers: Record<string, string> = {}): Request {
+  return new NextRequest(new URL(url, "http://localhost:3000"), { headers });
 }
 
 function postReq(url: string, body: unknown): Request {
@@ -259,5 +263,76 @@ describe("POST /api/netflix/watch/release + retry-auth", () => {
     const res = await retryAuthPost(req("http://localhost:3000/api/netflix/watch/retry-auth"));
     expect(res.status).toBe(202);
     expect(brokerRequests[0]?.url).toContain("/auth/retry");
+  });
+});
+
+describe("P52 — the pairing lockdown rung (NETFLIX_PAIRING_LOCKDOWN)", () => {
+  const TOKEN_STUB = async () =>
+    new Response(JSON.stringify({ token: "pair-token-1", bridge: null }), { status: 200 });
+  let savedLockdown: string | undefined;
+
+  beforeEach(() => {
+    savedLockdown = process.env.NETFLIX_PAIRING_LOCKDOWN;
+  });
+
+  afterEach(() => {
+    if (savedLockdown === undefined) delete process.env.NETFLIX_PAIRING_LOCKDOWN;
+    else process.env.NETFLIX_PAIRING_LOCKDOWN = savedLockdown;
+  });
+
+  test("lockdown ON + anonymous → the pairing token answers the house 401", async () => {
+    process.env.NETFLIX_PAIRING_LOCKDOWN = "1";
+    installBroker(TOKEN_STUB); // would have answered 200 — the gate must stop the request first
+    const res = await autoauthGet(req("http://localhost:3000/api/netflix/watch/autoauth"));
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "unauthenticated" });
+    expect(brokerRequests).toHaveLength(0); // the broker was never asked
+  });
+
+  test("lockdown ON + a signed-out cookie paste → 401, broker untouched", async () => {
+    process.env.NETFLIX_PAIRING_LOCKDOWN = "1";
+    installBroker(TOKEN_STUB);
+    const res = await cookiesPost(
+      postReq("http://localhost:3000/api/netflix/watch/cookies", { cookies: "NetflixId=abc" }),
+    );
+    expect(res.status).toBe(401);
+    expect(brokerRequests).toHaveLength(0);
+  });
+
+  test("lockdown ON + the signed-in identity (the x-wfx2-user header lane) → the gate opens", async () => {
+    process.env.NETFLIX_PAIRING_LOCKDOWN = "1";
+    const { demo } = await fixtures();
+    installBroker(TOKEN_STUB);
+    const res = await autoauthGet(
+      req("http://localhost:3000/api/netflix/watch/autoauth", { "x-wfx2-user": demo.id }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { token: string | null };
+    expect(body.token).toBe("pair-token-1");
+  });
+
+  test("lockdown OFF (the default) → anonymous keeps the open operator tool", async () => {
+    delete process.env.NETFLIX_PAIRING_LOCKDOWN;
+    installBroker(TOKEN_STUB);
+    const res = await autoauthGet(req("http://localhost:3000/api/netflix/watch/autoauth"));
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { token: string | null }).token).toBe("pair-token-1");
+  });
+
+  test("lockdown truthiness: only 1/true/yes lock the door", async () => {
+    process.env.NETFLIX_PAIRING_LOCKDOWN = "0";
+    installBroker(TOKEN_STUB);
+    const res = await autoauthGet(req("http://localhost:3000/api/netflix/watch/autoauth"));
+    expect(res.status).toBe(200);
+  });
+
+  test("lockdown ON + rotate without identity → 401 (rotation is privileged too)", async () => {
+    process.env.NETFLIX_PAIRING_LOCKDOWN = "1";
+    installBroker(TOKEN_STUB);
+    const res = await autoauthPost(
+      postReq("http://localhost:3000/api/netflix/watch/autoauth", { action: "rotate" }),
+    );
+    expect(res.status).toBe(401);
+    expect(brokerRequests).toHaveLength(0);
   });
 });

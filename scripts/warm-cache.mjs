@@ -39,6 +39,14 @@ const WARM_PATHS = [
   "/api/search/suggest?q=music", // yt:suggest:music
   "/api/videos/dQw4w9WgXcQ", // yt:watch:dQw4w9WgXcQ (meta + related)
   "/api/videos/dQw4w9WgXcQ/comments", // comments tokens + first page
+  // P52 — the report's §4 rung 7: the Netflix pools join the warming run.
+  // One /api/netflix hit composes ALL 8 Tudum pools through the shared
+  // `nf:pool:*` keys (the per-market re-ranks ride the SAME 8 keys — no
+  // extra keys per country), so a Global warm buys every market's rails.
+  // The US hit re-ranks for the default-favorite market and proves the
+  // re-rank path end to end.
+  "/api/netflix", // nf:pool:weekly-* + nf:pool:alltime-* (all 8 keys)
+  "/api/netflix?country=US", // the per-country re-rank over the same pools
 ];
 
 async function warm(path) {
@@ -59,7 +67,9 @@ async function warm(path) {
             ? `items=${json.items.length}`
             : json.suggestions !== undefined
               ? `suggestions=${json.suggestions.length}`
-              : "ok";
+              : json.rails !== undefined
+                ? `rails=${json.rails.length} ready=${json.rails.filter((r) => r.titles?.length).length}`
+                : "ok";
     return { path, ok: true, detail: `${rails} (${ms}ms)` };
   } catch (err) {
     return { path, ok: false, detail: `${err.name === "AbortError" ? "timeout" : err.message}` };

@@ -13,8 +13,11 @@ const BROKER = netflixBrokerEndpoint;
 
 export async function POST(request: Request) {
   // P51-AUDIT (B3): session-cookie submission is a privileged write —
-  // throttled + same-origin (the paste form is the only legit caller)
-  const gate = await watchGate(request, "cookies", { limit: 10 });
+  // throttled + same-origin (the paste form is the only legit caller).
+  // P52: identity-gated under the lockdown rung — a public deployment that
+  // sets NETFLIX_PAIRING_LOCKDOWN stops anonymous visitors substituting the
+  // shared session with their own cookies through the app.
+  const gate = await watchGate(request, "cookies", { limit: 10, requireIdentity: true });
   if (gate) return gate;
   try {
     const body = (await request.json()) as { cookies?: unknown };

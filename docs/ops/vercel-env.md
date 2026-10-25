@@ -203,3 +203,27 @@ stays client-fetched from `/api/*`, which keep `force-dynamic` by law.
   prod) — the P42 schema-sync law keeps both variants byte-equivalent modulo
   provider, and this deploy creates Clip + NetflixTitle + NetflixMyListItem.
 - No new env vars this lane (the Netflix reads need none — ADR 0002 §6).
+
+## 2026-10-26 — P52: the deferred tail (lockdown rung, warmer pools, image pipeline)
+
+- **NEW env — `NETFLIX_PAIRING_LOCKDOWN`** (optional, default open): `1`/`true`/`yes` gates the
+  PAIRING surfaces (`GET/POST /api/netflix/watch/autoauth`, `POST /api/netflix/watch/cookies`)
+  behind the signed-in WebFlix identity — anonymous visitors get the house 401 instead of the
+  shared session's pairing token (the P51 report's §4 rung 5, the B3 full fix). The WebFlix
+  Bridge is unaffected either way (it posts to the broker with its pairing token, never through
+  these app routes). Set it on any public deployment where the pairing lane should not be a
+  public tool.
+- **Cache warmer**: `scripts/warm-cache.mjs` now rides the Netflix pools — one `/api/netflix` hit
+  composes all 8 Tudum pools through the `nf:pool:*` keys (per-market re-ranks use the SAME 8
+  keys), so the daily warm run buys every market's hub rails too.
+- **Image optimizer**: `dnm.nflximg.net` joined `images.remotePatterns` — the Netflix surfaces
+  render sized `/_next/image` variants (−86…93% bytes measured). No env needed. On Vercel the
+  image optimizer is a platform feature; on self-hosted standalone builds it needs the bundled
+  sharp.
+- **Cache-header note (measured on prod)**: Vercel REWRITES `Cache-Control` on force-dynamic
+  route handlers to `public, max-age=0, must-revalidate` — the hub/title/search routes' own
+  `s-maxage=300, stale-while-revalidate` stands on self-hosted/proxied hosts. The acceptance
+  RAW check accepts both truths and fails only on cache-locking lies.
+- **Acceptance**: the merge gate now carries 46 checks (was 38) — the Netflix pages, the hub
+  rails contract, the anonymous progress contract, sitemap.xml + its robots advertisement, and
+  the cache contract. Selftest AND live both 46/46.

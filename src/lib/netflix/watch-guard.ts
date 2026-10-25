@@ -18,15 +18,16 @@
  */
 import { NextResponse } from "next/server";
 import { rateLimit } from "@/lib/youtube/cache";
+import { netflixViewerId } from "@/lib/netflix/viewer";
 
 export type WatchGateFailure = NextResponse;
 
 export async function watchGate(
   req: Request,
   bucket: string,
-  opts: { limit?: number; windowMs?: number; allowExtension?: boolean } = {},
+  opts: { limit?: number; windowMs?: number; allowExtension?: boolean; requireIdentity?: boolean } = {},
 ): Promise<WatchGateFailure | null> {
-  const { limit = 30, windowMs = 60_000, allowExtension = false } = opts;
+  const { limit = 30, windowMs = 60_000, allowExtension = false, requireIdentity = false } = opts;
 
   if (
     !(await rateLimit(`netflix:watch:${bucket}:${req.headers.get("x-forwarded-for") ?? "local"}`, {
@@ -58,6 +59,20 @@ export async function watchGate(
       { error: "Cross-site requests are not accepted here." },
       { status: 403 },
     );
+  }
+  // P52 — the report's §4 rung 5, implemented: the operator can lock the
+  // PAIRING surfaces (the bridge token + the cookie paste) behind the
+  // signed-in WebFlix identity. Off by default — the pairing lane is the
+  // operator's tool — but a public deployment that wants the B3 full fix
+  // sets NETFLIX_PAIRING_LOCKDOWN and anonymous visitors stop reading the
+  // shared session's pairing token (401, the house auth-gate shape). The
+  // WebFlix Bridge itself is unaffected either way: it posts to the BROKER
+  // with its pairing token, never through these app routes.
+  if (requireIdentity) {
+    const lockdown = /^(1|true|yes)$/i.test(process.env.NETFLIX_PAIRING_LOCKDOWN ?? "");
+    if (lockdown && !(await netflixViewerId(req))) {
+      return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+    }
   }
   return null;
 }

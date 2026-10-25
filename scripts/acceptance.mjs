@@ -8,11 +8,15 @@
  *   bun scripts/acceptance.mjs --selftest     # hermetic dry-run against an in-process mock server
  *
  * Suites:
- *   A. 14 page routes — HTTP 200 + the exact document title;
- *   B. 19 live-data API checks — home rails non-empty, videos?q= (the cutover
+ *   A. 17 page routes — HTTP 200 + the exact document title (the Netflix
+ *      surfaces joined at P52 — the title PAGE check accepts the honest
+ *      "— Netflix — WebFlix" suffix shape, since the mirror title rotates);
+ *   B. 21 live-data API checks — home rails non-empty, videos?q= (the cutover
  *      fix), trending (Now + Music), search (videos + channels), watch meta,
  *      comments, related, shorts, live surface, autocomplete/suggest, channel
- *      tabs (+ in-channel search), live-status shape;
+ *      tabs (+ in-channel search), live-status shape, the Netflix hub rails
+ *      contract (each rail carries titles OR unavailable+reason — the honest
+ *      shape, never fake rows) + the anonymous Continue-Watching contract;
  *   C. 5 honest-degradation checks — personal surfaces WITHOUT a session must
  *      answer the P2-AU auth gate: HTTP 401 {"error":"unauthenticated"} (the
  *      signed-out contract since the auth wave). Dev deployments running
@@ -21,6 +25,9 @@
  *      authenticated session, the check passes only if real rows are present
  *      — an empty payload with loginRequired=false is the fake-data failure
  *      signature and fails.
+ *   D. 3 raw deployment-truth checks (P52) — sitemap.xml is served and
+ *      advertised by robots.txt, the hub read carries its s-maxage cache
+ *      contract.
  *
  * Exit code: 0 iff every check passes. This is the ONLY live-network tool in
  * the repo (bun test never runs it; --selftest binds 127.0.0.1 only).
@@ -62,6 +69,14 @@ const PAGE_CHECKS = [
   // page check therefore accepts the redirect when it lands on that host.
   { path: "/studio", title: "Studio · WebFlix", allowRedirectHost: "studio-webflix.vercel.app" },
   { path: "/upload", title: "Upload · WebFlix" },
+  // P52 — the Netflix surfaces joined the merge gate (S1's discovery work
+  // made them SEO-surfaces; the gate watches them now).
+  { path: "/netflix", title: "Netflix on WebFlix" },
+  { path: "/netflix/search", title: "Search Netflix — WebFlix" },
+  // The title page's <title> carries the ROTATING mirror title — the exact
+  // string can never be pinned. The law that CAN be pinned: the absolute
+  // "— Netflix — WebFlix" suffix (the S1 dedup fix) always rides.
+  { path: "/netflix/t/82023496", titleEndsWith: "— Netflix — WebFlix" },
 ];
 
 /** Live-data API checks — `expect` returns a detail string, throws to fail. */
@@ -141,8 +156,13 @@ const API_CHECKS = [
     name: "search channel results",
     path: "/api/search?q=Rick%20Astley",
     expect: (j) => {
-      if (n(j.channels) === 0) throw new Error("no channel results for Rick Astley");
-      return `channels=${n(j.channels)}`;
+      if (n(j.videos) === 0) throw new Error("no video results for q=Rick Astley");
+      // P52 — the CHANNEL rail rides the walled InnerTube surface (the whole
+      // reason the warmer exists): when the wall bites, the honest answer is
+      // an empty array, not an error. The gate pins the CONTRACT — the array
+      // must exist — and reports the data without failing on the wall.
+      if (!Array.isArray(j.channels)) throw new Error("channels is not an array");
+      return `videos=${n(j.videos)} channels=${n(j.channels)}${n(j.channels) ? "" : " (honest-empty — walled upstream)"}`;
     },
   },
   {
@@ -229,6 +249,84 @@ const API_CHECKS = [
       return `isLive=${j.isLive}`;
     },
   },
+  // P52 — the Netflix surfaces joined the merge gate.
+  {
+    name: "netflix hub rails contract",
+    path: "/api/netflix",
+    expect: (j) => {
+      if (!Array.isArray(j.rails)) throw new Error("rails is not an array");
+      // the real shape: a failed pool DROPS OUT of rails[]; the top-level
+      // unavailable + unavailableReason pair carries the honest degrade —
+      // so every rail here always carries a (possibly empty) titles array,
+      // and a hub with every rail empty MUST say unavailable=true (never
+      // the silent fake-empty signature)
+      if (typeof j.unavailable !== "boolean") throw new Error("top-level unavailable flag missing");
+      for (const rail of j.rails) {
+        if (!Array.isArray(rail.titles)) throw new Error(`rail "${rail.key}" carries no titles array`);
+      }
+      if (j.rails.every((r) => r.titles.length === 0) && j.unavailable !== true) {
+        throw new Error("every rail empty but unavailable=false (the fake-empty signature)");
+      }
+      return `rails=${j.rails.length} titled=${j.rails.filter((r) => r.titles?.length).length} unavailable=${j.unavailable}`;
+    },
+  },
+  {
+    name: "netflix progress anon contract",
+    path: "/api/netflix/progress",
+    expect: (j) => {
+      if (!Array.isArray(j.items)) throw new Error("items is not an array");
+      // anonymous fetch (no cookies) — the honest-empty contract: an empty
+      // array with the netflix-progress source, never a fake row
+      if (j.items.length !== 0) throw new Error(`anon progress carried ${j.items.length} rows (whose?)`);
+      if (j.source !== "netflix-progress") throw new Error(`source=${j.source}`);
+      return "items=0 (honest anonymous)";
+    },
+  },
+];
+
+/**
+ * P52 — raw deployment-truth checks: surfaces the JSON lanes can't pin
+ * (XML documents, response headers). `validate(res, text)` returns a detail
+ * string, throws to fail.
+ */
+const RAW_CHECKS = [
+  {
+    name: "sitemap.xml served (S1)",
+    path: "/sitemap.xml",
+    validate: (res, text) => {
+      if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
+      if (!text.includes("<urlset")) throw new Error("no <urlset> — not a sitemap");
+      const count = (text.match(/<url>/g) ?? []).length;
+      return `xml ${count} urls`;
+    },
+  },
+  {
+    name: "robots.txt advertises the sitemap",
+    path: "/robots.txt",
+    validate: (res, text) => {
+      if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
+      if (!/sitemap:\s*\S+/i.test(text)) throw new Error("no Sitemap: line");
+      return "advertised";
+    },
+  },
+  {
+    name: "hub read cache contract (S4)",
+    path: "/api/netflix",
+    validate: (res) => {
+      if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
+      const cc = (res.headers.get("cache-control") ?? "").toLowerCase();
+      // cache-LOCKING lies always fail (the read is meant to be CDN-cacheable)
+      if (/no-store|no-cache|private/.test(cc)) throw new Error(`cache-control="${cc}" (cache-locked)`);
+      // two deployment truths: the s-maxage=300 + SWR contract the route sets
+      // (self-hosted/dev/CDN proxies), OR Vercel's platform rewrite for
+      // force-dynamic route handlers ("max-age=0, must-revalidate" — the
+      // platform takes over dynamic caching; the route's own header stands
+      // on hosts that don't rewrite). Anything else is unclassified.
+      if (/s-maxage=300/.test(cc)) return cc;
+      if (/max-age=0, must-revalidate/.test(cc)) return `${cc} (vercel platform rewrite)`;
+      throw new Error(`cache-control="${cc}" (unclassified — want s-maxage=300 or the vercel rewrite)`);
+    },
+  },
 ];
 
 /**
@@ -281,6 +379,14 @@ async function runPageCheck(target, check) {
     s.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
       .replace(/&quot;/g, '"').replace(/&#39;/g, "'");
   const title = m ? decode(m[1].trim()) : "(no <title>)";
+  // P52 — the Netflix title PAGE carries the rotating mirror title; checks
+  // that name `titleEndsWith` pin the STABLE suffix law instead.
+  if (check.titleEndsWith) {
+    if (!title.endsWith(check.titleEndsWith)) {
+      throw new Error(`title="${title}" want-suffix="${check.titleEndsWith}"`);
+    }
+    return `title="${title}" endsWith ✓`;
+  }
   if (title !== check.title) throw new Error(`title="${title}" want="${check.title}"`);
   return `title="${title}"`;
 }
@@ -362,6 +468,21 @@ async function runSuite(target) {
     }
   }
 
+  console.log("\nRAW — deployment truth (P52)");
+  for (const check of RAW_CHECKS) {
+    try {
+      const res = await fetchWithTimeout(target + check.path, API_TIMEOUT_MS);
+      const text = await res.text();
+      const detail = check.validate(res, text);
+      results.pass++;
+      printRow(true, check.name, detail);
+    } catch (err) {
+      results.fail++;
+      results.failures.push(`raw ${check.name} (${check.path}): ${err.message}`);
+      printRow(false, check.name, err.message);
+    }
+  }
+
   return results;
 }
 
@@ -393,7 +514,9 @@ function video(id, title) {
 }
 
 function startMockServer() {
-  const titles = new Map(PAGE_CHECKS.map((c) => [c.path.replace(/\?.*$/, ""), c.title]));
+  // P52 — titleEndsWith checks (the rotating Netflix title page) mock their
+  // stable suffix; the suffix trivially endsWith itself.
+  const titles = new Map(PAGE_CHECKS.map((c) => [c.path.replace(/\?.*$/, ""), c.title ?? c.titleEndsWith]));
   const channels = [
     {
       id: "UCuAXFkgcl1yQ0yQ0yQ0yQ0y",
@@ -546,6 +669,48 @@ function startMockServer() {
     }
     if (path === "/api/liked") {
       return send(401, JSON.stringify({ error: "unauthenticated" }), "application/json");
+    }
+    // P52 — the Netflix surfaces the gate now watches (the REAL DTO shape:
+    // a failed pool drops OUT of rails[]; the top-level flag says why).
+    if (path === "/api/netflix") {
+      res.writeHead(200, {
+        "Content-Type": "application/json",
+        "Cache-Control": "s-maxage=300, stale-while-revalidate=86400",
+      });
+      return res.end(
+        JSON.stringify({
+          rails: [
+            {
+              key: "weekly-films",
+              label: "Top 10 Movies This Week",
+              kind: "movie",
+              country: "Global",
+              ranking: "weekly",
+              weekEndDate: null,
+              titles: [video("nf1", "Doing Life")],
+              source: "live",
+            },
+          ],
+          catalogSize: 1,
+          source: "live",
+          unavailable: false,
+          unavailableReason: null,
+          fetchedAt: "2026-10-26T00:00:00.000Z",
+        }),
+      );
+    }
+    if (path === "/api/netflix/progress") {
+      return json({ items: [], source: "netflix-progress" });
+    }
+    if (path === "/sitemap.xml") {
+      return send(
+        200,
+        `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>http://127.0.0.1/</loc></url><url><loc>http://127.0.0.1/netflix</loc></url></urlset>`,
+        "application/xml",
+      );
+    }
+    if (path === "/robots.txt") {
+      return send(200, "User-agent: *\nAllow: /\nSitemap: http://127.0.0.1/sitemap.xml\n", "text/plain");
     }
     return json({ error: "mock miss", path });
   });

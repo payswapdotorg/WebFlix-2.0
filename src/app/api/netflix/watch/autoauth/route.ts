@@ -14,8 +14,11 @@ const BROKER = netflixBrokerEndpoint;
 
 export async function GET(request: Request) {
   // P51-AUDIT (B3): the pairing surface is the operator's tool — readable
-  // (the watch lane renders it) but no longer unthrottled
-  const gate = await watchGate(request, "autoauth:get", { limit: 60 });
+  // (the watch lane renders it) but no longer unthrottled. P52: under
+  // NETFLIX_PAIRING_LOCKDOWN the token is identity-gated (signed-in viewers
+  // only) — the anonymous visitor gets the house 401 instead of the shared
+  // session's pairing token.
+  const gate = await watchGate(request, "autoauth:get", { limit: 60, requireIdentity: true });
   if (gate) return gate;
   try {
     const res = await fetch(BROKER("/ingest/token"), { signal: AbortSignal.timeout(5_000) });
@@ -30,8 +33,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  // P51-AUDIT (B3): token rotation is privileged — same-origin + throttled
-  const gate = await watchGate(request, "autoauth:rotate", { limit: 10 });
+  // P51-AUDIT (B3): token rotation is privileged — same-origin + throttled.
+  // P52: identity-gated under the lockdown rung (see GET).
+  const gate = await watchGate(request, "autoauth:rotate", { limit: 10, requireIdentity: true });
   if (gate) return gate;
   let action: string | null = null;
   try {

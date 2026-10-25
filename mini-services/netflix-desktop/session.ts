@@ -15,6 +15,7 @@ import { CDP_RELAY_PY } from "./cdp-relay";
 import { harvestNetflixSession, hasAuthCookies, type NetflixCookie } from "./cookies";
 import { buildEgressPlan, egressBootstrap } from "./egress";
 import { readBridgeCandidate, clearBridgeCandidate, type BridgeCandidate } from "./ingest";
+import { createSerialQueue } from "./mutex";
 
 const SBX_TIMEOUT_MS = 30 * 60 * 1000;
 const IDLE_TTL_MS = 25 * 60 * 1000;
@@ -106,6 +107,12 @@ export class NetflixSessionManager {
   private lastWatchAt = 0;
   private lastHarvestFailedAt = 0;
   private ensurePromise: Promise<Sandbox> | null = null;
+  /**
+   * P52 (P51-AUDIT A3, broker side): bootstraps and teardowns share one
+   * serial queue — a restart's destroy() can no longer race a re-kick's
+   * ensure() into adopting a dying sandbox or nulling a fresh one.
+   */
+  private work = createSerialQueue();
   private keepalive: ReturnType<typeof setInterval> | null = null;
   audioRunning = false;
   onAudioChunk: ((chunk: Buffer) => void) | null = null;
@@ -160,24 +167,31 @@ export class NetflixSessionManager {
     }
   }
 
-  /** Ensure a fully-bootstrapped, Netflix-signed-in sandbox exists. */
+  /**
+   * Ensure a fully-bootstrapped, Netflix-signed-in sandbox exists.
+   * P52 (A3): the whole decision runs on the serial queue — an in-flight
+   * teardown (restart / idle TTL / lifetime cap) fully finishes before this
+   * reads state or bootstraps, so it can never adopt a dying sandbox.
+   */
   async ensure(): Promise<Sandbox> {
-    // reuse a live desktop that is up or mid-bootstrap/auth — only a hard error
-    // (or a dead sandbox) justifies building a new one
-    if (this.desktop) {
-      if (this.phase === "ready" || this.phase === "auth-required") {
-        this.lastActivity = Date.now();
-        return this.desktop;
+    return this.work.run(async (): Promise<Sandbox> => {
+      // reuse a live desktop that is up or mid-bootstrap/auth — only a hard error
+      // (or a dead sandbox) justifies building a new one
+      if (this.desktop) {
+        if (this.phase === "ready" || this.phase === "auth-required") {
+          this.lastActivity = Date.now();
+          return this.desktop;
+        }
+        if (this.phase === "provisioning" || this.phase === "stream-ready" || this.phase === "restoring-session") {
+          if (this.ensurePromise) return this.ensurePromise;
+        }
       }
-      if (this.phase === "provisioning" || this.phase === "stream-ready" || this.phase === "restoring-session") {
-        if (this.ensurePromise) return this.ensurePromise;
-      }
-    }
-    if (this.ensurePromise) return this.ensurePromise;
-    this.ensurePromise = this.bootstrap().finally(() => {
-      this.ensurePromise = null;
+      if (this.ensurePromise) return this.ensurePromise;
+      this.ensurePromise = this.bootstrap().finally(() => {
+        this.ensurePromise = null;
+      });
+      return this.ensurePromise;
     });
-    return this.ensurePromise;
   }
 
   private async bootstrap(): Promise<Sandbox> {
@@ -642,18 +656,25 @@ export class NetflixSessionManager {
     if (this.phase !== "idle") this.setPhase("idle", "session ended");
   }
 
-  async destroy() {
-    await this.stopAudio();
-    try {
-      await this.desktop?.kill();
-    } catch {
-      /* noop */
-    }
-    this.resetLocal();
-    if (this.keepalive) {
-      clearInterval(this.keepalive);
-      this.keepalive = null;
-    }
+  /**
+   * P52 (A3): every teardown — the restart route, the idle TTL, the lifetime
+   * cap — funnels through the serial queue. The full kill + resetLocal()
+   * completes before the next bootstrap starts; two teardowns never interleave.
+   */
+  async destroy(): Promise<void> {
+    return this.work.run(async () => {
+      await this.stopAudio();
+      try {
+        await this.desktop?.kill();
+      } catch {
+        /* noop */
+      }
+      this.resetLocal();
+      if (this.keepalive) {
+        clearInterval(this.keepalive);
+        this.keepalive = null;
+      }
+    });
   }
 
   /** Demand a fresh automatic harvest (clears cache first). */
