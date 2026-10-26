@@ -242,3 +242,35 @@ stays client-fetched from `/api/*`, which keep `force-dynamic` by law.
 - **Acceptance**: the merge gate now carries 46 checks (was 38) — the Netflix pages, the hub
   rails contract, the anonymous progress contract, sitemap.xml + its robots advertisement, and
   the cache contract. Selftest AND live both 46/46.
+
+## 2026-10-26 — the YT_COOKIES rotation protocol + identity probe
+
+- Directive context: the operator supplied the Google account for the
+  operator session (`payswaporg@gmail.com`) — i.e. the next harvest must
+  carry THAT identity. The live set (updated 2026-10-16) was probed and
+  resolves to **`yaslencatty@gmail.com`** (alive, HTTP 200 on authed
+  InnerTube) — a valid session, but NOT the directed identity. Rotation is
+  pending the operator's own browser.
+- **The station cannot perform the login**: measured 2026-10-26 — Google's
+  sign-in answers the automated browser with "Couldn't sign you in — This
+  browser or app may not be secure" (the automation-fingerprint block;
+  reached the password-step entry with the submitted identifier, then the
+  wall). The harvest is an operator-browser step, same as both prior
+  harvests (2026-10-05, 2026-10-16).
+- **Rotation protocol** (operator, ~2 minutes):
+  1. In YOUR browser, sign in to youtube.com as `payswaporg@gmail.com`.
+  2. Open DevTools → Network → any `youtubei` request → Request Headers →
+     copy the full `Cookie:` header value (must contain at least `SID`,
+     `SAPISID`, `LOGIN_INFO`, `__Secure-1PSID`).
+  3. Send the cookie string to the station (never commit it). The station
+     verifies identity, sets `YT_COOKIES` on the vault + Vercel Production,
+     and loads the same set into the broker's CDP profile if that surface
+     needs the same identity.
+- **Identity probe** (station-side, zero secret output):
+  `bun scripts/ops/yt-session-identity.ts --file <cookie-file>` — answers
+  HTTP status + the account email/name YouTube itself returns. Run it
+  before AND after every rotation; the "before" is the honest record of
+  whose session prod is wearing.
+- Both prior harvests' identity was never recorded at harvest time; from
+  this date the probe output is the record (measured: 2026-10-16 set ==
+  `yaslencatty@gmail.com`).
