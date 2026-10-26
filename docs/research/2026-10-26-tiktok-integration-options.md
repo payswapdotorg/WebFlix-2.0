@@ -168,4 +168,5 @@ whole domain from this IP. Two consequences, one per lane:
 
 ## Corrections
 
-- (none yet — P58 fresh record)
+- **P58 post-deploy measurement (2026-10-26)**: the §1 egress reality extends to PRODUCTION — TikTok's keyless oEmbed endpoint is datacenter-gated on Vercel's AWS egress too (the deployed `/api/tiktok/video/<id>` answers the honest unavailable DTO; the pages, the embed lane, and the YouTube/Netflix regressions all answer 200). The metadata lane's production paths are therefore the operator-gated ones documented in §5 (an Apify harvest through the broker riding the account's residential proxy group, or Data API v2 if a developer app is registered) — until one lands, the hub runs the honest metadata-less cards while the Embed Player (viewer-side) keeps playing. This is the designed degradation, exercised live end-to-end, not a regression.
+- The report's §3.3 seed stands: the single docs-example post keeps the hub honest (one real embed, zero guessed ids) until the operator curates `TIKTOK_CURATED_IDS`.

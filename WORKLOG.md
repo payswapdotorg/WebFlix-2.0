@@ -1346,3 +1346,16 @@ Stage Summary:
 - Gates: tsc clean; eslint 0 errors (1 pre-existing warning); FULL battery 2384/0 across 10 suites (test:tiktok 47/0 registered in the chain — urls law ×13, library/oEmbed ×12, routes ×7, 502 ladder ×2, UI ×10, laws ×6... totals incl. all fixes).
 - The lane ships honest-degrade-first: this station's walled egress exercises the exact path production falls back to; the post-deploy step verifies the keyless oEmbed answer from production egress (the embed lane was already proven immune).
 - Operator rungs: set TIKTOK_CURATED_IDS to curate the shelf (no deploy needed); optional TMDB/Apify/Data-API lanes documented in the research record §5.
+
+---
+Task ID: P58-POST-DEPLOY
+Agent: Z.ai Code (webflix-2.0 lane)
+Task: verify the TikTok lane on production after the auto-deploy of 0aa8862.
+
+Work Log:
+- Deploy READY (Vercel, 0aa8862). PROD pages: /tiktok 200, /tiktok/v/6718335390845095173 200; regressions / 200, /netflix 200.
+- THE §5 VERIFICATION ANSWERED: TikTok's keyless oEmbed is DATACENTER-GATED on Vercel's AWS egress too — /api/tiktok/video/<id> answers the honest unavailable DTO (and the tt:* cache then serves it for the soft TTL, re-probing at 6h). The designed degrade exercised live end-to-end.
+- Research record §Corrections updated with the measurement: the metadata lane's production paths are the operator-gated ones (Apify harvest on the account's residential proxy group, or Data API v2 with a registered app); until then the hub runs honest metadata-less cards while the viewer-side Embed Player keeps playing — the core user value (in-app playback) never depended on the metadata lane.
+
+Stage Summary:
+- Production truth: embed lane LIVE (official player URL, attribution params, honest error surface); metadata lane honestly degraded on datacenter egress by TikTok's own gating; zero impact on any YouTube/Netflix surface.
