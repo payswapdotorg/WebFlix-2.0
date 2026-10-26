@@ -397,8 +397,8 @@ model NetflixTitle {
   weeklyRank     Int?
   allTimeRank    Int?
   weeksInTop10   Int?
-  weeklyHoursViewed Int?
-  weeklyViews    Int?
+  weeklyHoursViewed BigInt?
+  weeklyViews    BigInt?
   // YYYY-MM-DD (weekly pools); null = all-time
   weekEndDate    String?
   pool           String?

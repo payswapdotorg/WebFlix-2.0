@@ -16,6 +16,7 @@ import { cachedResilient, type ResilientOptions } from "@/lib/youtube/upstash-ca
 import { db } from "@/lib/db";
 import { netflixUpstreamFetch } from "./upstream";
 import { netflixTitleUrl, netflixWatchUrl } from "./deeplink";
+import { toBig } from "./bigint";
 import type {
   NetflixPoolKey,
   NetflixTitleDTO,
@@ -476,8 +477,8 @@ async function mirrorTitles(titles: NetflixTitleDTO[]): Promise<void> {
           weeklyRank: t.weeklyRank,
           allTimeRank: t.allTimeRank,
           weeksInTop10: t.weeksInTop10,
-          weeklyHoursViewed: t.weeklyHoursViewed,
-          weeklyViews: t.weeklyViews,
+          weeklyHoursViewed: toBig(t.weeklyHoursViewed),
+          weeklyViews: toBig(t.weeklyViews),
           weekEndDate: t.weekEndDate,
           pool: t.pool,
           isPlayable: t.isPlayable,
@@ -494,8 +495,8 @@ async function mirrorTitles(titles: NetflixTitleDTO[]): Promise<void> {
           weeklyRank: t.weeklyRank,
           allTimeRank: t.allTimeRank,
           weeksInTop10: t.weeksInTop10,
-          weeklyHoursViewed: t.weeklyHoursViewed,
-          weeklyViews: t.weeklyViews,
+          weeklyHoursViewed: toBig(t.weeklyHoursViewed),
+          weeklyViews: toBig(t.weeklyViews),
           weekEndDate: t.weekEndDate,
           pool: t.pool,
           isPlayable: t.isPlayable,

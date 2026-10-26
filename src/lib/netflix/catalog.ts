@@ -8,6 +8,7 @@
  */
 import { db } from "@/lib/db";
 import { netflixTitleUrl, netflixWatchUrl } from "./deeplink";
+import { fromBig } from "./bigint";
 import { ALL_POOL_KEYS, POOLS, getTop10Pool, type ParsedPool } from "./top10";
 import type {
   NetflixCountryRank,
@@ -100,7 +101,11 @@ async function unionCatalog(byKey?: Map<NetflixPoolKey, ParsedPool | null>): Pro
   return [...byId.values()];
 }
 
-/** Mirror row → DTO (the Prisma fallback path; ranks may be stale by design). */
+/**
+ * Mirror row → DTO (the Prisma fallback path; ranks may be stale by design).
+ * P55-LAW: the stat columns are BigInt in the schemas — this seam converts
+ * back to the DTO's `number` contract (every value is exact below 2^53).
+ */
 export function mirrorRowToDTO(row: {
   netflixId: number;
   title: string;
@@ -114,8 +119,8 @@ export function mirrorRowToDTO(row: {
   weeklyRank: number | null;
   allTimeRank: number | null;
   weeksInTop10: number | null;
-  weeklyHoursViewed: number | null;
-  weeklyViews: number | null;
+  weeklyHoursViewed: bigint | number | null;
+  weeklyViews: bigint | number | null;
   weekEndDate: string | null;
   pool: string | null;
   isPlayable: boolean;
@@ -142,8 +147,8 @@ export function mirrorRowToDTO(row: {
     weeklyRank: row.weeklyRank,
     allTimeRank: row.allTimeRank,
     weeksInTop10: row.weeksInTop10,
-    weeklyHoursViewed: row.weeklyHoursViewed,
-    weeklyViews: row.weeklyViews,
+    weeklyHoursViewed: fromBig(row.weeklyHoursViewed),
+    weeklyViews: fromBig(row.weeklyViews),
     countryRanks,
     weekEndDate: row.weekEndDate,
     pool: (row.pool as NetflixTitleDTO["pool"]) ?? null,
@@ -225,6 +230,16 @@ export async function getNetflixTitlePage(
  * law as searchNetflixCatalog, but a small, cheap, DTO-light shape (the
  * suggest dropdown renders a title + badge, not a rail). Returns [] on any
  * mirror trouble — the suggest lane never blocks on Netflix.
+ *
+ * P55-LAW (case): NO SQL `contains` pre-filter — Prisma's `contains` is
+ * case-insensitive on SQLite but case-sensitive on Postgres, so a lowercased
+ * needle answered [] for every mixed-case title in prod. The bounded mirror
+ * is fetched whole and all matching happens in the JS scorer (mixed-case
+ * safe on every engine).
+ *
+ * P55-LAW (gate): the rank bonus ranks WITHIN text matches only — with the
+ * SQL pre-filter gone, a raw `score > 0` gate would let a merely-popular
+ * non-match (weeklyRank bonus alone) sail through and crowd real matches.
  */
 export type { NetflixCatalogSuggestion } from "./types";
 
@@ -237,30 +252,24 @@ export async function suggestNetflixTitles(
   const needle = query.toLowerCase();
   const tokens = needle.split(/\s+/).filter(Boolean).slice(0, 6);
   try {
-    const rows = await db.netflixTitle.findMany({
-      where: {
-        OR: [
-          { title: { contains: needle } },
-          ...tokens.map((t) => ({ title: { contains: t } })),
-        ],
-      },
-      take: 100,
-    });
+    const rows = await db.netflixTitle.findMany({ take: 1000 });
     return rows
       .map(mirrorRowToDTO)
       .map((t) => {
         const titleLower = t.title.toLowerCase();
-        let score = 0;
-        if (titleLower === needle) score += 100;
-        if (titleLower.startsWith(needle)) score += 50;
-        if (titleLower.includes(needle)) score += 25;
-        for (const tok of tokens) if (titleLower.includes(tok)) score += 5;
-        // currently-ranking titles answer first (the hub's live truth)
-        if (t.weeklyRank !== null) score += 10;
-        if (t.allTimeRank !== null) score += 5;
+        let text = 0;
+        if (titleLower === needle) text += 100;
+        if (titleLower.startsWith(needle)) text += 50;
+        if (titleLower.includes(needle)) text += 25;
+        for (const tok of tokens) if (titleLower.includes(tok)) text += 5;
+        // The text gate owns match truth — no text hit, no answer, ever.
+        if (text === 0) return null;
+        // currently-ranking titles answer first (the hub's live truth) —
+        // a tie-breaker inside the matches, never a substitute for one
+        const score = text + (t.weeklyRank !== null ? 10 : 0) + (t.allTimeRank !== null ? 5 : 0);
         return { t, score };
       })
-      .filter((s) => s.score > 0)
+      .filter((s): s is { t: NetflixTitleDTO; score: number } => s !== null)
       .sort((a, b) => b.score - a.score || a.t.title.localeCompare(b.t.title))
       .slice(0, cap)
       .map((s) => ({
@@ -269,7 +278,10 @@ export async function suggestNetflixTitles(
         releaseYear: s.t.releaseYear,
         kind: s.t.kind,
       }));
-  } catch {
+  } catch (err) {
+    // F3-LAW: never eat an error silently — the suggest lane degrades to []
+    // but the station log keeps the receipt.
+    console.error("suggestNetflixTitles failed", err);
     return [];
   }
 }
@@ -278,6 +290,12 @@ export async function suggestNetflixTitles(
  * Catalog search over the Prisma mirror (the search index the pools feed on
  * every refresh). Honest scope note: this is Netflix's own Top-10 universe,
  * not the full catalog (research record §5).
+ *
+ * P55-LAW (case): NO SQL `contains` pre-filter — Prisma's `contains` is
+ * case-insensitive on SQLite but case-sensitive on Postgres, so prod
+ * answered `catalogSize: 79` with `titles: []` for EVERY query. The
+ * bounded mirror is fetched whole (take: 1000 — the Top-10 union) and all
+ * matching happens in the JS scorer, mixed-case safe on every engine.
  */
 export async function searchNetflixCatalog(
   q: string,
@@ -290,20 +308,7 @@ export async function searchNetflixCatalog(
   const needle = query.toLowerCase();
   const tokens = needle.split(/\s+/).filter(Boolean).slice(0, 6);
   try {
-    // P51-AUDIT (F4): the candidate window used to close at 40 rows in
-    // rowid order — a common token could crowd the best match out BEFORE
-    // scoring ran. The mirror is bounded (the Top-10 union), so a wide
-    // window is cheap; scoring + the 20-cap still own the final answer.
-    const rows = await db.netflixTitle.findMany({
-      where: {
-        OR: [
-          { title: { contains: needle } },
-          ...tokens.map((t) => ({ title: { contains: t } })),
-          { synopsis: { contains: needle } },
-        ],
-      },
-      take: 200,
-    });
+    const rows = await db.netflixTitle.findMany({ take: 1000 });
     const scored = rows
       .map(mirrorRowToDTO)
       // P51-AUDIT (S2): the kind filter runs BEFORE the cap — the old
@@ -312,15 +317,18 @@ export async function searchNetflixCatalog(
       .filter((t) => (kind ? t.kind === kind : true))
       .map((t) => {
         const titleLower = t.title.toLowerCase();
-        let score = 0;
-        if (titleLower === needle) score += 100;
-        if (titleLower.startsWith(needle)) score += 50;
-        if (titleLower.includes(needle)) score += 25;
-        for (const tok of tokens) if (titleLower.includes(tok)) score += 5;
-        if (t.synopsis.toLowerCase().includes(needle)) score += 2;
-        return { t, score };
+        let text = 0;
+        if (titleLower === needle) text += 100;
+        if (titleLower.startsWith(needle)) text += 50;
+        if (titleLower.includes(needle)) text += 25;
+        for (const tok of tokens) if (titleLower.includes(tok)) text += 5;
+        if (t.synopsis.toLowerCase().includes(needle)) text += 2;
+        // The text gate owns match truth — a synopsis-only hit is a hit,
+        // a merely-popular row is not.
+        if (text === 0) return null;
+        return { t, score: text };
       })
-      .filter((s) => s.score > 0)
+      .filter((s): s is { t: NetflixTitleDTO; score: number } => s !== null)
       .sort((a, b) => b.score - a.score || a.t.title.localeCompare(b.t.title))
       .slice(0, 20)
       .map((s) => s.t);
@@ -331,7 +339,11 @@ export async function searchNetflixCatalog(
       source: "netflix-catalog",
       note: "Searching Netflix's official Top 10 & Most Popular universe — the catalog Netflix itself publishes for tracking.",
     };
-  } catch {
+  } catch (err) {
+    // F3-LAW: never eat an error silently — the honest empty shape stands,
+    // but the station log keeps the receipt (the silent empty catch is how
+    // the stat-ceiling bug hid through two deploys).
+    console.error("searchNetflixCatalog failed", err);
     return {
       q,
       titles: [],

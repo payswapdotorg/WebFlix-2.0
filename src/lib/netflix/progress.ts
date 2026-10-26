@@ -13,6 +13,7 @@
  * is NO percent-watched here and the UI never fakes a progress bar.
  */
 import { db } from "@/lib/db";
+import { toBig } from "@/lib/netflix/bigint";
 import { mirrorRowToDTO } from "./catalog";
 import { getNetflixTitle } from "./catalog";
 import type { NetflixTitleDTO } from "./types";
@@ -52,8 +53,8 @@ export async function recordWatch(userId: string, netflixId: number): Promise<vo
       weeklyRank: title.weeklyRank,
       allTimeRank: title.allTimeRank,
       weeksInTop10: title.weeksInTop10,
-      weeklyHoursViewed: title.weeklyHoursViewed,
-      weeklyViews: title.weeklyViews,
+      weeklyHoursViewed: toBig(title.weeklyHoursViewed),
+      weeklyViews: toBig(title.weeklyViews),
       weekEndDate: title.weekEndDate,
       pool: title.pool,
       isPlayable: title.isPlayable,

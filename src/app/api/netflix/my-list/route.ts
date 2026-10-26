@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { toBig } from "@/lib/netflix/bigint";
 import { db } from "@/lib/db";
 import { mirrorRowToDTO, getNetflixTitle } from "@/lib/netflix/catalog";
 import { rateLimit } from "@/lib/youtube/cache";
@@ -80,8 +81,8 @@ export async function POST(req: Request) {
         weeklyRank: title.weeklyRank,
         allTimeRank: title.allTimeRank,
         weeksInTop10: title.weeksInTop10,
-        weeklyHoursViewed: title.weeklyHoursViewed,
-        weeklyViews: title.weeklyViews,
+        weeklyHoursViewed: toBig(title.weeklyHoursViewed),
+        weeklyViews: toBig(title.weeklyViews),
         weekEndDate: title.weekEndDate,
         pool: title.pool,
         isPlayable: title.isPlayable,

@@ -28,7 +28,7 @@
     "test:community": "DATABASE_URL=file:../db/boot-test.db bun test --isolate tests/community-posts.test.ts",
     "test:notifications": "DATABASE_URL=file:../db/boot-test.db bun test --isolate tests/notifications-center.test.ts tests/notifications-prefs.test.tsx",
     "test:p36": "DATABASE_URL=file:../db/p36-test.db bun test --isolate tests/p36-official-actions.test.ts tests/p36-oauth.test.ts tests/p36-isolation.test.ts tests/p36-oauth-routes.test.ts",
-    "test:netflix": "DATABASE_URL=file:../db/watch-test.db prisma db push --accept-data-loss --skip-generate && DATABASE_URL=file:../db/watch-test.db bun prisma/seed-watch.ts && DATABASE_URL=file:../db/watch-test.db bun test --isolate tests/netflix-top10.test.ts tests/netflix-schema-parity.test.ts tests/netflix-routes.test.ts tests/netflix-progress.test.ts tests/netflix-broker-seam.test.ts tests/netflix-broker-mutex.test.ts tests/netflix-ui.test.tsx tests/netflix-search-page.test.tsx tests/netflix-watch-routes.test.ts tests/netflix-watch-ui.test.tsx tests/netflix-autoauth.test.ts"
+    "test:netflix": "DATABASE_URL=file:../db/watch-test.db prisma db push --accept-data-loss --skip-generate && DATABASE_URL=file:../db/watch-test.db bun prisma/seed-watch.ts && DATABASE_URL=file:../db/watch-test.db bun test --isolate tests/netflix-top10.test.ts tests/netflix-schema-parity.test.ts tests/netflix-routes.test.ts tests/netflix-progress.test.ts tests/netflix-broker-seam.test.ts tests/netflix-broker-mutex.test.ts tests/netflix-ui.test.tsx tests/netflix-search-page.test.tsx tests/netflix-watch-routes.test.ts tests/netflix-watch-ui.test.tsx tests/netflix-autoauth.test.ts tests/netflix-search-laws.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "6.3.1",
