@@ -16,6 +16,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticRoutes: MetadataRoute.Sitemap = [
     { url: `${base}/`, changeFrequency: "daily", priority: 1 },
     { url: `${base}/netflix`, changeFrequency: "daily", priority: 0.9 },
+    // P58 — the TikTok hub rides the static surfaces (the curated shelf;
+    // per-post pages are not SEO-valuable until the universe grows).
+    { url: `${base}/tiktok`, changeFrequency: "daily", priority: 0.7 },
     { url: `${base}/help`, changeFrequency: "monthly", priority: 0.3 },
   ];
   try {

@@ -57,6 +57,9 @@ const MAIN_NAV: NavItem[] = [
   // P42-NETFLIX-SOURCE — the second source's hub (ADR 0002): Netflix's own
   // Top 10 data browsed natively; playback hands off to Netflix's player.
   { href: "/netflix", label: "Netflix", icon: TvMinimalPlay },
+  // P58-TIKTOK-SOURCE — the third source's hub (ADR 0004): the curated shelf
+  // played through TikTok's own official embed player.
+  { href: "/tiktok", label: "TikTok", icon: Clapperboard },
 ];
 
 /**

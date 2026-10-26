@@ -1,0 +1,18 @@
+{
+  "_provenance": "P58-TIKTOK-SOURCE fixture. Shape = the official docs example response (developers.tiktok.com/doc/embed-videos, captured live from this station 2026-10-26, HTTP 200) + the enrichment fields real-world oEmbed responses carry (title/author/thumbnail per the oEmbed.com spec TikTok follows). The lane law: tests run NO network — this file stands in for the keyless endpoint; the parser treats everything beyond embed_product_id as optional.",
+  "version": "1.0",
+  "type": "video",
+  "title": "Baby cat being cute on the couch",
+  "author_url": "https://www.tiktok.com/@scout2015",
+  "author_name": "scout2015",
+  "width": 325,
+  "height": 578,
+  "html": "<iframe height=\"578\" width=\"325\" src=\"https://www.tiktok.com/player/v1/6718335390845095173?embed_from=oembed&music_info=1&description=1&autoplay=1&muted=1\" frameborder=\"0\" allow=\"accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share\" allowfullscreen loading=\"lazy\"></iframe>",
+  "thumbnail_url": "https://p19-sign-va.tiktokcdn-us.com/example-cover~c_5x5.jpeg",
+  "thumbnail_width": 576,
+  "thumbnail_height": 1024,
+  "provider_url": "https://www.tiktok.com",
+  "provider_name": "TikTok",
+  "embed_product_id": "6718335390845095173",
+  "embed_type": "video"
+}

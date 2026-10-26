@@ -588,18 +588,22 @@ describe("SidebarNav + SidebarRail — the You section at youtube.com's guide pa
   // P42-NETFLIX-SOURCE deviation (ADR 0002 §6, deliberate): the second
   // source's hub rides the main rung AFTER Subscriptions — youtube-parity
   // PLUS the Netflix destination, never replacing a youtube row.
-  test("the guide ladder at the pack's order: Home, Shorts, Subscriptions, Netflix(P42), You(→ /you) — Trending never rides the main rung", async () => {
+  // P58-TIKTOK-SOURCE deviation (ADR 0004, same class): the third source's
+  // hub rides right after Netflix.
+  test("the guide ladder at the pack's order: Home, Shorts, Subscriptions, Netflix(P42), TikTok(P58), You(→ /you) — Trending never rides the main rung", async () => {
     serveMe(null);
     await render(<SidebarNav onNavigate={() => {}} />);
     await act(async () => {});
     const links = all("nav a");
     const labels = links.map((a) => (a.textContent ?? "").trim());
-    // the main rung: exactly Home, Shorts, Subscriptions, Netflix (the pack's
-    // ladder + the P42 second-source row; Trending stays in Explore —
+    // the main rung: exactly Home, Shorts, Subscriptions, Netflix, TikTok
+    // (the pack's ladder + the two source rows; Trending stays in Explore —
     // youtube.com's own placement)
-    expect(labels.slice(0, 5)).toEqual(["Home", "Shorts", "Subscriptions", "Netflix", "You"]);
+    expect(labels.slice(0, 6)).toEqual(["Home", "Shorts", "Subscriptions", "Netflix", "TikTok", "You"]);
     const netflixRow = links.find((a) => (a.textContent ?? "").trim() === "Netflix");
     expect(netflixRow?.getAttribute("href")).toBe("/netflix");
+    const tiktokRow = links.find((a) => (a.textContent ?? "").trim() === "TikTok");
+    expect(tiktokRow?.getAttribute("href")).toBe("/tiktok");
     const youRow = links.find((a) => (a.textContent ?? "").trim() === "You");
     expect(youRow?.getAttribute("href")).toBe("/you");
     // the You family follows directly (the pack: You, History, Playlists, …)
@@ -621,8 +625,9 @@ describe("SidebarNav + SidebarRail — the You section at youtube.com's guide pa
     await act(async () => {});
     const links = all("nav a");
     const labels = links.map((a) => (a.textContent ?? "").trim());
-    // P42: the collapsed rail mirrors the extended main rung (Netflix rides)
-    expect(labels.slice(0, 5)).toEqual(["Home", "Shorts", "Subscriptions", "Netflix", "You"]);
+    // P42+P58: the collapsed rail mirrors the extended main rung (Netflix and
+    // TikTok both ride)
+    expect(labels.slice(0, 6)).toEqual(["Home", "Shorts", "Subscriptions", "Netflix", "TikTok", "You"]);
     const youRow = links.find((a) => (a.textContent ?? "").trim() === "You");
     expect(youRow?.getAttribute("href")).toBe("/you");
     expect(labels).toContain("Your videos");

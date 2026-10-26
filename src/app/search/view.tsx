@@ -12,6 +12,7 @@ import { useHoverPreview } from "@/components/video/video-hover-preview";
 import { ChannelResultCard } from "@/components/search/channel-result-card";
 import { PlaylistResultCard } from "@/components/search/playlist-result-card";
 import { NetflixSearchShelf } from "@/components/search/netflix-search-shelf";
+import { TikTokSearchShelf } from "@/components/search/tiktok-search-shelf";
 import {
   filtersFromParams,
   hasActiveFilters,
@@ -301,6 +302,11 @@ function SearchContent() {
               same query over Netflix's own Top 10 catalog; renders only when
               the mirror answers with real titles (the honest absence). */}
           <NetflixSearchShelf q={q} />
+
+          {/* P58 — the TikTok shelf (additive, third-source lane): rides the
+              same query over the curated library; renders only when the
+              library answers with real matches (the honest absence). */}
+          <TikTokSearchShelf q={q} />
 
           {/* P23-B (G3) — the AI answer card, ABOVE the results grid. Fires
               only for conversational queries (the heuristic); stays hidden
