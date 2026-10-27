@@ -47,6 +47,15 @@ describe("POST /api/tiktok/player-events", () => {
     expect(await getDeadPost(ID)).toBeNull();
   });
 
+  test("the READINESS_TIMEOUT shape (code:null) answers recorded:null, never 400", async () => {
+    const { POST } = await import("@/app/api/tiktok/player-events/route");
+    const res = await POST(post({ postId: ID, code: null, type: "READINESS_TIMEOUT" }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ recorded: null });
+    const { getDeadPost } = await import("@/lib/tiktok/dead");
+    expect(await getDeadPost(ID)).toBeNull();
+  });
+
   test("a non-post-id answers 400 without touching the ledger", async () => {
     const { POST } = await import("@/app/api/tiktok/player-events/route");
     const res = await POST(post({ postId: "bogus", code: 1001, type: "INVALID_VIDEO" }));

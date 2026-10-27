@@ -36,11 +36,19 @@ export async function POST(req: Request) {
     }
     const b = body as { postId?: unknown; code?: unknown; type?: unknown };
     const postId = typeof b.postId === "string" ? b.postId : "";
-    const code = typeof b.code === "number" ? b.code : Number.NaN;
-    if (!isTikTokPostId(postId) || !Number.isInteger(code)) {
+    // code: null is the P59-R4 READINESS_TIMEOUT shape — a legal, non-lethal
+    // report that must answer { recorded: null }, not 400.
+    const codeIsInt = typeof b.code === "number" && Number.isInteger(b.code);
+    const codeIsNull = b.code === null;
+    if (!isTikTokPostId(postId) || (!codeIsInt && !codeIsNull)) {
       return NextResponse.json({ error: "Invalid player event" }, { status: 400 });
     }
-    const result = await recordDeadPost(postId, code, typeof b.type === "string" ? b.type : "");
+    if (codeIsNull) {
+      return NextResponse.json({ recorded: null }, {
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
+    const result = await recordDeadPost(postId, b.code as number, typeof b.type === "string" ? b.type : "");
     return NextResponse.json(result, {
       headers: { "Cache-Control": "no-store" },
     });
