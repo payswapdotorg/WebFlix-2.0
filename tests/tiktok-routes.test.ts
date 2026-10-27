@@ -32,7 +32,7 @@ describe("GET /api/tiktok/rail", () => {
     const res = await GET(new Request("http://localhost:3000/api/tiktok/rail"));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.universeSize).toBe(1);
+    expect(body.universeSize).toBe(17);
     expect(body.videos[0].postId).toBe(DOCS_ID);
     expect(res.headers.get("Cache-Control")).toContain("s-maxage=300");
   });
@@ -60,7 +60,7 @@ describe("GET /api/tiktok/video/[id]", () => {
     expect(res.status).toBe(400);
   });
 
-  test("a walled oEmbed answers 200 with the honest unavailable DTO (the embed lane is viewer-side)", async () => {
+  test("a walled oEmbed answers 200 with the cited fallback DTO (the embed lane is viewer-side)", async () => {
     setTikTokUpstream(() => Promise.resolve(new Response("walled", { status: 302 })));
     const { GET } = await import("@/app/api/tiktok/video/[id]/route");
     const res = await GET(new Request(`http://localhost:3000/api/tiktok/video/${DOCS_ID}`), {
@@ -68,7 +68,9 @@ describe("GET /api/tiktok/video/[id]", () => {
     });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.unavailable).toBeTrue();
+    expect(body.unavailable).toBeFalse();
+    expect(body.source).toBe("tiktok-curated");
+    expect(body.author).toBe("scout2015");
     expect(body.embedUrl).toContain(`player/v1/${DOCS_ID}`);
   });
 });
@@ -80,7 +82,7 @@ describe("GET /api/tiktok/search", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.videos.length).toBe(1);
-    expect(body.universeSize).toBe(1);
+    expect(body.universeSize).toBe(17);
   });
 
   test("an empty needle answers an honest empty set", async () => {

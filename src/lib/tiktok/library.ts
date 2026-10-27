@@ -15,10 +15,12 @@
  * built locally from the documented params (no remote HTML injection).
  */
 import { cachedResilient } from "@/lib/youtube/upstash-cache";
+import { curatedAuthorMap, TIKTOK_CURATED_UNIVERSE } from "./curated";
 import { tiktokUpstreamFetch } from "./upstream";
 import {
   isTikTokPostId,
   parseTikTokVideoUrl,
+  tiktokAuthorUrl,
   tiktokOEmbedApiUrl,
   tiktokPlayerEmbedUrl,
   tiktokVideoUrl,
@@ -29,15 +31,13 @@ import type { TikTokRailDTO, TikTokSearchResultsDTO, TikTokSource, TikTokVideoDT
 export const TIKTOK_CURATED_CAP = 40;
 
 /**
- * The in-repo seed: TikTok's own documentation example video (the only post
- * whose embed this station can verify without operator curation — it rides
- * the official docs). Extend honestly via TIKTOK_CURATED_IDS, never by
- * guessing ids: an unknown id is a 1001 INVALID_VIDEO player error, surfaced
- * as data, not manufactured here.
+ * Continuity alias for the P58 name: the curated universe's ids (the P59
+ * cited-universe default — TikTok's docs example FIRST, then the HN-cited
+ * posts; see curated.ts for the provenance law).
  */
-export const TIKTOK_SEED: readonly string[] = ["6718335390845095173"];
+export const TIKTOK_SEED: readonly string[] = TIKTOK_CURATED_UNIVERSE.map((p) => p.postId);
 
-/** The curated universe: env override → seed, deduped in order, capped. */
+/** The curated universe: env override → the cited default, deduped in order, capped. */
 export function curatedPostIds(env: Record<string, string | undefined> = process.env): string[] {
   const raw = (env.TIKTOK_CURATED_IDS ?? "").trim();
   const seen = new Set<string>();
@@ -85,6 +85,31 @@ function toNum(v: number | string | undefined): number | null {
   if (v == null) return null;
   const n = typeof v === "number" ? v : Number(v);
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * P59-R2 — the curated fallback card: when the oEmbed lane is walled, a
+ * cited post STILL renders an honest card — the factual `@handle` from the
+ * citation, a URL-law author link, no fabricated title/thumbnail, and
+ * `unavailable: false` because the embed player (viewer-side) may play
+ * regardless. Provenance stays `tiktok-curated` so no surface can mistake
+ * it for an oEmbed answer.
+ */
+function curatedFallbackDTO(postId: string, author: string): TikTokVideoDTO {
+  return {
+    postId,
+    author,
+    authorUrl: tiktokAuthorUrl(author),
+    title: null,
+    thumbnailUrl: null,
+    width: null,
+    height: null,
+    embedUrl: tiktokPlayerEmbedUrl(postId),
+    deepLinkUrl: tiktokVideoUrl(author, postId),
+    source: "tiktok-curated",
+    unavailable: false,
+    unavailableReason: null,
+  };
 }
 
 /** The honest unavailable card (walled egress / private / deleted post).
@@ -155,6 +180,10 @@ export async function getTikTokVideo(postId: string): Promise<TikTokVideoDTO> {
     async () => {
       const body = await fetchOEmbed(postId);
       if (!body) {
+        // P59-R2: a cited post keeps its factual handle even when the
+        // metadata lane walls — the card stays renderable, the player rides.
+        const cited = curatedAuthorMap().get(postId);
+        if (cited) return curatedFallbackDTO(postId, cited.author);
         return unavailableDTO(
           postId,
           "TikTok's oEmbed endpoint is unreachable from this egress right now (or the post is private/removed) — the embed player still rides the official lane."
@@ -189,10 +218,15 @@ export async function getTikTokRail(): Promise<TikTokRailDTO> {
   const ids = curatedPostIds();
   const videos = await Promise.all(ids.map((id) => getTikTokVideo(id)));
   const ok = videos.filter((v) => !v.unavailable);
+  // P59-R2: provenance reflects what actually served the cards — oEmbed when
+  // any row rode it, the cited fallback when only curated handles served.
+  const anyOEmbed = videos.some((v) => v.source === "tiktok-oembed" && !v.unavailable);
+  const source: TikTokSource =
+    ok.length > 0 ? (anyOEmbed ? "tiktok-oembed" : "tiktok-curated") : ids.length > 0 ? "tiktok-curated" : "";
   return {
     videos,
     universeSize: ids.length,
-    source: ok.length > 0 ? "tiktok-oembed" : ids.length > 0 ? "tiktok-curated" : "",
+    source,
     unavailable: ids.length > 0 && ok.length === 0,
     unavailableReason:
       ids.length === 0
@@ -224,7 +258,8 @@ export async function searchTikTokLibrary(q: string): Promise<TikTokSearchResult
     const text = hay.includes(needle) || tokens.some((t) => t.length > 0 && hay.includes(t));
     return text;
   });
-  const source: TikTokSource = videos.length > 0 ? "tiktok-oembed" : "";
+  const anyOEmbed = videos.some((v) => v.source === "tiktok-oembed");
+  const source: TikTokSource = videos.length > 0 ? (anyOEmbed ? "tiktok-oembed" : "tiktok-curated") : "";
   return {
     q,
     videos,

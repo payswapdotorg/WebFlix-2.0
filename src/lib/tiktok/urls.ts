@@ -131,3 +131,13 @@ export function tiktokVideoUrl(author: string | null, postId: string): string {
     ? `https://www.tiktok.com/@${encodeURIComponent(author)}/video/${postId}`
     : `https://www.tiktok.com/player/v1/${postId}`;
 }
+
+/** The creator profile URL (P59: the curated citations carry factual handles;
+ * the URL law owns every tiktok.com shape, this one included). */
+export function tiktokAuthorUrl(author: string): string {
+  const handle = author.replace(/^@/, "").trim();
+  if (!/^[\w.\-]{1,30}$/.test(handle)) {
+    throw new Error(`invalid TikTok author handle: ${author}`);
+  }
+  return `https://www.tiktok.com/@${encodeURIComponent(handle)}`;
+}

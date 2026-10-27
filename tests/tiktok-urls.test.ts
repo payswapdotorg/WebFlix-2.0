@@ -9,6 +9,7 @@ import { describe, expect, test } from "bun:test";
 import {
   isTikTokPostId,
   parseTikTokVideoUrl,
+  tiktokAuthorUrl,
   tiktokOEmbedApiUrl,
   tiktokPlayerEmbedUrl,
   tiktokVideoUrl,
@@ -103,5 +104,12 @@ describe("the other two constructors", () => {
     expect(tiktokVideoUrl("scout2015", DOCS_ID)).toBe(`https://www.tiktok.com/@scout2015/video/${DOCS_ID}`);
     expect(tiktokVideoUrl(null, DOCS_ID)).toBe(`https://www.tiktok.com/player/v1/${DOCS_ID}`);
     expect(() => tiktokVideoUrl(null, "bogus")).toThrow();
+  });
+
+  test("author profile URL (P59-R1): @-stripped, encoded, handle-validated", () => {
+    expect(tiktokAuthorUrl("scout2015")).toBe("https://www.tiktok.com/@scout2015");
+    expect(tiktokAuthorUrl("@scout2015")).toBe("https://www.tiktok.com/@scout2015");
+    expect(() => tiktokAuthorUrl("bad handle!")).toThrow();
+    expect(() => tiktokAuthorUrl("")).toThrow();
   });
 });

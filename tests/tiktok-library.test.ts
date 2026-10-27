@@ -28,8 +28,9 @@ beforeEach(() => {
 afterEach(() => setTikTokUpstream(null));
 
 describe("curatedPostIds — the curated universe", () => {
-  test("default = the in-repo seed (TikTok's own docs example)", () => {
+  test("default = the cited universe (docs example first, 17 posts)", () => {
     expect(curatedPostIds()).toEqual([...TIKTOK_SEED]);
+    expect(TIKTOK_SEED.length).toBe(17);
     expect(TIKTOK_SEED).toContain(DOCS_ID);
   });
 
@@ -48,7 +49,7 @@ describe("curatedPostIds — the curated universe", () => {
     expect(curatedPostIds(env).length).toBe(40);
   });
 
-  test("a garbage env falls back to the seed (never an empty hub by accident)", () => {
+  test("a garbage env falls back to the cited universe (never an empty hub by accident)", () => {
     const env = { TIKTOK_CURATED_IDS: "garbage,,https://youtube.com/watch?v=x" };
     expect(curatedPostIds(env)).toEqual([...TIKTOK_SEED]);
   });
@@ -88,25 +89,45 @@ describe("getTikTokVideo — the keyless oEmbed lane (injected seam)", () => {
     expect(dto.embedUrl).toContain("player/v1");
   });
 
-  test("id mismatch (a foreign row) = honest absence, never rendered", async () => {
+  test("id mismatch (a foreign row) = honest absence — the cited fallback renders NO fabricated data", async () => {
     setTikTokUpstream(jsonUpstream({ ...FIXTURE, embed_product_id: "9999999999999999999" }));
     const dto = await getTikTokVideo(DOCS_ID);
-    expect(dto.unavailable).toBeTrue();
+    // The oEmbed answer lied about the product id → the whole body is refused;
+    // DOCS_ID is curated, so the P59 fallback card serves (factual handle,
+    // no fabricated title) instead of the old unavailable DTO.
+    expect(dto.unavailable).toBeFalse();
+    expect(dto.source).toBe("tiktok-curated");
+    expect(dto.author).toBe("scout2015");
     expect(dto.title).toBeNull();
+    expect(dto.thumbnailUrl).toBeNull();
   });
 
-  test("walled egress (5xx) degrades honestly; the embed URL stays built", async () => {
+  test("walled egress (5xx): a cited post falls back to its factual handle, embed URL intact", async () => {
     setTikTokUpstream(() => Promise.resolve(new Response("walled", { status: 302 })));
     const dto = await getTikTokVideo(DOCS_ID);
-    expect(dto.unavailable).toBeTrue();
-    expect(dto.unavailableReason).toContain("unreachable");
+    expect(dto.unavailable).toBeFalse();
+    expect(dto.source).toBe("tiktok-curated");
+    expect(dto.author).toBe("scout2015");
+    expect(dto.authorUrl).toBe("https://www.tiktok.com/@scout2015");
+    expect(dto.deepLinkUrl).toBe(`https://www.tiktok.com/@scout2015/video/${DOCS_ID}`);
+    expect(dto.title).toBeNull();
     expect(dto.embedUrl).toContain(`player/v1/${DOCS_ID}`);
   });
 
-  test("a network throw degrades honestly too", async () => {
+  test("walled egress for a NON-curated id degrades to the honest unavailable card", async () => {
+    setTikTokUpstream(() => Promise.resolve(new Response("walled", { status: 302 })));
+    const dto = await getTikTokVideo("9123456789012345678");
+    expect(dto.unavailable).toBeTrue();
+    expect(dto.unavailableReason).toContain("unreachable");
+    expect(dto.author).toBeNull();
+    expect(dto.embedUrl).toContain("player/v1/9123456789012345678");
+  });
+
+  test("a network throw: a cited post still serves its fallback card", async () => {
     setTikTokUpstream(() => Promise.reject(new Error("egress wall")));
     const dto = await getTikTokVideo(DOCS_ID);
-    expect(dto.unavailable).toBeTrue();
+    expect(dto.unavailable).toBeFalse();
+    expect(dto.source).toBe("tiktok-curated");
   });
 
   test("a non-post-id short-circuits without any fetch", async () => {
@@ -125,18 +146,24 @@ describe("the rail + the search lane", () => {
   test("the rail composes every curated post with provenance", async () => {
     setTikTokUpstream(jsonUpstream(FIXTURE));
     const rail = await getTikTokRail();
-    expect(rail.universeSize).toBe(1);
+    expect(rail.universeSize).toBe(17);
+    // Only the docs id matches the fixture's embed_product_id — every other
+    // row is refused as a foreign body and falls back to its cited handle.
     expect(rail.videos[0].postId).toBe(DOCS_ID);
+    expect(rail.videos[0].source).toBe("tiktok-oembed");
     expect(rail.source).toBe("tiktok-oembed");
     expect(rail.unavailable).toBeFalse();
   });
 
-  test("an all-walled rail is honestly unavailable (never fake rows)", async () => {
+  test("an all-walled rail serves the cited fallback cards (honest, renderable)", async () => {
     setTikTokUpstream(() => Promise.resolve(new Response("no", { status: 500 })));
     const rail = await getTikTokRail();
-    expect(rail.unavailable).toBeTrue();
+    expect(rail.unavailable).toBeFalse();
     expect(rail.source).toBe("tiktok-curated");
-    expect(rail.videos.every((v) => v.unavailable)).toBeTrue();
+    expect(rail.universeSize).toBe(17);
+    expect(rail.videos.every((v) => v.source === "tiktok-curated" && !v.unavailable)).toBeTrue();
+    expect(rail.videos.every((v) => v.author !== null)).toBeTrue();
+    expect(rail.videos.every((v) => v.title === null)).toBeTrue();
   });
 
   test("search answers only real metadata matches (render-when-answers)", async () => {
@@ -147,12 +174,15 @@ describe("the rail + the search lane", () => {
     const miss = await searchTikTokLibrary("zzzqqq");
     expect(miss.videos).toEqual([]);
     expect(miss.note).toBeNull();
-    // A walled lane carries no metadata → no matches, honestly. (The cache
-    // still serves the warm answer inside its TTL — clear it to model a cold
-    // walled window.)
+    // A walled lane carries no titles → text matches honestly miss…
     clearCache();
     setTikTokUpstream(() => Promise.resolve(new Response("no", { status: 500 })));
     const walled = await searchTikTokLibrary("cute");
     expect(walled.videos).toEqual([]);
+    // …but a cited HANDLE still answers, with the fallback's provenance.
+    const byHandle = await searchTikTokLibrary("scout2015");
+    expect(byHandle.videos.length).toBe(1);
+    expect(byHandle.source).toBe("tiktok-curated");
+    expect(byHandle.videos[0].author).toBe("scout2015");
   });
 });

@@ -1,0 +1,91 @@
+{
+  "harvestedAt": "2026-10-27T14:55:53.339Z",
+  "source": "Hacker News citations via the Algolia open API (scripts/ops/harvest-tiktok-cited.ts) — zero guessed ids (ADR-0004 law)",
+  "docsExample": {
+    "postId": "6718335390845095173",
+    "author": "scout2015",
+    "cite": "https://developers.tiktok.com/doc/embed-player/ (TikTok official docs example)"
+  },
+  "cited": [
+    {
+      "postId": "7206561191609716014",
+      "author": "melodizeai",
+      "cite": "https://www.tiktok.com/@melodizeai/video/7206561191609716014"
+    },
+    {
+      "postId": "7157587293451062574",
+      "author": "bsmachinist",
+      "cite": "https://www.tiktok.com/@bsmachinist/video/7157587293451062574"
+    },
+    {
+      "postId": "7322301313134415134",
+      "author": "brittanypeachhh",
+      "cite": "https://www.tiktok.com/@brittanypeachhh/video/7322301313134415134?_r=1&_t=8ix9BpBqady"
+    },
+    {
+      "postId": "7371838707747278122",
+      "author": "decoderpod",
+      "cite": "https://www.tiktok.com/@decoderpod/video/7371838707747278122"
+    },
+    {
+      "postId": "7212953186724842795",
+      "author": "tiktok",
+      "cite": "https://www.tiktok.com/@tiktok/video/7212953186724842795"
+    },
+    {
+      "postId": "7323004085043612959",
+      "author": "brittanypeachhh",
+      "cite": "https://www.tiktok.com/@brittanypeachhh/video/7323004085043612959"
+    },
+    {
+      "postId": "7384528123192200490",
+      "author": "hasslotumismo",
+      "cite": "https://www.tiktok.com/@hasslotumismo/video/7384528123192200490"
+    },
+    {
+      "postId": "7213856534080605483",
+      "author": "nowthispolitics",
+      "cite": "https://www.tiktok.com/@nowthispolitics/video/7213856534080605483"
+    },
+    {
+      "postId": "7043083660093869318",
+      "author": "digitalsamaritan",
+      "cite": "https://www.tiktok.com/@digitalsamaritan/video/7043083660093869318"
+    },
+    {
+      "postId": "7294761545605680426",
+      "author": "jessicaelawson",
+      "cite": "https://www.tiktok.com/@jessicaelawson/video/7294761545605680426"
+    },
+    {
+      "postId": "7162192484611722542",
+      "author": "mattxshaver",
+      "cite": "https://www.tiktok.com/@mattxshaver/video/7162192484611722542"
+    },
+    {
+      "postId": "7078825219833580843",
+      "author": "latercam",
+      "cite": "https://www.tiktok.com/@latercam/video/7078825219833580843"
+    },
+    {
+      "postId": "7186009974852586795",
+      "author": "showbizpizzaman",
+      "cite": "https://www.tiktok.com/@showbizpizzaman/video/7186009974852586795"
+    },
+    {
+      "postId": "6968868536114482438",
+      "author": "sheridanellis",
+      "cite": "https://www.tiktok.com/@sheridanellis/video/6968868536114482438"
+    },
+    {
+      "postId": "7191244761821465898",
+      "author": "wellandsepticlife",
+      "cite": "https://www.tiktok.com/@wellandsepticlife/video/7191244761821465898"
+    },
+    {
+      "postId": "7243513794436123950",
+      "author": "malwaretech",
+      "cite": "https://www.tiktok.com/@malwaretech/video/7243513794436123950"
+    }
+  ]
+}

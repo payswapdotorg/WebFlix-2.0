@@ -11,6 +11,10 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
+import { TIKTOK_CURATED_UNIVERSE } from "@/lib/tiktok/curated";
+import { getDeadPost, isLethalPlayerError, recordDeadPost } from "@/lib/tiktok/dead";
+import { clearCache } from "@/lib/youtube/cache";
+
 function walk(dir: string): string[] {
   const out: string[] = [];
   for (const name of readdirSync(dir)) {
@@ -39,7 +43,62 @@ describe("the tiktok module's import law", () => {
 
   test("lib/tiktok mirrors the netflix seams (upstream injectable, URL law, typed DTOs)", () => {
     const names = libFiles.map((f) => f.split("/").pop()).sort();
-    expect(names).toEqual(["library.ts", "types.ts", "upstream.ts", "urls.ts"]);
+    expect(names).toEqual(["curated.ts", "dead.ts", "library.ts", "types.ts", "upstream.ts", "urls.ts"]);
+  });
+});
+
+describe("the curated universe law (P59-R1) — cited, never guessed", () => {
+  test("every entry is a format-valid post id with a factual handle", () => {
+    expect(TIKTOK_CURATED_UNIVERSE.length).toBe(17);
+    const seen = new Set<string>();
+    for (const p of TIKTOK_CURATED_UNIVERSE) {
+      expect(p.postId).toMatch(/^\d{6,32}$/);
+      expect(p.author).toMatch(/^[\w.\-]{1,30}$/);
+      expect(seen.has(p.postId)).toBeFalse();
+      seen.add(p.postId);
+    }
+  });
+
+  test("TikTok's own docs example stays in the universe (P58 continuity)", () => {
+    expect(TIKTOK_CURATED_UNIVERSE[0]).toEqual({ postId: "6718335390845095173", author: "scout2015" });
+  });
+
+  test("the citation ledger carries every curated post (provenance law)", () => {
+    const ledger = JSON.parse(readFileSync("scripts/ops/tiktok-curated-citations.json", "utf8")) as {
+      cited: { postId: string }[];
+    };
+    const ledgerIds = new Set(ledger.cited.map((c) => c.postId));
+    for (const p of TIKTOK_CURATED_UNIVERSE.slice(1)) {
+      expect(ledgerIds.has(p.postId)).toBeTrue();
+    }
+  });
+});
+
+describe("the dead-post ledger law (P59-R3) — only lethal errors are remembered", () => {
+  test("the lethal family is exactly 1000–1099", () => {
+    expect(isLethalPlayerError(1001)).toBeTrue();
+    expect(isLethalPlayerError(1000)).toBeTrue();
+    expect(isLethalPlayerError(1099)).toBeTrue();
+    expect(isLethalPlayerError(999)).toBeFalse();
+    expect(isLethalPlayerError(2001)).toBeFalse();
+    expect(isLethalPlayerError(3001)).toBeFalse();
+    expect(isLethalPlayerError(3002)).toBeFalse();
+    expect(isLethalPlayerError(Number.NaN)).toBeFalse();
+  });
+
+  test("a lethal report is recorded for the soft TTL; a non-lethal one never lands", async () => {
+    clearCache();
+    const ok = await recordDeadPost("7212953186724842795", 1001, "INVALID_VIDEO");
+    expect(ok).toEqual({ recorded: true });
+    const rec = await getDeadPost("7212953186724842795");
+    expect(rec?.code).toBe(1001);
+
+    const guarded = await recordDeadPost("7212953186724842795", 2001, "SERVER_ERROR");
+    expect(guarded).toEqual({ recorded: null });
+    expect(await getDeadPost("7213856534080605483")).toBeNull();
+
+    const malformed = await recordDeadPost("bogus", 1001, "INVALID_VIDEO");
+    expect(malformed).toEqual({ recorded: false });
   });
 });
 
