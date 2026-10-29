@@ -213,7 +213,7 @@ export function TikTokEmbedPlayer({
           className="absolute inset-0 size-full"
         />
       </div>
-      {!ready && !error ? (
+      {!ready && !error && !timedOut ? (
         <p className="mt-2 text-center text-xs text-muted-foreground" data-testid="tiktok-player-loading">
           Loading TikTok&apos;s player…
         </p>

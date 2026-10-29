@@ -205,6 +205,18 @@ describe("TikTokEmbedPlayer — the readiness timer (P59-R4, the silent-black-bo
     });
   });
 
+  test("the timeout banner replaces the loading note (never contradictory hints)", async () => {
+    await render(createElement(TikTokEmbedPlayer, { postId: DOCS_ID, readyTimeoutMs: 20 }));
+    expect(all('[data-testid="tiktok-player-loading"]').length).toBe(1);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 90));
+    });
+    // P59G: the loading note yields to the terminal states — the honest
+    // timeout banner must never coexist with a stale "Loading…" line.
+    expect(all('[data-testid="tiktok-player-timeout"]').length).toBe(1);
+    expect(all('[data-testid="tiktok-player-loading"]').length).toBe(0);
+  });
+
   test("the timeout report fires ONCE per (post, kind)", async () => {
     await render(createElement(TikTokEmbedPlayer, { postId: DOCS_ID, readyTimeoutMs: 20 }));
     await act(async () => {
