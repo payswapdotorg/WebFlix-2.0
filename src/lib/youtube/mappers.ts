@@ -332,11 +332,13 @@ function channelFromBylineRuns(runs: any[] | undefined): ChannelLite {
   const browse = first?.navigationEndpoint?.browseEndpoint ?? first?.navigationEndpoint?.commandMetadata;
   const channelId: string = first?.navigationEndpoint?.browseEndpoint?.browseId ?? "";
   const canonical: string = first?.navigationEndpoint?.browseEndpoint?.canonicalBaseUrl ?? "";
+  // P59H channel-handle law: a canonical path is only a handle when it is an
+  // @handle — a canonical /channel/UC… path must NEVER become the handle (every
+  // consumer builds '/channel/<handle>', so a stored 'channel/UC…' renders
+  // double-form dead links); non-@ canonicals fall back to the bare UC browseId.
   const handle = canonical.startsWith("/@")
     ? canonical.slice(1)
-    : canonical.startsWith("/")
-      ? canonical.slice(1)
-      : channelId;
+    : channelId;
   return {
     id: channelId,
     handle: handle || channelId,

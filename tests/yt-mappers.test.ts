@@ -188,6 +188,34 @@ describe("search_lofi fixture → VideoDTOs", () => {
     expect(dto.channel.verified).toBe(true); // BADGE_STYLE_TYPE_VERIFIED_ARTIST
     expect(dto.badges).toContain("verified_artist");
   });
+
+  test("byline channel handle law — a canonical /channel/UC path NEVER becomes the handle (P59H)", () => {
+    // A channel without an @handle: InnerTube's canonicalBaseUrl is the
+    // /channel/UC… form. Storing it (minus the slash) as the handle made every
+    // consumer build '/channel/channel/UC…' — double-form dead links. The law:
+    // @handle from the canonical, else the bare UC browseId.
+    const raw = {
+      videoId: "dQw4w9WgXcQ",
+      title: { runs: [{ text: "t" }] },
+      ownerText: {
+        runs: [
+          {
+            text: "Rick Astley",
+            navigationEndpoint: {
+              browseEndpoint: {
+                browseId: "UCuAXFkgcl1dYUu6A6F9m_gQ",
+                canonicalBaseUrl: "/channel/UCus8sgip4avnaYNVO22INhQ",
+              },
+            },
+          },
+        ],
+      },
+    };
+    const dto = mapVideoRenderer(raw)!;
+    // the bare UC browseId wins — never the canonical /channel/… path
+    expect(dto.channel.handle).toBe("UCuAXFkgcl1dYUu6A6F9m_gQ");
+    expect(dto.channel.handle.startsWith("channel/")).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
