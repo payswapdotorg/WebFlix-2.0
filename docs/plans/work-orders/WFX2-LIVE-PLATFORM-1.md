@@ -5,7 +5,7 @@
 **Owner:** WebFlix 2.0 TL  
 **Repository:** https://github.com/payswapdotorg/WebFlix-2.0  
 **Research/report:** [TikTok LIVE system and WebFlix implementation strategy](../../research/2026-10-29-tiktok-live-system-research.md)  
-**GitHub tracking issue:** [WFX2: Build a complete first-party WebFlix LIVE system](https://github.com/payswapdotorg/WebFlix-2.0/issues/66)  
+**GitHub tracking issue:** [WFX2: Build a complete first-party WebFlix LIVE system](https://github.com/payswapdotorg/WebFlix-2.0/issues/2)  
 **Existing policy decision:** [ADR 0004 — TikTok source policy](../../adr/0004-tiktok-embed-policy.md)
 
 ## 1. The assignment
