@@ -42,7 +42,7 @@ export interface LiveRoomDto {
   hostName: string;
   title: string;
   status: LiveRoomStatus;
-  visibility: "public" | "unlisted";
+  visibility: "public" | "unlisted" | "members";
   createdAt: string;
   updatedAt: string;
   /** The one active/most-recent session, freshest first. */
@@ -93,7 +93,7 @@ export interface LivePlaybackPlan {
 /** POST /api/live-rooms body. */
 export interface CreateLiveRoomInput {
   title: string;
-  visibility?: "public" | "unlisted";
+  visibility?: "public" | "unlisted" | "members";
 }
 
 /** POST /api/live-rooms/[id]/token body. */
@@ -160,6 +160,10 @@ export interface LiveChatMessageDto {
   createdAt: string;
   /** Moderation tombstone: true renders "message removed", body is "". */
   deleted: boolean;
+  /** Phase 5 (additive): the sender's fan-club badge for THIS room's host
+   * club — server-derived at read (ADR-0010 §5), never stored on the row,
+   * never client-claimed. null when the sender is not a member. */
+  senderClubBadge: LiveChatClubBadge;
 }
 
 /** POST /api/live-rooms/[id]/chat body. clientMessageId = idempotency key. */
@@ -202,6 +206,9 @@ export interface LiveRoomPolicyDto {
   /** Phase 3 (additive): the guest-stage and gift gates. */
   guestsEnabled: boolean;
   giftsEnabled: boolean;
+  /** Phase 5 (additive): members-only chat — club members of the room
+   * host may chat; everyone else receives the honest blocked reason. */
+  membersOnlyChat: boolean;
   /** The caller's effective role for this room. */
   actorRole: "host" | "moderator" | "guest" | "viewer" | "anonymous";
   /** Whether the CALLER may chat right now (policy + sanctions combined). */
@@ -212,6 +219,7 @@ export interface LiveRoomPolicyDto {
     | "muted"
     | "banned"
     | "slow-mode"
+    | "members-only"
     | null
     | "session-ended";
 }
@@ -230,7 +238,10 @@ export type LiveModerationActionKind =
   | "guests-enable"
   | "guests-disable"
   | "gifts-enable"
-  | "gifts-disable";
+  | "gifts-disable"
+  /** Phase 5 (additive): the members-only chat gate. */
+  | "members-chat-enable"
+  | "members-chat-disable";
 
 /** One audited moderation decision. Rows are immutable (append-only). */
 export interface LiveModerationActionDto {
@@ -584,7 +595,7 @@ export interface LiveReplayAssetDto {
   sizeBytes: number | null;
   /** Recorder-reported media duration — advisory, never a billing fact. */
   durationMs: number | null;
-  visibility: "inherit" | "public" | "unlisted" | "hidden";
+  visibility: "inherit" | "public" | "unlisted" | "hidden" | "members";
   error: string | null;
   recordingStartedAt: string;
   stoppedAt: string | null;

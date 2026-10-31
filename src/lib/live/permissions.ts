@@ -284,6 +284,7 @@ export type LiveRoomPolicy = Pick<
   | "slowModeSeconds"
   | "guestsEnabled"
   | "giftsEnabled"
+  | "membersOnlyChat"
 >;
 
 export async function roomPolicyFor(roomId: string): Promise<LiveRoomPolicy | null> {
@@ -298,6 +299,7 @@ export async function roomPolicyFor(roomId: string): Promise<LiveRoomPolicy | nu
       slowModeSeconds: true,
       guestsEnabled: true,
       giftsEnabled: true,
+      membersOnlyChat: true,
     },
   });
 }

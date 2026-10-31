@@ -87,6 +87,7 @@ const CHAT_BLOCKED_COPY: Record<
   "chat-disabled": "The host disabled chat",
   "slow-mode": "Slow mode is on — wait a few seconds between messages",
   "session-ended": "Chat opens when the broadcast is live",
+  "members-only": "Members-only chat — join the fan club to chat",
 };
 
 const REPORT_REASONS: ReadonlyArray<{ reason: LiveReportReason; label: string }> = [

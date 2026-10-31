@@ -68,6 +68,7 @@ export function mapChatMessage(row: LiveChatMessageRow, handles: HandleMap): Liv
     body: row.deletedAt ? "" : row.body,
     createdAt: row.createdAt.toISOString(),
     deleted: row.deletedAt != null,
+    senderClubBadge: null,
   };
 }
 

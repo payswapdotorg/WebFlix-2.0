@@ -936,6 +936,7 @@ function LiveConsole({ room, playback, endFailure, onEnd, cameraId, micId }: Liv
     slowModeSeconds,
     guestsEnabled: true,
     giftsEnabled: true,
+    membersOnlyChat: false,
     actorRole: "host",
     canChat: true,
     chatBlockedReason: null,

@@ -17,9 +17,12 @@ export interface PolicyInputs {
   sanctions: LiveSanctions;
   /** Whether the room currently has a live (non-ended) session. */
   sessionLive: boolean;
+  /** Phase 5: whether the caller is a member of the room host's fan club.
+   * Undefined = not evaluated → treated as NOT a member (fail-closed). */
+  callerIsClubMember?: boolean;
 }
 
-export function buildPolicyDto({ room, actor, sanctions, sessionLive }: PolicyInputs): LiveRoomPolicyDto {
+export function buildPolicyDto({ room, actor, sanctions, sessionLive, callerIsClubMember }: PolicyInputs): LiveRoomPolicyDto {
   const staff = canModerate(actor.role);
   let chatBlockedReason: LiveRoomPolicyDto["chatBlockedReason"] = null;
   let canChat = true;
@@ -36,6 +39,14 @@ export function buildPolicyDto({ room, actor, sanctions, sessionLive }: PolicyIn
   } else if (!room.chatEnabled && !staff) {
     canChat = false;
     chatBlockedReason = "chat-disabled";
+  } else if (
+    room.membersOnlyChat &&
+    !staff &&
+    actor.role !== "host" &&
+    callerIsClubMember !== true
+  ) {
+    canChat = false;
+    chatBlockedReason = "members-only";
   }
 
   return {
@@ -44,6 +55,7 @@ export function buildPolicyDto({ room, actor, sanctions, sessionLive }: PolicyIn
     slowModeSeconds: room.slowModeSeconds,
     guestsEnabled: room.guestsEnabled,
     giftsEnabled: room.giftsEnabled,
+    membersOnlyChat: room.membersOnlyChat,
     actorRole: actor.role,
     canChat,
     chatBlockedReason,

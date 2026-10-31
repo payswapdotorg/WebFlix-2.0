@@ -476,6 +476,9 @@ model LiveRoom {
   // Phase 3 room policy — the guest-stage and gift gates (same law).
   guestsEnabled    Boolean @default(true)
   giftsEnabled     Boolean @default(true)
+  // Phase 5 room policy — the members-only chat gate (ADR-0010 §6):
+  // only the room host's fan-club members (or staff/host) may chat.
+  membersOnlyChat  Boolean @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
