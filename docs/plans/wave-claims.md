@@ -648,7 +648,7 @@ re-runs gates → merges.
 
 | Wave | Lane | Lead | Claimed (UTC) | Base | Status |
 |---|---|---|---|---|---|
-| P67 / Phase 5-emotes | WFX2-LIVE-PLATFORM-1 §4G supporter emotes (TL + 3 lanes: E-a domain/routes / E-b chat integration / E-c UI) | Z.ai Code (TL, issue #2) | 2026-10-31 16:05 | main @ 27c73a4 | **IN PROGRESS** (contracts frozen first; ADR-0011; lanes dispatch on the frozen base) |
+| P67 / Phase 5-emotes | WFX2-LIVE-PLATFORM-1 §4G supporter emotes (TL + 3 lanes: E-a domain/routes / E-b chat integration / E-c UI) | Z.ai Code (TL, issue #2) | 2026-10-31 16:05 | main @ 27c73a4 | **LANED** (2cb638f→c03600e on main; ADR-0011; 390/390 live battery; three-browser acceptance in evidence/wfx2-live-platform-1-phase-5-emotes/) |
 
 - Scope: the work order's §4G "supporter emotes where built" — host-defined
   club emote glyphs gated by member level (ADR-0011; the ADR-0010
