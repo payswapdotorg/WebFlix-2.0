@@ -32,6 +32,7 @@ import {
 } from "./permissions";
 import { publishLiveEvent } from "./hub";
 import { isClubMemberOfHost, LiveDomainError } from "./rooms";
+import { validateEmoteUsage } from "./emotes";
 import type { LiveChatKind, LiveChatMessageDto, SendLiveChatInput } from "./types";
 
 /** Raw LiveRoomMessage row shape (as Prisma returns it, before DTO mapping). */
@@ -208,6 +209,14 @@ export async function sendChat(
     const isMember = await isClubMemberOfHost(room.hostId, actor.id);
     if (!isMember) throw new LiveDomainError("forbidden", "members-only");
   }
+
+  // Phase 5-emotes intake law (ADR-0011 §3): a body token that matches an
+  // emote code of the room host's club must be entitled — the host always
+  // is, members by level, everyone else gets the honest 403. Tokens that
+  // match no emote code are ordinary punctuation ("2:1", "10:30", ":)")
+  // and never error here; the no-colon body short-circuits inside the
+  // validator with zero extra queries.
+  await validateEmoteUsage(room.hostId, actor.id, typeof input.body === "string" ? input.body : "");
 
   // Slow-mode applies to viewer/guest senders only (host/moderator bypass).
   if (room.slowModeSeconds > 0 && !canModerate(actor.role)) {
