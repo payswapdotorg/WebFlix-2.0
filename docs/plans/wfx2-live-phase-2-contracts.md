@@ -98,3 +98,26 @@ Integration lane (TL only): `rooms.ts` viewer-count windowing, UI wiring,
    matrix, idempotent replays (duplicate clientMessageId / clientBatchId),
    rate-limit 429s, tombstone flows, server-computed totals, and the
    honest 403/409 error contract.
+
+## Implementation addendum (TL, at integration — the adjudicated judgment calls)
+
+Recorded so the contract stays truthful to what shipped and is test-pinned:
+
+- GET chat answers `{ messages: LiveChatMessageDto[] }` (the wrapper was unpinned).
+- Lane POSTs answer 200 (Phase 1's room-create 201 stays as-is); duplicates are
+  200-with-`duplicate: true`, never errors.
+- Moderator grant/revoke share the `moderatorGrant` limit under key
+  `wf:live:moderators:<roomId>:<actorId>`.
+- `unmute` on the host is allowed (an idempotent intent row — it can never
+  create a sanction); `mute`/`ban`/`unban` on the host stay forbidden.
+- One-open-poll is enforced ROOM-scoped (a strict superset of per-session, so
+  stale open polls from ended sessions can never linger).
+- Mutes are TIMED-only in v1 (`expiresAt` always stamped, 1..86400s, default
+  600); the sanction core treats a null-expiry mute as not-muted by law.
+- Slow mode exempts the host and moderators; mute blocks speech (chat + Q&A)
+  but never reactions or votes (documented asymmetry, pinned).
+- Fan-out publishes (ADR-0006 fast path) are wired for chat, reaction
+  batches, presence, moderation decisions, message tombstones (a chat
+  envelope — the in-place update never replays), polls and questions.
+- The viewer's chat read wrapper on the stream is `data:`-only JSON
+  envelopes (`LiveStreamEvent`); the SSE keeps a ~15s `: ping` comment.
