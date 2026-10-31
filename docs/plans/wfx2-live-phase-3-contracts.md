@@ -168,3 +168,34 @@ re-derives everything for multi-instance correctness).
 8. Additive only: no lane edits frozen files (types.ts, permissions.ts,
    policy.ts, provider.ts, rooms.ts, reactions.ts, moderation.ts, hub.ts,
    schema) — needs go through the TL.
+
+## Implementation addendum (TL, at integration — the adjudicated judgment calls)
+
+Recorded so the contract stays truthful to what shipped and is test-pinned:
+
+- `not-live` answers 403 `forbidden` with message "not-live" (the Phase 2
+  convention — the §Frozen routes "409" grouping in this doc's first draft
+  was superseded by the lane briefs; every lane implemented 403 and the
+  tests pin it).
+- A banned actor can never RESPOND to an invite (the TL ruling: accepting
+  would mint publish rights the ban exists to prevent). Mutes never touch
+  the invite/match/gift surfaces (the documented Phase 2 asymmetry holds).
+- startMatch settles an expired-but-unread match BEFORE the match-active
+  gate (the wall clock, not read order, decides whether a start proceeds).
+- The reactions→match hook is best-effort inside sendReactionBatch: a
+  score refusal or failure never fails the room-wide 200; ingestScore's
+  own (matchId, clientEventId) dedupe makes the hook retry-safe.
+- Gift quantity < 1 is a 400 `invalid` (never a silent clamp-to-1 — that
+  would charge unasked credits); quantities above GIFT_QTY_MAX clamp.
+- The gift spend window is per-SENDER GLOBALLY (not per-room) — the stricter
+  reading of the abuse bound; pinned by tests.
+- The viewer room's guest consent CTA covers BOTH paths: a host-invite
+  accept button and the request-approved "Publish camera & mic" state
+  (the actor's policy role flips to "guest" at approval, before consent).
+- The stream tail re-derives stage/match/gift (the invite surface stays
+  fast-path + caller GET — the host console re-fetches on envelope events;
+  documented ADR-0006 floor).
+- `test:live` runs in four sub-batches: the bun 1.3.14 SIGILL runner crash
+  is deterministic for the live-chat+live-stream file combination and
+  reproduces on the unmodified Phase 2 tree (environment fact, not a
+  regression; coverage unchanged).
