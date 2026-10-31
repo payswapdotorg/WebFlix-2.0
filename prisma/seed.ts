@@ -58,6 +58,13 @@ async function main() {
   await db.videoSignal.deleteMany();
   await db.thumbnailTest.deleteMany()
   await db.liveChatMessage.deleteMany()
+  // WFX2-LIVE-PLATFORM-1: the LIVE tables carry FKs into User (hostId), so
+  // they must clear before the user wipe or the seed fails P2003 after any
+  // real broadcast has run on this database.
+  await db.liveInvite.deleteMany()
+  await db.liveParticipant.deleteMany()
+  await db.liveSession.deleteMany()
+  await db.liveRoom.deleteMany()
   await db.membership.deleteMany()
   await db.membershipTier.deleteMany()
   await db.notification.deleteMany()
