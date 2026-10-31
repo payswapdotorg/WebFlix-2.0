@@ -1615,12 +1615,13 @@ function HostStageControls({
   const guests = (stage?.participants ?? []).filter(
     (p) => p.role === "guest" && p.state !== "removed",
   );
+  const matchActive = match?.status === "active";
   const canStart =
-    match === null &&
+    !matchActive &&
     (matchKind === "solo" ? guests.length >= 1 : guests.length >= 2) &&
     !busy;
   const startHint =
-    match !== null
+    matchActive
       ? "A match is already running."
       : matchKind === "solo"
         ? "Solo matches need you plus one guest on stage."
@@ -1726,7 +1727,7 @@ function HostStageControls({
           {match ? (
             <>
               <LiveMatchPanel match={match} />
-              {match.status === "active" && (
+              {matchActive ? (
                 <div className="flex gap-2">
                   <Button size="sm" variant="outline" disabled={busy} onClick={() => void endMatch()}>
                     End &amp; declare winner
@@ -1734,6 +1735,40 @@ function HostStageControls({
                   <Button size="sm" variant="ghost" disabled={busy} onClick={() => void cancelMatch()}>
                     Cancel match
                   </Button>
+                </div>
+              ) : null}
+              {!matchActive && (
+                <div className="space-y-3 border-t pt-3">
+                  <div className="flex flex-wrap gap-1.5">
+                    {(["solo", "team"] as const).map((k) => (
+                      <Button
+                        key={k}
+                        size="sm"
+                        variant={matchKind === k ? "default" : "outline"}
+                        disabled={busy}
+                        onClick={() => setMatchKind(k)}
+                      >
+                        {k === "solo" ? "Solo (you vs guest)" : "Team (guest vs guest)"}
+                      </Button>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {MATCH_DURATION_CHOICES.map((d) => (
+                      <Button
+                        key={d}
+                        size="sm"
+                        variant={matchDuration === d ? "default" : "outline"}
+                        disabled={busy}
+                        onClick={() => setMatchDuration(d)}
+                      >
+                        {d}s
+                      </Button>
+                    ))}
+                  </div>
+                  <Button size="sm" disabled={!canStart} onClick={() => void startMatch()}>
+                    Start match
+                  </Button>
+                  {!canStart && !busy && <p className="text-xs text-muted-foreground">{startHint}</p>}
                 </div>
               )}
             </>

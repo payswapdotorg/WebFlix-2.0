@@ -967,13 +967,31 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
               {match && <LiveMatchPanel match={match} />}
 
               {/* ── Phase 3 guest surface: the caller's invite/request state ── */}
-              {sessionLive && room.policy?.actorRole === "viewer" && user !== null && (
+              {sessionLive &&
+                (room.policy?.actorRole === "viewer" || room.policy?.actorRole === "guest") &&
+                user !== null && (
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-sm">Join the stage</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3 text-sm">
-                    {myInvite ? (
+                    {room.policy?.actorRole === "guest" ? (
+                      activePlayback?.role === "guest" ? (
+                        <p className="text-muted-foreground">
+                          You&apos;re publishing as a guest. The host can remove you at any time.
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          <p>
+                            You&apos;re approved for the stage. Publishing shares your camera and
+                            microphone with everyone in the room.
+                          </p>
+                          <Button size="sm" onClick={() => void joinStageAsGuest()} disabled={inviteBusy}>
+                            Publish camera &amp; mic
+                          </Button>
+                        </div>
+                      )
+                    ) : myInvite ? (
                       myInvite.direction === "host-invite" ? (
                         <div className="space-y-2">
                           <p>The host invited you to join the stage as a guest.</p>
