@@ -31,7 +31,7 @@
  * failure (or a zero-emote map) leaves the picker hidden and chat intact.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Ban,
@@ -176,15 +176,34 @@ export function LiveChatPanel({
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm>(null);
 
   // ── Phase 5-emotes: the room host's club emote map (ADR-0011) ──
-  // One GET per mount; a failure (or a no-club/zero-emote answer) keeps the
-  // map empty — the picker stays hidden and chat NEVER breaks. The emote
-  // state is display truth only; the send path is untouched (the server
-  // re-derives entitlement and answers 403 emote-locked like any other).
+  // One GET per mount PLUS a re-derive every time the picker OPENS: the
+  // entitlement law is per-request (a member may join mid-session, points
+  // move levels) — a map fetched once at mount would render stale locks.
+  // A failure (or a no-club/zero-emote answer) keeps the map empty — the
+  // picker stays hidden and chat NEVER breaks. The emote state is display
+  // truth only; the send path is untouched (the server re-derives
+  // entitlement and answers 403 emote-locked like any other).
   const [emoteMap, setEmoteMap] = useState<{
     clubName: string | null;
     emotes: LiveClubEmotesDto["emotes"];
   }>({ clubName: null, emotes: [] });
   const [pickerOpen, setPickerOpen] = useState(false);
+
+  const refreshEmotes = useCallback(async (): Promise<void> => {
+    if (!hostId) return;
+    try {
+      const res = await fetch(
+        `/api/live-clubs/emotes?hostId=${encodeURIComponent(hostId)}`,
+        { credentials: "same-origin", cache: "no-store" },
+      );
+      if (!res.ok) return; // map stays as-is — picker shows what it had
+      const body = (await res.json().catch(() => null)) as LiveClubEmotesDto | null;
+      if (!body || !Array.isArray(body.emotes)) return;
+      setEmoteMap({ clubName: body.clubName ?? null, emotes: body.emotes });
+    } catch {
+      /* a fetch failure NEVER breaks chat — the map simply stays as-is */
+    }
+  }, [hostId]);
 
   useEffect(() => {
     if (!hostId) return;
@@ -569,7 +588,12 @@ export function LiveChatPanel({
                   aria-label="Emotes"
                   aria-expanded={pickerOpen}
                   data-testid="emote-picker-trigger"
-                  onClick={() => setPickerOpen((o) => !o)}
+                  onClick={() =>
+                    setPickerOpen((o) => {
+                      if (!o) void refreshEmotes(); // re-derive on every open
+                      return !o;
+                    })
+                  }
                   className="size-11 md:size-9"
                 >
                   <SmilePlus aria-hidden />
