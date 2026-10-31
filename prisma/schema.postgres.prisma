@@ -44,6 +44,7 @@ model User {
   netflixMyList  NetflixMyListItem[]
   netflixWatchEvents NetflixWatchEvent[]
   liveRoomsOwned LiveRoom[] @relation("LiveRoomHost")
+  liveFanClubOwned LiveFanClub[] @relation("LiveFanClubHost")
 }
 
 model Channel {
@@ -1015,4 +1016,65 @@ model LiveOpsEvent {
   @@index([kind, createdAt])
   @@index([roomId, createdAt])
   @@index([createdAt])
+}
+// ═══════════════════════════════════════════════════════════════════
+// WFX2-LIVE-PLATFORM-1 Phase 5 — non-monetary fan clubs (§4G bullet 1).
+// ADR-0010 law: club points/levels are ENTERTAINMENT facts — never money,
+// never wallet, never convertible, no purchase path (the money gate stays
+// closed). One club per creator. Points derive ONLY from durable server
+// facts through the append-only LiveClubPointEvent ledger (idempotency-
+// keyed); member.points is a maintained projection, re-derivable.
+// ═══════════════════════════════════════════════════════════════════
+
+// The creator-owned club (unique hostId — one per creator, the fan-club
+// model). name/motto are clamped by CLUB_NAME_MAX / CLUB_MOTTO_MAX.
+// pointsPerLevel is the level-threshold unit (server law, one knob).
+model LiveFanClub {
+  id             String   @id @default(cuid())
+  hostId         String   @unique
+  name           String
+  motto          String?
+  pointsPerLevel Int      @default(500)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  host    User                @relation("LiveFanClubHost", fields: [hostId], references: [id])
+  members LiveFanClubMember[]
+
+  @@index([hostId])
+}
+
+// Club membership — non-cash join/leave. The (clubId, userId) unique row is
+// the gate every members-only surface authorizes against.
+model LiveFanClubMember {
+  id           String   @id @default(cuid())
+  clubId       String
+  userId       String
+  points       Int      @default(0)
+  joinedAt     DateTime @default(now())
+  lastActiveAt DateTime @default(now())
+
+  club LiveFanClub @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@unique([clubId, userId])
+  @@index([userId])
+  @@index([clubId])
+}
+
+// Append-only activity-point ledger. source: "watch" | "chat" | "gift".
+// Every row carries an idempotencyKey derived from the durable event that
+// earned it — duplicate delivery can never double-award (the ScoreEvent
+// law). amount ≤ CLUB_POINT_AWARD_MAX, re-clamped server-side.
+model LiveClubPointEvent {
+  id             String   @id @default(cuid())
+  clubId         String
+  memberId       String
+  amount         Int
+  source         String
+  sourceEventId  String?
+  idempotencyKey String   @unique
+  createdAt      DateTime @default(now())
+
+  @@index([clubId, memberId])
+  @@index([clubId, createdAt])
 }

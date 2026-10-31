@@ -756,3 +756,79 @@ export interface LiveOpsOverviewDto {
   };
   storage: { replayAssets: number; replayBytes: number };
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// WFX2-LIVE-PLATFORM-1 Phase 5 — non-monetary fan clubs (§4G bullet 1).
+// Additive freeze (TL, 2026-10-31). ADR-0010 law: points/levels are
+// ENTERTAINMENT facts — never money, never wallet, never convertible.
+// Routes/UI speak THESE types only.
+// ═══════════════════════════════════════════════════════════════════
+
+/** The creator-owned club (one per creator — the unique hostId row). */
+export interface LiveFanClubDto {
+  id: string;
+  hostId: string;
+  hostHandle: string;
+  hostName: string;
+  name: string;
+  motto: string | null;
+  memberCount: number;
+  pointsPerLevel: number;
+  createdAt: string;
+}
+
+/** POST /api/live-clubs body — creator-only, one club per creator. */
+export interface CreateLiveFanClubInput {
+  name: string;
+  motto?: string;
+}
+
+/** A club member projection. level derives from points (server law). */
+export interface LiveFanClubMemberDto {
+  userId: string;
+  handle: string;
+  name: string;
+  points: number;
+  level: number;
+  joinedAt: string;
+}
+
+/** One non-monetary participation mission — DERIVED at read time from
+ * durable rows only (no mission tables; the derivation law). */
+export interface LiveClubMissionDto {
+  key: "first-steps" | "voice" | "supporter";
+  label: string;
+  done: boolean;
+  progress: number;
+  goal: number;
+}
+
+/** GET /api/live-clubs/[hostId] — the club overview for THIS caller. */
+export interface LiveFanClubOverviewDto {
+  club: LiveFanClubDto;
+  /** The caller's own membership, or null when not a member. */
+  membership: {
+    points: number;
+    level: number;
+    joinedAt: string;
+  } | null;
+  missions: LiveClubMissionDto[];
+  /** Top members by points (bounded preview, CLUB_MEMBER_PREVIEW_MAX). */
+  topMembers: LiveFanClubMemberDto[];
+  /** The host's current LIVE room when the caller may see it. */
+  liveRoom: LiveRoomDto | null;
+}
+
+/** GET /api/live-clubs/[hostId]/members?cursor= — the paged member roster. */
+export interface LiveFanClubMembersDto {
+  clubId: string;
+  members: LiveFanClubMemberDto[];
+  nextCursor: string | null;
+}
+
+/** The chat message badge — server-derived at read, never client-claimed.
+ * level is null when the sender is not a member of the room host's club. */
+export type LiveChatClubBadge = {
+  clubName: string;
+  level: number;
+} | null;

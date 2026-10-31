@@ -112,6 +112,25 @@ export const OPS_WINDOW_MS_MAX = 30 * 24 * 3_600_000;
 export const OPS_WINDOW_MS_DEFAULT = 24 * 3_600_000;
 
 /** The per-surface rate limits (the app-wide rateLimit() adapter). */
+// ── Phase 5 — non-monetary fan clubs (ADR-0010: entertainment facts) ──
+export const CLUB_NAME_MAX = 40;
+export const CLUB_MOTTO_MAX = 120;
+/** One club per creator (the unique hostId row). */
+export const CLUB_PER_CREATOR = 1;
+/** Documented join cap — honest capacity law, load-tested before raising. */
+export const CLUB_MEMBERS_MAX = 1000;
+/** level = min(CLUB_LEVEL_MAX, floor(points / pointsPerLevel) + 1). */
+export const CLUB_LEVEL_MAX = 50;
+/** Member preview size on the overview payload. */
+export const CLUB_MEMBER_PREVIEW_MAX = 10;
+/** Member roster page size. */
+export const CLUB_MEMBERS_PAGE = 50;
+/** Any single point award clamps here (server-side re-clamp law). */
+export const CLUB_POINT_AWARD_MAX = 100;
+/** Points per durable source event (server-fact-backed, idempotency-keyed). */
+export const CLUB_POINTS_WATCH = 2;
+export const CLUB_POINTS_CHAT = 1;
+
 export const RATE_LIMITS = {
   chat: { limit: 8, windowMs: 10_000 },
   reactions: { limit: 12, windowMs: 10_000 },
@@ -137,6 +156,11 @@ export const RATE_LIMITS = {
   // ── Phase 4-OPS ──
   beacon: { limit: 30, windowMs: 60_000 },
   opsOverview: { limit: 30, windowMs: 60_000 },
+  // ── Phase 5 — fan clubs (ADR-0010) ──
+  clubCreate: { limit: 2, windowMs: 10 * 60_000 },
+  clubJoin: { limit: 10, windowMs: 60_000 },
+  clubLeave: { limit: 10, windowMs: 60_000 },
+  clubManage: { limit: 20, windowMs: 60_000 },
 } as const;
 
 /** Host and granted moderators share the moderation capability set. */
