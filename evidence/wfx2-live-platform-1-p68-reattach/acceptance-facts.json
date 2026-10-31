@@ -1,0 +1,44 @@
+{
+  "stamp": "mvwvk6o7",
+  "identities": 2,
+  "steps": {
+    "coldConsoleHasNoReattachCard": true,
+    "hostWentLive": true,
+    "liveRoomFound": true,
+    "liveRoomId": "cmvwvk8w2001uquijy49m2xoq",
+    "viewerRealFramesBefore": {
+      "readyState": 4,
+      "currentTime": 4.229,
+      "w": 640,
+      "h": 360
+    },
+    "reattachCardShownAfterReload": true,
+    "reattachCardLine": "You have a live session runningP68 acceptance — reload cannot orphan me · started Oct 31, 2026, 8:49 PM · 1 approximate viewerThis console reloaded while the stream kept running. Re-attach to resume publishing, the chat,",
+    "probeStatus": 200,
+    "probeRoomIdMatches": true,
+    "viewerProbeDuringDetached": null,
+    "consoleReattached": true,
+    "reattachCardGoneAfterAttach": true,
+    "viewerRealFramesAfterReattach": {
+      "readyState": 4,
+      "currentTime": 19.327,
+      "w": 640,
+      "h": 360
+    },
+    "viewerFramesAdvancedThroughDetached": true,
+    "roomStillLiveAfterReattach": true,
+    "endedFromReattachedConsole": true,
+    "viewerSawEnded": true
+  },
+  "db": {
+    "sessionStatus": "ended",
+    "sessionEndReason": "host",
+    "sessionEndedAtStamped": true,
+    "roomStatus": "ended",
+    "phantomLiveRoomsForHost": 0
+  },
+  "consoleErrors": {
+    "host": [],
+    "viewer": []
+  }
+}
