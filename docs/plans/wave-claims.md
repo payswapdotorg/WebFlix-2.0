@@ -638,7 +638,7 @@ re-runs gates → merges.
 
 | Wave | Lane | Lead | Claimed (UTC) | Base | Status |
 |---|---|---|---|---|---|
-| P66 / Phase 5 | WFX2-LIVE-PLATFORM-1 §4G fan clubs (TL + 3 lanes: 5-a domain / 5-b integration / 5-c UI) | Z.ai Code (TL, issue #2) | 2026-10-31 15:15 | main @ a4c1905 | DISPATCHED (contracts freeze commit follows this row) |
+| P66 / Phase 5 | WFX2-LIVE-PLATFORM-1 §4G fan clubs (TL + 3 lanes: 5-a domain / 5-b integration / 5-c UI) | Z.ai Code (TL, issue #2) | 2026-10-31 15:15 | main @ a4c1905 | **LANED** (0839903→1262a5a on main; ADR-0010; 326/326 live battery; three-browser acceptance in evidence/wfx2-live-platform-1-phase-5/) |
 
 - Scope: the work order's §4G bullet 1 — clubs, member badges, non-cash
   points/missions, member-only chat, members-only rooms/replays (ADR-0010).
