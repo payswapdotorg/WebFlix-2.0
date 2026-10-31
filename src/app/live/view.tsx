@@ -4,6 +4,8 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { Eye, Link2, Radio, RefreshCw, TriangleAlert, Video } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
+import { useWebFlixSession } from "@/hooks/use-webflix-session";
+import { LiveEventsCard } from "@/components/live/live-events-card";
 import { formatCount, formatRelativeDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -186,6 +188,7 @@ export default function LiveDiscoveryView() {
   const { data, loading, error, reload } = useApi<{ rooms: LiveRoomDto[] }>(
     "/api/live-rooms?status=live",
   );
+  const { user } = useWebFlixSession();
 
   // Freshness poll: only while a result set is on screen (an error state
   // stays put — no error/loading flicker from a background refetch). The
@@ -242,6 +245,10 @@ export default function LiveDiscoveryView() {
       </header>
 
       <main className="mt-6">
+        <div className="mb-6">
+          <LiveEventsCard signedIn={user !== null} />
+        </div>
+
         {loading && (
           <GridShell testId="live-grid" busy>
             {Array.from({ length: 8 }).map((_, i) => (

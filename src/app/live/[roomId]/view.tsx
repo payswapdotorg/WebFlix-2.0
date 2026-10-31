@@ -23,7 +23,12 @@ import {
 } from "@livekit/components-react";
 import { ConnectionState, Track, type DisconnectReason } from "livekit-client";
 import { useApi } from "@/hooks/use-api";
+import { useWebFlixSession } from "@/hooks/use-webflix-session";
 import { formatCount, formatRelativeDate } from "@/lib/format";
+import { LiveChatPanel } from "@/components/live/live-chat-panel";
+import { LiveReactionRail } from "@/components/live/live-reaction-rail";
+import { LivePollsQuestions } from "@/components/live/live-polls-questions";
+import { useLiveStream } from "@/components/live/use-live-stream";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -259,6 +264,23 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
     reload: reloadRoom,
   } = useApi<{ room: LiveRoomDto }>(`/api/live-rooms/${roomId}`);
   const room = data?.room ?? null;
+  const { user } = useWebFlixSession();
+
+  // ONE stream subscription for the whole page (ADR-0006 economics): chat
+  // rows, reaction totals, presence and the moderation/poll/question
+  // envelopes all flow through here; panels receive slices as props.
+  const stream = useLiveStream(roomId, {
+    onRoomChange: reloadRoom,
+    onEnvelope: (event) => {
+      // A moderation decision may have changed room policy (chat-disable,
+      // slow-mode) — the caller-scoped policy lives on the room GET.
+      if (event.kind === "moderation") void reloadRoom();
+    },
+  });
+  const canModerate =
+    room?.policy?.actorRole === "host" ||
+    room?.policy?.actorRole === "moderator" ||
+    (room?.policy == null && room?.isHost === true);
 
   // Mint lifecycle state. `minting` is DERIVED (no setState-in-effect): a
   // mint is in flight exactly when the room is live, has a session, no
@@ -415,7 +437,7 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
         )}
       </header>
 
-      <div className="mt-4 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="mt-4 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         {/* ── Stage / state column ─────────────────────────────────────── */}
         <main>
           {(() => {
@@ -654,6 +676,34 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
             </div>
           ) : (
             <>
+              {sessionLive && (
+                <LiveReactionRail
+                  roomId={roomId}
+                  sessionLive={sessionLive}
+                  reactionsEnabled={room.policy?.reactionsEnabled ?? true}
+                  signedIn={user !== null}
+                  streamReactionTotal={stream.reactionTotal?.total ?? null}
+                />
+              )}
+
+              <LiveChatPanel
+                roomId={roomId}
+                sessionLive={sessionLive}
+                policy={room.policy ?? null}
+                canModerate={canModerate}
+                signedIn={user !== null}
+                stream={stream}
+              />
+
+              <LivePollsQuestions
+                roomId={roomId}
+                sessionLive={sessionLive}
+                canModerate={canModerate}
+                signedIn={user !== null}
+                streamConnected={stream.connected}
+                envelope={stream.latestEnvelope}
+              />
+
               <Card>
                 <CardHeader>
                   <CardTitle className="text-sm">Host</CardTitle>
@@ -725,9 +775,8 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
               </Card>
 
               <p className="px-1 text-xs leading-relaxed text-muted-foreground/80">
-                WebFlix LIVE is first-party: rooms, sessions and counts belong to WebFlix. Viewer
-                counts are approximate and never a billing fact. Chat, reactions and polls arrive
-                with the realtime interaction wave — this room is playback-only right now.
+                WebFlix LIVE is first-party: rooms, chat, reactions, polls and counts belong to
+                WebFlix. Viewer counts are approximate and never a billing fact.
               </p>
             </>
           )}

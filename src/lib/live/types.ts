@@ -51,6 +51,13 @@ export interface LiveRoomDto {
   viewerCount: number;
   /** True when the requesting identity is this room's host (or null for guests). */
   isHost: boolean | null;
+  /**
+   * Phase 2 (additive): the caller-scoped interaction policy — present on
+   * the DETAIL endpoint (GET /api/live-rooms/[id]) for signed-in callers,
+   * absent on discovery rows (per-room sanction queries don't belong in a
+   * 24-room list).
+   */
+  policy?: LiveRoomPolicyDto;
 }
 
 /** Broadcast lifecycle row. providerRoomId is a routing name, NOT a secret. */

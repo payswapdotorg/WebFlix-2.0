@@ -22,6 +22,7 @@ import type { LiveProviderAdapter } from "./provider";
 import {
   liveProviderConfig,
 } from "./config";
+import { PRESENCE_WINDOW_MS } from "./permissions";
 import type {
   CreateLiveRoomInput,
   LivePlaybackPlan,
@@ -153,11 +154,24 @@ export function mapRoom(
   };
 }
 
+/**
+ * Approximate viewer counts — the Phase 2 presence law: only VIEWER-role
+ * participants inside the freshness window (PRESENCE_WINDOW_MS) count.
+ * Heartbeats keep rows fresh; a closed tab decays out of the count within
+ * one window. Host rows never count as viewers. Still APPROXIMATE by law —
+ * never a billing/financial fact.
+ */
 export async function viewerCountsFor(sessionIds: string[]): Promise<Map<string, number>> {
   if (sessionIds.length === 0) return new Map();
+  const cutoff = new Date(Date.now() - PRESENCE_WINDOW_MS);
   const rows = await db.liveParticipant.groupBy({
     by: ["sessionId"],
-    where: { sessionId: { in: sessionIds }, state: "connected" },
+    where: {
+      sessionId: { in: sessionIds },
+      state: "connected",
+      role: "viewer",
+      lastSeenAt: { gt: cutoff },
+    },
     _count: { _all: true },
   });
   return new Map(rows.map((r) => [r.sessionId, r._count._all]));
@@ -270,7 +284,7 @@ export async function startSession(
     create: { sessionId: session.id, userId: identity.id, role: "host", state: "connected" },
     update: { role: "host", state: "connected", lastSeenAt: new Date() },
   });
-  return { room: mapRoom(fresh, new Map([[session.id, 1]]), identity.id), playback };
+  return { room: mapRoom(fresh, new Map([[session.id, 0]]), identity.id), playback };
 }
 
 export async function mintJoinToken(

@@ -59,8 +59,15 @@ import { Separator } from "@/components/ui/separator";
 import type {
   LivePlaybackPlan,
   LiveRoomDto,
+  LiveRoomPolicyDto,
   LiveSessionDto,
+  PerformLiveModerationInput,
 } from "@/lib/live/types";
+import { LiveChatPanel } from "@/components/live/live-chat-panel";
+import { LiveReactionRail } from "@/components/live/live-reaction-rail";
+import { useLivePresence, useLiveStream } from "@/components/live/use-live-stream";
+import { Switch } from "@/components/ui/switch";
+import { toast } from "sonner";
 
 /**
  * WFX2-LIVE-PLATFORM-1 (Worker 3) — the Creator Go Live preflight + console.
@@ -880,6 +887,22 @@ function LiveConsole({ room, playback, endFailure, onEnd, cameraId, micId }: Liv
   // render) so the connection UI can tell "never connected" from "lost".
   const [everConnected, setEverConnected] = useState(false);
 
+  // ── Phase 2 interaction (the console is the HOST surface) ──
+  // ONE page stream feeds the chat panel + the room-wide reaction total;
+  // the heartbeat keeps the host row inside the freshness window.
+  const stream = useLiveStream(room.id);
+  useLivePresence(room.id, true);
+  const [chatEnabled, setChatEnabled] = useState(true);
+  const [slowModeSeconds, setSlowModeSeconds] = useState(0);
+  const hostPolicy: LiveRoomPolicyDto = {
+    chatEnabled,
+    reactionsEnabled: true,
+    slowModeSeconds,
+    actorRole: "host",
+    canChat: true,
+    chatBlockedReason: null,
+  };
+
   const runEnd = useCallback(async () => {
     setEnding(true);
     const failure = await onEnd();
@@ -991,6 +1014,34 @@ function LiveConsole({ room, playback, endFailure, onEnd, cameraId, micId }: Liv
             </p>
           </CardContent>
         </Card>
+      </div>
+
+      {/* ── Phase 2: the room interaction surface (chat + moderation) ── */}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <LiveChatPanel
+          roomId={room.id}
+          sessionLive
+          policy={hostPolicy}
+          canModerate
+          signedIn
+          stream={stream}
+        />
+        <div className="space-y-4">
+          <LiveReactionRail
+            roomId={room.id}
+            sessionLive
+            reactionsEnabled
+            signedIn
+            streamReactionTotal={stream.reactionTotal?.total ?? null}
+          />
+          <HostPolicyControls
+            roomId={room.id}
+            chatEnabled={chatEnabled}
+            slowModeSeconds={slowModeSeconds}
+            onChatEnabled={setChatEnabled}
+            onSlowMode={setSlowModeSeconds}
+          />
+        </div>
       </div>
 
       {connectError && (
@@ -1283,6 +1334,106 @@ function EndedSummaryCard({
           <Radio className="size-4" aria-hidden="true" />
           Start another live
         </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Slow-mode choices (seconds) — 0 disables. */
+const SLOW_MODE_CHOICES = [0, 10, 30, 60, 120, 300] as const;
+
+/**
+ * Phase 2 host policy controls — chat on/off + slow mode. Every change is
+ * an audited moderation POST; the local mirror only renders what the
+ * server confirmed (a failed POST keeps the previous value and says so).
+ */
+function HostPolicyControls(props: {
+  roomId: string;
+  chatEnabled: boolean;
+  slowModeSeconds: number;
+  onChatEnabled: (v: boolean) => void;
+  onSlowMode: (v: number) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  const perform = useCallback(
+    async (body: PerformLiveModerationInput) => {
+      setBusy(true);
+      try {
+        const res = await fetch(`/api/live-rooms/${props.roomId}/moderation`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const detail = (await res.json().catch(() => ({}))) as { message?: string };
+          toast.error("The change didn't stick", {
+            description: detail.message ?? `Server answered ${res.status}.`,
+          });
+          return false;
+        }
+        return true;
+      } catch {
+        toast.error("Couldn't reach WebFlix — the change was not applied.");
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [props.roomId],
+  );
+
+  return (
+    <Card>
+      <CardHeader className="pb-0">
+        <CardTitle className="text-base">Room policy</CardTitle>
+        <CardDescription>
+          Every change is audited and applied to every viewer instantly.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <label className="flex items-center justify-between gap-3 text-sm font-medium">
+          <span>Chat</span>
+          <Switch
+            data-testid="live-policy-chat"
+            checked={props.chatEnabled}
+            disabled={busy}
+            onCheckedChange={(v) => {
+              const prev = props.chatEnabled;
+              props.onChatEnabled(v);
+              void perform({ action: v ? "chat-enable" : "chat-disable" }).then((ok) => {
+                if (!ok) props.onChatEnabled(prev);
+              });
+            }}
+            aria-label="Toggle room chat"
+          />
+        </label>
+        <div className="space-y-1.5">
+          <p className="text-sm font-medium">Slow mode</p>
+          <div className="flex flex-wrap gap-1.5">
+            {SLOW_MODE_CHOICES.map((s) => (
+              <Button
+                key={s}
+                size="sm"
+                variant={props.slowModeSeconds === s ? "default" : "outline"}
+                disabled={busy}
+                onClick={() => {
+                  const prev = props.slowModeSeconds;
+                  props.onSlowMode(s);
+                  void perform({ action: "slow-mode", slowModeSeconds: s }).then((ok) => {
+                    if (!ok) props.onSlowMode(prev);
+                  });
+                }}
+                className="h-8 min-w-11 px-2 text-xs"
+              >
+                {s === 0 ? "Off" : `${s}s`}
+              </Button>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Viewers must wait this long between messages. Hosts and moderators are exempt.
+          </p>
+        </div>
       </CardContent>
     </Card>
   );
