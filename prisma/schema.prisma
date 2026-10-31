@@ -466,6 +466,12 @@ model LiveRoom {
   title      String
   status     String   @default("idle")
   visibility String   @default("public")
+  // Phase 2 room policy — server-enforced interaction gates (explicit
+  // columns, no JSON blob; the no-catch-all law). Moderators/host mutate
+  // them only through the audited moderation route.
+  chatEnabled      Boolean @default(true)
+  reactionsEnabled Boolean @default(true)
+  slowModeSeconds  Int     @default(0)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -537,4 +543,203 @@ model LiveInvite {
 
   @@index([roomId, status])
   @@index([inviteeId, status])
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// WFX2-LIVE-PLATFORM-1 Phase 2 — interaction, safety and events (issue #2).
+// Same laws as Phase 1: String enums (allowed values in comments), NO FKs
+// on high-volume interaction rows (sender/actor ids are the shadow-user
+// seam ids — display fields resolve at read time so user deletion can
+// never cascade-erase room history / the moderation audit trail), and
+// every side effect carries an idempotency key.
+// ═══════════════════════════════════════════════════════════════════
+
+// Durable room chat. kind: "chat" | "system" | "announcement". The seq
+// autoincrement is the STRICT ordering + replay cursor (work order §4C
+// "exact message ordering semantics"); (sessionId, senderId,
+// clientMessageId) is the duplicate-suppression law. deletedAt/deletedBy
+// tombstone moderation removals — the row (and thus the audit trail)
+// survives; the API renders deleted messages as tombstones.
+model LiveRoomMessage {
+  seq             Int       @id @default(autoincrement())
+  id              String    @unique @default(cuid())
+  roomId          String
+  sessionId       String
+  senderId        String
+  clientMessageId String
+  body            String
+  kind            String    @default("chat")
+  deletedAt       DateTime?
+  deletedBy       String?
+  createdAt       DateTime  @default(now())
+
+  @@unique([sessionId, senderId, clientMessageId])
+  @@index([sessionId, seq])
+  @@index([roomId, createdAt])
+}
+
+// One client-side batching window (400ms law) of tap reactions, accepted
+// server-side with a per-batch count cap. kind: "heart" (Phase 2 v1).
+// (sessionId, senderId, clientBatchId) is the retry/duplicate law. Totals
+// are always SUM-ed server-side — never client-supplied.
+model LiveReactionBatch {
+  id            String   @id @default(cuid())
+  roomId        String
+  sessionId     String
+  senderId      String
+  clientBatchId String
+  kind          String   @default("heart")
+  count         Int
+  createdAt     DateTime @default(now())
+
+  @@unique([sessionId, senderId, clientBatchId])
+  @@index([sessionId, createdAt])
+}
+
+// Persistent moderator grant (survives sessions, unlike participant rows).
+// Revocation keeps the row with revokedAt/revokedBy set — the grant ledger
+// stays complete for audit.
+model LiveRoomModerator {
+  id        String    @id @default(cuid())
+  roomId    String
+  userId    String
+  grantedBy String
+  revokedAt DateTime?
+  revokedBy String?
+  createdAt DateTime  @default(now())
+
+  @@unique([roomId, userId])
+  @@index([roomId])
+}
+
+// The moderation AUDIT TRAIL (work order §4I). action: "delete-message" |
+// "mute" | "unmute" | "ban" | "unban" | "slow-mode" | "chat-enable" |
+// "chat-disable". Mute is timed via expiresAt; mute/ban STATE is derived
+// from this table (latest action wins) so state and audit can never drift.
+model LiveModerationAction {
+  id        String    @id @default(cuid())
+  roomId    String
+  sessionId String?
+  actorId   String
+  targetId  String?
+  action    String
+  reason    String?
+  messageId String?
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([roomId, createdAt])
+  @@index([roomId, targetId, createdAt])
+}
+
+// Viewer reports. reason: "spam" | "harassment" | "inappropriate" |
+// "other". status: "open" | "reviewed" | "dismissed". Visible to the room
+// host; platform-wide queue lands with the admin surface (Phase 3+).
+model LiveReport {
+  id         String   @id @default(cuid())
+  roomId     String
+  sessionId  String?
+  reporterId String
+  targetId   String?
+  messageId  String?
+  reason     String
+  detail     String?
+  status     String   @default("open")
+  createdAt  DateTime @default(now())
+
+  @@index([roomId, status])
+  @@index([reporterId, createdAt])
+}
+
+// Server-authoritative polls (work order §4C: counts are server-computed).
+// status: "open" | "closed". One vote per (poll, user); changing a vote is
+// an UPDATE of that unique row, never a second row.
+model LivePoll {
+  id          String    @id @default(cuid())
+  roomId      String
+  sessionId   String
+  question    String
+  createdById String
+  status      String    @default("open")
+  closedAt    DateTime?
+  createdAt   DateTime  @default(now())
+
+  options LivePollOption[]
+  votes   LivePollVote[]
+
+  @@index([sessionId, createdAt])
+}
+
+model LivePollOption {
+  id       String @id @default(cuid())
+  pollId   String
+  label    String
+  position Int
+
+  poll  LivePoll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes LivePollVote[]
+
+  @@index([pollId, position])
+}
+
+model LivePollVote {
+  id        String   @id @default(cuid())
+  pollId    String
+  optionId  String
+  userId    String
+  createdAt DateTime @default(now())
+
+  poll   LivePoll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  option LivePollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, userId])
+  @@index([optionId])
+}
+
+// Q&A — viewers ask; host/moderators answer or hide. hiddenAt is the
+// moderation tombstone (the question stays in the audit set, never listed
+// publicly once hidden).
+model LiveQuestion {
+  id         String    @id @default(cuid())
+  roomId     String
+  sessionId  String
+  askerId    String
+  body       String
+  answeredAt DateTime?
+  hiddenAt   DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([sessionId, createdAt])
+  @@index([roomId, hiddenAt])
+}
+
+// Scheduled WebFlix LIVE events (work order §4H). status: "scheduled" |
+// "canceled" | "completed". roomId links the broadcast once it starts.
+model LiveEvent {
+  id           String   @id @default(cuid())
+  creatorId    String
+  title        String
+  description  String?
+  scheduledFor DateTime
+  status       String   @default("scheduled")
+  roomId       String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  registrations EventRegistration[]
+
+  @@index([status, scheduledFor])
+  @@index([creatorId])
+}
+
+// Event registrations — one per (event, user), cancel = row delete
+// (registration count derives from rows, never client claims).
+model EventRegistration {
+  eventId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  event LiveEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, userId])
 }
