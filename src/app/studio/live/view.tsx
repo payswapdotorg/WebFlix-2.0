@@ -90,6 +90,7 @@ import {
   type ProgramRecorder,
 } from "@/components/live/live-recorder-console";
 import { LiveReplayPanel } from "@/components/live/live-replay-panel";
+import { ReattachCard } from "@/components/live/live-reattach-card";
 import { useLivePresence, useLiveStream } from "@/components/live/use-live-stream";
 import { useLiveClub } from "@/hooks/use-live-club";
 import { useWebFlixSession } from "@/hooks/use-webflix-session";
@@ -214,6 +215,14 @@ export default function GoLivePage() {
   // The room POST /api/live-rooms created, kept across a failed session
   // start so "try again" reuses the SAME room — no duplicate idle rooms.
   const [stagedRoom, setStagedRoom] = useState<LiveRoomDto | null>(null);
+
+  // P68 re-attach: the mount probe finds the caller's ACTIVE live room (a
+  // console that reloads mid-broadcast re-takes its session instead of
+  // orphaning it). The playback plan is still minted by the server and
+  // held in memory only — re-attach adds no new token surface.
+  const [reattachRoom, setReattachRoom] = useState<LiveRoomDto | null>(null);
+  const [reattaching, setReattaching] = useState(false);
+  const [reattachError, setReattachError] = useState<string | null>(null);
 
   // The live room + its playback plan (held in memory only; short-lived).
   const [room, setRoom] = useState<LiveRoomDto | null>(null);
@@ -341,6 +350,77 @@ export default function GoLivePage() {
     [],
   );
 
+  /**
+   * P68 re-attach: re-take the host console of an ACTIVE session. The
+   * server derives the rung (mintJoinToken gives the room's hostId the
+   * host rung — the caller cannot claim it), so the minted plan's role is
+   * VERIFIED before the console flips live: anything but "host" is an
+   * honest refusal. Nothing here starts or ends a stream — the session
+   * keeps running exactly as it was. Resolves true when the console is
+   * live again, false otherwise (with the honest copy already surfaced).
+   * Defined BEFORE goLive: goLive's conflict path awaits this, so the
+   * deps array must never read it before initialization (TDZ).
+   */
+  const reattachTo = useCallback(async (candidateRoomId: string): Promise<boolean> => {
+    setReattachError(null);
+    setReattaching(true);
+    try {
+      const minted = await postLive<{ playback: LivePlaybackPlan }>(
+        `/api/live-rooms/${candidateRoomId}/token`,
+        {},
+      );
+      if (minted.playback.role !== "host") {
+        setReattachError(
+          "The live provider did not issue a host token for this room, so this console cannot re-attach. The stream (if any) is unaffected.",
+        );
+        return false;
+      }
+      const detail = await fetch(`/api/live-rooms/${candidateRoomId}`, { cache: "no-store" });
+      if (!detail.ok) {
+        setReattachError(
+          detail.status === 404
+            ? "That room no longer exists — nothing to re-attach to."
+            : `Re-attach failed while loading the room (HTTP ${detail.status}). The stream (if any) is unaffected — try again.`,
+        );
+        return false;
+      }
+      const { room: detailRoom } = (await detail.json()) as { room: LiveRoomDto };
+      if (detailRoom.status === "ended") {
+        // The session ended while the console was away (webhook, kill
+        // switch) — there is nothing to re-attach to.
+        setReattachRoom(null);
+        setReattachError("That session has already ended — nothing to re-attach to.");
+        return false;
+      }
+      // The private preview capture is over — the live room publishes its own.
+      previewStreamRef.current?.getTracks().forEach((t) => t.stop());
+      previewStreamRef.current = null;
+      setPreviewStream(null);
+      setPermState("ask");
+      setRoom(detailRoom);
+      setRoomId(detailRoom.id);
+      setPlayback(minted.playback);
+      setReattachRoom(null);
+      setPhase("live");
+      toast.success("Console re-attached — the stream kept running the whole time.");
+      return true;
+    } catch (err) {
+      const failure = err as LiveRequestFailure;
+      setReattachError(
+        failure.code === "conflict"
+          ? "That room has no live session to re-attach to (it may have ended)."
+          : failure.code === "unauthenticated"
+            ? "Sign in again to re-attach the console."
+            : failure.code === "provider-not-configured" || failure.code === "provider-failed"
+              ? "The live provider could not be reached to re-attach the console. The stream (if any) is unaffected — try again."
+              : `Re-attach failed (${failure.code}). The stream (if any) is unaffected — try again.`,
+      );
+      return false;
+    } finally {
+      setReattaching(false);
+    }
+  }, []);
+
   /** Go Live: create the room, then start the session on it (two honest POSTs). */
   const goLive = useCallback(async () => {
     if (!titleValid || starting) return;
@@ -348,6 +428,7 @@ export default function GoLivePage() {
     setFormError(null);
     setProviderFailure(null);
     setSignInRequired(false);
+    setReattachError(null);
     let working = stagedRoom;
     try {
       if (!working) {
@@ -370,6 +451,7 @@ export default function GoLivePage() {
       setRoom(started.room);
       setRoomId(started.room.id);
       setPlayback(started.playback);
+      setReattachRoom(null);
       setPhase("live");
     } catch (err) {
       // Honesty detail: the failure may land AFTER the room was created
@@ -391,11 +473,22 @@ export default function GoLivePage() {
         case "rate-limited":
           setFormError("Too many Go Live attempts right now — wait a moment and try again.");
           break;
-        case "conflict":
-          setFormError(
-            "This room already has an active live session. Reload the page to re-attach to it.",
-          );
+        case "conflict": {
+          // P68: the room already has an active session — that is exactly
+          // what re-attach exists for. Take the console back directly; the
+          // old "Reload the page to re-attach" copy was a lie (a reload
+          // reset the form and orphaned the running session). If re-attach
+          // itself fails, the honest alert + candidate card stay above the
+          // form and the stream is untouched. (conflict can only originate
+          // at the session POST, so `working` is the room — the null guard
+          // is for the type, and a null here simply leaves the honest
+          // alert-less preflight untouched.)
+          if (working) {
+            setReattachRoom(working);
+            await reattachTo(working.id);
+          }
           break;
+        }
         case "not-found":
           setFormError("That room no longer exists. Start again with a fresh Go Live.");
           setStagedRoom(null);
@@ -408,7 +501,7 @@ export default function GoLivePage() {
     } finally {
       setStarting(false);
     }
-  }, [titleValid, starting, trimmedTitle, visibility, stagedRoom]);
+  }, [titleValid, starting, trimmedTitle, visibility, stagedRoom, reattachTo]);
 
   /**
    * End live: POST /api/live-rooms/[id]/end. The server destroys the provider
@@ -482,6 +575,29 @@ export default function GoLivePage() {
     };
   }, [phase, roomId]);
 
+  // P68: one mount probe — "does the signed-in caller already have a live
+  // session running?" Signed-out is the common cold-browser case (401 →
+  // stay silent; the preflight handles sign-in). A transient probe failure
+  // stays silent too: the conflict path re-attaches directly, and the
+  // probe re-runs on the next full page load.
+  useEffect(() => {
+    let cancelled = false;
+    const probe = async () => {
+      try {
+        const res = await fetch("/api/studio/live-session", { cache: "no-store" });
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { room: LiveRoomDto | null };
+        if (!cancelled && data.room) setReattachRoom(data.room);
+      } catch {
+        // silent — see above
+      }
+    };
+    void probe();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   /** "Start another live" — full reset to a clean preflight. */
   const resetAll = useCallback(() => {
     setPhase("preflight");
@@ -496,6 +612,8 @@ export default function GoLivePage() {
     setEndFailure(null);
     setSignInRequired(false);
     setStarting(false);
+    setReattachRoom(null);
+    setReattachError(null);
   }, []);
 
   return (
@@ -530,25 +648,52 @@ export default function GoLivePage() {
       ) : signInRequired ? (
         <SignInRequiredCard roomSaved={stagedRoom !== null} />
       ) : (
-        <PreflightCard
-          title={title}
-          onTitleChange={setTitle}
-          visibility={visibility}
-          onVisibilityChange={setVisibility}
-          starting={starting}
-          formError={formError}
-          providerFailure={providerFailure}
-          onRetryStart={goLive}
-          permState={permState}
-          deviceError={deviceError}
-          cameras={cameras}
-          mics={mics}
-          cameraId={cameraId}
-          micId={micId}
-          previewVideoRef={previewVideoRef}
-          onDeviceTest={startDeviceTest}
-          onGoLive={goLive}
-        />
+        <>
+          {reattachError && (
+            <Alert variant="destructive" data-testid="reattach-error">
+              <AlertTriangle aria-hidden="true" />
+              <AlertTitle>Re-attach failed</AlertTitle>
+              <AlertDescription className="flex flex-wrap items-center gap-2">
+                <span>{reattachError}</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setReattachError(null)}
+                >
+                  Dismiss
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+          {reattachRoom && (
+            <ReattachCard
+              room={reattachRoom}
+              reattaching={reattaching}
+              onReattach={() => void reattachTo(reattachRoom.id)}
+              onDismiss={() => setReattachRoom(null)}
+            />
+          )}
+          <PreflightCard
+            title={title}
+            onTitleChange={setTitle}
+            visibility={visibility}
+            onVisibilityChange={setVisibility}
+            starting={starting}
+            formError={formError}
+            providerFailure={providerFailure}
+            onRetryStart={goLive}
+            permState={permState}
+            deviceError={deviceError}
+            cameras={cameras}
+            mics={mics}
+            cameraId={cameraId}
+            micId={micId}
+            previewVideoRef={previewVideoRef}
+            onDeviceTest={startDeviceTest}
+            onGoLive={goLive}
+          />
+        </>
       )}
 
       {/* Phase 4: the creator's past sessions with their derived analytics.

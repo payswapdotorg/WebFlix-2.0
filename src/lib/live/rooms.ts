@@ -280,6 +280,36 @@ export async function listRooms(opts: {
   return rooms.map((r) => mapRoom(r, counts, callerId));
 }
 
+/**
+ * The caller's ACTIVE live room, if any — the re-attach probe behind
+ * GET /api/studio/live-session (P68). Host-scoped by construction: the
+ * query joins on the caller's own rooms only, ANY visibility (an unlisted
+ * or members room belongs to its host exactly as much as a public one —
+ * the discovery route's public filter must never leak into the host's own
+ * console). The per-room one-active-session law still holds; a host with
+ * several rooms live at once gets the newest console candidate. The
+ * session row (status not ended) is the truth — a stale room row that a
+ * webhook already finished never answers.
+ */
+export async function findHostActiveRoom(hostShadowId: string): Promise<LiveRoomDto | null> {
+  const room = await db.liveRoom.findFirst({
+    where: {
+      hostId: hostShadowId,
+      status: "live",
+      sessions: { some: { status: { not: "ended" } } },
+    },
+    include: roomInclude(),
+    orderBy: { createdAt: "desc" },
+  });
+  if (!room) return null;
+  // include() order is not guaranteed and the row carries past ended
+  // sessions too — the approximate viewer count must attach to THE active
+  // session, never to a stale ended one.
+  const active = [...room.sessions].find((s) => s.status !== "ended");
+  const counts = await viewerCountsFor(active ? [active.id] : []);
+  return mapRoom(room, counts, hostShadowId);
+}
+
 export async function startSession(
   roomId: string,
   sessionUser: WebFlixSessionUser,
