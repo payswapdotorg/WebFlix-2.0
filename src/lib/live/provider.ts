@@ -68,6 +68,14 @@ export interface LiveProviderAdapter {
    * deleting an already-gone room must not throw. */
   destroyRoom(roomName: string): Promise<void>;
 
+  /**
+   * Server-side removal of ONE participant (the Phase 3 host-removes-guest
+   * path). Idempotent by law: removing an identity the provider no longer
+   * knows must not throw. Implementations SHOULD boot the live participant;
+   * the app-level `removed` state stays the authorization truth.
+   */
+  removeParticipant(roomName: string, identity: string): Promise<void>;
+
   /** Does the provider currently know this room? (reconnect reconciliation) */
   roomExists(roomName: string): Promise<boolean>;
 

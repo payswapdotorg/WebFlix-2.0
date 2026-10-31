@@ -28,6 +28,9 @@ import { formatCount, formatRelativeDate } from "@/lib/format";
 import { LiveChatPanel } from "@/components/live/live-chat-panel";
 import { LiveReactionRail } from "@/components/live/live-reaction-rail";
 import { LivePollsQuestions } from "@/components/live/live-polls-questions";
+import { LiveStageGrid } from "@/components/live/live-stage-grid";
+import { LiveMatchPanel } from "@/components/live/live-match-panel";
+import { LiveGiftPanel } from "@/components/live/live-gift-panel";
 import { useLiveStream } from "@/components/live/use-live-stream";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,10 +39,16 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type {
+  GiftCatalogItemDto,
+  GiftEventDto,
   LiveApiError,
+  LiveInviteDto,
+  LiveMatchDto,
   LivePlaybackPlan,
   LiveRoomDto,
   LiveSessionDto,
+  LiveStageDto,
+  SendGiftInput,
 } from "@/lib/live/types";
 
 /**
@@ -138,26 +147,27 @@ const END_REASON_COPY: Record<Exclude<LiveSessionDto["endReason"], null>, string
 async function mintViewerToken(
   roomId: string,
   signal: AbortSignal,
+  body: Record<string, unknown> = {},
 ): Promise<{ ok: true; playback: LivePlaybackPlan } | { ok: false; code: TokenFailureCode; message?: string }> {
   try {
     const res = await fetch(`/api/live-rooms/${roomId}/token`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
+      body: JSON.stringify(body),
       cache: "no-store",
       signal,
     });
-    const body = (await res
+    const payload = (await res
       .json()
       .catch(() => ({}))) as Partial<LiveApiError> & { playback?: LivePlaybackPlan };
-    if (!res.ok || !body.playback) {
+    if (!res.ok || !payload.playback) {
       return {
         ok: false,
-        code: body.error ?? "network",
-        message: body.message,
+        code: payload.error ?? "network",
+        message: payload.message,
       };
     }
-    return { ok: true, playback: body.playback };
+    return { ok: true, playback: payload.playback };
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") throw err;
     return { ok: false, code: "network" };
@@ -257,6 +267,67 @@ function ViewerStage({ hostName }: { hostName: string }) {
   );
 }
 
+/**
+ * Phase 3 — the GUEST publishing stage. Rendered only when this browser's
+ * minted token carries the guest rung (an accepted invite, server-verified).
+ * Publishes camera + mic ONLY after the explicit consent step that precedes
+ * the token mint; renders the multi-participant program (host + guests) and
+ * the caller's own tile.
+ */
+function GuestStage({ hostName }: { hostName: string }) {
+  const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare], {
+    onlySubscribed: true,
+  });
+  const localRefs = useTracks([Track.Source.Camera], { onlySubscribed: false });
+  const localRef = localRefs.find((ref) => ref.participant.isLocal);
+  const connectionState = useConnectionState();
+
+  return (
+    <div className="flex h-full w-full flex-col gap-2 bg-black p-2">
+      <div className="grid flex-1 grid-cols-1 gap-2 overflow-hidden sm:grid-cols-2">
+        {tracks.map((ref) => (
+          <div
+            key={ref.participant.identity}
+            className="relative min-h-0 overflow-hidden rounded-lg bg-black"
+          >
+            <VideoTrack trackRef={ref} className="h-full w-full object-contain" />
+            <span className="absolute bottom-2 left-2 rounded-sm bg-black/70 px-1.5 py-0.5 text-[11px] font-medium text-white">
+              {ref.participant.name || hostName || "Host"}
+            </span>
+          </div>
+        ))}
+        <div className="relative min-h-0 overflow-hidden rounded-lg bg-black">
+          {localRef ? (
+            <VideoTrack trackRef={localRef} className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-sm text-muted-foreground">
+              <Loader2 className="size-6 animate-spin" aria-hidden="true" />
+              <p>Starting your camera — you&apos;re publishing as a guest.</p>
+            </div>
+          )}
+          <span className="absolute bottom-2 left-2 rounded-sm bg-black/70 px-1.5 py-0.5 text-[11px] font-medium text-white">
+            You (guest)
+          </span>
+        </div>
+      </div>
+      <span
+        role="status"
+        aria-live="polite"
+        className="self-end rounded-md bg-white/10 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-white"
+      >
+        {connectionState === ConnectionState.Connected
+          ? "Publishing as guest"
+          : connectionState === ConnectionState.Connecting
+            ? "Connecting…"
+            : connectionState === ConnectionState.Reconnecting ||
+                connectionState === ConnectionState.SignalReconnecting
+              ? "Reconnecting…"
+              : "Disconnected"}
+      </span>
+    </div>
+  );
+}
+
 export default function ViewerRoomView({ roomId }: { roomId: string }) {
   const {
     data,
@@ -266,6 +337,36 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
   const room = data?.room ?? null;
   const { user } = useWebFlixSession();
 
+  // ── Phase 3 (guests, matches, gifts) — slices of the ONE page stream ──
+  const [stage, setStage] = useState<LiveStageDto | null>(null);
+  const [match, setMatch] = useState<LiveMatchDto | null>(null);
+  const [gifts, setGifts] = useState<GiftEventDto[]>([]);
+  const [catalogue, setCatalogue] = useState<GiftCatalogItemDto[]>([]);
+  const [giftSending, setGiftSending] = useState(false);
+  const [giftError, setGiftError] = useState<string | null>(null);
+  const [myInvite, setMyInvite] = useState<LiveInviteDto | null>(null);
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+
+  /** The caller's own pending invite/request — the renderer never guesses. */
+  const refreshMyInvite = useCallback(async () => {
+    if (!user) {
+      setMyInvite(null);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/live-rooms/${roomId}/invites`, { cache: "no-store" });
+      if (!res.ok) {
+        setMyInvite(null);
+        return;
+      }
+      const body = (await res.json().catch(() => ({}))) as { invites?: LiveInviteDto[] };
+      setMyInvite(body.invites?.find((i) => i.status === "pending") ?? null);
+    } catch {
+      setMyInvite(null);
+    }
+  }, [roomId, user]);
+
   // ONE stream subscription for the whole page (ADR-0006 economics): chat
   // rows, reaction totals, presence and the moderation/poll/question
   // envelopes all flow through here; panels receive slices as props.
@@ -273,8 +374,33 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
     onRoomChange: reloadRoom,
     onEnvelope: (event) => {
       // A moderation decision may have changed room policy (chat-disable,
-      // slow-mode) — the caller-scoped policy lives on the room GET.
-      if (event.kind === "moderation") void reloadRoom();
+      // slow-mode, gifts-disable) — the caller-scoped policy lives on the
+      // room GET.
+      if (event.kind === "moderation") {
+        void reloadRoom();
+        return;
+      }
+      if (event.kind === "stage") {
+        setStage(event.stage);
+        return;
+      }
+      if (event.kind === "match") {
+        setMatch(event.match);
+        return;
+      }
+      if (event.kind === "gift") {
+        // Prepend + dedupe by id (at-least-once transport can re-deliver).
+        setGifts((prev) =>
+          [event.gift, ...prev.filter((g) => g.id !== event.gift.id)].slice(0, 50),
+        );
+        return;
+      }
+      if (event.kind === "invite") {
+        // Any invite change may concern THIS caller (request approved, invite
+        // expired...) — the caller-scoped GET is the truth, not identity
+        // comparisons in the renderer.
+        void refreshMyInvite();
+      }
     },
   });
   const canModerate =
@@ -379,6 +505,151 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
       "The connection to this live room closed. The host may have ended the broadcast — or the connection dropped.",
     );
   }, []);
+
+  // ── Phase 3 mount loads: catalogue + gift feed + the caller's invites ──
+  // (the stream baseline covers stage/match; the catalogue is never streamed)
+  useEffect(() => {
+    const controller = new AbortController();
+    const load = async () => {
+      try {
+        const [catRes, feedRes] = await Promise.all([
+          fetch("/api/live/gifts", { cache: "no-store", signal: controller.signal }),
+          fetch(`/api/live-rooms/${roomId}/gifts?limit=20`, {
+            cache: "no-store",
+            signal: controller.signal,
+          }),
+        ]);
+        if (catRes.ok) {
+          const body = (await catRes.json().catch(() => ({}))) as { gifts?: GiftCatalogItemDto[] };
+          setCatalogue(body.gifts ?? []);
+        }
+        if (feedRes.ok) {
+          const body = (await feedRes.json().catch(() => ({}))) as { gifts?: GiftEventDto[] };
+          setGifts(body.gifts ?? []);
+        }
+      } catch {
+        /* aborted or offline — the stream re-derives what it can */
+      }
+    };
+    void load();
+    return () => controller.abort();
+  }, [roomId]);
+
+  useEffect(() => {
+    // Deferred to a timer callback (external-system subscription shape —
+    // the fetch's setState must not land in the effect body).
+    const t = setTimeout(() => void refreshMyInvite(), 0);
+    return () => clearTimeout(t);
+  }, [refreshMyInvite]);
+
+  /** Send a gift (dev credits). The response/dedupe rides the stream. */
+  const sendGift = useCallback(
+    async (input: SendGiftInput) => {
+      setGiftSending(true);
+      setGiftError(null);
+      try {
+        const res = await fetch(`/api/live-rooms/${roomId}/gifts`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        });
+        const body = (await res.json().catch(() => ({}))) as {
+          gift?: GiftEventDto;
+          error?: string;
+          message?: string;
+        };
+        if (!res.ok || !body.gift) {
+          setGiftError(
+            body.message ??
+              (body.error === "spend-cap"
+                ? "You've reached the dev-credit limit for now — try again in a minute."
+                : `Sending failed (${body.error ?? "network"}).`),
+          );
+          return;
+        }
+        setGifts((prev) => [body.gift!, ...prev.filter((g) => g.id !== body.gift!.id)].slice(0, 50));
+      } catch {
+        setGiftError("Sending failed — the network dropped.");
+      } finally {
+        setGiftSending(false);
+      }
+    },
+    [roomId],
+  );
+
+  /** Request to join the stage (a signed-in viewer's self-request). */
+  const requestGuestSlot = useCallback(async () => {
+    setInviteBusy(true);
+    setInviteError(null);
+    try {
+      const res = await fetch(`/api/live-rooms/${roomId}/invites`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+        setInviteError(body.message ?? `The request failed (${body.error ?? "network"}).`);
+      }
+    } catch {
+      setInviteError("The request failed — the network dropped.");
+    } finally {
+      setInviteBusy(false);
+      void refreshMyInvite();
+    }
+  }, [roomId, refreshMyInvite]);
+
+  /** Respond to the caller's pending invite (accept = guest consent gate). */
+  const respondMyInvite = useCallback(
+    async (action: "accept" | "decline") => {
+      if (!myInvite) return;
+      setInviteBusy(true);
+      setInviteError(null);
+      try {
+        const res = await fetch(
+          `/api/live-rooms/${roomId}/invites/${myInvite.id}/respond`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action }),
+          },
+        );
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as {
+            error?: string;
+            message?: string;
+          };
+          setInviteError(body.message ?? `The response failed (${body.error ?? "network"}).`);
+          return;
+        }
+        setMyInvite(null);
+      } catch {
+        setInviteError("The response failed — the network dropped.");
+      } finally {
+        setInviteBusy(false);
+      }
+    },
+    [roomId, myInvite],
+  );
+
+  /** Accept consent → mint the GUEST rung (publish) and swap transports. */
+  const joinStageAsGuest = useCallback(async () => {
+    await respondMyInvite("accept");
+    const controller = new AbortController();
+    const result = await mintViewerToken(roomId, controller.signal, { role: "guest" });
+    if (result.ok) {
+      setMintedSessionId(sessionId);
+      setMintedToken(result.playback);
+      setMintFailure(null);
+      setTransportError(null);
+    } else {
+      // Honest degrade: the server refused the guest rung (expired invite,
+      // removed, stage full) — back to the viewer token.
+      setInviteError(
+        result.message ?? "The stage join was refused by the server — you're still watching as a viewer.",
+      );
+    }
+  }, [roomId, respondMyInvite, sessionId]);
 
   const roomEnded = room?.status === "ended";
   const showTransportError = !roomEnded && transportError !== null;
@@ -625,6 +896,7 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
             }
 
             if (activePlayback && room.status === "live") {
+              const isGuestRung = activePlayback.role === "guest";
               return (
                 <div
                   data-testid="live-stage"
@@ -635,9 +907,11 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
                     serverUrl={activePlayback.url}
                     token={activePlayback.token}
                     connect={true}
-                    // Subscribe-only: the viewer never captures or publishes.
-                    audio={false}
-                    video={false}
+                    // Viewer rung: subscribe-only (no capture). Guest rung:
+                    // audio+video auto-publish — consent happened at the
+                    // explicit accept step that minted this token.
+                    audio={isGuestRung}
+                    video={isGuestRung}
                     screen={false}
                     options={{ adaptiveStream: true, dynacast: true }}
                     onConnected={() => setTransportError(null)}
@@ -645,7 +919,11 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
                     onError={onTransportError}
                     className="flex h-full w-full"
                   >
-                    <ViewerStage hostName={room.hostName} />
+                    {isGuestRung ? (
+                      <GuestStage hostName={room.hostName} />
+                    ) : (
+                      <ViewerStage hostName={room.hostName} />
+                    )}
                     <RoomAudioRenderer />
                   </LiveKitRoom>
                 </div>
@@ -686,6 +964,92 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
                 />
               )}
 
+              {match && <LiveMatchPanel match={match} />}
+
+              {/* ── Phase 3 guest surface: the caller's invite/request state ── */}
+              {sessionLive &&
+                (room.policy?.actorRole === "viewer" || room.policy?.actorRole === "guest") &&
+                user !== null && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Join the stage</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 text-sm">
+                    {room.policy?.actorRole === "guest" ? (
+                      activePlayback?.role === "guest" ? (
+                        <p className="text-muted-foreground">
+                          You&apos;re publishing as a guest. The host can remove you at any time.
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          <p>
+                            You&apos;re approved for the stage. Publishing shares your camera and
+                            microphone with everyone in the room.
+                          </p>
+                          <Button size="sm" onClick={() => void joinStageAsGuest()} disabled={inviteBusy}>
+                            Publish camera &amp; mic
+                          </Button>
+                        </div>
+                      )
+                    ) : myInvite ? (
+                      myInvite.direction === "host-invite" ? (
+                        <div className="space-y-2">
+                          <p>The host invited you to join the stage as a guest.</p>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => void joinStageAsGuest()}
+                              disabled={inviteBusy}
+                            >
+                              Accept &amp; publish camera
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void respondMyInvite("decline")}
+                              disabled={inviteBusy}
+                            >
+                              Decline
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-muted-foreground">
+                          Your guest request was sent — waiting for the host.
+                        </p>
+                      )
+                    ) : (room.policy?.guestsEnabled ?? true) &&
+                      (stage?.participants.filter((p) => p.role === "guest" && p.state !== "removed")
+                        .length ?? 0) < (stage?.guestsMax ?? 4) ? (
+                      <div className="space-y-2">
+                        <p className="text-muted-foreground">
+                          Ask {room.hostName} to bring you on stage as a guest (camera + mic).
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void requestGuestSlot()}
+                          disabled={inviteBusy}
+                        >
+                          Request to join
+                        </Button>
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground">
+                        {(room.policy?.guestsEnabled ?? true)
+                          ? "The stage is full right now."
+                          : "The host turned guest joins off for this room."}
+                      </p>
+                    )}
+                    {inviteError && (
+                      <p role="alert" className="text-xs text-destructive">
+                        {inviteError}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
               <LiveChatPanel
                 roomId={roomId}
                 sessionLive={sessionLive}
@@ -702,6 +1066,31 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
                 signedIn={user !== null}
                 streamConnected={stream.connected}
                 envelope={stream.latestEnvelope}
+              />
+
+              {stage && <LiveStageGrid stage={stage} />}
+
+              <LiveGiftPanel
+                catalogue={catalogue}
+                gifts={gifts}
+                canSend={sessionLive && user !== null && (room.policy?.giftsEnabled ?? true)}
+                disabledReason={
+                  !sessionLive
+                    ? "Gifts open when the broadcast is live"
+                    : user === null
+                      ? "Sign in to send gifts"
+                      : room.policy?.giftsEnabled === false
+                        ? "Gifts are off in this room"
+                        : null
+                }
+                sending={giftSending}
+                error={giftError}
+                onSend={(input) => void sendGift(input)}
+                activeMatchTeams={
+                  match && match.status === "active"
+                    ? match.teams.map((t) => ({ id: t.id, label: t.label }))
+                    : []
+                }
               />
 
               <Card>

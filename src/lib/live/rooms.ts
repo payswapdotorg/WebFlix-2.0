@@ -306,27 +306,51 @@ export async function mintJoinToken(
   if (!session || session.status === "ended") {
     throw new LiveDomainError("conflict", "no-live-session");
   }
-  // Phase 1 rung law: the host proves identity by being the room's hostId;
-  // every other caller gets the subscribe-only viewer rung. The guest rung
-  // requires an accepted LiveInvite — that path opens in Phase 3, so a
-  // requested "guest" role today degrades honestly to viewer.
-  void requestedRole;
-  const role: LiveTokenRole = room.hostId === identity.id ? "host" : "viewer";
+  // Phase 1 rung law: the host proves identity by being the room's hostId.
+  // Phase 3 guest rung: a publisher token requires an ACCEPTED invite on
+  // this room (guests.acceptedGuestInvite) AND a non-removed participant
+  // row — a host-removed guest can never re-publish. Everything else
+  // degrades honestly to the subscribe-only viewer rung.
+  let role: LiveTokenRole = "viewer";
+  const existingParticipant = await db.liveParticipant.findUnique({
+    where: { sessionId_userId: { sessionId: session.id, userId: identity.id } },
+    select: { state: true },
+  });
+  const wasRemoved = existingParticipant?.state === "removed";
+  if (room.hostId === identity.id) {
+    role = "host";
+  } else if (requestedRole === "guest" && !wasRemoved) {
+    // Dynamic import: guests.ts sits on top of rooms.ts (LiveDomainError +
+    // adapter); the static edge would be a module cycle.
+    const { acceptedGuestInvite } = await import("./guests");
+    if (await acceptedGuestInvite(roomId, identity.id)) {
+      role = "guest";
+    }
+  }
   const plan = await ad.mintToken({
     roomName: session.providerRoomId,
     identity: identity.id,
     role,
-    ttlSeconds: role === "host" ? TOKEN_TTL_SECONDS.host : TOKEN_TTL_SECONDS.viewer,
+    ttlSeconds:
+      role === "host"
+        ? TOKEN_TTL_SECONDS.host
+        : role === "guest"
+          ? TOKEN_TTL_SECONDS.guest
+          : TOKEN_TTL_SECONDS.viewer,
   });
   await db.liveParticipant.upsert({
     where: { sessionId_userId: { sessionId: session.id, userId: identity.id } },
     create: {
       sessionId: session.id,
       userId: identity.id,
-      role: role === "host" ? "host" : "viewer",
-      state: "connected",
+      role: role === "host" ? "host" : role === "guest" ? "guest" : "viewer",
+      state: wasRemoved ? "removed" : "connected",
     },
-    update: { state: "connected", lastSeenAt: new Date() },
+    // A host-removed identity keeps its removed marker (the stage roster
+    // and future mint decisions read it) — only lastSeenAt refreshes.
+    update: wasRemoved
+      ? { lastSeenAt: new Date() }
+      : { state: "connected", lastSeenAt: new Date() },
   });
   return plan;
 }

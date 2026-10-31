@@ -42,6 +42,8 @@ export function buildPolicyDto({ room, actor, sanctions, sessionLive }: PolicyIn
     chatEnabled: room.chatEnabled,
     reactionsEnabled: room.reactionsEnabled,
     slowModeSeconds: room.slowModeSeconds,
+    guestsEnabled: room.guestsEnabled,
+    giftsEnabled: room.giftsEnabled,
     actorRole: actor.role,
     canChat,
     chatBlockedReason,

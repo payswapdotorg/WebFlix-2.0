@@ -57,14 +57,24 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import type {
+  GiftCatalogItemDto,
+  GiftEventDto,
+  LiveInviteDto,
+  LiveMatchDto,
   LivePlaybackPlan,
   LiveRoomDto,
   LiveRoomPolicyDto,
   LiveSessionDto,
+  LiveStageDto,
+  LiveStreamEvent,
   PerformLiveModerationInput,
+  SendGiftInput,
 } from "@/lib/live/types";
 import { LiveChatPanel } from "@/components/live/live-chat-panel";
 import { LiveReactionRail } from "@/components/live/live-reaction-rail";
+import { LiveStageGrid } from "@/components/live/live-stage-grid";
+import { LiveMatchPanel } from "@/components/live/live-match-panel";
+import { LiveGiftPanel } from "@/components/live/live-gift-panel";
 import { useLivePresence, useLiveStream } from "@/components/live/use-live-stream";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
@@ -898,6 +908,8 @@ function LiveConsole({ room, playback, endFailure, onEnd, cameraId, micId }: Liv
     chatEnabled,
     reactionsEnabled: true,
     slowModeSeconds,
+    guestsEnabled: true,
+    giftsEnabled: true,
     actorRole: "host",
     canChat: true,
     chatBlockedReason: null,
@@ -1041,6 +1053,7 @@ function LiveConsole({ room, playback, endFailure, onEnd, cameraId, micId }: Liv
             onChatEnabled={setChatEnabled}
             onSlowMode={setSlowModeSeconds}
           />
+          <HostStageControls roomId={room.id} streamEnvelope={stream.latestEnvelope} />
         </div>
       </div>
 
@@ -1436,5 +1449,422 @@ function HostPolicyControls(props: {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Phase 3 — the host's stage & match box                              */
+/*                                                                     */
+/* Server-authoritative law: this panel renders server truth (stage    */
+/* roster, pending invites, current match) and sends validated intent  */
+/* only. Every action rides the frozen contracts; nothing here claims  */
+/* a capability the server didn't confirm.                             */
+/* ------------------------------------------------------------------ */
+
+const MATCH_DURATION_CHOICES = [30, 60, 120, 300] as const;
+
+function HostStageControls({
+  roomId,
+  streamEnvelope,
+}: {
+  roomId: string;
+  streamEnvelope: LiveStreamEvent | null;
+}) {
+  const [stage, setStage] = useState<LiveStageDto | null>(null);
+  const [invites, setInvites] = useState<LiveInviteDto[]>([]);
+  const [match, setMatch] = useState<LiveMatchDto | null>(null);
+  const [gifts, setGifts] = useState<GiftEventDto[]>([]);
+  const [catalogue, setCatalogue] = useState<GiftCatalogItemDto[]>([]);
+  const [matchKind, setMatchKind] = useState<"solo" | "team">("solo");
+  const [matchDuration, setMatchDuration] = useState<number>(120);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const reload = useCallback(async () => {
+    try {
+      const [stageRes, inviteRes, matchRes, giftRes] = await Promise.all([
+        fetch(`/api/live-rooms/${roomId}/stage`, { cache: "no-store" }),
+        fetch(`/api/live-rooms/${roomId}/invites`, { cache: "no-store" }),
+        fetch(`/api/live-rooms/${roomId}/matches/current`, { cache: "no-store" }),
+        fetch(`/api/live-rooms/${roomId}/gifts?limit=10`, { cache: "no-store" }),
+      ]);
+      if (stageRes.ok) {
+        const body = (await stageRes.json().catch(() => ({}))) as { stage?: LiveStageDto };
+        setStage(body.stage ?? null);
+      }
+      if (inviteRes.ok) {
+        const body = (await inviteRes.json().catch(() => ({}))) as { invites?: LiveInviteDto[] };
+        setInvites((body.invites ?? []).filter((i) => i.status === "pending"));
+      }
+      if (matchRes.ok) {
+        const body = (await matchRes.json().catch(() => ({}))) as { match?: LiveMatchDto | null };
+        setMatch(body.match ?? null);
+      }
+      if (giftRes.ok) {
+        const body = (await giftRes.json().catch(() => ({}))) as { gifts?: GiftEventDto[] };
+        setGifts(body.gifts ?? []);
+      }
+    } catch {
+      /* transient — the next envelope or interval re-derives */
+    }
+  }, [roomId]);
+
+  useEffect(() => {
+    // Deferred to a timer callback (the React-documented external-system
+    // subscription shape) — the fetch's setState then lands outside the
+    // effect body.
+    const t = setTimeout(() => void reload(), 0);
+    return () => clearTimeout(t);
+  }, [reload]);
+
+  useEffect(() => {
+    const kind = streamEnvelope?.kind;
+    if (kind === "stage" || kind === "invite" || kind === "match" || kind === "gift") {
+      const t = setTimeout(() => void reload(), 0);
+      return () => clearTimeout(t);
+    }
+  }, [streamEnvelope, reload]);
+
+  useEffect(() => {
+    const t = setInterval(() => void reload(), 12_000);
+    return () => clearInterval(t);
+  }, [reload]);
+
+  useEffect(() => {
+    fetch("/api/live/gifts", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b: { gifts?: GiftCatalogItemDto[] } | null) => setCatalogue(b?.gifts ?? []))
+      .catch(() => setCatalogue([]));
+  }, []);
+
+  /** One honest action runner: busy + error + reload after every intent. */
+  const run = useCallback(
+    async (fn: () => Promise<Response>, failureLabel: string) => {
+      setBusy(true);
+      setError(null);
+      try {
+        const res = await fn();
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as { message?: string };
+          setError(body.message ?? `${failureLabel} (${res.status})`);
+        }
+      } catch {
+        setError(`${failureLabel} — the network dropped.`);
+      } finally {
+        setBusy(false);
+        void reload();
+      }
+    },
+    [reload],
+  );
+
+  const postJson = (url: string, body: unknown) =>
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  const respond = (inviteId: string, action: "accept" | "decline") =>
+    run(
+      () => postJson(`/api/live-rooms/${roomId}/invites/${inviteId}/respond`, { action }),
+      `Could not ${action} the invite`,
+    );
+  const removeGuest = (userId: string) =>
+    run(
+      () => fetch(`/api/live-rooms/${roomId}/stage/${userId}`, { method: "DELETE" }),
+      "Could not remove the guest",
+    );
+  const togglePolicy = (action: "guests-enable" | "guests-disable" | "gifts-enable" | "gifts-disable") =>
+    run(() => postJson(`/api/live-rooms/${roomId}/moderation`, { action }), "Could not update the room policy");
+
+  const startMatch = () => {
+    const host = stage?.participants.find((p) => p.role === "host");
+    const guests = (stage?.participants ?? []).filter(
+      (p) => p.role === "guest" && p.state !== "removed",
+    );
+    const roster =
+      matchKind === "solo"
+        ? { teamA: host ? [host.userId] : [], teamB: guests[0] ? [guests[0].userId] : [] }
+        : { teamA: guests[0] ? [guests[0].userId] : [], teamB: guests[1] ? [guests[1].userId] : [] };
+    return run(
+      () =>
+        postJson(`/api/live-rooms/${roomId}/matches`, {
+          kind: matchKind,
+          durationSeconds: matchDuration,
+          ...roster,
+        }),
+      "Could not start the match",
+    );
+  };
+  const endMatch = () =>
+    match
+      ? run(
+          () => postJson(`/api/live-rooms/${roomId}/matches/${match.id}/end`, {}),
+          "Could not end the match",
+        )
+      : undefined;
+  const cancelMatch = () =>
+    match
+      ? run(
+          () => postJson(`/api/live-rooms/${roomId}/matches/${match.id}/cancel`, {}),
+          "Could not cancel the match",
+        )
+      : undefined;
+
+  const guests = (stage?.participants ?? []).filter(
+    (p) => p.role === "guest" && p.state !== "removed",
+  );
+  const matchActive = match?.status === "active";
+  const canStart =
+    !matchActive &&
+    (matchKind === "solo" ? guests.length >= 1 : guests.length >= 2) &&
+    !busy;
+  const startHint =
+    matchActive
+      ? "A match is already running."
+      : matchKind === "solo"
+        ? "Solo matches need you plus one guest on stage."
+        : "Team matches need two guests on stage (one per side).";
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Stage &amp; guests</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-2 text-sm">
+            <span>Guest joins</span>
+            <Switch
+              checked={stage?.guestsEnabled ?? true}
+              disabled={busy}
+              onCheckedChange={(checked) =>
+                void togglePolicy(checked ? "guests-enable" : "guests-disable")
+              }
+              aria-label="Toggle guest joins"
+            />
+          </div>
+          <div className="flex items-center justify-between gap-2 text-sm">
+            <span>Gifts</span>
+            <GiftsToggle roomId={roomId} onToggle={(a) => void togglePolicy(a)} busy={busy} />
+          </div>
+
+          {invites.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Pending requests ({invites.length})
+              </p>
+              {invites.map((invite) => (
+                <div
+                  key={invite.id}
+                  className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-sm"
+                >
+                  <span className="min-w-0 truncate">
+                    {invite.direction === "guest-request" ? "requested" : "invited"}:{" "}
+                    <span className="font-medium">{invite.inviteeName}</span>{" "}
+                    <span className="text-muted-foreground">@{invite.inviteeHandle}</span>
+                  </span>
+                  <span className="flex shrink-0 gap-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => void respond(invite.id, "accept")}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() => void respond(invite.id, "decline")}
+                    >
+                      Decline
+                    </Button>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <LiveStageGrid stage={stage} />
+
+          {guests.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Remove a guest
+              </p>
+              {guests.map((g) => (
+                <div
+                  key={g.userId}
+                  className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-sm"
+                >
+                  <span className="min-w-0 truncate">
+                    {g.name} <span className="text-muted-foreground">@{g.handle}</span>
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-destructive"
+                    disabled={busy}
+                    onClick={() => void removeGuest(g.userId)}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Match</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {match ? (
+            <>
+              <LiveMatchPanel match={match} />
+              {matchActive ? (
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" disabled={busy} onClick={() => void endMatch()}>
+                    End &amp; declare winner
+                  </Button>
+                  <Button size="sm" variant="ghost" disabled={busy} onClick={() => void cancelMatch()}>
+                    Cancel match
+                  </Button>
+                </div>
+              ) : null}
+              {!matchActive && (
+                <div className="space-y-3 border-t pt-3">
+                  <div className="flex flex-wrap gap-1.5">
+                    {(["solo", "team"] as const).map((k) => (
+                      <Button
+                        key={k}
+                        size="sm"
+                        variant={matchKind === k ? "default" : "outline"}
+                        disabled={busy}
+                        onClick={() => setMatchKind(k)}
+                      >
+                        {k === "solo" ? "Solo (you vs guest)" : "Team (guest vs guest)"}
+                      </Button>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {MATCH_DURATION_CHOICES.map((d) => (
+                      <Button
+                        key={d}
+                        size="sm"
+                        variant={matchDuration === d ? "default" : "outline"}
+                        disabled={busy}
+                        onClick={() => setMatchDuration(d)}
+                      >
+                        {d}s
+                      </Button>
+                    ))}
+                  </div>
+                  <Button size="sm" disabled={!canStart} onClick={() => void startMatch()}>
+                    Start match
+                  </Button>
+                  {!canStart && !busy && <p className="text-xs text-muted-foreground">{startHint}</p>}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-1.5">
+                {(["solo", "team"] as const).map((k) => (
+                  <Button
+                    key={k}
+                    size="sm"
+                    variant={matchKind === k ? "default" : "outline"}
+                    disabled={busy}
+                    onClick={() => setMatchKind(k)}
+                  >
+                    {k === "solo" ? "Solo (you vs guest)" : "Team (guest vs guest)"}
+                  </Button>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {MATCH_DURATION_CHOICES.map((d) => (
+                  <Button
+                    key={d}
+                    size="sm"
+                    variant={matchDuration === d ? "default" : "outline"}
+                    disabled={busy}
+                    onClick={() => setMatchDuration(d)}
+                  >
+                    {d}s
+                  </Button>
+                ))}
+              </div>
+              <Button size="sm" disabled={!canStart} onClick={() => void startMatch()}>
+                Start match
+              </Button>
+              {!canStart && !busy && <p className="text-xs text-muted-foreground">{startHint}</p>}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Gift activity</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <LiveGiftPanel
+            catalogue={catalogue}
+            gifts={gifts}
+            canSend={false}
+            disabledReason="The host receives gifts — sending happens in the viewer room"
+            activeMatchTeams={[]}
+          />
+        </CardContent>
+      </Card>
+
+      {error && (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** The gifts toggle reads its own server truth (the audited policy). */
+function GiftsToggle({
+  roomId,
+  onToggle,
+  busy,
+}: {
+  roomId: string;
+  onToggle: (action: "gifts-enable" | "gifts-disable") => void;
+  busy: boolean;
+}) {
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch(`/api/live-rooms/${roomId}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b: { room?: { policy?: { giftsEnabled?: boolean } } } | null) => {
+        if (alive && b?.room?.policy) setEnabled(b.room.policy.giftsEnabled ?? true);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [roomId]);
+  return (
+    <Switch
+      checked={enabled ?? true}
+      disabled={busy || enabled === null}
+      onCheckedChange={(checked) => {
+        setEnabled(checked);
+        onToggle(checked ? "gifts-enable" : "gifts-disable");
+      }}
+      aria-label="Toggle gifts"
+    />
   );
 }
