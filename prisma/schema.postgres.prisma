@@ -43,6 +43,7 @@ model User {
   clips          Clip[]
   netflixMyList  NetflixMyListItem[]
   netflixWatchEvents NetflixWatchEvent[]
+  liveRoomsOwned LiveRoom[] @relation("LiveRoomHost")
 }
 
 model Channel {
@@ -438,4 +439,96 @@ model NetflixWatchEvent {
 
   @@id([userId, netflixId])
   @@index([userId, lastPlayedAt])
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// WFX2-LIVE-PLATFORM-1 — first-party WebFlix LIVE (issue #2).
+// Frozen Phase 1 contracts (docs/plans/work-orders/WFX2-LIVE-PLATFORM-1.md §6).
+// One LiveRoom = one broadcast lifecycle in Phase 1; LiveSession carries the
+// provider-scoped transport; participants are identity rows, never
+// credentials. Enumerated fields are String (the no-enum SQLite law) with
+// allowed values in comments, union-typed in src/lib/live/types.ts.
+// Production note: the Vercel build pushes THIS model set to Neon PostgreSQL
+// via the schema.postgres.prisma twin (byte-equivalent modulo provider).
+// ═══════════════════════════════════════════════════════════════════
+
+// The canonical room identity + policy. status: "idle" | "live" | "ended".
+// visibility: "public" | "unlisted" (Phase 1); audience/age gates land later.
+model LiveRoom {
+  id         String   @id @default(cuid())
+  hostId     String
+  title      String
+  status     String   @default("idle")
+  visibility String   @default("public")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  host     User          @relation("LiveRoomHost", fields: [hostId], references: [id])
+  sessions LiveSession[]
+  invites  LiveInvite[]
+
+  @@index([status])
+  @@index([hostId])
+}
+
+// One scheduled/actual broadcast lifecycle. status: "starting" | "live" |
+// "reconnecting" | "ended". providerRoomId is the provider-side room NAME —
+// a routing identity, never a secret (tokens are minted server-side).
+// endReason: "host" | "provider-webhook" | "timeout" | null while live.
+model LiveSession {
+  id             String    @id @default(cuid())
+  roomId         String
+  provider       String    @default("livekit")
+  providerRoomId String
+  status         String    @default("starting")
+  startedAt      DateTime?
+  endedAt        DateTime?
+  endReason      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  room         LiveRoom          @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  participants LiveParticipant[]
+
+  @@unique([provider, providerRoomId])
+  @@index([roomId])
+  @@index([status])
+}
+
+// Session membership for a WebFlix identity. role: "host" | "guest" | "viewer".
+// state: "connected" | "disconnected" | "removed". Viewer counts are derived
+// from these rows and are APPROXIMATE — never a billing/financial fact.
+model LiveParticipant {
+  id        String   @id @default(cuid())
+  sessionId String
+  userId    String
+  role      String
+  state     String   @default("connected")
+  joinedAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+
+  session LiveSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, userId])
+  @@index([sessionId])
+}
+
+// Host-approved invitation/request state for publisher roles (guests land in
+// Phase 3; the table + authorization path freeze now). status: "pending" |
+// "accepted" | "declined" | "expired" | "cancelled".
+model LiveInvite {
+  id        String   @id @default(cuid())
+  roomId    String
+  inviteeId String
+  inviterId String
+  role      String   @default("guest")
+  status    String   @default("pending")
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  room LiveRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, status])
+  @@index([inviteeId, status])
 }
