@@ -8,11 +8,14 @@ import {
   CheckCircle2,
   Eye,
   Loader2,
+  Lock,
   Mic,
   MicOff,
   PlugZap,
   Radio,
   RefreshCw,
+  SmilePlus,
+  Trash2,
   Users,
   Video,
   VideoOff,
@@ -62,6 +65,7 @@ import type {
   GiftCatalogItemDto,
   GiftEventDto,
   LiveAnalyticsSnapshotDto,
+  LiveClubEmotesDto,
   LiveInviteDto,
   LiveMatchDto,
   LivePlaybackPlan,
@@ -71,6 +75,7 @@ import type {
   LiveStageDto,
   LiveStreamEvent,
   PerformLiveModerationInput,
+  SaveLiveClubEmoteInput,
   SendGiftInput,
 } from "@/lib/live/types";
 import { LiveChatPanel } from "@/components/live/live-chat-panel";
@@ -1090,6 +1095,7 @@ function LiveConsole({ room, playback, endFailure, onEnd, cameraId, micId }: Liv
           canModerate
           signedIn
           stream={stream}
+          hostId={room.hostId}
         />
         <div className="space-y-4">
           <LiveReactionRail
@@ -1795,6 +1801,8 @@ export function HostPolicyControls(props: {
 /** Frozen numeric law — mirrors src/lib/live/permissions.ts (server-only). */
 const CLUB_NAME_MAX = 40;
 const CLUB_MOTTO_MAX = 120;
+/** The emote form's level input ceiling — the server clamps to CLUB_LEVEL_MAX. */
+const EMOTE_LEVEL_MAX_INPUT = 50;
 
 export function ClubManagerCard() {
   const { status, user } = useWebFlixSession();
@@ -1805,7 +1813,104 @@ export function ClubManagerCard() {
   const [name, setName] = useState("");
   const [motto, setMotto] = useState("");
 
+  // ── Phase 5-emotes (ADR-0011): the supporter-emote manager ──
+  // Emotes are HOST-MANAGED CONFIGURATION, never history and never money:
+  // the card speaks ONLY the frozen routes (GET/POST/DELETE
+  // /api/live-clubs/emotes) and toasts the server's message verbatim on
+  // failure (a failed save never fakes a row). The list re-fetches from
+  // the server after every confirmed save/delete — no optimistic rows.
+  const [emotes, setEmotes] = useState<LiveClubEmotesDto["emotes"]>([]);
+  const [emotesLoaded, setEmotesLoaded] = useState(false);
+  const [emoteTick, setEmoteTick] = useState(0);
+  const [emoteBusy, setEmoteBusy] = useState(false);
+  const [emoteCode, setEmoteCode] = useState("");
+  const [emoteGlyph, setEmoteGlyph] = useState("");
+  const [emoteLevel, setEmoteLevel] = useState(1);
+
   const overview = club.overview;
+
+  // The emote set exists only for an existing club — load once the
+  // overview confirms one (the create form state needs no emote manager).
+  useEffect(() => {
+    const hostId = user?.id ?? null;
+    if (!hostId || !overview) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/live-clubs/emotes?hostId=${encodeURIComponent(hostId)}`,
+          { cache: "no-store", credentials: "same-origin" },
+        );
+        const body = (await res.json().catch(() => null)) as LiveClubEmotesDto | null;
+        if (cancelled) return;
+        setEmotes(res.ok && Array.isArray(body?.emotes) ? body.emotes : []);
+        setEmotesLoaded(true);
+      } catch {
+        if (!cancelled) setEmotesLoaded(true); // an empty honest list, not a crash
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, overview, emoteTick]);
+
+  /** Save (upsert by code) → refresh the list from the server. */
+  async function saveEmote(): Promise<void> {
+    const code = emoteCode.trim();
+    const unicode = emoteGlyph.trim();
+    if (code.length === 0 || unicode.length === 0 || emoteBusy) return;
+    setEmoteBusy(true);
+    try {
+      const level =
+        Number.isFinite(emoteLevel) && emoteLevel >= 1
+          ? Math.min(EMOTE_LEVEL_MAX_INPUT, Math.floor(emoteLevel))
+          : 1;
+      const res = await fetch("/api/live-clubs/emotes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        cache: "no-store",
+        body: JSON.stringify({ code, unicode, requiredLevel: level } satisfies SaveLiveClubEmoteInput),
+      });
+      if (res.ok) {
+        toast.success("Emote saved");
+        setEmoteCode("");
+        setEmoteGlyph("");
+        setEmoteLevel(1);
+        setEmoteTick((t) => t + 1); // the server's list replaces the form
+        return;
+      }
+      const body = (await res.json().catch(() => ({}))) as { message?: string };
+      toast.error(body.message ?? "Couldn't save the emote — nothing was changed.");
+    } catch {
+      toast.error("Couldn't reach WebFlix — the emote was not saved.");
+    } finally {
+      setEmoteBusy(false);
+    }
+  }
+
+  /** Delete by code → refresh (deleting never rewrites past messages). */
+  async function deleteEmote(code: string): Promise<void> {
+    if (emoteBusy) return;
+    setEmoteBusy(true);
+    try {
+      const res = await fetch(
+        `/api/live-clubs/emotes?code=${encodeURIComponent(code)}`,
+        { method: "DELETE", credentials: "same-origin", cache: "no-store" },
+      );
+      if (res.ok) {
+        toast.success("Emote deleted");
+        setEmoteTick((t) => t + 1);
+        return;
+      }
+      const body = (await res.json().catch(() => ({}))) as { message?: string };
+      toast.error(body.message ?? "Couldn't delete the emote — nothing was changed.");
+    } catch {
+      toast.error("Couldn't reach WebFlix — the emote was not deleted.");
+    } finally {
+      setEmoteBusy(false);
+    }
+  }
 
   return (
     <Card data-testid="club-manager">
@@ -1979,6 +2084,115 @@ export function ClubManagerCard() {
               Fan points are entertainment facts — no cash value, nothing to buy, nothing to
               convert.
             </p>
+
+            {/* ── Phase 5-emotes (ADR-0011): the supporter-emote manager.
+                Configuration, not history: a deleted emote leaves old chat
+                messages untouched (their codes render as plain text). ── */}
+            <div
+              data-testid="emote-manager"
+              className="space-y-2 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800"
+            >
+              <div className="flex items-center gap-2">
+                <SmilePlus className="size-4 text-muted-foreground" aria-hidden="true" />
+                <p className="text-sm font-medium">Emotes</p>
+              </div>
+              {!emotesLoaded ? (
+                <p className="px-1 text-xs text-muted-foreground">Loading emotes…</p>
+              ) : emotes.length === 0 ? (
+                <p className="rounded-lg border border-dashed px-3 py-3 text-center text-xs text-muted-foreground">
+                  No emotes yet — add your club&apos;s first one below.
+                </p>
+              ) : (
+                <ul aria-label="Club emotes" className="max-h-64 space-y-1 overflow-y-auto pr-1">
+                  {emotes.map((emote) => (
+                    <li
+                      key={emote.code}
+                      data-testid="emote-row"
+                      data-code={emote.code}
+                      className="flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5"
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="text-base leading-none" aria-hidden="true">
+                          {emote.unicode}
+                        </span>
+                        <span className="text-xs text-muted-foreground">:{emote.code}:</span>
+                      </span>
+                      <span className="flex shrink-0 items-center gap-1.5">
+                        <span className="text-[11px] tabular-nums text-muted-foreground">
+                          Level {emote.requiredLevel}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-7"
+                          aria-label={`Delete emote :${emote.code}:`}
+                          data-testid="emote-delete"
+                          disabled={emoteBusy}
+                          onClick={() => void deleteEmote(emote.code)}
+                        >
+                          <Trash2 className="size-3.5 text-muted-foreground" aria-hidden="true" />
+                        </Button>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="space-y-2 border-t pt-2">
+                <Input
+                  aria-label="Emote code"
+                  placeholder="Emote code, e.g. wave"
+                  value={emoteCode}
+                  maxLength={24}
+                  pattern="[a-z0-9_-]{1,24}"
+                  autoComplete="off"
+                  onChange={(e) => setEmoteCode(e.target.value)}
+                />
+                <p className="px-1 text-[11px] text-muted-foreground">
+                  Lowercase letters, numbers, “-” and “_” only — up to 24 characters.
+                </p>
+                <div className="grid grid-cols-[1fr_96px] gap-2">
+                  <Input
+                    aria-label="Emoji or character"
+                    placeholder="👋"
+                    value={emoteGlyph}
+                    maxLength={16}
+                    autoComplete="off"
+                    onChange={(e) => setEmoteGlyph(e.target.value)}
+                  />
+                  <Input
+                    aria-label="Required club level"
+                    type="number"
+                    min={1}
+                    max={EMOTE_LEVEL_MAX_INPUT}
+                    step={1}
+                    value={emoteLevel}
+                    onChange={(e) => setEmoteLevel(Number(e.target.value))}
+                  />
+                </div>
+                <Button
+                  data-testid="emote-save"
+                  size="sm"
+                  className="w-full"
+                  disabled={
+                    emoteBusy || emoteCode.trim().length === 0 || emoteGlyph.trim().length === 0
+                  }
+                  onClick={() => void saveEmote()}
+                >
+                  {emoteBusy ? (
+                    <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <SmilePlus className="size-4" aria-hidden="true" />
+                  )}
+                  {emoteBusy ? "Saving…" : "Save emote"}
+                </Button>
+                <p className="px-1 text-[11px] text-muted-foreground">
+                  Members at or above the emote&apos;s level can use it in your room&apos;s chat.
+                </p>
+              </div>
+              <p className="px-1 text-[11px] text-muted-foreground/80">
+                Non-monetary — emotes are identity, not purchases.
+              </p>
+            </div>
           </div>
         )}
       </CardContent>

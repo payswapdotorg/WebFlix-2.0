@@ -1145,6 +1145,7 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
                 canModerate={canModerate}
                 signedIn={user !== null}
                 stream={stream}
+                hostId={room.hostId}
               />
 
               <LivePollsQuestions

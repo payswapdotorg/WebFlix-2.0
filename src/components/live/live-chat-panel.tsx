@@ -19,6 +19,16 @@
  * Phase 5 (ADR-0010): the sender's fan-club badge (senderClubBadge) is
  * server-derived at read — it renders as a neutral zinc pill next to the
  * name, and null renders NOTHING (a badge is never client-claimed).
+ *
+ * Phase 5-emotes (ADR-0011): when the caller passes the room host's id,
+ * the panel fetches the host club's emote map ONCE per mount. Bodies are
+ * split by the FROZEN pure module (renderEmoteSegments) into text/emote
+ * segments — React text nodes only, never HTML; unknown codes stay text.
+ * The composer grows an emote picker when the map is non-empty: entitled
+ * rows append their `:code:`; locked rows are DISABLED with the level
+ * lock — the entitled stamp is display-only (the server re-derives on
+ * send; a forged send surfaces as the existing 403 error toast). A fetch
+ * failure (or a zero-emote map) leaves the picker hidden and chat intact.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -27,6 +37,7 @@ import {
   Ban,
   Flag,
   Loader2,
+  Lock,
   LogIn,
   Megaphone,
   MicOff,
@@ -34,6 +45,7 @@ import {
   SendHorizontal,
   ShieldMinus,
   ShieldPlus,
+  SmilePlus,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -66,6 +78,7 @@ import type {
   CreateLiveReportInput,
   LiveStreamEvent,
   LiveChatMessageDto,
+  LiveClubEmotesDto,
   LiveModerationActionDto,
   LiveReportDto,
   LiveReportReason,
@@ -73,6 +86,7 @@ import type {
   PerformLiveModerationInput,
   SendLiveChatInput,
 } from "@/lib/live/types";
+import { renderEmoteSegments, type EmoteGlyph } from "@/lib/live/emote-render";
 import { liveFetch, toastLiveFailure, type UseLiveStreamResult } from "./use-live-stream";
 
 /** Frozen numeric law (src/lib/live/permissions.ts CHAT_BODY_MAX). */
@@ -111,6 +125,14 @@ type PendingConfirm =
   | { kind: "ban"; message: LiveChatMessageDto }
   | null;
 
+/** One picker row's display facts (ADR-0011 §3 — the entitled stamp is a
+ * display hint from the GET map, never authority; the send path re-derives). */
+interface EmoteEntry {
+  unicode: string;
+  requiredLevel: number;
+  entitled: boolean;
+}
+
 export interface LiveChatPanelProps {
   roomId: string;
   /** Chat only when the broadcast is live — the server enforces it too. */
@@ -122,6 +144,9 @@ export interface LiveChatPanelProps {
   signedIn: boolean;
   /** The page-level stream (ONE EventSource per page — no per-panel one). */
   stream: UseLiveStreamResult;
+  /** The room host's id (either plane — the server resolves). When absent
+   * the emote map stays empty: no fetch, no picker, plain-text bodies. */
+  hostId?: string | null;
   className?: string;
 }
 
@@ -132,6 +157,7 @@ export function LiveChatPanel({
   canModerate,
   signedIn,
   stream,
+  hostId = null,
   className,
 }: LiveChatPanelProps) {
   const { messages, connected } = stream;
@@ -148,6 +174,64 @@ export function LiveChatPanel({
   const [authLost, setAuthLost] = useState(false);
   const [localTombstones, setLocalTombstones] = useState<ReadonlySet<string>>(new Set());
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm>(null);
+
+  // ── Phase 5-emotes: the room host's club emote map (ADR-0011) ──
+  // One GET per mount; a failure (or a no-club/zero-emote answer) keeps the
+  // map empty — the picker stays hidden and chat NEVER breaks. The emote
+  // state is display truth only; the send path is untouched (the server
+  // re-derives entitlement and answers 403 emote-locked like any other).
+  const [emoteMap, setEmoteMap] = useState<{
+    clubName: string | null;
+    emotes: LiveClubEmotesDto["emotes"];
+  }>({ clubName: null, emotes: [] });
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  useEffect(() => {
+    if (!hostId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/live-clubs/emotes?hostId=${encodeURIComponent(hostId)}`,
+          { credentials: "same-origin", cache: "no-store" },
+        );
+        if (cancelled || !res.ok) return; // map stays empty — picker hidden
+        const body = (await res.json().catch(() => null)) as LiveClubEmotesDto | null;
+        if (cancelled || !body || !Array.isArray(body.emotes)) return;
+        setEmoteMap({ clubName: body.clubName ?? null, emotes: body.emotes });
+      } catch {
+        /* a fetch failure NEVER breaks chat — the map simply stays empty */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hostId]);
+
+  // The picker's rows (code → display facts), derived once per map change.
+  const emoteEntries = useMemo<Map<string, EmoteEntry>>(
+    () =>
+      new Map(
+        emoteMap.emotes.map((e) => [
+          e.code,
+          { unicode: e.unicode, requiredLevel: e.requiredLevel, entitled: e.entitled },
+        ]),
+      ),
+    [emoteMap.emotes],
+  );
+  // The body renderer's glyph list — byte-for-byte from the server map.
+  const emoteGlyphs = useMemo<readonly EmoteGlyph[]>(
+    () => emoteMap.emotes.map((e) => ({ code: e.code, unicode: e.unicode })),
+    [emoteMap.emotes],
+  );
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
+
+  /** Append `:code:` (with a trailing space) and hand focus back. */
+  function appendEmote(code: string): void {
+    setDraft((prev) => `${prev}:${code}: `);
+    setPickerOpen(false);
+    composerRef.current?.focus();
+  }
 
   // Slow-mode countdown — starts ONLY from a server 403 ("slow-mode").
   const [slowModeUntil, setSlowModeUntil] = useState(0);
@@ -416,6 +500,7 @@ export function LiveChatPanel({
                   key={m.id}
                   message={m}
                   deleted={m.deleted || localTombstones.has(m.id)}
+                  emoteGlyphs={emoteGlyphs}
                   isMine={myId !== null && m.senderId === myId}
                   canModerate={canModerate && signedIn}
                   canReport={signedIn && !canModerate && m.senderId !== myId}
@@ -453,6 +538,7 @@ export function LiveChatPanel({
           >
             <div className="min-w-0 flex-1">
               <Textarea
+                ref={composerRef}
                 aria-label="Chat message"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
@@ -474,6 +560,72 @@ export function LiveChatPanel({
                 </p>
               )}
             </div>
+            {emoteEntries.size > 0 && (
+              <div className="relative shrink-0">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Emotes"
+                  aria-expanded={pickerOpen}
+                  data-testid="emote-picker-trigger"
+                  onClick={() => setPickerOpen((o) => !o)}
+                  className="size-11 md:size-9"
+                >
+                  <SmilePlus aria-hidden />
+                </Button>
+                {pickerOpen && (
+                  <div
+                    data-testid="emote-picker"
+                    role="group"
+                    aria-label="Emotes"
+                    className="absolute bottom-full right-0 z-50 mb-2 max-h-64 w-64 overflow-y-auto rounded-xl border bg-popover p-2 shadow-md"
+                  >
+                    {emoteMap.clubName !== null && (
+                      <p className="px-1 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        {emoteMap.clubName}
+                      </p>
+                    )}
+                    <div className="flex flex-col gap-0.5">
+                      {Array.from(emoteEntries.entries()).map(([code, entry]) =>
+                        entry.entitled ? (
+                          <button
+                            key={code}
+                            type="button"
+                            data-testid="emote-row"
+                            onClick={() => appendEmote(code)}
+                            className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                          >
+                            <span className="text-base leading-none" aria-hidden>
+                              {entry.unicode}
+                            </span>
+                            <span className="text-xs text-muted-foreground">:{code}:</span>
+                          </button>
+                        ) : (
+                          <button
+                            key={code}
+                            type="button"
+                            disabled
+                            aria-disabled="true"
+                            title={`Unlocks at club level ${entry.requiredLevel}`}
+                            data-testid="emote-row"
+                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-muted-foreground/60"
+                          >
+                            <span className="text-base leading-none" aria-hidden>
+                              {entry.unicode}
+                            </span>
+                            <span className="text-xs">:{code}:</span>
+                            <span className="ml-auto inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-muted-foreground">
+                              <Lock className="size-3" aria-hidden /> Level {entry.requiredLevel}
+                            </span>
+                          </button>
+                        ),
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             <Button
               type="submit"
               size="icon"
@@ -542,6 +694,9 @@ export function LiveChatPanel({
 interface ChatRowProps {
   message: LiveChatMessageDto;
   deleted: boolean;
+  /** The room host's emote glyphs (empty when the map is absent/failed —
+   * bodies then render as plain text, the honest history). */
+  emoteGlyphs: readonly EmoteGlyph[];
   isMine: boolean;
   canModerate: boolean;
   /** Signed-in non-moderators may report — never on their own rows. */
@@ -555,6 +710,7 @@ interface ChatRowProps {
 function ChatRow({
   message,
   deleted,
+  emoteGlyphs,
   isMine,
   canModerate,
   canReport,
@@ -616,7 +772,25 @@ function ChatRow({
                   announcement && "font-medium text-amber-700 dark:text-amber-400",
                 )}
               >
-                {message.body}
+                {/* Phase 5-emotes (ADR-0011 §4): the FROZEN pure module does
+                    the ONLY substitution — exact :code: matches against the
+                    server map render its unicode as a React text node; every
+                    other colon (scores, times, unknown/retired codes) stays
+                    literal text. Never HTML, never a client-invented glyph. */}
+                {renderEmoteSegments(message.body, emoteGlyphs).map((seg, i) =>
+                  seg.kind === "emote" ? (
+                    <span
+                      key={i}
+                      title={`:${seg.code}:`}
+                      className="text-base leading-none"
+                      aria-label={`emote :${seg.code}:`}
+                    >
+                      {seg.value}
+                    </span>
+                  ) : (
+                    seg.value
+                  ),
+                )}
               </p>
               {announcement && (
                 <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
