@@ -30,7 +30,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     } catch {
       body = {};
     }
-    const playback = await mintJoinToken(id, sessionUser.id, body.role === "guest" ? "guest" : "viewer");
+    const playback = await mintJoinToken(id, sessionUser, body.role === "guest" ? "guest" : "viewer");
     return NextResponse.json({ playback });
   } catch (err) {
     if (err instanceof LiveDomainError) {

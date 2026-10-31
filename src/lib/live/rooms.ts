@@ -16,6 +16,7 @@
  *     deliveries (an ended session is terminal; nothing un-ends it)
  */
 import { db } from "@/lib/db";
+import { ensureShadowUser } from "@/lib/watch/local-comments";
 import { livekitAdapter } from "./livekit-adapter";
 import type { LiveProviderAdapter } from "./provider";
 import {
@@ -31,6 +32,23 @@ import type {
   LiveTokenRole,
   LiveWebhookEvent,
 } from "./types";
+import type { WebFlixSessionUser } from "@/lib/auth/types";
+
+/**
+ * The canonical LIVE identity: the shadow User row (the app-wide seam —
+ * /api/me and the watch lanes resolve identities through the same
+ * ensureShadowUser law). The auth session (Upstash-backed) is a separate
+ * identity plane; EVERY LiveRoom/LiveParticipant/LiveKit identity below is
+ * the LOCAL shadow id, so FKs hold and host checks compare like with like.
+ */
+export async function resolveLiveIdentity(sessionUser: WebFlixSessionUser): Promise<{
+  id: string;
+  handle: string;
+  name: string;
+  avatarUrl: string;
+}> {
+  return ensureShadowUser(sessionUser);
+}
 
 /** Token TTLs (seconds) — short-lived by law; clients re-mint on reconnect. */
 export const TOKEN_TTL_SECONDS = {
@@ -152,7 +170,7 @@ function roomInclude() {
 }
 
 export async function createRoom(
-  callerId: string,
+  sessionUser: WebFlixSessionUser,
   input: CreateLiveRoomInput,
 ): Promise<LiveRoomDto> {
   const title = input.title?.trim() ?? "";
@@ -160,17 +178,19 @@ export async function createRoom(
     throw new LiveDomainError("invalid", "title must be 1..140 chars");
   }
   const visibility = input.visibility === "unlisted" ? "unlisted" : "public";
+  const identity = await resolveLiveIdentity(sessionUser);
   const room = await db.liveRoom.create({
-    data: { hostId: callerId, title, visibility, status: "idle" },
+    data: { hostId: identity.id, title, visibility, status: "idle" },
     include: roomInclude(),
   });
-  return mapRoom(room, new Map(), callerId);
+  return mapRoom(room, new Map(), identity.id);
 }
 
 export async function getRoom(
   roomId: string,
-  callerId: string | null,
+  sessionUser: WebFlixSessionUser | null,
 ): Promise<LiveRoomDto | null> {
+  const callerId = sessionUser ? (await resolveLiveIdentity(sessionUser)).id : null;
   const room = await db.liveRoom.findUnique({ where: { id: roomId }, include: roomInclude() });
   if (!room) return null;
   // Unlisted rooms are visible to their host and to anyone who already has
@@ -184,10 +204,11 @@ export async function getRoom(
 
 export async function listRooms(opts: {
   status?: LiveRoomStatus;
-  callerId: string | null;
+  sessionUser: WebFlixSessionUser | null;
   limit?: number;
 }): Promise<LiveRoomDto[]> {
   const status = opts.status ?? "live";
+  const callerId = opts.sessionUser ? (await resolveLiveIdentity(opts.sessionUser)).id : null;
   const rooms = await db.liveRoom.findMany({
     where: { visibility: "public", status },
     include: roomInclude(),
@@ -195,20 +216,21 @@ export async function listRooms(opts: {
     take: Math.min(Math.max(opts.limit ?? 24, 1), 48),
   });
   const counts = await viewerCountsFor(rooms.flatMap((r) => r.sessions.map((s) => s.id)));
-  return rooms.map((r) => mapRoom(r, counts, opts.callerId));
+  return rooms.map((r) => mapRoom(r, counts, callerId));
 }
 
 export async function startSession(
   roomId: string,
-  callerId: string,
+  sessionUser: WebFlixSessionUser,
 ): Promise<{ room: LiveRoomDto; playback: LivePlaybackPlan }> {
   const ad = adapter();
   if (!ad.isConfigured()) {
     throw new LiveDomainError("provider-not-configured");
   }
+  const identity = await resolveLiveIdentity(sessionUser);
   const room = await db.liveRoom.findUnique({ where: { id: roomId }, include: roomInclude() });
   if (!room) throw new LiveDomainError("not-found");
-  if (room.hostId !== callerId) throw new LiveDomainError("forbidden");
+  if (room.hostId !== identity.id) throw new LiveDomainError("forbidden");
 
   const active = await db.liveSession.findFirst({
     where: { roomId, status: { not: "ended" } },
@@ -233,7 +255,7 @@ export async function startSession(
 
   const playback = await ad.mintToken({
     roomName: providerRoomId,
-    identity: callerId,
+    identity: identity.id,
     role: "host",
     ttlSeconds: TOKEN_TTL_SECONDS.host,
   });
@@ -243,22 +265,23 @@ export async function startSession(
     include: roomInclude(),
   });
   await db.liveParticipant.upsert({
-    where: { sessionId_userId: { sessionId: session.id, userId: callerId } },
-    create: { sessionId: session.id, userId: callerId, role: "host", state: "connected" },
+    where: { sessionId_userId: { sessionId: session.id, userId: identity.id } },
+    create: { sessionId: session.id, userId: identity.id, role: "host", state: "connected" },
     update: { role: "host", state: "connected", lastSeenAt: new Date() },
   });
-  return { room: mapRoom(fresh, new Map([[session.id, 1]]), callerId), playback };
+  return { room: mapRoom(fresh, new Map([[session.id, 1]]), identity.id), playback };
 }
 
 export async function mintJoinToken(
   roomId: string,
-  callerId: string,
+  sessionUser: WebFlixSessionUser,
   requestedRole: LiveTokenRole,
 ): Promise<LivePlaybackPlan> {
   const ad = adapter();
   if (!ad.isConfigured()) {
     throw new LiveDomainError("provider-not-configured");
   }
+  const identity = await resolveLiveIdentity(sessionUser);
   const room = await db.liveRoom.findUnique({
     where: { id: roomId },
     include: { sessions: { orderBy: { createdAt: "desc" }, take: 1 } },
@@ -273,18 +296,18 @@ export async function mintJoinToken(
   // requires an accepted LiveInvite — that path opens in Phase 3, so a
   // requested "guest" role today degrades honestly to viewer.
   void requestedRole;
-  const role: LiveTokenRole = room.hostId === callerId ? "host" : "viewer";
-  const plan = ad.mintToken({
+  const role: LiveTokenRole = room.hostId === identity.id ? "host" : "viewer";
+  const plan = await ad.mintToken({
     roomName: session.providerRoomId,
-    identity: callerId,
+    identity: identity.id,
     role,
     ttlSeconds: role === "host" ? TOKEN_TTL_SECONDS.host : TOKEN_TTL_SECONDS.viewer,
   });
   await db.liveParticipant.upsert({
-    where: { sessionId_userId: { sessionId: session.id, userId: callerId } },
+    where: { sessionId_userId: { sessionId: session.id, userId: identity.id } },
     create: {
       sessionId: session.id,
-      userId: callerId,
+      userId: identity.id,
       role: role === "host" ? "host" : "viewer",
       state: "connected",
     },
@@ -293,13 +316,14 @@ export async function mintJoinToken(
   return plan;
 }
 
-export async function endRoom(roomId: string, callerId: string): Promise<LiveRoomDto> {
+export async function endRoom(roomId: string, sessionUser: WebFlixSessionUser): Promise<LiveRoomDto> {
+  const identity = await resolveLiveIdentity(sessionUser);
   const room = await db.liveRoom.findUnique({
     where: { id: roomId },
     include: { sessions: { orderBy: { createdAt: "desc" }, take: 1 } },
   });
   if (!room) throw new LiveDomainError("not-found");
-  if (room.hostId !== callerId) throw new LiveDomainError("forbidden");
+  if (room.hostId !== identity.id) throw new LiveDomainError("forbidden");
 
   const session = room.sessions[0];
   const alreadyEnded =
@@ -325,7 +349,7 @@ export async function endRoom(roomId: string, callerId: string): Promise<LiveRoo
     include: roomInclude(),
   });
   const counts = await viewerCountsFor(done.sessions.map((s) => s.id));
-  return mapRoom(done, counts, callerId);
+  return mapRoom(done, counts, identity.id);
 }
 
 /**

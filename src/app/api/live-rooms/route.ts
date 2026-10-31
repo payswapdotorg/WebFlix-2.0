@@ -22,7 +22,7 @@ export async function GET(req: Request) {
     const statusParam = new URL(req.url).searchParams.get("status");
     const status = statusParam === "ended" ? "ended" : statusParam === "idle" ? "idle" : "live";
     const sessionUser = await getSessionUser(req);
-    const rooms = await listRooms({ status, callerId: sessionUser?.id ?? null });
+    const rooms = await listRooms({ status, sessionUser: sessionUser });
     return NextResponse.json({ rooms });
   } catch (err) {
     console.error("GET /api/live-rooms failed", err);
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
     } catch {
       return NextResponse.json({ error: "invalid" }, { status: 400 });
     }
-    const room = await createRoom(sessionUser.id, body);
+    const room = await createRoom(sessionUser, body);
     return NextResponse.json({ room }, { status: 201 });
   } catch (err) {
     if (err instanceof LiveDomainError) {

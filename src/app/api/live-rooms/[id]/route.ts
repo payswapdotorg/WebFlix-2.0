@@ -14,7 +14,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   try {
     const { id } = await ctx.params;
     const sessionUser = await getSessionUser(req);
-    const room = await getRoom(id, sessionUser?.id ?? null);
+    const room = await getRoom(id, sessionUser);
     if (!room) {
       return NextResponse.json({ error: "not-found" }, { status: 404 });
     }

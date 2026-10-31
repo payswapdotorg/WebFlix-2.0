@@ -25,7 +25,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     if (!sessionUser) {
       return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
     }
-    const room = await endRoom(id, sessionUser.id);
+    const room = await endRoom(id, sessionUser);
     return NextResponse.json({ room });
   } catch (err) {
     if (err instanceof LiveDomainError) {
