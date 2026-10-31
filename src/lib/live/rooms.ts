@@ -376,11 +376,13 @@ export async function endRoom(roomId: string, sessionUser: WebFlixSessionUser): 
     // Provider teardown FIRST — if the provider is unreachable the app state
     // stays live and the caller sees the honest failure (no fake success);
     // the provider webhook remains the reconciliation backstop.
+    // (RoomCompositeEgress, when operator-declared, ends with the room.)
     await ad.destroyRoom(session.providerRoomId);
     await db.liveSession.update({
       where: { id: session.id },
       data: { status: "ended", endedAt: new Date(), endReason: "host" },
     });
+    await runEndSideEffects(session.id, roomId);
   }
   const done = await db.liveRoom.update({
     where: { id: roomId },
@@ -389,6 +391,28 @@ export async function endRoom(roomId: string, sessionUser: WebFlixSessionUser): 
   });
   const counts = await viewerCountsFor(done.sessions.map((s) => s.id));
   return mapRoom(done, counts, identity.id);
+}
+
+/**
+ * Phase 4 end-hook (integration lane): the analytics snapshot + the replay
+ * finalize BOTH run best-effort — neither may block or fail the end
+ * reconcile (the host analytics read always re-derives = self-healing; a
+ * recording still in flight flips to the honest "failed" row). Dynamic
+ * imports keep the rooms→{analytics,replays} edges acyclic.
+ */
+async function runEndSideEffects(sessionId: string, roomId: string): Promise<void> {
+  try {
+    const { recordSessionAnalytics } = await import("./analytics");
+    await recordSessionAnalytics(sessionId, roomId);
+  } catch (err) {
+    console.error("live end-hook analytics failed", err);
+  }
+  try {
+    const { finalizeRecordingOnEnd } = await import("./replays");
+    await finalizeRecordingOnEnd(sessionId, roomId);
+  } catch (err) {
+    console.error("live end-hook replay finalize failed", err);
+  }
 }
 
 /**
@@ -420,6 +444,7 @@ export async function reconcileWebhookEvent(event: LiveWebhookEvent): Promise<{ 
           data: { status: "ended", endedAt: new Date(), endReason: "provider-webhook" },
         });
         await db.liveRoom.update({ where: { id: session.roomId }, data: { status: "ended" } });
+        await runEndSideEffects(session.id, session.roomId);
         return { reconciled: true };
       }
       return { reconciled: false };

@@ -81,6 +81,25 @@ export async function heartbeat(
     sessionId: session.id,
     viewerCount: await connectedViewerCount(session.id),
   };
+  // Phase 4: raise the session's presence-time concurrent viewer peak
+  // (the ONLY concurrent-peak fact that exists; analytics summarizes it).
+  // Best-effort — a failed raise never fails the heartbeat.
+  if (presence.viewerCount > 0) {
+    try {
+      const peak = await db.liveSession.findUnique({
+        where: { id: session.id },
+        select: { peakViewers: true },
+      });
+      if (peak && presence.viewerCount > peak.peakViewers) {
+        await db.liveSession.update({
+          where: { id: session.id },
+          data: { peakViewers: presence.viewerCount },
+        });
+      }
+    } catch (err) {
+      console.error("live peak-viewers raise failed", err);
+    }
+  }
   // Publish law: presence changes flush to same-instance streams instantly.
   publishLiveEvent(roomId, {
     kind: "presence",

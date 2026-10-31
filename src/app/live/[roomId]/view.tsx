@@ -31,6 +31,7 @@ import { LivePollsQuestions } from "@/components/live/live-polls-questions";
 import { LiveStageGrid } from "@/components/live/live-stage-grid";
 import { LiveMatchPanel } from "@/components/live/live-match-panel";
 import { LiveGiftPanel } from "@/components/live/live-gift-panel";
+import { LiveReplayPanel } from "@/components/live/live-replay-panel";
 import { useLiveStream } from "@/components/live/use-live-stream";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -771,6 +772,8 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
                       Ended {formatRelativeDate(ended.endedAt)}
                     </p>
                   )}
+                  {/* Phase 4: the session's replay, when the host recorded one. */}
+                  <LiveReplayPanel roomId={room.id} className="w-full" />
                   <Button asChild variant="outline" size="sm">
                     <Link href="/live">Browse other live rooms</Link>
                   </Button>
@@ -1068,7 +1071,23 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
                 envelope={stream.latestEnvelope}
               />
 
-              {stage && <LiveStageGrid stage={stage} />}
+              {stage && (
+                <div className="space-y-2">
+                  {stage.recording && (
+                    <p
+                      data-testid="live-rec-indicator"
+                      className="flex items-center gap-1.5 text-xs font-semibold text-destructive"
+                    >
+                      <span
+                        className="size-2 animate-pulse rounded-full bg-destructive"
+                        aria-hidden="true"
+                      />
+                      REC — this session is being recorded
+                    </p>
+                  )}
+                  <LiveStageGrid stage={stage} />
+                </div>
+              )}
 
               <LiveGiftPanel
                 catalogue={catalogue}

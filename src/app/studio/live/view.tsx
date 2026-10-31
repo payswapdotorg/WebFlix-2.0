@@ -56,9 +56,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import type {
   GiftCatalogItemDto,
   GiftEventDto,
+  LiveAnalyticsSnapshotDto,
   LiveInviteDto,
   LiveMatchDto,
   LivePlaybackPlan,
@@ -75,6 +77,13 @@ import { LiveReactionRail } from "@/components/live/live-reaction-rail";
 import { LiveStageGrid } from "@/components/live/live-stage-grid";
 import { LiveMatchPanel } from "@/components/live/live-match-panel";
 import { LiveGiftPanel } from "@/components/live/live-gift-panel";
+import {
+  LiveRecorderConsole,
+  useProgramRecorder,
+  type LiveRecordingTake,
+  type ProgramRecorder,
+} from "@/components/live/live-recorder-console";
+import { LiveReplayPanel } from "@/components/live/live-replay-panel";
 import { useLivePresence, useLiveStream } from "@/components/live/use-live-stream";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
@@ -533,6 +542,9 @@ export default function GoLivePage() {
           onGoLive={goLive}
         />
       )}
+
+      {/* Phase 4: the creator's past sessions with their derived analytics. */}
+      {phase === "preflight" && <PastSessionsCard />}
     </main>
   );
 }
@@ -902,6 +914,11 @@ function LiveConsole({ room, playback, endFailure, onEnd, cameraId, micId }: Liv
   // the heartbeat keeps the host row inside the freshness window.
   const stream = useLiveStream(room.id);
   useLivePresence(room.id, true);
+  // Phase 4 consent fact: the stage envelope carries the recording flag.
+  const stageRecording =
+    stream.latestEnvelope?.kind === "stage"
+      ? Boolean(stream.latestEnvelope.stage.recording)
+      : false;
   const [chatEnabled, setChatEnabled] = useState(true);
   const [slowModeSeconds, setSlowModeSeconds] = useState(0);
   const hostPolicy: LiveRoomPolicyDto = {
@@ -1024,6 +1041,10 @@ function LiveConsole({ room, playback, endFailure, onEnd, cameraId, micId }: Liv
               You&apos;ll be asked to confirm — ending disconnects viewers
               immediately and can&apos;t be undone.
             </p>
+            <Separator />
+            {/* Phase 4: the host-capture recording sink (ADR-0008). Rendered
+                INSIDE the LiveKitRoom so the bridge can read the local tracks. */}
+            <ProgramRecordingControls roomId={room.id} stageRecording={stageRecording} />
           </CardContent>
         </Card>
       </div>
@@ -1287,6 +1308,69 @@ function LocalCameraTile() {
   );
 }
 
+/**
+ * Phase 4: the host-capture recording bridge (ADR-0008). Lives INSIDE the
+ * LiveKitRoom context so it can build the recorded MediaStream from the
+ * local camera+mic tracks. The server's recording fact (stage envelope)
+ * stays authoritative; the MediaRecorder is armed when the fact is true
+ * and the take uploads through LiveRecorderConsole's stop path.
+ */
+function ProgramRecordingControls({
+  roomId,
+  stageRecording,
+}: {
+  roomId: string;
+  stageRecording: boolean;
+}) {
+  const [recording, setRecording] = useState(stageRecording);
+  // The React-documented render-phase adjustment (the same pattern the
+  // stream hook uses for room changes): when the server's recording fact
+  // moves, adopt it — guarded by the previously seen value, never an effect.
+  const [lastStageFact, setLastStageFact] = useState(stageRecording);
+  if (stageRecording !== lastStageFact) {
+    setLastStageFact(stageRecording);
+    setRecording(stageRecording);
+  }
+  const recorderRef = useRef<ProgramRecorder | null>(null);
+  const recorder = useProgramRecorder();
+  useEffect(() => {
+    recorderRef.current = recorder;
+  });
+  const trackRefs = useTracks(
+    [Track.Source.Camera, Track.Source.Microphone],
+    { onlySubscribed: false },
+  );
+
+  // Arm the recorder once the recording is on AND local tracks exist.
+  useEffect(() => {
+    if (!recording) return;
+    const rec = recorderRef.current;
+    if (!rec || rec.recording || rec.unsupported) return;
+    const tracks = trackRefs
+      .map((ref) => ref.publication?.track?.mediaStreamTrack)
+      .filter((t): t is MediaStreamTrack => Boolean(t));
+    if (tracks.length === 0) return;
+    rec.start(new MediaStream(tracks));
+  }, [recording, trackRefs]);
+
+  // Another console tab (or a mid-run re-attach) moved the server fact —
+  // handled by the render-phase adjustment above, not an effect.
+
+  const getRecordingTake = useCallback(
+    async (): Promise<LiveRecordingTake | null> => recorderRef.current?.stop() ?? null,
+    [],
+  );
+
+  return (
+    <LiveRecorderConsole
+      roomId={roomId}
+      recording={recording}
+      onRecordingChange={setRecording}
+      getRecordingTake={getRecordingTake}
+    />
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* Ended summary                                                       */
 /* ------------------------------------------------------------------ */
@@ -1338,15 +1422,197 @@ function EndedSummaryCard({
           </div>
         </dl>
         <Separator />
-        <p className="text-sm text-muted-foreground">
-          Viewer state has been reconciled — disconnected viewers no longer count
-          as watching, and no phantom live room remains. Replays arrive in a
-          later phase of the LIVE platform.
-        </p>
+        {/* Phase 4: the session's replay (host-controlled visibility) and the
+            derived analytics — both server-truth, never client-claimed. */}
+        <LiveReplayPanel roomId={room.id} hostView className="w-full" />
+        <EndedAnalytics roomId={room.id} />
         <Button onClick={onStartAnother}>
           <Radio className="size-4" aria-hidden="true" />
           Start another live
         </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** The ended summary's analytics block — the host GET re-derives on read. */
+function EndedAnalytics({ roomId }: { roomId: string }) {
+  const [snapshot, setSnapshot] = useState<LiveAnalyticsSnapshotDto | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch(`/api/live-rooms/${roomId}/analytics`, { cache: "no-store" })
+      .then(async (res) => {
+        const json = (await res.json().catch(() => null)) as {
+          snapshot?: LiveAnalyticsSnapshotDto;
+          message?: string;
+        } | null;
+        if (!alive) return;
+        if (res.ok && json?.snapshot) {
+          setSnapshot(json.snapshot);
+          setFailure(null);
+        } else {
+          setFailure(json?.message ?? "Analytics are unavailable right now.");
+        }
+      })
+      .catch(() => {
+        if (alive) setFailure("Analytics are unavailable right now.");
+      });
+    return () => {
+      alive = false;
+    };
+  }, [roomId]);
+
+  if (failure) {
+    return (
+      <p className="text-xs text-muted-foreground" role="note">
+        {failure}
+      </p>
+    );
+  }
+  if (!snapshot) return <Skeleton className="h-20 w-full" />;
+  return (
+    <div data-testid="live-analytics-summary">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Session analytics
+      </p>
+      <dl className="mt-2 grid gap-x-6 gap-y-3 sm:grid-cols-3">
+        <AnalyticsStat label="Peak viewers" value={snapshot.peakViewers} approx />
+        <AnalyticsStat label="Unique viewers" value={snapshot.uniqueViewers} />
+        <AnalyticsStat label="Chat messages" value={snapshot.chatMessages} />
+        <AnalyticsStat label="Hearts tapped" value={snapshot.reactionHearts} />
+        <AnalyticsStat label="Gift events" value={snapshot.giftEvents} />
+        <AnalyticsStat label="Matches run" value={snapshot.matchesRun} />
+      </dl>
+      <p className="mt-2 text-[11px] text-muted-foreground">
+        Gift credits are dev credits — no cash value. Viewer figures are
+        approximate and never billing facts.
+      </p>
+    </div>
+  );
+}
+
+function AnalyticsStat({
+  label,
+  value,
+  approx,
+}: {
+  label: string;
+  value: number;
+  approx?: boolean;
+}) {
+  return (
+    <div>
+      <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+        {approx ? " (approx.)" : ""}
+      </dt>
+      <dd className="text-lg font-semibold tabular-nums">{value}</dd>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Phase 4: past sessions (studio analytics feed)                       */
+/* ------------------------------------------------------------------ */
+
+interface StudioSessionRow {
+  room: { id: string; title: string; status: string; createdAt: string };
+  session: LiveSessionDto;
+  snapshot: LiveAnalyticsSnapshotDto | null;
+  replay: { status: string; readyAt: string | null; durationMs: number | null } | null;
+}
+
+/**
+ * The creator's own ended sessions with their server-derived analytics
+ * (GET /api/studio/live-sessions — host-scoped by construction). The
+ * snapshot rides the end-hook; a session that ended before Phase 4 simply
+ * has no snapshot yet (an honest empty state, never a zero-filled fake).
+ */
+function PastSessionsCard() {
+  const [rows, setRows] = useState<StudioSessionRow[] | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/studio/live-sessions", { cache: "no-store" })
+      .then(async (res) => {
+        const json = (await res.json().catch(() => null)) as {
+          sessions?: StudioSessionRow[];
+          message?: string;
+        } | null;
+        if (!alive) return;
+        if (res.ok && json?.sessions) setRows(json.sessions);
+        else setFailure(json?.message ?? "Past sessions are unavailable right now.");
+      })
+      .catch(() => {
+        if (alive) setFailure("Past sessions are unavailable right now.");
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  return (
+    <Card data-testid="studio-past-sessions">
+      <CardHeader>
+        <CardTitle className="text-base">Past sessions</CardTitle>
+        <CardDescription>
+          Your ended broadcasts with their server-derived analytics — viewer
+          figures are approximate, gift credits are dev credits (no cash
+          value), and nothing here is client-claimable.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {failure && <p className="text-xs text-muted-foreground">{failure}</p>}
+        {!failure && rows === null && (
+          <div className="space-y-2" aria-busy="true">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+          </div>
+        )}
+        {rows !== null && rows.length === 0 && (
+          <p className="text-sm text-muted-foreground">
+            No ended sessions yet — your broadcast history and analytics appear
+            here after your first stream.
+          </p>
+        )}
+        {rows !== null &&
+          rows.map((row) => (
+            <div
+              key={row.session.id}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">{row.room.title}</p>
+                <p className="text-xs text-muted-foreground">
+                  Ended {formatWhen(row.session.endedAt ?? null)}
+                  {row.session.endReason ? ` · ${endReasonLabel(row.session.endReason)}` : ""}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs tabular-nums">
+                {row.snapshot ? (
+                  <>
+                    <Badge variant="outline">
+                      {formatDuration(row.session.startedAt ?? null, row.session.endedAt ?? null)}
+                    </Badge>
+                    <Badge variant="outline">
+                      peak {row.snapshot.peakViewers} (approx.)
+                    </Badge>
+                    <Badge variant="outline">{row.snapshot.uniqueViewers} viewers</Badge>
+                    <Badge variant="outline">{row.snapshot.chatMessages} chat</Badge>
+                    <Badge variant="outline">{row.snapshot.reactionHearts} hearts</Badge>
+                    <Badge variant="outline">{row.snapshot.giftEvents} gifts</Badge>
+                    <Badge variant="outline">{row.snapshot.matchesRun} matches</Badge>
+                  </>
+                ) : (
+                  <Badge variant="outline">no analytics yet</Badge>
+                )}
+                {row.replay && <Badge variant="secondary">replay: {row.replay.status}</Badge>}
+              </div>
+            </div>
+          ))}
       </CardContent>
     </Card>
   );

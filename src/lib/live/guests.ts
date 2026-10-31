@@ -394,11 +394,26 @@ export async function stageFor(
     state: r.state as LiveParticipantState,
     joinedAt: r.joinedAt.toISOString(),
   }));
+  // Phase 4 consent law: the stage carries the recording fact so EVERY
+  // stage participant (and the viewer room) can render the REC indicator.
+  // Absent/failed read renders false — the flag itself is stamped by the
+  // replay routes and re-published through the stage envelope on change.
+  let recording = false;
+  try {
+    const asset = await db.liveReplayAsset.findUnique({
+      where: { sessionId: session.id },
+      select: { status: true },
+    });
+    recording = asset?.status === "recording";
+  } catch {
+    recording = false;
+  }
   return {
     sessionId: session.id,
     guestsEnabled: room.guestsEnabled,
     guestsMax: GUEST_SLOTS_MAX,
     participants,
+    recording,
   };
 }
 

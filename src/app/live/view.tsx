@@ -6,6 +6,7 @@ import { Eye, Link2, Radio, RefreshCw, TriangleAlert, Video } from "lucide-react
 import { useApi } from "@/hooks/use-api";
 import { useWebFlixSession } from "@/hooks/use-webflix-session";
 import { LiveEventsCard } from "@/components/live/live-events-card";
+import { LiveReplayShelf } from "@/components/live/live-replay-shelf";
 import { formatCount, formatRelativeDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -294,6 +295,9 @@ export default function LiveDiscoveryView() {
             </GridShell>
           </section>
         )}
+
+        {/* Phase 4: the replay shelf — public ready replays self-hide when empty. */}
+        <LiveReplayShelf className="mt-10" />
       </main>
 
       <p className="mt-10 flex items-center gap-1.5 text-xs text-muted-foreground/70">

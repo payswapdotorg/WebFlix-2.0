@@ -69,6 +69,29 @@ export function setStageRecordingNotifier(
   stageRecordingNotifier = fn;
 }
 
+// ── integration wiring (TL, Phase 4): the stage envelope is how EVERY
+// participant learns the recording fact (ADR-0008 consent law). The fresh
+// stage read re-derives `recording` from the durable asset row, so the
+// republish always carries the server truth; dynamic imports keep the
+// replays→{guests,hub} edges acyclic. Failures are swallowed — the notifier
+// is best-effort by law and the stage GET re-derives anyway.
+setStageRecordingNotifier(async (roomId, sessionId) => {
+  try {
+    const { stageFor } = await import("./guests");
+    const { publishLiveEvent } = await import("./hub");
+    const stage = await stageFor(roomId, null);
+    if (stage.sessionId !== sessionId) return;
+    publishLiveEvent(roomId, {
+      kind: "stage",
+      eventId: crypto.randomUUID(),
+      at: new Date().toISOString(),
+      stage,
+    });
+  } catch (err) {
+    console.error("stage recording republish failed", err);
+  }
+});
+
 /** Best-effort by law — a notifier failure never fails the replay 200. */
 async function notifyRecordingChanged(
   roomId: string,
