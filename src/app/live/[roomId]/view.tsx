@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -33,6 +33,7 @@ import { LiveMatchPanel } from "@/components/live/live-match-panel";
 import { LiveGiftPanel } from "@/components/live/live-gift-panel";
 import { LiveReplayPanel } from "@/components/live/live-replay-panel";
 import { useLiveStream } from "@/components/live/use-live-stream";
+import { beaconOps } from "@/lib/live/ops-beacon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -202,8 +203,25 @@ function StageNote({ icon, title, body }: { icon: React.ReactNode; title: string
  * The stage INSIDE the LiveKit room context. Subscribe-only: it renders the
  * program video (camera, falling back to a screen share) and room audio —
  * and nothing else. There are deliberately NO publish controls here.
+ *
+ * Phase 4-OPS: this is ALSO the honest TTFF seam — the join-intent→first-
+ * rendered-frame sample fires ONCE per stage mount, straight off the real
+ * <video> element's loadeddata (never guessed from a React render). The
+ * reconnect-recovery sample fires when a Reconnecting→Connected transition
+ * completes. Both are client observations (ADR-0009): fire-and-forget,
+ * server-validated, never authority.
  */
-function ViewerStage({ hostName }: { hostName: string }) {
+function ViewerStage({
+  hostName,
+  roomId,
+  sessionId,
+  joinStartedAt,
+}: {
+  hostName: string;
+  roomId: string;
+  sessionId: string | null;
+  joinStartedAt: number | null;
+}) {
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare], {
     onlySubscribed: true,
   });
@@ -212,6 +230,45 @@ function ViewerStage({ hostName }: { hostName: string }) {
 
   const camera = tracks.find((t) => t.source === Track.Source.Camera);
   const program = camera ?? tracks[0];
+
+  // ── Ops observations (once-per-fact refs — never re-firing) ──
+  const stageWrapRef = useRef<HTMLDivElement>(null);
+  const ttffSentRef = useRef(false);
+  const reconnectStartedAtRef = useRef<number | null>(null);
+
+  // Reconnect recovery: Reconnecting… → Connected completes a fact.
+  useEffect(() => {
+    if (
+      connectionState === ConnectionState.Reconnecting ||
+      connectionState === ConnectionState.SignalReconnecting
+    ) {
+      if (reconnectStartedAtRef.current === null) reconnectStartedAtRef.current = Date.now();
+      return;
+    }
+    if (connectionState === ConnectionState.Connected && reconnectStartedAtRef.current !== null) {
+      const recoveryMs = Date.now() - reconnectStartedAtRef.current;
+      reconnectStartedAtRef.current = null;
+      beaconOps({ kind: "reconnect", roomId, sessionId, valueMs: recoveryMs });
+    }
+  }, [connectionState, roomId, sessionId]);
+
+  // TTFF: wait for the REAL video element's first decoded frame.
+  useEffect(() => {
+    if (!program || ttffSentRef.current || joinStartedAt === null) return;
+    const video = stageWrapRef.current?.querySelector("video");
+    if (!video) return; // VideoTrack not mounted yet — the effect re-runs on render
+    const fire = (): void => {
+      if (ttffSentRef.current) return;
+      ttffSentRef.current = true;
+      beaconOps({ kind: "ttff", roomId, sessionId, valueMs: Date.now() - joinStartedAt });
+    };
+    if (video.readyState >= 2) {
+      fire();
+      return;
+    }
+    video.addEventListener("loadeddata", fire, { once: true });
+    return () => video.removeEventListener("loadeddata", fire);
+  }, [program, joinStartedAt, roomId, sessionId]);
 
   const chipLabel =
     connectionState === ConnectionState.Connected
@@ -224,7 +281,7 @@ function ViewerStage({ hostName }: { hostName: string }) {
           : "Disconnected";
 
   return (
-    <div className="relative flex h-full w-full items-center justify-center bg-black">
+    <div ref={stageWrapRef} className="relative flex h-full w-full items-center justify-center bg-black">
       {program ? (
         <VideoTrack trackRef={program} className="h-full w-full bg-black object-contain" />
       ) : connectionState === ConnectionState.Connecting ? (
@@ -422,6 +479,13 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
   const [mintNonce, setMintNonce] = useState(0);
   const [transportError, setTransportError] = useState<string | null>(null);
 
+  // ── Phase 4-OPS: the join-intent clock (TTFF basis) — set ONCE per live
+  // session, at the FIRST mint attempt for it (retries stay inside the
+  // sample: the whole struggle to first frame is the honest fact). Held in
+  // STATE (not a ref) so the stage mount can read it during render. ──
+  const [joinStartedAt, setJoinStartedAt] = useState<number | null>(null);
+  const joinStartSessionRef = useRef<string | null>(null);
+
   const session = room?.currentSession ?? null;
   const sessionId = session?.id ?? null;
   const roomStatus = room?.status ?? null;
@@ -462,6 +526,10 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
     if (mintFailure && mintFailure.sessionId === sessionId) return;
     const controller = new AbortController();
     let cancelled = false;
+    if (joinStartSessionRef.current !== sessionId) {
+      joinStartSessionRef.current = sessionId;
+      setJoinStartedAt(Date.now());
+    }
     mintViewerToken(roomId, controller.signal)
       .then((result) => {
         if (cancelled) return;
@@ -470,6 +538,7 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
           setMintedToken(result.playback);
           setMintFailure(null);
         } else {
+          beaconOps({ kind: "join_error", roomId, sessionId, code: result.code });
           setMintFailure({
             sessionId,
             code: result.code,
@@ -495,9 +564,19 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
     setMintNonce((n) => n + 1);
   }, []);
 
-  const onTransportError = useCallback((err: Error) => {
-    setTransportError(err.message || "The live connection failed.");
-  }, []);
+  const onTransportError = useCallback(
+    (err: Error) => {
+      // Phase 4-OPS: a transport failure after attach is a media_error fact.
+      beaconOps({
+        kind: "media_error",
+        roomId,
+        sessionId,
+        code: err.message ? err.message.slice(0, 80) : "transport-error",
+      });
+      setTransportError(err.message || "The live connection failed.");
+    },
+    [roomId, sessionId],
+  );
 
   const onTransportDisconnected = useCallback((_reason?: DisconnectReason) => {
     // The room poll reconciles the true ended state within 15s; until then
@@ -925,7 +1004,12 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
                     {isGuestRung ? (
                       <GuestStage hostName={room.hostName} />
                     ) : (
-                      <ViewerStage hostName={room.hostName} />
+                      <ViewerStage
+                        hostName={room.hostName}
+                        roomId={roomId}
+                        sessionId={sessionId}
+                        joinStartedAt={joinStartedAt}
+                      />
                     )}
                     <RoomAudioRenderer />
                   </LiveKitRoom>

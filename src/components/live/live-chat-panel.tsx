@@ -33,6 +33,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { beaconOps } from "@/lib/live/ops-beacon";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -204,6 +205,8 @@ export function LiveChatPanel({
   // ── Auto-scroll: only when the reader is already near the bottom ──
   const listRef = useRef<HTMLDivElement>(null);
   const nearBottomRef = useRef(true);
+  // Phase 4-OPS: the every-5th-send chat-latency sampler (see send()).
+  const chatSendCountRef = useRef(0);
   function onListScroll(): void {
     const el = listRef.current;
     if (!el) return;
@@ -224,12 +227,25 @@ export function LiveChatPanel({
       body,
       clientMessageId: crypto.randomUUID(),
     };
+    // Phase 4-OPS: every 5th own send samples the SERVER-COMMIT latency
+    // (POST start → durable 200). A client observation, fire-and-forget;
+    // sessionId is deliberately omitted (the panel never knew it — the
+    // per-room aggregate is the honest granularity available here).
+    const chatStartedAt = Date.now();
     const result = await liveFetch<{ message: LiveChatMessageDto; duplicate?: boolean }>(
       `/api/live-rooms/${roomId}/chat`,
       { body: payload },
     );
     setSending(false);
     if (result.ok) {
+      chatSendCountRef.current += 1;
+      if (chatSendCountRef.current % 5 === 1) {
+        beaconOps({
+          kind: "chat_latency",
+          roomId,
+          valueMs: Date.now() - chatStartedAt,
+        });
+      }
       // The message arrives via the stream like every other row — the
       // response is deliberately NOT appended (no double render).
       setDraft("");
