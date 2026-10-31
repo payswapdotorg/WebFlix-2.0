@@ -999,3 +999,26 @@ model LiveAnalyticsSnapshot {
 
   @@index([roomId])
 }
+
+// The §4H operations fact log — append-only operational OBSERVATIONS
+// (ADR-0009): client media beacons (validated, clamped, rate-limited,
+// identity-stamped) plus server-side facts (rate-limit denials, provider
+// errors, end reconciles). Ops rows are never authority — they can never
+// mutate room state, scores, moderation state or balances. Bare ids, no
+// FKs by design (the interaction-row law): the log survives a room purge.
+model LiveOpsEvent {
+  id        String   @id @default(cuid())
+  kind      String
+  surface   String?
+  roomId    String?
+  sessionId String?
+  actorId   String?
+  code      String?
+  valueMs   Int?
+  meta      String?
+  createdAt DateTime @default(now())
+
+  @@index([kind, createdAt])
+  @@index([roomId, createdAt])
+  @@index([createdAt])
+}

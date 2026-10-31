@@ -69,3 +69,13 @@ export function subscribeLiveRoom(
     hub.off(channel, handler);
   };
 }
+
+/**
+ * Phase 4-OPS (§4H): the number of SSE streams attached to THIS instance
+ * right now. An INSTANCE-LOCAL fact by design (ADR-0006: the hub is
+ * deliberately per-instance, never a durability or fleet layer) — the ops
+ * dashboard labels it as such and never presents it as fleet-wide.
+ */
+export function attachedStreamCount(): number {
+  return hub.eventNames().reduce((sum, name) => sum + hub.listenerCount(name), 0);
+}

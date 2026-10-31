@@ -90,6 +90,27 @@ export const REPLAY_LIST_MAX = 12;
 /** Accepted container types for the upload (checked against the header). */
 export const REPLAY_MIME_TYPES = ["video/webm", "video/x-webm", "video/mp4"];
 
+// ── Phase 4-OPS numeric laws (§4H operations telemetry, ADR-0009) ──
+/** The kinds a CLIENT may beacon — the server kinds are never client-claimable. */
+export const OPS_BEACON_KINDS = [
+  "ttff",
+  "reconnect",
+  "join_error",
+  "media_error",
+  "chat_latency",
+] as const;
+/** Char clamps on the observation fields (frozen contracts §1). */
+export const OPS_CODE_MAX = 80;
+export const OPS_SURFACE_MAX = 60;
+/** The serialized meta blob clamp — never identity-bearing keys. */
+export const OPS_META_MAX = 512;
+/** Any sampled duration clamps to one hour. */
+export const OPS_VALUE_MS_MAX = 3_600_000;
+/** Overview window clamp: 1h..30d, default 24h. */
+export const OPS_WINDOW_MS_MIN = 3_600_000;
+export const OPS_WINDOW_MS_MAX = 30 * 24 * 3_600_000;
+export const OPS_WINDOW_MS_DEFAULT = 24 * 3_600_000;
+
 /** The per-surface rate limits (the app-wide rateLimit() adapter). */
 export const RATE_LIMITS = {
   chat: { limit: 8, windowMs: 10_000 },
@@ -113,6 +134,9 @@ export const RATE_LIMITS = {
   replayStop: { limit: 10, windowMs: 60_000 },
   replayVisibility: { limit: 20, windowMs: 60_000 },
   analytics: { limit: 60, windowMs: 60_000 },
+  // ── Phase 4-OPS ──
+  beacon: { limit: 30, windowMs: 60_000 },
+  opsOverview: { limit: 30, windowMs: 60_000 },
 } as const;
 
 /** Host and granted moderators share the moderation capability set. */

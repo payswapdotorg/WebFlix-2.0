@@ -639,3 +639,120 @@ export interface LiveAnalyticsSnapshotDto {
   /** The session's replay asset status, when an asset exists. */
   replayStatus: LiveReplayStatus | null;
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// WFX2-LIVE-PLATFORM-1 Phase 4-OPS — operations telemetry (§4H, ADR-0009)
+//
+// THE OBSERVATION LAW: every LiveOpsEvent row is an observation, never
+// authority — ops rows cannot mutate room state, scores, moderation state
+// or balances. The dashboard's every figure is server-DERIVED in ONE
+// place (deriveOpsOverview) from durable rows; nothing here is
+// client-claimable except the clamped, rate-limited beacon payload.
+// ═══════════════════════════════════════════════════════════════════
+
+/** All ops kinds — the server-only kinds are never accepted from clients. */
+export type LiveOpsEventKind =
+  | "ttff"
+  | "reconnect"
+  | "join_error"
+  | "media_error"
+  | "chat_latency"
+  | "rate_limit"
+  | "provider_error"
+  | "end_reconcile";
+
+/**
+ * The client-beaconable subset — mirrors the shared OPS_BEACON_KINDS law in
+ * permissions.ts (this module stays import-free by design; the parity is
+ * compile-time-pinned in ops.ts and test-pinned in the battery).
+ */
+export type LiveOpsBeaconKind =
+  | "ttff"
+  | "reconnect"
+  | "join_error"
+  | "media_error"
+  | "chat_latency";
+
+/** The beacon request body (client observation; every field server-clamped). */
+export interface LiveOpsBeaconDto {
+  kind: LiveOpsBeaconKind;
+  roomId: string;
+  sessionId?: string;
+  code?: string;
+  valueMs?: number;
+  meta?: string;
+}
+
+/** A sampled-latency aggregate (nearest-rank percentiles over observations). */
+export interface LiveOpsLatencyDto {
+  count: number;
+  p50Ms: number | null;
+  p95Ms: number | null;
+}
+
+/** A count keyed by an observation code/surface (top-N lists). */
+export interface LiveOpsTopDto {
+  count: number;
+  top: Array<{ key: string; count: number }>;
+}
+
+/**
+ * The honest-unavailable block (work order §3.8): what the deployment
+ * cannot measure is SAID SO with a reason — never zero-filled.
+ */
+export interface LiveOpsUnavailableDto {
+  status: "unavailable" | "not-applicable";
+  reason: string;
+  detail?: string;
+}
+
+/** One high-volume room row (server-computed from durable rows only). */
+export interface LiveOpsRoomRowDto {
+  roomId: string;
+  title: string;
+  hostHandle: string;
+  hostName: string;
+  status: string;
+  sessions: number;
+  chatMessages: number;
+  reactionHearts: number;
+  giftEvents: number;
+  matches: number;
+  peakViewers: number;
+  lastActivityAt: string | null;
+}
+
+/** The operations overview — the §4H dashboard feed. */
+export interface LiveOpsOverviewDto {
+  windowMs: number;
+  generatedAt: string;
+  media: {
+    ttff: LiveOpsLatencyDto;
+    reconnects: number;
+    joinErrors: LiveOpsTopDto;
+    mediaErrors: LiveOpsTopDto;
+  };
+  chatLatency: LiveOpsLatencyDto;
+  rateLimits: LiveOpsTopDto;
+  provider: {
+    errors: LiveOpsTopDto;
+    costs: LiveOpsUnavailableDto;
+    egress: LiveOpsUnavailableDto;
+  };
+  reconciles: { endReconciles: number };
+  rooms: {
+    liveNow: number;
+    startedInWindow: number;
+    endedInWindow: number;
+    endReasons: Array<{ key: string; count: number }>;
+  };
+  volume: { rooms: LiveOpsRoomRowDto[] };
+  moderation: { actions: number; reports: number };
+  transport: {
+    /** Instance-local (ADR-0006 hub) — labelled as such, never fleet-wide. */
+    attachedStreamsThisInstance: number;
+    tailFlushMs: number;
+    outbox: LiveOpsUnavailableDto;
+  };
+  storage: { replayAssets: number; replayBytes: number };
+}
