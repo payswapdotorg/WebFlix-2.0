@@ -253,8 +253,11 @@ describe("live replays — the stop upload guards + finalize", () => {
     expect(empty.status).toBe(400);
     expect(empty.body.message).toBe("empty-recording");
 
+    // The container-with-codec-parameter case (what real browsers send:
+    // "video/webm;codecs=vp8,opus") is accepted — the law governs the
+    // CONTAINER type, and the full parameterized type is stored.
     const ok = await stopAs(HOST, roomId, {
-      contentType: "video/webm",
+      contentType: "video/webm;codecs=vp8,opus",
       body: zeros(1024),
       durationMs: 5000,
     });
@@ -263,7 +266,7 @@ describe("live replays — the stop upload guards + finalize", () => {
     expect(asset.status).toBe("ready");
     expect(asset.sizeBytes).toBe(1024);
     expect(asset.durationMs).toBe(5000);
-    expect(asset.mimeType).toBe("video/webm");
+    expect(asset.mimeType).toBe("video/webm;codecs=vp8,opus");
     expect(asset.readyAt).toBeTruthy();
     expect(asset.stoppedAt).toBeTruthy();
     expect(asset.retentionExpiresAt).toBeTruthy();

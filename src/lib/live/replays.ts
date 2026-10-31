@@ -276,10 +276,11 @@ export async function stopReplay(
   if (upload.body.byteLength === 0) {
     throw new LiveDomainError("invalid", "empty-recording");
   }
-  if (
-    !upload.contentType ||
-    !(REPLAY_MIME_TYPES as readonly string[]).includes(upload.contentType)
-  ) {
+  // Browsers send container types WITH codec parameters ("video/webm;
+  // codecs=vp8,opus") — the law governs the CONTAINER, so normalize to the
+  // base type before the allow-list comparison (and store the full type).
+  const contentTypeBase = upload.contentType?.split(";")[0]?.trim().toLowerCase() ?? "";
+  if (!upload.contentType || !(REPLAY_MIME_TYPES as readonly string[]).includes(contentTypeBase)) {
     throw new LiveDomainError("invalid", "unsupported-media-type");
   }
   if (upload.body.byteLength > REPLAY_UPLOAD_MAX_BYTES) {

@@ -161,11 +161,15 @@ export const livekitAdapter: LiveProviderAdapter = {
     const svc = roomService();
     // Idempotent by law: deleting a room the provider no longer knows is a
     // successful no-op (the goal state is "room gone", which already holds).
+    // LiveKit words that condition BOTH ways ("not found" on some versions,
+    // "requested room does not exist" on others — and self-hosted servers
+    // auto-finish empty rooms, so the host-path teardown can legitimately
+    // arrive after the room is already gone; proven by Phase 4 acceptance).
     try {
       await svc.deleteRoom(roomName);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (/not found/i.test(msg)) return;
+      if (/not found|does not exist/i.test(msg)) return;
       throw err;
     }
   },

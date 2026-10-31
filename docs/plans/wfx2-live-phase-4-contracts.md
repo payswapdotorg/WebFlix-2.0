@@ -134,3 +134,34 @@ proved path).
 8. Additive only: no lane edits frozen files (types.ts, permissions.ts,
    policy.ts, provider.ts, rooms.ts, presence.ts, reactions.ts,
    moderation.ts, hub.ts, guests.ts, schema) — needs go through the TL.
+
+## Implementation addendum (TL, at integration — the adjudicated judgment calls)
+
+Recorded so the contract stays truthful to what shipped and is test-pinned:
+
+- **Container MIME law**: real browsers upload `video/webm;codecs=vp8,opus`
+  — the stop guard normalizes to the base type before the REPLAY_MIME_TYPES
+  comparison and stores the full parameterized type (found BY the browser
+  acceptance; test-pinned).
+- **Repeated stop answers 409 `replay-not-recording`** (contract law 6's two
+  sentences were mutually exclusive; the lane implemented the 409 and the
+  test pins it — a client retry after a FAILED upload restarts from `start`,
+  which the one-asset law already allows after a `failed` finalize).
+- **Analytics GET subject**: the room's most recent session (any status) is
+  the snapshot subject; a room with no session answers 404
+  `not-found/no-session` (the read-is-authoritative law, applied
+  consistently).
+- **provider-egress stop rides the room teardown**: RoomCompositeEgress ends
+  when its room ends (provider semantics), so `endRoom`'s existing
+  `destroyRoom` is the egress stop path; `finalizeRecordingOnEnd` flips an
+  in-flight recording to the honest `failed` row. No egress id is persisted
+  (none is needed for v1).
+- **Acceptance-found fixes (integration lane)**: the stage-recording fact is
+  LATCHED from the newest STAGE envelope in the console (presence/chat
+  events must never overwrite it — the render-phase adjustment pattern);
+  the adapter's `destroyRoom` idempotency guard now matches LiveKit's
+  second wording "requested room does not exist" (self-hosted servers
+  auto-finish empty rooms — the host-path teardown can legitimately arrive
+  after the room is gone; the 502 was found BY the two-browser run).
+- `test:live` runs in FIVE crash-safe sub-batches (the fourth gained no new
+  files; the fifth carries replays + analytics + phase-4 UI).

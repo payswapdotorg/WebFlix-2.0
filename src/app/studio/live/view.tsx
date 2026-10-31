@@ -914,11 +914,20 @@ function LiveConsole({ room, playback, endFailure, onEnd, cameraId, micId }: Liv
   // the heartbeat keeps the host row inside the freshness window.
   const stream = useLiveStream(room.id);
   useLivePresence(room.id, true);
-  // Phase 4 consent fact: the stage envelope carries the recording flag.
-  const stageRecording =
-    stream.latestEnvelope?.kind === "stage"
-      ? Boolean(stream.latestEnvelope.stage.recording)
-      : false;
+  // Phase 4 consent fact — LATCHED from the newest STAGE envelope (the
+  // render-phase adjustment pattern): presence/chat events must NEVER
+  // overwrite the recording fact, they only mean the heartbeat is alive.
+  const [stageRecording, setStageRecording] = useState(false);
+  const [seenStageEventId, setSeenStageEventId] = useState<string | null>(null);
+  const recordingEnvelope = stream.latestEnvelope;
+  if (
+    recordingEnvelope &&
+    recordingEnvelope.kind === "stage" &&
+    recordingEnvelope.eventId !== seenStageEventId
+  ) {
+    setSeenStageEventId(recordingEnvelope.eventId);
+    setStageRecording(Boolean(recordingEnvelope.stage.recording));
+  }
   const [chatEnabled, setChatEnabled] = useState(true);
   const [slowModeSeconds, setSlowModeSeconds] = useState(0);
   const hostPolicy: LiveRoomPolicyDto = {
