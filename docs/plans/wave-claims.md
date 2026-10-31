@@ -643,3 +643,16 @@ re-runs gates → merges.
 - Scope: the work order's §4G bullet 1 — clubs, member badges, non-cash
   points/missions, member-only chat, members-only rooms/replays (ADR-0010).
   The §4F/§4G money gate stays CLOSED. The last ungated gap under issue #2.
+
+## 2026-10-31 — WFX2-LIVE-PLATFORM-1 Phase 5-emotes (supporter emotes) claim
+
+| Wave | Lane | Lead | Claimed (UTC) | Base | Status |
+|---|---|---|---|---|---|
+| P67 / Phase 5-emotes | WFX2-LIVE-PLATFORM-1 §4G supporter emotes (TL + 3 lanes: E-a domain/routes / E-b chat integration / E-c UI) | Z.ai Code (TL, issue #2) | 2026-10-31 16:05 | main @ 27c73a4 | **IN PROGRESS** (contracts frozen first; ADR-0011; lanes dispatch on the frozen base) |
+
+- Scope: the work order's §4G "supporter emotes where built" — host-defined
+  club emote glyphs gated by member level (ADR-0011; the ADR-0010
+  non-monetary law extends verbatim: never purchased, never a wallet item).
+  Chat bodies store short-codes as sent; substitution only through the
+  frozen `src/lib/live/emote-render.ts` map law. The §4F/§4G money gate
+  stays CLOSED. The LAST ungated gap under issue #2.

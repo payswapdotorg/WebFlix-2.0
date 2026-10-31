@@ -131,6 +131,16 @@ export const CLUB_POINT_AWARD_MAX = 100;
 export const CLUB_POINTS_WATCH = 2;
 export const CLUB_POINTS_CHAT = 1;
 
+// ── Phase 5-emotes — supporter emotes (ADR-0011: non-monetary identity) ──
+/** Emote short-code bounds: lowercase slug, [a-z0-9_-]{1,EMOTE_CODE_MAX}. */
+export const EMOTE_CODE_MAX = 24;
+/** The unicode glyph clamp (an emoji + modifiers/ZWJ fits inside 16). */
+export const EMOTE_UNICODE_MAX = 16;
+/** Host-defined emote set cap per club. */
+export const EMOTES_PER_CLUB_MAX = 20;
+/** requiredLevel clamps to the club level ceiling. */
+export const EMOTE_REQUIRED_LEVEL_MAX = CLUB_LEVEL_MAX;
+
 export const RATE_LIMITS = {
   chat: { limit: 8, windowMs: 10_000 },
   reactions: { limit: 12, windowMs: 10_000 },
@@ -161,6 +171,9 @@ export const RATE_LIMITS = {
   clubJoin: { limit: 10, windowMs: 60_000 },
   clubLeave: { limit: 10, windowMs: 60_000 },
   clubManage: { limit: 20, windowMs: 60_000 },
+  // ── Phase 5-emotes — host emote CRUD (usage rides the chat limiter:
+  // an emote send IS a chat send, re-gated per request) ──
+  emoteSave: { limit: 20, windowMs: 60_000 },
 } as const;
 
 /** Host and granted moderators share the moderation capability set. */

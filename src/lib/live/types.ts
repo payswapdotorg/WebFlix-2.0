@@ -843,3 +843,37 @@ export type LiveChatClubBadge = {
   clubName: string;
   level: number;
 } | null;
+
+// ═══════════════════════════════════════════════════════════════════
+// WFX2-LIVE-PLATFORM-1 Phase 5-emotes — supporter emotes (ADR-0011).
+// Additive freeze (TL, 2026-10-31). Non-monetary club identity: an emote
+// is never purchased, never a wallet item, never convertible (the ADR-0010
+// law extends verbatim). Entitlement derives ONLY from durable club
+// membership rows per request — clients claim nothing.
+// ═══════════════════════════════════════════════════════════════════
+
+/** One host-defined club emote (configuration, not history). */
+export interface LiveClubEmoteDto {
+  /** Lowercase slug, 1..EMOTE_CODE_MAX chars; unique per club. */
+  code: string;
+  /** The unicode glyph rendered in chat (EMOTE_UNICODE_MAX chars). */
+  unicode: string;
+  /** Minimum club level (1..EMOTE_REQUIRED_LEVEL_MAX). */
+  requiredLevel: number;
+}
+
+/** GET /api/live-clubs/emotes?hostId= — the room-host emote set with the
+ * CALLER'S entitlement stamped server-side (anonymous → all entitled:false;
+ * the host → all true; members by the level law). */
+export interface LiveClubEmotesDto {
+  hostId: string;
+  clubName: string | null;
+  emotes: (LiveClubEmoteDto & { entitled: boolean })[];
+}
+
+/** POST /api/live-clubs/emotes body — host-only upsert by code. */
+export interface SaveLiveClubEmoteInput {
+  code: string;
+  unicode: string;
+  requiredLevel?: number;
+}

@@ -1043,6 +1043,7 @@ model LiveFanClub {
 
   host    User                @relation("LiveFanClubHost", fields: [hostId], references: [id])
   members LiveFanClubMember[]
+  emotes  LiveClubEmote[]
 
   @@index([hostId])
 }
@@ -1080,4 +1081,26 @@ model LiveClubPointEvent {
 
   @@index([clubId, memberId])
   @@index([clubId, createdAt])
+}
+
+// Supporter emotes — host-defined club glyphs (ADR-0011). A short-code →
+// unicode pair with a required member level; non-monetary by law (never
+// purchased, never a wallet item, never convertible — ADR-0010 extends
+// verbatim). Messages store short-codes AS SENT; the render layer
+// substitutes glyphs from the server map only. This is CONFIGURATION, not
+// history — deleting an emote never rewrites past messages (their codes
+// render as plain text).
+model LiveClubEmote {
+  id            String   @id @default(cuid())
+  clubId        String
+  code          String
+  unicode       String
+  requiredLevel Int      @default(1)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  club LiveFanClub @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@unique([clubId, code])
+  @@index([clubId])
 }
