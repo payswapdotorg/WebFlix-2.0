@@ -31,6 +31,7 @@ import { LivePollsQuestions } from "@/components/live/live-polls-questions";
 import { LiveStageGrid } from "@/components/live/live-stage-grid";
 import { LiveMatchPanel } from "@/components/live/live-match-panel";
 import { LiveGiftPanel } from "@/components/live/live-gift-panel";
+import { LiveClubPanel } from "@/components/live/live-club-panel";
 import { LiveReplayPanel } from "@/components/live/live-replay-panel";
 import { useLiveStream } from "@/components/live/use-live-stream";
 import { beaconOps } from "@/lib/live/ops-beacon";
@@ -1194,6 +1195,16 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
                     ? match.teams.map((t) => ({ id: t.id, label: t.label }))
                     : []
                 }
+              />
+
+              {/* ── Phase 5: the host's fan club (ADR-0010 — non-monetary) ── */}
+              <LiveClubPanel
+                hostId={room.hostId}
+                hostHandle={room.hostHandle}
+                hostName={room.hostName}
+                signedIn={user !== null}
+                isHost={room.isHost === true}
+                signInHref={`/signin?redirect=${encodeURIComponent(`/live/${roomId}`)}`}
               />
 
               <Card>

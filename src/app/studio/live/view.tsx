@@ -13,6 +13,7 @@ import {
   PlugZap,
   Radio,
   RefreshCw,
+  Users,
   Video,
   VideoOff,
   WifiOff,
@@ -85,6 +86,8 @@ import {
 } from "@/components/live/live-recorder-console";
 import { LiveReplayPanel } from "@/components/live/live-replay-panel";
 import { useLivePresence, useLiveStream } from "@/components/live/use-live-stream";
+import { useLiveClub } from "@/hooks/use-live-club";
+import { useWebFlixSession } from "@/hooks/use-webflix-session";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 
@@ -197,7 +200,7 @@ export default function GoLivePage() {
 
   // Broadcast details.
   const [title, setTitle] = useState("");
-  const [visibility, setVisibility] = useState<"public" | "unlisted">("public");
+  const [visibility, setVisibility] = useState<"public" | "unlisted" | "members">("public");
   const [starting, setStarting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [providerFailure, setProviderFailure] = useState<ProviderFailure | null>(null);
@@ -543,8 +546,14 @@ export default function GoLivePage() {
         />
       )}
 
-      {/* Phase 4: the creator's past sessions with their derived analytics. */}
-      {phase === "preflight" && <PastSessionsCard />}
+      {/* Phase 4: the creator's past sessions with their derived analytics.
+          Phase 5: the compact fan-club manager (create + roster, ADR-0010). */}
+      {phase === "preflight" && (
+        <>
+          <ClubManagerCard />
+          <PastSessionsCard />
+        </>
+      )}
     </main>
   );
 }
@@ -556,8 +565,8 @@ export default function GoLivePage() {
 interface PreflightCardProps {
   title: string;
   onTitleChange: (v: string) => void;
-  visibility: "public" | "unlisted";
-  onVisibilityChange: (v: "public" | "unlisted") => void;
+  visibility: "public" | "unlisted" | "members";
+  onVisibilityChange: (v: "public" | "unlisted" | "members") => void;
   starting: boolean;
   formError: string | null;
   providerFailure: ProviderFailure | null;
@@ -573,7 +582,7 @@ interface PreflightCardProps {
   onGoLive: () => Promise<void>;
 }
 
-function PreflightCard(props: PreflightCardProps) {
+export function PreflightCard(props: PreflightCardProps) {
   const {
     title,
     onTitleChange,
@@ -630,22 +639,29 @@ function PreflightCard(props: PreflightCardProps) {
 
         <div className="space-y-2">
           <Label htmlFor="go-live-visibility">Visibility</Label>
-          <Select
+          {/* Phase 5: "members" joins the frozen CreateLiveRoomInput union —
+              a native select (the live surfaces' convention) with the honest
+              explainer right under it while it's chosen. */}
+          <select
+            id="go-live-visibility"
+            data-testid="go-live-visibility"
+            aria-label="Room visibility"
             value={visibility}
-            onValueChange={(value) => onVisibilityChange(value as "public" | "unlisted")}
+            onChange={(e) =>
+              onVisibilityChange(e.target.value as "public" | "unlisted" | "members")
+            }
+            className="h-9 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-72"
           >
-            <SelectTrigger id="go-live-visibility" className="w-full sm:w-72">
-              <SelectValue placeholder="Choose visibility" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="public">
-                Public — listed in Live discovery while you stream
-              </SelectItem>
-              <SelectItem value="unlisted">
-                Unlisted — only people with the room link can watch
-              </SelectItem>
-            </SelectContent>
-          </Select>
+            <option value="public">Public — listed in Live discovery while you stream</option>
+            <option value="unlisted">Unlisted — only people with the room link can watch</option>
+            <option value="members">Members — only your fan-club members can join this room</option>
+          </select>
+          {visibility === "members" && (
+            <p data-testid="visibility-members-note" className="text-xs text-muted-foreground">
+              Only your fan-club members can join this room. Discovery and replays honor the
+              same gate.
+            </p>
+          )}
         </div>
 
         <Separator />
@@ -930,13 +946,17 @@ function LiveConsole({ room, playback, endFailure, onEnd, cameraId, micId }: Liv
   }
   const [chatEnabled, setChatEnabled] = useState(true);
   const [slowModeSeconds, setSlowModeSeconds] = useState(0);
+  // Phase 5: the members-only chat gate (the audited members-chat-enable/
+  // members-chat-disable moderation actions) — optimistic mirror, same law
+  // as chatEnabled: the local value only survives when the server confirms.
+  const [membersOnlyChat, setMembersOnlyChat] = useState(false);
   const hostPolicy: LiveRoomPolicyDto = {
     chatEnabled,
     reactionsEnabled: true,
     slowModeSeconds,
     guestsEnabled: true,
     giftsEnabled: true,
-    membersOnlyChat: false,
+    membersOnlyChat,
     actorRole: "host",
     canChat: true,
     chatBlockedReason: null,
@@ -1033,7 +1053,9 @@ function LiveConsole({ room, playback, endFailure, onEnd, cameraId, micId }: Liv
               Your camera and microphone stream from this browser.{" "}
               {room.visibility === "public"
                 ? "This public room appears in Live discovery while you stream."
-                : "This unlisted room is reachable only by its link."}{" "}
+                : room.visibility === "members"
+                  ? "This members-only room is visible only to your fan-club members."
+                  : "This unlisted room is reachable only by its link."}{" "}
               The viewer count is approximate and refreshes every 10 seconds.
             </CardDescription>
           </CardHeader>
@@ -1081,10 +1103,14 @@ function LiveConsole({ room, playback, endFailure, onEnd, cameraId, micId }: Liv
             roomId={room.id}
             chatEnabled={chatEnabled}
             slowModeSeconds={slowModeSeconds}
+            membersOnlyChat={membersOnlyChat}
             onChatEnabled={setChatEnabled}
             onSlowMode={setSlowModeSeconds}
+            onMembersOnlyChat={setMembersOnlyChat}
           />
           <HostStageControls roomId={room.id} streamEnvelope={stream.latestEnvelope} />
+          {/* Phase 5: the compact fan-club manager (create + roster). */}
+          <ClubManagerCard />
         </div>
       </div>
 
@@ -1636,12 +1662,15 @@ const SLOW_MODE_CHOICES = [0, 10, 30, 60, 120, 300] as const;
  * an audited moderation POST; the local mirror only renders what the
  * server confirmed (a failed POST keeps the previous value and says so).
  */
-function HostPolicyControls(props: {
+export function HostPolicyControls(props: {
   roomId: string;
   chatEnabled: boolean;
   slowModeSeconds: number;
+  /** Phase 5: the members-only chat gate (audited members-chat-* actions). */
+  membersOnlyChat: boolean;
   onChatEnabled: (v: boolean) => void;
   onSlowMode: (v: number) => void;
+  onMembersOnlyChat: (v: boolean) => void;
 }) {
   const [busy, setBusy] = useState(false);
 
@@ -1697,6 +1726,31 @@ function HostPolicyControls(props: {
             aria-label="Toggle room chat"
           />
         </label>
+        {/* Phase 5: the members-only chat gate — same audited-action law as
+            the chat toggle (optimistic mirror, rolled back on failure). */}
+        <label className="flex items-center justify-between gap-3 text-sm font-medium">
+          <span className="min-w-0">
+            Members-only chat
+            <span className="block text-xs font-normal text-muted-foreground">
+              While this is on, only your fan-club members can chat.
+            </span>
+          </span>
+          <Switch
+            data-testid="live-policy-members-chat"
+            checked={props.membersOnlyChat}
+            disabled={busy}
+            onCheckedChange={(v) => {
+              const prev = props.membersOnlyChat;
+              props.onMembersOnlyChat(v);
+              void perform({
+                action: v ? "members-chat-enable" : "members-chat-disable",
+              }).then((ok) => {
+                if (!ok) props.onMembersOnlyChat(prev);
+              });
+            }}
+            aria-label="Toggle members-only chat"
+          />
+        </label>
         <div className="space-y-1.5">
           <p className="text-sm font-medium">Slow mode</p>
           <div className="flex flex-wrap gap-1.5">
@@ -1723,6 +1777,210 @@ function HostPolicyControls(props: {
             Viewers must wait this long between messages. Hosts and moderators are exempt.
           </p>
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Phase 5 — the compact fan-club manager card (ADR-0010)              */
+/*                                                                     */
+/* The creator's own club, spoken entirely in the frozen overview DTO: */
+/* GET /api/live-clubs/[myId] answering 404 is the honest empty state  */
+/* with the create form; a club renders the member count + the bounded */
+/* top-members preview. Points render ONLY under the ADR-0010 framing  */
+/* ("Fan points — no cash value"), never as a balance or a currency.   */
+/* ------------------------------------------------------------------ */
+
+/** Frozen numeric law — mirrors src/lib/live/permissions.ts (server-only). */
+const CLUB_NAME_MAX = 40;
+const CLUB_MOTTO_MAX = 120;
+
+export function ClubManagerCard() {
+  const { status, user } = useWebFlixSession();
+  // The manager speaks the caller's OWN overview: hostId = the signed-in
+  // creator's id — the same frozen GET /api/live-clubs/[hostId] the viewer
+  // panel uses, so the studio surface invents no second contract.
+  const club = useLiveClub(status === "authenticated" ? (user?.id ?? null) : null);
+  const [name, setName] = useState("");
+  const [motto, setMotto] = useState("");
+
+  const overview = club.overview;
+
+  return (
+    <Card data-testid="club-manager">
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 pb-0">
+        <div className="space-y-1.5">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Users className="size-4 text-muted-foreground" aria-hidden="true" />
+            Fan club
+          </CardTitle>
+          <CardDescription>
+            One club per creator. Members join from your live rooms — fan points have no
+            cash value.
+          </CardDescription>
+        </div>
+        {overview && (
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Refresh fan club"
+            data-testid="club-manager-refresh"
+            disabled={club.loading}
+            onClick={club.refresh}
+          >
+            <RefreshCw className="size-4" aria-hidden="true" />
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {status === "loading" && (
+          <div className="space-y-2" aria-busy="true" data-testid="club-manager-loading">
+            <Skeleton className="h-4 w-1/2" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        )}
+
+        {status !== "loading" && !user && (
+          <div className="space-y-2" data-testid="club-manager-signin">
+            <p className="text-sm text-muted-foreground">
+              Sign in to create and manage your fan club. Nothing was created — this card
+              needs a signed-in creator.
+            </p>
+            <Button asChild size="sm">
+              <Link href="/signin?redirect=%2Fstudio%2Flive">Sign in</Link>
+            </Button>
+          </div>
+        )}
+
+        {user && club.loading && (
+          <div className="space-y-2" aria-busy="true" data-testid="club-manager-loading">
+            <Skeleton className="h-4 w-1/2" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        )}
+
+        {user && club.loadError !== null && (
+          <div className="space-y-2" data-testid="club-manager-error">
+            <p role="alert" className="text-sm text-muted-foreground">
+              Couldn&apos;t load your fan club —{" "}
+              {club.loadErrorMessage ?? `the server answered “${club.loadError}”`}.
+            </p>
+            <Button variant="outline" size="sm" data-testid="club-manager-retry" onClick={club.refresh}>
+              <RefreshCw className="size-4" aria-hidden="true" /> Retry
+            </Button>
+          </div>
+        )}
+
+        {user && club.clubMissing && (
+          <div className="space-y-2" data-testid="club-manager-create-form">
+            <p className="text-sm text-muted-foreground">
+              You haven&apos;t started a fan club yet. Name it — members join from your
+              live rooms and earn fan points by watching, chatting and gifting.
+            </p>
+            <Input
+              aria-label="Club name"
+              placeholder="Club name"
+              value={name}
+              maxLength={CLUB_NAME_MAX}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <Input
+              aria-label="Club motto (optional)"
+              placeholder="Motto (optional)"
+              value={motto}
+              maxLength={CLUB_MOTTO_MAX}
+              onChange={(e) => setMotto(e.target.value)}
+            />
+            <Button
+              data-testid="club-manager-create"
+              disabled={club.createBusy || name.trim().length === 0}
+              onClick={() =>
+                void club.create({
+                  name: name.trim(),
+                  ...(motto.trim() ? { motto: motto.trim() } : {}),
+                })
+              }
+            >
+              {club.createBusy ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Users className="size-4" aria-hidden="true" />
+              )}
+              {club.createBusy ? "Creating…" : "Create fan club"}
+            </Button>
+            {club.actionError !== null && (
+              <p role="alert" data-testid="club-manager-create-error" className="text-sm text-destructive">
+                {club.actionError.copy}
+              </p>
+            )}
+          </div>
+        )}
+
+        {user && overview && (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium" data-testid="club-manager-name">
+                  {overview.club.name}
+                </p>
+                {overview.club.motto && (
+                  <p className="truncate text-xs italic text-muted-foreground">
+                    “{overview.club.motto}”
+                  </p>
+                )}
+              </div>
+              <p
+                data-testid="club-points-note"
+                className="inline-flex shrink-0 items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400"
+              >
+                Fan points — no cash value
+              </p>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              <span data-testid="club-manager-count" className="font-semibold tabular-nums text-foreground">
+                {overview.club.memberCount}
+              </span>{" "}
+              members
+            </p>
+            {overview.topMembers.length === 0 ? (
+              <p className="rounded-lg border border-dashed px-3 py-3 text-center text-xs text-muted-foreground">
+                No members yet — they join from your live rooms.
+              </p>
+            ) : (
+              <ul
+                aria-label="Top members"
+                data-testid="club-manager-members"
+                className="slim-scrollbar max-h-96 space-y-1 overflow-y-auto pr-1"
+              >
+                {overview.topMembers.map((member, index) => (
+                  <li
+                    key={member.userId}
+                    data-testid="club-manager-member"
+                    className="flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5"
+                  >
+                    <span className="flex min-w-0 items-baseline gap-1.5">
+                      <span className="w-4 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                        {index + 1}
+                      </span>
+                      <span className="min-w-0 truncate text-sm font-medium">{member.name}</span>
+                      <span className="min-w-0 truncate text-xs text-muted-foreground">
+                        @{member.handle}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                      Lv {member.level} · {member.points} pts
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="px-1 text-[11px] leading-relaxed text-muted-foreground/80">
+              Fan points are entertainment facts — no cash value, nothing to buy, nothing to
+              convert.
+            </p>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

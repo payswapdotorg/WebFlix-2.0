@@ -15,6 +15,10 @@
  *   deletion hides, it never rewrites history;
  * - moderation/report actions surface the server's real answer as
  *   success or error toasts, never a fake success.
+ *
+ * Phase 5 (ADR-0010): the sender's fan-club badge (senderClubBadge) is
+ * server-derived at read — it renders as a neutral zinc pill next to the
+ * name, and null renders NOTHING (a badge is never client-claimed).
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -585,6 +589,20 @@ function ChatRow({
                 <span className="min-w-0 truncate font-medium text-foreground">
                   {message.senderName}
                 </span>
+                {/* Phase 5: the sender's fan-club badge — server-derived at
+                    read (ADR-0010 §5), rendered as a neutral zinc pill next
+                    to the name; null means the sender isn't a member and
+                    renders NOTHING (never a client-claimed badge). */}
+                {message.senderClubBadge && (
+                  <span
+                    data-testid="chat-club-badge"
+                    title={`${message.senderClubBadge.clubName} · fan-club level ${message.senderClubBadge.level}`}
+                    className="inline-flex shrink-0 items-center gap-0.5 rounded-full border border-zinc-300 bg-zinc-100 px-1.5 py-px text-[10px] font-semibold leading-none text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                  >
+                    <span aria-hidden>★</span>
+                    {message.senderClubBadge.level}
+                  </span>
+                )}
                 <span className="shrink-0 truncate text-xs text-muted-foreground">
                   @{message.senderHandle}
                 </span>
