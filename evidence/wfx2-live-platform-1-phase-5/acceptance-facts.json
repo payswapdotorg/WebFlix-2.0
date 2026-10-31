@@ -1,0 +1,60 @@
+{
+  "stamp": "mvwlgn33",
+  "identities": 3,
+  "steps": {
+    "clubCreated": "Station Builders",
+    "memberCountAfterCreate": "0",
+    "visibilityOptions": [
+      "public",
+      "unlisted",
+      "members"
+    ],
+    "membersToggleChecked": "true",
+    "liveRoomFound": true,
+    "memberJoinedPanel": {
+      "level": "Level 1",
+      "points": "0 fan points"
+    },
+    "memberBadge": "\u26051",
+    "memberPointsAfterChat": "0 fan points",
+    "nonmemberBlockedCopy": "Members-only chat \u2014 join the fan club to chat",
+    "nonmemberJoinCtaVisible": true,
+    "probeRoomCreate": 201,
+    "probeMemberToken": 409,
+    "probeNonmemberToken": 403
+  },
+  "db": {
+    "club": {
+      "name": "Station Builders",
+      "hostId": "wf-64c863a7-297f-49f2-a09e-8ae3c803f9ca",
+      "id": "cmvwlgp7t0005qus8a9efadm7"
+    },
+    "memberRows": 1,
+    "memberDurableId": "wf-405f825a-f874-46fa-9d43-86e4c8c46c90",
+    "memberPoints": 1,
+    "pointEvents": [
+      {
+        "source": "chat",
+        "amount": 1,
+        "idempotencyKey": "chat:cmvwlh880000pqus8su4uwqal"
+      }
+    ],
+    "watchAwardAbsentLaw": "the member joined the club AFTER entering the room \u2014 the watch award no-ops for non-members (ADR-0010 \u00a73), correct by law",
+    "liveRoom": {
+      "visibility": "public",
+      "status": "live",
+      "peakViewers": 2
+    },
+    "duplicateAwardLaw": true
+  },
+  "consoleErrors": {
+    "host": [],
+    "member": [],
+    "nonmember": []
+  },
+  "interpretation": {
+    "probeMemberToken409": "the members GATE passed (membership proven) and the request reached the session rung \u2014 the probe room has no live session (409 conflict). The nonmember's 403 is the gate itself. The 403-vs-409 boundary IS the members-gate proof.",
+    "memberPointsPanelStale": "the club panel refreshes on join/leave/create; the +1 chat point is durable server-side (verified in the ledger) and renders on the next mount \u2014 documented residual.",
+    "memberBadge": "\u26051 rendered next to the member's own chat message (server-derived at read, ADR-0010 \u00a75)."
+  }
+}
