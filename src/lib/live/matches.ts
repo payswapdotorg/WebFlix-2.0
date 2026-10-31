@@ -271,6 +271,15 @@ export async function startMatch(
   const session = await activeSessionFor(roomId);
   if (!session) throw new LiveDomainError("forbidden", "not-live");
 
+  // TL heal: settle an expired-but-unread match BEFORE the match-active
+  // gate — the wall clock (not read order) decides whether a start may
+  // proceed, so a stale active row can never block the next match.
+  const staleActive = await db.liveMatch.findFirst({
+    where: { sessionId: session.id, status: "active" },
+    select: { id: true },
+  });
+  if (staleActive) await settleIfExpired(staleActive.id);
+
   if (!(await rateLimit(`wf:live:matches:${roomId}:${actor.id}`, RATE_LIMITS.matchStart))) {
     throw new LiveDomainError("rate-limited");
   }

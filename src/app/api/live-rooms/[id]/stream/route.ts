@@ -4,6 +4,9 @@ import { getRoom } from "@/lib/live/rooms";
 import { listChat } from "@/lib/live/chat";
 import { reactionTotal } from "@/lib/live/reactions";
 import { connectedViewerCount } from "@/lib/live/presence";
+import { stageFor } from "@/lib/live/guests";
+import { currentMatch } from "@/lib/live/matches";
+import { giftFeed } from "@/lib/live/gifts";
 import { subscribeLiveRoom } from "@/lib/live/hub";
 import { db } from "@/lib/db";
 import type {
@@ -104,6 +107,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       let lastPresenceCount = -1;
       let lastPresenceAt = 0;
       let lastRoomStamp = initialRoomStamp;
+      let lastStageStamp = "";
+      let lastMatchStamp = "";
+      let lastGiftKey = "";
       const seenHubEvents = new Set<string>();
 
       const write = (chunk: string): void => {
@@ -231,6 +237,40 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
             sessionId,
             viewerCount: await connectedViewerCount(sessionId),
           });
+          // Phase 3 tail floors: the stage roster, the match snapshot (whose
+          // read also drives the lazy wall-clock expiry) and the stage-
+          // adjacent state re-derive from durable rows so multi-instance
+          // deployments converge within one tick.
+          const stage = await stageFor(id, sessionUser);
+          const stageStamp = `${stage.guestsEnabled}|${stage.participants
+            .map((p) => `${p.userId}:${p.role}:${p.state}`)
+            .join(",")}`;
+          if (stageStamp !== lastStageStamp) {
+            lastStageStamp = stageStamp;
+            send({ kind: "stage", eventId: newEventId(), at: new Date().toISOString(), stage });
+          }
+          const match = await currentMatch(id, sessionUser);
+          const matchStamp = match
+            ? `${match.id}|${match.status}|${match.winnerTeamId ?? ""}|${match.teams
+                .map((t) => t.score)
+                .join(",")}`
+            : "";
+          if (matchStamp !== lastMatchStamp) {
+            lastMatchStamp = matchStamp;
+            if (match) {
+              send({ kind: "match", eventId: newEventId(), at: new Date().toISOString(), match });
+            }
+          }
+        }
+        // The gift feed is ROOM-scoped (it survives across sessions).
+        const giftHead = (await giftFeed(id, sessionUser, 1))[0];
+        const giftKey = giftHead ? giftHead.id : "";
+        if (giftKey !== lastGiftKey) {
+          const isNew = giftKey !== "";
+          lastGiftKey = giftKey;
+          if (isNew && giftHead) {
+            send({ kind: "gift", eventId: newEventId(), at: new Date().toISOString(), gift: giftHead });
+          }
         }
         const roomRow = await db.liveRoom.findUnique({
           where: { id },
@@ -274,6 +314,25 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
             { sessionId, viewerCount: await connectedViewerCount(sessionId) },
             true,
           );
+          // Phase 3 baselines: stage roster + current match on connect (the
+          // fast path keeps them fresh; the tail is the correctness floor).
+          const stage = await stageFor(id, sessionUser);
+          lastStageStamp = `${stage.guestsEnabled}|${stage.participants
+            .map((p) => `${p.userId}:${p.role}:${p.state}`)
+            .join(",")}`;
+          send({ kind: "stage", eventId: newEventId(), at: new Date().toISOString(), stage });
+          const match = await currentMatch(id, sessionUser);
+          if (match) {
+            lastMatchStamp = `${match.id}|${match.status}|${match.winnerTeamId ?? ""}|${match.teams
+              .map((t) => t.score)
+              .join(",")}`;
+            send({ kind: "match", eventId: newEventId(), at: new Date().toISOString(), match });
+          }
+        }
+        const giftHead = (await giftFeed(id, sessionUser, 1))[0];
+        if (giftHead) {
+          lastGiftKey = giftHead.id;
+          send({ kind: "gift", eventId: newEventId(), at: new Date().toISOString(), gift: giftHead });
         }
       };
 

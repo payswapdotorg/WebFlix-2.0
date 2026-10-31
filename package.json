@@ -31,7 +31,7 @@
     "test:netflix": "DATABASE_URL=file:../db/watch-test.db prisma db push --accept-data-loss --skip-generate && DATABASE_URL=file:../db/watch-test.db bun prisma/seed-watch.ts && DATABASE_URL=file:../db/watch-test.db bun test --isolate tests/netflix-top10.test.ts tests/netflix-schema-parity.test.ts tests/netflix-routes.test.ts tests/netflix-progress.test.ts tests/netflix-broker-seam.test.ts tests/netflix-broker-mutex.test.ts tests/netflix-ui.test.tsx tests/netflix-search-page.test.tsx tests/netflix-watch-routes.test.ts tests/netflix-watch-ui.test.tsx tests/netflix-autoauth.test.ts tests/netflix-search-laws.test.ts",
     "test:tiktok": "bun test --isolate tests/tiktok-dead.test.ts tests/tiktok-urls.test.ts tests/tiktok-library.test.ts tests/tiktok-routes.test.ts tests/tiktok-routes-502.test.ts tests/tiktok-ui.test.tsx tests/tiktok-law.test.ts",
     "postinstall": "cd mini-services/netflix-desktop && bun install",
-    "test:live": "DATABASE_URL=file:../db/live-test.db bun test --isolate tests/live-chat.test.ts tests/live-reactions.test.ts tests/live-presence.test.ts tests/live-stream.test.ts tests/live-moderation.test.ts tests/live-reports.test.ts tests/live-polls.test.ts tests/live-questions.test.ts tests/live-events.test.ts"
+    "test:live": "DATABASE_URL=file:../db/live-test.db bun test --isolate tests/live-chat.test.ts tests/live-reactions.test.ts tests/live-presence.test.ts tests/live-stream.test.ts tests/live-moderation.test.ts tests/live-reports.test.ts tests/live-polls.test.ts tests/live-questions.test.ts tests/live-events.test.ts tests/live-guests.test.ts tests/live-matches.test.ts tests/live-gifts.test.ts tests/live-ui-phase3.test.tsx"
   },
   "dependencies": {
     "@dnd-kit/core": "6.3.1",

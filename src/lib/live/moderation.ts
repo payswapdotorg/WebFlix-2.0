@@ -75,6 +75,11 @@ const ACTION_KINDS: ReadonlySet<string> = new Set<LiveModerationActionKind>([
   "slow-mode",
   "chat-enable",
   "chat-disable",
+  // Phase 3: the guest-stage and gift policy toggles (same law).
+  "guests-enable",
+  "guests-disable",
+  "gifts-enable",
+  "gifts-disable",
 ]);
 
 /** Kill-switch class actions — the host's alone (moderators never flip policy). */
@@ -82,6 +87,10 @@ const HOST_ONLY_KINDS: ReadonlySet<string> = new Set<LiveModerationActionKind>([
   "slow-mode",
   "chat-enable",
   "chat-disable",
+  "guests-enable",
+  "guests-disable",
+  "gifts-enable",
+  "gifts-disable",
 ]);
 
 const REPORT_REASONS: ReadonlySet<string> = new Set<LiveReportReason>([
@@ -298,6 +307,23 @@ export async function performModeration(
       await db.liveRoom.update({
         where: { id: roomId },
         data: { chatEnabled: kind === "chat-enable" },
+      });
+      break;
+    }
+    // Phase 3 policy toggles — the same audited flip pattern as chat.
+    case "guests-enable":
+    case "guests-disable": {
+      await db.liveRoom.update({
+        where: { id: roomId },
+        data: { guestsEnabled: kind === "guests-enable" },
+      });
+      break;
+    }
+    case "gifts-enable":
+    case "gifts-disable": {
+      await db.liveRoom.update({
+        where: { id: roomId },
+        data: { giftsEnabled: kind === "gifts-enable" },
       });
       break;
     }

@@ -262,6 +262,13 @@ export async function respondInvite(
   const responderId = row.inviterId === room.hostId ? row.inviteeId : room.hostId;
   if (actor.id !== responderId) throw new LiveDomainError("forbidden");
 
+  // TL ruling (the contracts law §2: bans block the invite surface): a
+  // banned actor never answers an invite — accepting would grant publish
+  // rights the ban exists to prevent. (The host can never be banned, so
+  // this guards the invitee side in practice.)
+  const responderSanctions = await activeSanctions(roomId, actor.id);
+  if (responderSanctions.banned) throw new LiveDomainError("forbidden", "banned");
+
   if (row.status !== "pending") throw new LiveDomainError("conflict", "invite-resolved");
 
   if (

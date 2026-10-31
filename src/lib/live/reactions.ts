@@ -120,6 +120,28 @@ export async function sendReactionBatch(
 
   const total = await reactionTotal(session.id, kind);
   if (accepted) {
+    // Phase 3 (TL integration): a batcher rostered on an ACTIVE match with
+    // reaction scoring banks the batch as match points. Best-effort — any
+    // refusal (match closed, not rostered, policy off) or failure leaves
+    // the room-wide 200 and the reaction publish untouched; ingestScore
+    // itself dedupes by clientEventId and publishes the match snapshot.
+    try {
+      const match = await db.liveMatch.findFirst({
+        where: { sessionId: session.id, status: "active" },
+        select: { id: true, reactionsScore: true },
+      });
+      if (match && match.reactionsScore) {
+        const { ingestScore } = await import("./matches");
+        await ingestScore(match.id, {
+          source: "reaction",
+          actorId: actor.id,
+          amount: count,
+          clientEventId: clientBatchId,
+        });
+      }
+    } catch {
+      // the room-wide batch succeeded; match scoring is additive
+    }
     // Publish law: instant same-instance fan-out of the fresh total.
     publishLiveEvent(roomId, {
       kind: "reaction",
