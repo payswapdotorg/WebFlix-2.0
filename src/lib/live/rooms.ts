@@ -66,7 +66,8 @@ export class LiveDomainError extends Error {
       | "invalid"
       | "conflict"
       | "provider-not-configured"
-      | "provider-failed",
+      | "provider-failed"
+      | "rate-limited",
     message?: string,
   ) {
     super(message ?? code);
@@ -430,6 +431,8 @@ export function liveErrorStatus(code: LiveDomainError["code"]): number {
       return 503;
     case "provider-failed":
       return 502;
+    case "rate-limited":
+      return 429;
   }
 }
 
