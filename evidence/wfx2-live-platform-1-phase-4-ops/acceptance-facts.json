@@ -1,0 +1,19 @@
+{
+  "roomId": "cmvwhqcnl000dop704fkocrj7",
+  "viewerFrame": {
+    "w": 320,
+    "h": 180,
+    "t": 0.006938,
+    "rs": 4
+  },
+  "hostConsoleErrors": [
+    "Failed to load resource: the server responded with a status of 409 (Conflict)",
+    "A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:\n\n- A server/client bran",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ],
+  "viewerConsoleErrors": [
+    "publisher data channel 'RELIABLE' closed unexpectedly {room: wfl-38ec6bcd-1505-4037-81fe-06d15c6ddb45, roomID: RM_j22mDmUSKNUP, participant: wf-87192025-79a3-437b-88b9-ea5279764324, participantID: PA_",
+    "publisher data channel 'LOSSY' closed unexpectedly {room: wfl-38ec6bcd-1505-4037-81fe-06d15c6ddb45, roomID: RM_j22mDmUSKNUP, participant: wf-87192025-79a3-437b-88b9-ea5279764324, participantID: PA_QeA",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ]
+}
