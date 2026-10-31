@@ -599,7 +599,9 @@ describe("SidebarNav + SidebarRail — the You section at youtube.com's guide pa
     // the main rung: exactly Home, Shorts, Subscriptions, Netflix, TikTok
     // (the pack's ladder + the two source rows; Trending stays in Explore —
     // youtube.com's own placement)
-    expect(labels.slice(0, 6)).toEqual(["Home", "Shorts", "Subscriptions", "Netflix", "TikTok", "You"]);
+    // WFX2-LIVE-PLATFORM-1: the first-party /live destination rides the main
+    // rung after the source hubs (Netflix, TikTok) — the guide parity extends.
+    expect(labels.slice(0, 7)).toEqual(["Home", "Shorts", "Subscriptions", "Netflix", "TikTok", "WebFlix LIVE", "You"]);
     const netflixRow = links.find((a) => (a.textContent ?? "").trim() === "Netflix");
     expect(netflixRow?.getAttribute("href")).toBe("/netflix");
     const tiktokRow = links.find((a) => (a.textContent ?? "").trim() === "TikTok");
@@ -627,7 +629,9 @@ describe("SidebarNav + SidebarRail — the You section at youtube.com's guide pa
     const labels = links.map((a) => (a.textContent ?? "").trim());
     // P42+P58: the collapsed rail mirrors the extended main rung (Netflix and
     // TikTok both ride)
-    expect(labels.slice(0, 6)).toEqual(["Home", "Shorts", "Subscriptions", "Netflix", "TikTok", "You"]);
+    // WFX2-LIVE-PLATFORM-1: the first-party /live destination rides the main
+    // rung after the source hubs (Netflix, TikTok) — the guide parity extends.
+    expect(labels.slice(0, 7)).toEqual(["Home", "Shorts", "Subscriptions", "Netflix", "TikTok", "WebFlix LIVE", "You"]);
     const youRow = links.find((a) => (a.textContent ?? "").trim() === "You");
     expect(youRow?.getAttribute("href")).toBe("/you");
     expect(labels).toContain("Your videos");
