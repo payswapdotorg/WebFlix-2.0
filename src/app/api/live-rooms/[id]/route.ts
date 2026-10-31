@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
-import { getRoom } from "@/lib/live/rooms";
+import { getRoom, isClubMemberOfHost } from "@/lib/live/rooms";
 import { liveActorFor, activeSanctions, roomPolicyFor, activeSessionFor } from "@/lib/live/permissions";
 import { buildPolicyDto } from "@/lib/live/policy";
 
@@ -33,11 +33,18 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
         activeSessionFor(id),
       ]);
       if (policyRow) {
+        // Phase 5: on members-only-chat rooms the caller's fan-club
+        // membership decides the honest canChat answer (fail-closed).
+        const callerIsClubMember = policyRow.membersOnlyChat
+          ? actor.role === "host" ||
+            (await isClubMemberOfHost(policyRow.hostId, actor.id))
+          : undefined;
         policy = buildPolicyDto({
           room: policyRow,
           actor,
           sanctions,
           sessionLive: session !== null && session.status !== "ended",
+          callerIsClubMember,
         });
       }
     }
