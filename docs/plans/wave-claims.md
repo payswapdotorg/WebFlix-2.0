@@ -656,3 +656,19 @@ re-runs gates → merges.
   Chat bodies store short-codes as sent; substitution only through the
   frozen `src/lib/live/emote-render.ts` map law. The §4F/§4G money gate
   stays CLOSED. The LAST ungated gap under issue #2.
+
+## 2026-10-31 — WFX2-LIVE-PLATFORM-1 P68 (the console re-attach — the Phase 3 "Phase 1 follow-up" residual) claim
+
+| Wave | Lane | Lead | Claimed (UTC) | Base | Status |
+|---|---|---|---|---|---|
+| P68 / re-attach | WFX2-LIVE-PLATFORM-1 console re-attach (TL integrated: probe domain + route + card + console wiring + pins) | Z.ai Code (TL, issue #2) | 2026-10-31 21:30 | main @ e6a0a24 | **LANED** (fe67760 + docs/evidence on main; 398/398 live battery across ELEVEN sub-batches; two-browser acceptance in evidence/wfx2-live-platform-1-p68-reattach/) |
+
+- Scope: the LAST honest product residual under issue #2 — the Phase 3
+  claims row's own follow-up: the studio console's 409 conflict copy
+  promised "Reload the page to re-attach" while a reload reset the form
+  and orphaned the running session. P68 makes re-attach REAL
+  (findHostActiveRoom host-scoped probe, ANY visibility; the probe route;
+  the presentational ReattachCard; the console verifies the minted plan's
+  role === "host" before flipping live; the conflict path re-attaches
+  directly). The money gate stays CLOSED. The §9.7 documentation closeout
+  (work order delivery record + this row + the WORKLOG entry) ships with it.

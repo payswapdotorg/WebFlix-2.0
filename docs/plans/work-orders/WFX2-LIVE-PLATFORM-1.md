@@ -1,12 +1,31 @@
 # Final TL Handoff — WFX2-LIVE-PLATFORM-1: Build WebFlix LIVE
 
-**Status:** READY FOR IMPLEMENTATION  
-**Date:** 2026-10-29  
+**Status:** DELIVERED — every ungated wave LANED on main (see the delivery record below)  
+**Date:** 2026-10-29 (opened) · 2026-10-31 (delivery record)  
 **Owner:** WebFlix 2.0 TL  
 **Repository:** https://github.com/payswapdotorg/WebFlix-2.0  
 **Research/report:** [TikTok LIVE system and WebFlix implementation strategy](../../research/2026-10-29-tiktok-live-system-research.md)  
 **GitHub tracking issue:** [WFX2: Build a complete first-party WebFlix LIVE system](https://github.com/payswapdotorg/WebFlix-2.0/issues/2)  
 **Existing policy decision:** [ADR 0004 — TikTok source policy](../../adr/0004-tiktok-embed-policy.md)
+
+## Delivery record (2026-10-31, the §9.7 closeout)
+
+Every ungated wave of this work order is LANED on `main` with browser
+evidence, DB-verified durable facts and the full gate battery. Exact
+record (commit SHAs are on the issue's delivery comments):
+
+- **Phase 1 — real stream vertical slice** (§4A/§4B rungs + §8 Phase 1 gate): LANED; ADR-0005 pins LiveKit for the interactive stage behind the provider adapter.
+- **Phase 2 — realtime chat, batched tap reactions, presence, moderation, polls/Q&A, LIVE events** (§4C + the §8 Phase 2 gate): LANED; ADR-0006 pins the SSE + durable cursor tail transport.
+- **Phase 3 — guests, matches, non-monetary gifts** (§4D/§4E + the §8 Phase 3 gate's sandbox slice): LANED; ADR-0007 (guest stage authorization, append-only match scoring, the dev-gift sandbox).
+- **Phase 4 — replays + creator analytics** (§4H): LANED; ADR-0008 (one lifecycle, two recording sinks, the local-FS storage seam).
+- **Phase 4-OPS — the operations dashboard** (§4H last bullet): LANED; ADR-0009 (observations never authority; the fail-closed `WEBFLIX_OPS_ADMIN_EMAILS` gate).
+- **Phase 5 — non-monetary fan clubs** (§4G bullet 1): LANED; ADR-0010 (the non-monetary law: points/levels/badges/missions are entertainment facts, never money).
+- **Phase 5-emotes — supporter emotes** (§4G "where built"): LANED; ADR-0011 (the entitlement law: host always, member level ≥ requiredLevel, everyone else nothing).
+- **P68 — the console re-attach** (the Phase 3 claims row's own "Phase 1 follow-up" residual): LANED. A mid-broadcast reload re-takes the session instead of orphaning it: the host-scoped probe (`GET /api/studio/live-session`), the honest ReattachCard, the conflict path re-attaching directly — the "Reload the page to re-attach" copy was a lie and is gone.
+
+**Still gated (by design, not by omission):**
+- **Real money** — gift purchases, paid subscriptions, creator payouts stay disabled until the work order's own gate passes: legal/compliance, payment-provider approval, country/age rules, fraud, refund/chargeback, tax/KYC and platform terms. ADR-0010/0011 keep every shipped surface provably non-monetary.
+- **Operator-gated residuals** — R2 replay storage (creds pending re-supply), provider costs/egress metering (billing API + `LIVEKIT_EGRESS_ENABLED`), ops retention sweep on real traffic. The surfaces answer with typed honest-unavailable states, never zeros.
 
 ## 1. The assignment
 
