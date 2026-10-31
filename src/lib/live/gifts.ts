@@ -322,6 +322,24 @@ export async function sendGift(
     },
   });
 
+  // ── Phase 5 club award (ADR-0010 §3) ──
+  // The durable GiftEvent commit in the host's room earns club points =
+  // the raw gift credits (awardClubPoints re-clamps server-side). The
+  // frozen idempotency key (gift:{giftEventId}) makes duplicate delivery
+  // impossible to double-award; a failure is best-effort and NEVER fails
+  // the gift it rides on. Dynamic import keeps the gifts→clubs edge
+  // acyclic (the Phase 3 pattern).
+  try {
+    const { awardClubPoints } = await import("./clubs");
+    await awardClubPoints(room.hostId, actor.id, {
+      source: "gift",
+      sourceEventId: event.id,
+      amount: totalCredits,
+    });
+  } catch (err) {
+    console.error("live club gift award failed", err);
+  }
+
   // ── Match scoring (lane 3-b boundary) ──
   // A provided matchTeamId scores ONLY when an ACTIVE match exists on this
   // session; ingestScore owns the rest of the law (giftsScore policy, team

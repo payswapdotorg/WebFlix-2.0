@@ -22,7 +22,7 @@ import type { LiveProviderAdapter } from "./provider";
 import {
   liveProviderConfig,
 } from "./config";
-import { PRESENCE_WINDOW_MS } from "./permissions";
+import { CLUB_POINTS_WATCH, PRESENCE_WINDOW_MS } from "./permissions";
 import type {
   CreateLiveRoomInput,
   LivePlaybackPlan,
@@ -49,6 +49,44 @@ export async function resolveLiveIdentity(sessionUser: WebFlixSessionUser): Prom
   avatarUrl: string;
 }> {
   return ensureShadowUser(sessionUser);
+}
+
+/**
+ * Phase 5 (ADR-0010) — the narrow club-membership read the members-only
+ * gates authorize against. Deliberately NOT routed through clubs.ts: the
+ * gate may never depend on a sibling-lane helper that may not exist (the
+ * lane 5 dispatch law), and the read is two unique-index lookups. True iff
+ * the host owns a LiveFanClub AND the user has a LiveFanClubMember row on
+ * it. No client claim is ever trusted (ADR-0010 §6).
+ */
+export async function isClubMemberOfHost(hostId: string, userId: string): Promise<boolean> {
+  if (!userId || userId === hostId) return false;
+  const club = await db.liveFanClub.findUnique({ where: { hostId }, select: { id: true } });
+  if (!club) return false;
+  const member = await db.liveFanClubMember.findUnique({
+    where: { clubId_userId: { clubId: club.id, userId } },
+    select: { id: true },
+  });
+  return member !== null;
+}
+
+/**
+ * Phase 5 award hook (ADR-0010 §3): a durable LiveParticipant row creation
+ * on a live session earns CLUB_POINTS_WATCH under the frozen idempotency
+ * key — best-effort by law, dynamic import keeps the rooms→clubs edge
+ * acyclic (the Phase 3 guests.ts pattern). NEVER fails the join.
+ */
+async function awardWatchPoints(hostId: string, userId: string, sessionId: string): Promise<void> {
+  try {
+    const { awardClubPoints } = await import("./clubs");
+    await awardClubPoints(hostId, userId, {
+      source: "watch",
+      sourceEventId: sessionId,
+      amount: CLUB_POINTS_WATCH,
+    });
+  } catch (err) {
+    console.error("live club watch award failed", err);
+  }
 }
 
 /** Token TTLs (seconds) — short-lived by law; clients re-mint on reconnect. */
@@ -145,7 +183,10 @@ export function mapRoom(
     hostName: room.host.name,
     title: room.title,
     status: room.status as LiveRoomStatus,
-    visibility: room.visibility === "unlisted" ? "unlisted" : "public",
+    // Phase 5: "members" rooms surface their honest visibility (discovery
+    // filters them out at the query level — this mapping never lies).
+    visibility:
+      room.visibility === "members" ? "members" : room.visibility === "unlisted" ? "unlisted" : "public",
     createdAt: room.createdAt.toISOString(),
     updatedAt: room.updatedAt.toISOString(),
     currentSession: current,
@@ -192,7 +233,12 @@ export async function createRoom(
   if (title.length < 1 || title.length > 140) {
     throw new LiveDomainError("invalid", "title must be 1..140 chars");
   }
-  const visibility = input.visibility === "unlisted" ? "unlisted" : "public";
+  // Phase 5: the create input admits "members" (ADR-0010 §4). Anything
+  // else the client claims degrades honestly to the "public" default.
+  const visibility =
+    input.visibility === "unlisted" || input.visibility === "members"
+      ? input.visibility
+      : "public";
   const identity = await resolveLiveIdentity(sessionUser);
   const room = await db.liveRoom.create({
     data: { hostId: identity.id, title, visibility, status: "idle" },
@@ -307,16 +353,27 @@ export async function mintJoinToken(
   sessionUser: WebFlixSessionUser,
   requestedRole: LiveTokenRole,
 ): Promise<LivePlaybackPlan> {
-  const ad = adapter();
-  if (!ad.isConfigured()) {
-    throw new LiveDomainError("provider-not-configured");
-  }
   const identity = await resolveLiveIdentity(sessionUser);
   const room = await db.liveRoom.findUnique({
     where: { id: roomId },
     include: { sessions: { orderBy: { createdAt: "desc" }, take: 1 } },
   });
   if (!room) throw new LiveDomainError("not-found");
+  // Phase 5 members gate (ADR-0010 §4): on a "members" room only the host
+  // and the host's club members may mint a join token — authorization
+  // BEFORE the provider capability check (the honest forbidden, never a
+  // misleading provider error). Host always allowed.
+  if (
+    room.visibility === "members" &&
+    room.hostId !== identity.id &&
+    !(await isClubMemberOfHost(room.hostId, identity.id))
+  ) {
+    throw new LiveDomainError("forbidden");
+  }
+  const ad = adapter();
+  if (!ad.isConfigured()) {
+    throw new LiveDomainError("provider-not-configured");
+  }
   const session = room.sessions[0];
   if (!session || session.status === "ended") {
     throw new LiveDomainError("conflict", "no-live-session");
@@ -367,6 +424,13 @@ export async function mintJoinToken(
       ? { lastSeenAt: new Date() }
       : { state: "connected", lastSeenAt: new Date() },
   });
+  // Phase 5 award law (ADR-0010 §3): the DURABLE CREATION of a viewer/guest
+  // participant row earns watch points (host rows never award). The
+  // pre-read above is the created-signal; the idempotency key dedupes any
+  // race with the webhook path.
+  if (role !== "host" && !existingParticipant) {
+    await awardWatchPoints(room.hostId, identity.id, session.id);
+  }
   return plan;
 }
 
@@ -498,6 +562,13 @@ export async function reconcileWebhookEvent(event: LiveWebhookEvent): Promise<{ 
     case "participant_joined": {
       if (!event.participantIdentity) return { reconciled: false };
       const isHost = session.room.hostId === event.participantIdentity;
+      // The pre-read is the durable-creation signal for the Phase 5 watch
+      // award (a rejoin/update must not re-enter the award path; the
+      // idempotency key is the backstop either way).
+      const existing = await db.liveParticipant.findUnique({
+        where: { sessionId_userId: { sessionId: session.id, userId: event.participantIdentity } },
+        select: { id: true },
+      });
       await db.liveParticipant.upsert({
         where: { sessionId_userId: { sessionId: session.id, userId: event.participantIdentity } },
         create: {
@@ -508,6 +579,9 @@ export async function reconcileWebhookEvent(event: LiveWebhookEvent): Promise<{ 
         },
         update: { state: "connected", lastSeenAt: new Date() },
       });
+      if (!isHost && !existing) {
+        await awardWatchPoints(session.room.hostId, event.participantIdentity, session.id);
+      }
       return { reconciled: true };
     }
     case "participant_left": {

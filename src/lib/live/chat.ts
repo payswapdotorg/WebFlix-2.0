@@ -23,13 +23,15 @@ import {
   activeSessionFor,
   canModerate,
   CHAT_BODY_MAX,
+  CLUB_LEVEL_MAX,
+  CLUB_POINTS_CHAT,
   liveActorFor,
   RATE_LIMITS,
   resolveHandles,
   roomPolicyFor,
 } from "./permissions";
 import { publishLiveEvent } from "./hub";
-import { LiveDomainError } from "./rooms";
+import { isClubMemberOfHost, LiveDomainError } from "./rooms";
 import type { LiveChatKind, LiveChatMessageDto, SendLiveChatInput } from "./types";
 
 /** Raw LiveRoomMessage row shape (as Prisma returns it, before DTO mapping). */
@@ -49,12 +51,23 @@ export type LiveChatMessageRow = {
 
 export type HandleMap = Map<string, { handle: string; name: string }>;
 
+/** Phase 5: the per-sender club badge map (ADR-0010 §5 — derived at read). */
+export type ClubBadgeMap = Map<string, { clubName: string; level: number }>;
+
 /**
  * Row → DTO. Tombstoned rows keep their place in the transcript but render
  * "message removed": `deleted: true`, `body: ""` (the raw body never leaves
  * the server once a moderator has hidden it).
+ *
+ * Phase 5: `badges` is the CALLER-SCOPED badge map for THIS room's host
+ * club (chat.ts badgesFor). Undefined/absent sender → `senderClubBadge:
+ * null` — the badge is never stored on the row and never client-claimed.
  */
-export function mapChatMessage(row: LiveChatMessageRow, handles: HandleMap): LiveChatMessageDto {
+export function mapChatMessage(
+  row: LiveChatMessageRow,
+  handles: HandleMap,
+  badges?: ClubBadgeMap,
+): LiveChatMessageDto {
   const sender = handles.get(row.senderId);
   return {
     id: row.id,
@@ -68,12 +81,61 @@ export function mapChatMessage(row: LiveChatMessageRow, handles: HandleMap): Liv
     body: row.deletedAt ? "" : row.body,
     createdAt: row.createdAt.toISOString(),
     deleted: row.deletedAt != null,
-    senderClubBadge: null,
+    senderClubBadge: badges?.get(row.senderId) ?? null,
   };
 }
 
 async function handlesFor(senderIds: string[]): Promise<HandleMap> {
   return resolveHandles(senderIds);
+}
+
+/**
+ * Phase 5 (ADR-0010 §5) — ONE batched membership lookup per fan-out: the
+ * room host's club members among `senderIds`, joined with the club name and
+ * the member's points projection. Level is the ONE server formula (ADR-0010
+ * §4): min(CLUB_LEVEL_MAX, floor(points / pointsPerLevel) + 1). NEVER
+ * throws — a badge failure renders no badge, never a failed read.
+ */
+export async function badgesFor(roomHostId: string, senderIds: string[]): Promise<ClubBadgeMap> {
+  const unique = [...new Set(senderIds.filter(Boolean))];
+  if (unique.length === 0) return new Map();
+  try {
+    const rows = await db.liveFanClubMember.findMany({
+      where: { userId: { in: unique }, club: { hostId: roomHostId } },
+      select: { userId: true, points: true, club: { select: { name: true, pointsPerLevel: true } } },
+    });
+    const map: ClubBadgeMap = new Map();
+    for (const r of rows) {
+      const perLevel = r.club.pointsPerLevel > 0 ? r.club.pointsPerLevel : 1;
+      map.set(r.userId, {
+        clubName: r.club.name,
+        level: Math.min(CLUB_LEVEL_MAX, Math.floor(r.points / perLevel) + 1),
+      });
+    }
+    return map;
+  } catch (err) {
+    console.error("live club badge derivation failed", err);
+    return new Map();
+  }
+}
+
+/**
+ * Phase 5 award hook (ADR-0010 §3): the durable LiveChatMessage commit
+ * earns CLUB_POINTS_CHAT under the frozen idempotency key — best-effort by
+ * law (dynamic import keeps the chat→clubs edge acyclic), NEVER fails the
+ * send it rides on.
+ */
+async function awardChatPoints(hostId: string, senderId: string, messageId: string): Promise<void> {
+  try {
+    const { awardClubPoints } = await import("./clubs");
+    await awardClubPoints(hostId, senderId, {
+      source: "chat",
+      sourceEventId: messageId,
+      amount: CLUB_POINTS_CHAT,
+    });
+  } catch (err) {
+    console.error("live club chat award failed", err);
+  }
 }
 
 /**
@@ -95,8 +157,19 @@ export async function listChat(
     orderBy: { seq: "asc" },
     take: limit,
   });
-  const handles = await handlesFor(rows.map((r) => r.senderId));
-  return rows.map((r) => mapChatMessage(r, handles));
+  const [handles, badges] = await Promise.all([
+    handlesFor(rows.map((r) => r.senderId)),
+    // Phase 5: the history/tail fan-out stamps the same read-derived badge
+    // (ONE batched lookup; host id needed for the club join).
+    (async () => {
+      const host = await db.liveRoom.findUnique({
+        where: { id: roomId },
+        select: { hostId: true },
+      });
+      return badgesFor(host?.hostId ?? "", rows.map((r) => r.senderId));
+    })(),
+  ]);
+  return rows.map((r) => mapChatMessage(r, handles, badges));
 }
 
 /**
@@ -125,6 +198,15 @@ export async function sendChat(
   // moderators can still speak (system/announcement channel stays usable).
   if (room.chatEnabled === false && !canModerate(actor.role)) {
     throw new LiveDomainError("forbidden", "chat-disabled");
+  }
+
+  // Phase 5 members-only chat (ADR-0010 §4/§6): the send-path rung of the
+  // canChat law — staff bypasses, the club membership is resolved against
+  // the room host's club server-side (never a client claim). Same honest
+  // "members-only" reason the policy DTO reports.
+  if (room.membersOnlyChat && !canModerate(actor.role)) {
+    const isMember = await isClubMemberOfHost(room.hostId, actor.id);
+    if (!isMember) throw new LiveDomainError("forbidden", "members-only");
   }
 
   // Slow-mode applies to viewer/guest senders only (host/moderator bypass).
@@ -174,6 +256,9 @@ export async function sendChat(
   }
 
   const handles = await handlesFor([actor.id]);
+  // Phase 5: the sender's badge derives from the same host-club lookup the
+  // gate uses (ONE batched read; failure renders no badge).
+  const badges = await badgesFor(room.hostId, [actor.id]);
   try {
     const row = await db.liveRoomMessage.create({
       data: {
@@ -185,7 +270,10 @@ export async function sendChat(
         kind,
       },
     });
-    const message = mapChatMessage(row, handles);
+    // Phase 5 award law: the durable commit earns chat points (best-effort;
+    // duplicate replays below never re-enter this path).
+    await awardChatPoints(room.hostId, actor.id, row.id);
+    const message = mapChatMessage(row, handles, badges);
     // Publish law: same-instance subscribers get instant fan-out; other
     // instances converge via the stream's DB tail (ADR-0006).
     publishLiveEvent(roomId, {
@@ -208,7 +296,7 @@ export async function sendChat(
           },
         },
       });
-      if (existing) return { message: mapChatMessage(existing, handles), duplicate: true };
+      if (existing) return { message: mapChatMessage(existing, handles, badges), duplicate: true };
     }
     throw err;
   }

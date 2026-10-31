@@ -44,7 +44,7 @@ import {
   REPLAY_UPLOAD_MAX_BYTES,
   activeSessionFor,
 } from "./permissions";
-import { LiveDomainError, adapter, resolveLiveIdentity } from "./rooms";
+import { LiveDomainError, adapter, isClubMemberOfHost, resolveLiveIdentity } from "./rooms";
 import { deleteReplayObject, saveReplayObject } from "./replay-storage";
 import type {
   LiveReplayAssetDto,
@@ -56,7 +56,9 @@ import type {
 
 type ReplayVisibility = LiveReplayAssetDto["visibility"];
 
-const VISIBILITIES: ReplayVisibility[] = ["inherit", "public", "unlisted", "hidden"];
+// Phase 5 (ADR-0010 §4): the asset union gains "members" — playback
+// authorizes the same club-membership gate as members rooms.
+const VISIBILITIES: ReplayVisibility[] = ["inherit", "public", "unlisted", "hidden", "members"];
 
 // ── the stage-notifier seam (documented above; TL wires at integration) ──
 let stageRecordingNotifier:
@@ -338,10 +340,12 @@ export async function stopReplay(
  * SWEEP first: a ready asset past retentionExpiresAt purges its object
  * (best-effort) and flips to `expired` — the row survives as audit.
  * Visibility law: hidden → host only; otherwise the effective visibility
- * (asset override, else the room's) admits "public" (anyone) and
- * "unlisted" (link holders — a bare roomId IS the link). Returns null on
- * any denial; the route answers 404 (never a 403 — existence is not
- * disclosed to non-viewers).
+ * (asset override, else the room's) admits "public" (anyone), "unlisted"
+ * (link holders — a bare roomId IS the link) and — Phase 5 (ADR-0010 §4)
+ * — "members": the room host + the host's club members ONLY (an "inherit"
+ * asset on a members room flows through the same gate). Everyone else is
+ * denied. Returns null on any denial; the route answers 404 (never a 403
+ * — existence is not disclosed to non-viewers).
  */
 export async function getReplayFor(
   roomId: string,
@@ -383,7 +387,17 @@ export async function getReplayFor(
   } else {
     const effective: string =
       asset.visibility === "inherit" ? room.visibility : asset.visibility;
-    if (effective !== "public" && effective !== "unlisted") return null;
+    if (effective === "members") {
+      // Phase 5 members gate (ADR-0010 §4): the room host + the host's
+      // club members may play — everyone else is denied (honest null →
+      // 404; no membership claim is ever client-trusted). "inherit" on a
+      // members room lands here too.
+      if (!isHost && !(await isClubMemberOfHost(room.hostId, callerId ?? ""))) {
+        return null;
+      }
+    } else if (effective !== "public" && effective !== "unlisted") {
+      return null;
+    }
   }
 
   // Playback URL minted at read time — carries NO key, NO storageKey.

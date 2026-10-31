@@ -30,7 +30,7 @@
 import { db } from "@/lib/db";
 import { LiveDomainError } from "./rooms";
 import { publishLiveEvent } from "./hub";
-import { mapChatMessage } from "./chat";
+import { badgesFor, mapChatMessage } from "./chat";
 import {
   activeSessionFor,
   canModerate,
@@ -81,6 +81,9 @@ const ACTION_KINDS: ReadonlySet<string> = new Set<LiveModerationActionKind>([
   "guests-disable",
   "gifts-enable",
   "gifts-disable",
+  // Phase 5: the members-only chat gate (ADR-0010 §4 — same audited law).
+  "members-chat-enable",
+  "members-chat-disable",
 ]);
 
 /** Kill-switch class actions — the host's alone (moderators never flip policy). */
@@ -92,6 +95,8 @@ const HOST_ONLY_KINDS: ReadonlySet<string> = new Set<LiveModerationActionKind>([
   "guests-disable",
   "gifts-enable",
   "gifts-disable",
+  "members-chat-enable",
+  "members-chat-disable",
 ]);
 
 const REPORT_REASONS: ReadonlySet<string> = new Set<LiveReportReason>([
@@ -332,6 +337,18 @@ export async function performModeration(
       });
       break;
     }
+    // Phase 5 — the members-only chat gate. EXACTLY the audited-flip
+    // pattern as chat-enable/disable: the room update above persists the
+    // policy, the shared tail below appends the LiveModerationAction row
+    // (host-only, like every policy toggle).
+    case "members-chat-enable":
+    case "members-chat-disable": {
+      await db.liveRoom.update({
+        where: { id: roomId },
+        data: { membersOnlyChat: kind === "members-chat-enable" },
+      });
+      break;
+    }
   }
 
   const row = await db.liveModerationAction.create({
@@ -362,11 +379,14 @@ export async function performModeration(
     const tombstoned = await db.liveRoomMessage.findUnique({ where: { id: messageId } });
     if (tombstoned) {
       const senderHandles = await resolveHandles([tombstoned.senderId]);
+      // Phase 5: the tombstone envelope carries the same read-derived badge
+      // (best-effort — badgesFor never throws).
+      const badges = await badgesFor(room.hostId, [tombstoned.senderId]);
       publishLiveEvent(roomId, {
         kind: "chat",
         eventId: crypto.randomUUID(),
         at: tombstoned.createdAt.toISOString(),
-        message: mapChatMessage(tombstoned, senderHandles),
+        message: mapChatMessage(tombstoned, senderHandles, badges),
       });
     }
   }
