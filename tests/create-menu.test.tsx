@@ -196,20 +196,20 @@ describe("the + CREATE pill", () => {
     expect(upload.getAttribute("href")).toBe("/upload");
     expect(upload.textContent).toContain("Upload video");
 
-    // P24-SEND (G10): the Go live rung stays in the menu (youtube.com's own
-    // rung family) but routes EXTERNALLY to the measured real URL — the
-    // Live Control Room is a creator surface WebFlix has no seam for;
-    // _blank + noopener/noreferrer + the honest tooltip carry the reason.
+    // WFX2-LIVE-PLATFORM-1 (issue #2): the Go live rung routes INTERNALLY to
+    // the first-party creator surface /studio/live (the parity debt is paid
+    // — WebFlix has its own preflight + broadcast console now). The retired
+    // external-YouTube lane's pins are gone: no _blank, no noopener, no
+    // "no streaming setup" copy.
     const live = win.document.querySelector(
       '[data-testid="create-go-live"]'
     ) as unknown as HTMLAnchorElement;
     expect(live).not.toBeNull();
-    expect(live.getAttribute("href")).toBe("https://www.youtube.com/live");
-    expect(live.getAttribute("target")).toBe("_blank");
-    expect(live.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(live.getAttribute("href")).toBe("/studio/live");
+    expect(live.getAttribute("target")).toBeNull();
     expect(live.textContent).toContain("Go live");
-    expect(live.getAttribute("title")).toContain("Live Control Room");
-    expect(live.getAttribute("aria-label")).toContain("no streaming setup");
+    expect(live.getAttribute("title")).toContain("Go live on WebFlix");
+    expect(live.getAttribute("aria-label")).toContain("Go live on WebFlix");
 
     // the honest absence: no own channel resolved → no New post deep link
     expect(win.document.querySelector('[data-testid="create-new-post"]')).toBeNull();

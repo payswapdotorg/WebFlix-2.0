@@ -60,6 +60,10 @@ const MAIN_NAV: NavItem[] = [
   // P58-TIKTOK-SOURCE — the third source's hub (ADR 0004): the curated shelf
   // played through TikTok's own official embed player.
   { href: "/tiktok", label: "TikTok", icon: Clapperboard },
+  // WFX2-LIVE-PLATFORM-1 — the FIRST-PARTY WebFlix LIVE destination (issue
+  // #2): WebFlix-owned broadcast rooms. Deliberately distinct from the
+  // YouTube LIVE discovery at /explore/live (that stays YouTube's surface).
+  { href: "/live", label: "WebFlix LIVE", icon: Radio },
 ];
 
 /**
