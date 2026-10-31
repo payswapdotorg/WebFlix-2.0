@@ -37,6 +37,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import type { WebFlixSessionUser } from "@/lib/auth/types";
 import { rateLimit } from "@/lib/youtube/cache";
+import { opsRateLimit } from "./ops";
 import {
   activeSessionFor,
   GIFT_PRICE_MAX,
@@ -280,7 +281,11 @@ export async function startMatch(
   });
   if (staleActive) await settleIfExpired(staleActive.id);
 
-  if (!(await rateLimit(`wf:live:matches:${roomId}:${actor.id}`, RATE_LIMITS.matchStart))) {
+  if (!(await opsRateLimit(
+        "matchStart",
+        `wf:live:matches:${roomId}:${actor.id}`,
+        RATE_LIMITS.matchStart,
+      ))) {
     throw new LiveDomainError("rate-limited");
   }
 

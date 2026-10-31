@@ -17,6 +17,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import type { WebFlixSessionUser } from "@/lib/auth/types";
 import { rateLimit } from "@/lib/youtube/cache";
+import { opsRateLimit } from "./ops";
 import {
   activeSanctions,
   activeSessionFor,
@@ -137,7 +138,11 @@ export async function sendChat(
     }
   }
 
-  if (!(await rateLimit(`wf:live:chat:${roomId}:${actor.id}`, RATE_LIMITS.chat))) {
+  if (!(await opsRateLimit(
+        "chat",
+        `wf:live:chat:${roomId}:${actor.id}`,
+        RATE_LIMITS.chat,
+      ))) {
     throw new LiveDomainError("rate-limited");
   }
 

@@ -43,6 +43,7 @@ import {
   type LiveActor,
 } from "./permissions";
 import { rateLimit } from "@/lib/youtube/cache";
+import { opsRateLimit } from "./ops";
 import type {
   CreateLiveReportInput,
   LiveModerationActionDto,
@@ -224,7 +225,11 @@ export async function performModeration(
   }
 
   if (
-    !(await rateLimit(`wf:live:moderation:${roomId}:${actor.id}`, RATE_LIMITS.moderation))
+    !(await opsRateLimit(
+        "moderation",
+        `wf:live:moderation:${roomId}:${actor.id}`,
+        RATE_LIMITS.moderation,
+      ))
   ) {
     throw new LiveDomainError("rate-limited");
   }
@@ -420,7 +425,11 @@ export async function grantModerator(
     throw invalid("userId is required");
   }
   if (
-    !(await rateLimit(`wf:live:moderators:${roomId}:${actor.id}`, RATE_LIMITS.moderatorGrant))
+    !(await opsRateLimit(
+        "moderatorGrant",
+        `wf:live:moderators:${roomId}:${actor.id}`,
+        RATE_LIMITS.moderatorGrant,
+      ))
   ) {
     throw new LiveDomainError("rate-limited");
   }
@@ -459,7 +468,11 @@ export async function revokeModerator(
     throw invalid("userId is required");
   }
   if (
-    !(await rateLimit(`wf:live:moderators:${roomId}:${actor.id}`, RATE_LIMITS.moderatorGrant))
+    !(await opsRateLimit(
+        "moderatorGrant",
+        `wf:live:moderators:${roomId}:${actor.id}`,
+        RATE_LIMITS.moderatorGrant,
+      ))
   ) {
     throw new LiveDomainError("rate-limited");
   }
@@ -502,7 +515,11 @@ export async function createReport(
   if (typeof reason !== "string" || !REPORT_REASONS.has(reason)) {
     throw invalid("reason must be spam | harassment | inappropriate | other");
   }
-  if (!(await rateLimit(`wf:live:reports:${roomId}:${actor.id}`, RATE_LIMITS.reports))) {
+  if (!(await opsRateLimit(
+        "reports",
+        `wf:live:reports:${roomId}:${actor.id}`,
+        RATE_LIMITS.reports,
+      ))) {
     throw new LiveDomainError("rate-limited");
   }
 

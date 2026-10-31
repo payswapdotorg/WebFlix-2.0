@@ -19,6 +19,7 @@ import { db } from "@/lib/db";
 import type { LivePoll, LivePollOption } from "@prisma/client";
 import type { WebFlixSessionUser } from "@/lib/auth/types";
 import { rateLimit } from "@/lib/youtube/cache";
+import { opsRateLimit } from "./ops";
 import { LiveDomainError } from "./rooms";
 import { publishLiveEvent } from "./hub";
 import {
@@ -127,7 +128,11 @@ export async function createPoll(
     seen.add(key);
   }
 
-  if (!(await rateLimit(`wf:live:polls:${roomId}:${actor.id}`, RATE_LIMITS.pollCreate))) {
+  if (!(await opsRateLimit(
+        "pollCreate",
+        `wf:live:polls:${roomId}:${actor.id}`,
+        RATE_LIMITS.pollCreate,
+      ))) {
     throw new LiveDomainError("rate-limited");
   }
 
@@ -193,7 +198,11 @@ export async function votePoll(
     throw invalid("optionId must belong to this poll");
   }
 
-  if (!(await rateLimit(`wf:live:poll-vote:${roomId}:${actor.id}`, RATE_LIMITS.pollVote))) {
+  if (!(await opsRateLimit(
+        "pollVote",
+        `wf:live:poll-vote:${roomId}:${actor.id}`,
+        RATE_LIMITS.pollVote,
+      ))) {
     throw new LiveDomainError("rate-limited");
   }
 

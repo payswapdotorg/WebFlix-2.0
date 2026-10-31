@@ -19,6 +19,7 @@ import { db } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
 import type { WebFlixSessionUser } from "@/lib/auth/types";
 import { rateLimit } from "@/lib/youtube/cache";
+import { opsRateLimit } from "./ops";
 import { LiveDomainError, resolveLiveIdentity } from "./rooms";
 import { EVENT_DESCRIPTION_MAX, EVENT_TITLE_MAX, RATE_LIMITS, resolveHandles } from "./permissions";
 import type { CreateLiveEventInput, LiveEventDto } from "./types";
@@ -133,7 +134,11 @@ export async function createEvent(
   }
   const scheduledFor = parseFutureDate(input.scheduledFor);
 
-  if (!(await rateLimit(`wf:live:events:create:${identity.id}`, RATE_LIMITS.eventCreate))) {
+  if (!(await opsRateLimit(
+        "eventCreate",
+        `wf:live:events:create:${identity.id}`,
+        RATE_LIMITS.eventCreate,
+      ))) {
     throw new LiveDomainError("rate-limited");
   }
 
@@ -289,7 +294,11 @@ export async function registerEvent(
     throw new LiveDomainError("conflict", "event is not open for registration");
   }
   if (
-    !(await rateLimit(`wf:live:events:register:${id}:${identity.id}`, RATE_LIMITS.eventRegister))
+    !(await opsRateLimit(
+        "eventRegister",
+        `wf:live:events:register:${id}:${identity.id}`,
+        RATE_LIMITS.eventRegister,
+      ))
   ) {
     throw new LiveDomainError("rate-limited");
   }
@@ -313,7 +322,11 @@ export async function unregisterEvent(
   const identity = await resolveLiveIdentity(sessionUser);
   await eventRowOr404(id);
   if (
-    !(await rateLimit(`wf:live:events:register:${id}:${identity.id}`, RATE_LIMITS.eventRegister))
+    !(await opsRateLimit(
+        "eventRegister",
+        `wf:live:events:register:${id}:${identity.id}`,
+        RATE_LIMITS.eventRegister,
+      ))
   ) {
     throw new LiveDomainError("rate-limited");
   }

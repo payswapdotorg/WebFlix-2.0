@@ -18,6 +18,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import type { WebFlixSessionUser } from "@/lib/auth/types";
 import { rateLimit } from "@/lib/youtube/cache";
+import { opsRateLimit } from "./ops";
 import {
   activeSanctions,
   activeSessionFor,
@@ -79,7 +80,11 @@ export async function sendReactionBatch(
   // a chat sanction and does not block reactions (see the file header).
   if (sanctions.banned) throw new LiveDomainError("forbidden", "banned");
 
-  if (!(await rateLimit(`wf:live:reactions:${roomId}:${actor.id}`, RATE_LIMITS.reactions))) {
+  if (!(await opsRateLimit(
+        "reactions",
+        `wf:live:reactions:${roomId}:${actor.id}`,
+        RATE_LIMITS.reactions,
+      ))) {
     throw new LiveDomainError("rate-limited");
   }
 

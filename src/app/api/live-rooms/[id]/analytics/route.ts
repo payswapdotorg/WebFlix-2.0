@@ -5,6 +5,7 @@ import { LiveDomainError, liveErrorStatus, resolveLiveIdentity } from "@/lib/liv
 import { computeAnalyticsSnapshot } from "@/lib/live/analytics";
 import { RATE_LIMITS } from "@/lib/live/permissions";
 import { rateLimit } from "@/lib/youtube/cache";
+import { opsRateLimit } from "@/lib/live/ops";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +36,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     if (!room) throw new LiveDomainError("not-found");
     if (room.hostId !== identity.id) throw new LiveDomainError("forbidden");
     if (
-      !(await rateLimit(`wf:live:analytics:${roomId}:${identity.id}`, RATE_LIMITS.analytics))
+      !(await opsRateLimit(
+        "analytics",
+        `wf:live:analytics:${roomId}:${identity.id}`,
+        RATE_LIMITS.analytics,
+      ))
     ) {
       throw new LiveDomainError("rate-limited");
     }

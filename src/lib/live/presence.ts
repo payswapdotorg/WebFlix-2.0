@@ -13,6 +13,7 @@
 import { db } from "@/lib/db";
 import type { WebFlixSessionUser } from "@/lib/auth/types";
 import { rateLimit } from "@/lib/youtube/cache";
+import { opsRateLimit } from "./ops";
 import {
   activeSessionFor,
   liveActorFor,
@@ -58,7 +59,11 @@ export async function heartbeat(
 
   const actor = await liveActorFor(roomId, sessionUser);
 
-  if (!(await rateLimit(`wf:live:presence:${roomId}:${actor.id}`, RATE_LIMITS.presence))) {
+  if (!(await opsRateLimit(
+        "presence",
+        `wf:live:presence:${roomId}:${actor.id}`,
+        RATE_LIMITS.presence,
+      ))) {
     throw new LiveDomainError("rate-limited");
   }
 

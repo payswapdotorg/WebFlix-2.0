@@ -22,6 +22,7 @@ import { db } from "@/lib/db";
 import type { LiveInvite } from "@prisma/client";
 import type { WebFlixSessionUser } from "@/lib/auth/types";
 import { rateLimit } from "@/lib/youtube/cache";
+import { opsRateLimit } from "./ops";
 import {
   activeSanctions,
   activeSessionFor,
@@ -131,7 +132,11 @@ export async function createInvite(
   const sanctions = await activeSanctions(roomId, actor.id);
   if (sanctions.banned) throw new LiveDomainError("forbidden", "banned");
 
-  if (!(await rateLimit(`wf:live:invites:${roomId}:${actor.id}`, RATE_LIMITS.inviteCreate))) {
+  if (!(await opsRateLimit(
+        "inviteCreate",
+        `wf:live:invites:${roomId}:${actor.id}`,
+        RATE_LIMITS.inviteCreate,
+      ))) {
     throw new LiveDomainError("rate-limited");
   }
 
@@ -272,7 +277,11 @@ export async function respondInvite(
   if (row.status !== "pending") throw new LiveDomainError("conflict", "invite-resolved");
 
   if (
-    !(await rateLimit(`wf:live:invite-respond:${roomId}:${actor.id}`, RATE_LIMITS.inviteRespond))
+    !(await opsRateLimit(
+        "inviteRespond",
+        `wf:live:invite-respond:${roomId}:${actor.id}`,
+        RATE_LIMITS.inviteRespond,
+      ))
   ) {
     throw new LiveDomainError("rate-limited");
   }

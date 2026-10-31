@@ -32,6 +32,7 @@
  */
 import { db } from "@/lib/db";
 import { rateLimit } from "@/lib/youtube/cache";
+import { opsRateLimit } from "./ops";
 import type { LiveReplayAsset } from "@prisma/client";
 import type { WebFlixSessionUser } from "@/lib/auth/types";
 import {
@@ -171,10 +172,11 @@ export async function startReplay(
   if (!session) throw new LiveDomainError("forbidden", "not-live");
 
   if (
-    !(await rateLimit(
-      `wf:live:replayStart:${roomId}:${identity.id}`,
-      RATE_LIMITS.replayStart,
-    ))
+    !(await opsRateLimit(
+        "replayStart",
+        `wf:live:replayStart:${roomId}:${identity.id}`,
+        RATE_LIMITS.replayStart,
+      ))
   ) {
     throw new LiveDomainError("rate-limited", "replayStart");
   }
@@ -257,10 +259,11 @@ export async function stopReplay(
   if (!session) throw new LiveDomainError("forbidden", "not-live");
 
   if (
-    !(await rateLimit(
-      `wf:live:replayStop:${roomId}:${identity.id}`,
-      RATE_LIMITS.replayStop,
-    ))
+    !(await opsRateLimit(
+        "replayStop",
+        `wf:live:replayStop:${roomId}:${identity.id}`,
+        RATE_LIMITS.replayStop,
+      ))
   ) {
     throw new LiveDomainError("rate-limited", "replayStop");
   }
@@ -402,10 +405,11 @@ export async function setReplayVisibility(
   const { identity } = await hostRoomOrThrow(roomId, sessionUser);
 
   if (
-    !(await rateLimit(
-      `wf:live:replayVisibility:${roomId}:${identity.id}`,
-      RATE_LIMITS.replayVisibility,
-    ))
+    !(await opsRateLimit(
+        "replayVisibility",
+        `wf:live:replayVisibility:${roomId}:${identity.id}`,
+        RATE_LIMITS.replayVisibility,
+      ))
   ) {
     throw new LiveDomainError("rate-limited", "replayVisibility");
   }

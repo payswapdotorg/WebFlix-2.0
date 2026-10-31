@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { rateLimit } from "@/lib/youtube/cache";
+import { opsRateLimit } from "@/lib/live/ops";
 import { createRoom, listRooms, LiveDomainError, liveErrorStatus } from "@/lib/live/rooms";
 import type { CreateLiveRoomInput } from "@/lib/live/types";
 
@@ -16,7 +17,13 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: Request) {
   try {
-    if (!(await rateLimit(`live-rooms:${req.headers.get("x-forwarded-for") ?? "local"}`))) {
+    if (
+      !(await opsRateLimit(
+        "live-rooms",
+        `live-rooms:${req.headers.get("x-forwarded-for") ?? "local"}`,
+        { limit: 120, windowMs: 60_000 },
+      ))
+    ) {
       return NextResponse.json({ error: "rate-limited" }, { status: 429 });
     }
     const statusParam = new URL(req.url).searchParams.get("status");

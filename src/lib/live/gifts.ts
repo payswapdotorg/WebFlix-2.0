@@ -37,6 +37,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import type { WebFlixSessionUser } from "@/lib/auth/types";
 import { rateLimit } from "@/lib/youtube/cache";
+import { opsRateLimit } from "./ops";
 import {
   activeSanctions,
   activeSessionFor,
@@ -224,7 +225,11 @@ export async function sendGift(
   // asymmetry: mute silences speech, not participation). Only a ban does.
   if (sanctions.banned) throw new LiveDomainError("forbidden", "banned");
 
-  if (!(await rateLimit(`wf:live:gifts:${roomId}:${actor.id}`, RATE_LIMITS.gifts))) {
+  if (!(await opsRateLimit(
+        "gifts",
+        `wf:live:gifts:${roomId}:${actor.id}`,
+        RATE_LIMITS.gifts,
+      ))) {
     throw new LiveDomainError("rate-limited");
   }
 

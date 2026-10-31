@@ -268,12 +268,27 @@ export async function startSession(
       : new LiveDomainError("provider-failed", "could not create session");
   }
 
-  const playback = await ad.mintToken({
-    roomName: providerRoomId,
-    identity: identity.id,
-    role: "host",
-    ttlSeconds: TOKEN_TTL_SECONDS.host,
-  });
+  const playback = await (async () => {
+    try {
+      return await ad.mintToken({
+        roomName: providerRoomId,
+        identity: identity.id,
+        role: "host",
+        ttlSeconds: TOKEN_TTL_SECONDS.host,
+      });
+    } catch (err) {
+      // Phase 4-OPS: a provider failure at go-live is an OPERATIONS fact —
+      // recorded best-effort (never replaces the honest domain error).
+      const { recordOpsEvent } = await import("./ops");
+      void recordOpsEvent({
+        kind: "provider_error",
+        roomId,
+        surface: "start-session",
+        code: err instanceof Error ? err.message : "mint-failed",
+      });
+      throw err;
+    }
+  })();
 
   const fresh = await db.liveRoom.findUniqueOrThrow({
     where: { id: roomId },
@@ -377,7 +392,21 @@ export async function endRoom(roomId: string, sessionUser: WebFlixSessionUser): 
     // stays live and the caller sees the honest failure (no fake success);
     // the provider webhook remains the reconciliation backstop.
     // (RoomCompositeEgress, when operator-declared, ends with the room.)
-    await ad.destroyRoom(session.providerRoomId);
+    try {
+      await ad.destroyRoom(session.providerRoomId);
+    } catch (err) {
+      // Phase 4-OPS: a failed teardown is an OPERATIONS fact (best-effort;
+      // the honest failure still surfaces unchanged).
+      const { recordOpsEvent } = await import("./ops");
+      void recordOpsEvent({
+        kind: "provider_error",
+        roomId,
+        sessionId: session.id,
+        surface: "end-room",
+        code: err instanceof Error ? err.message : "destroy-failed",
+      });
+      throw err;
+    }
     await db.liveSession.update({
       where: { id: session.id },
       data: { status: "ended", endedAt: new Date(), endReason: "host" },
@@ -401,6 +430,23 @@ export async function endRoom(roomId: string, sessionUser: WebFlixSessionUser): 
  * imports keep the rooms→{analytics,replays} edges acyclic.
  */
 async function runEndSideEffects(sessionId: string, roomId: string): Promise<void> {
+  // Phase 4-OPS: the end reconcile itself is an observation (ADR-0009) —
+  // valueMs is the session's derived duration (both callers set endedAt
+  // BEFORE this hook runs). Best-effort like everything in this hook.
+  try {
+    const { recordOpsEvent } = await import("./ops");
+    const session = await db.liveSession.findUnique({
+      where: { id: sessionId },
+      select: { startedAt: true, endedAt: true },
+    });
+    const durationMs =
+      session?.startedAt && session?.endedAt
+        ? Math.max(0, session.endedAt.getTime() - session.startedAt.getTime())
+        : null;
+    await recordOpsEvent({ kind: "end_reconcile", roomId, sessionId, valueMs: durationMs });
+  } catch (err) {
+    console.error("live end-hook ops fact failed", err);
+  }
   try {
     const { recordSessionAnalytics } = await import("./analytics");
     await recordSessionAnalytics(sessionId, roomId);
