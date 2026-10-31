@@ -1,0 +1,27 @@
+{
+  "01-host-device-test": "01-host-device-test.png",
+  "hostConsoleHasConnected": true,
+  "hostConsoleHasPublishing": true,
+  "02-host-live-console": "02-host-live-console.png",
+  "roomId": "cmvx1pm4y0001spjtifs8uj1y",
+  "roomTitle": "P69 resurrection stream",
+  "discoveryShowsLiveBadge": true,
+  "03-discovery-live-room": "03-discovery-live-room.png",
+  "viewerFrames": {
+    "rs": 4,
+    "t": 0.216,
+    "w": 320,
+    "h": 180,
+    "advanced": true,
+    "t2": 2.203
+  },
+  "04-viewer-real-frames": "04-viewer-real-frames.png",
+  "reattachCardShown": true,
+  "hostReattached": true,
+  "05-host-reattached": "05-host-reattached.png",
+  "hostEndedSummary": true,
+  "06-host-ended-summary": "06-host-ended-summary.png",
+  "viewerSeesEnded": true,
+  "viewerStillShowsReplayOrEnded": false,
+  "07-viewer-ended-state": "07-viewer-ended-state.png"
+}

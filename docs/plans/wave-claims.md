@@ -672,3 +672,11 @@ re-runs gates → merges.
   role === "host" before flipping live; the conflict path re-attaches
   directly). The money gate stays CLOSED. The §9.7 documentation closeout
   (work order delivery record + this row + the WORKLOG entry) ships with it.
+
+## 2026-10-31 — WFX2-LIVE-PLATFORM-1 P69 (resurrection re-verification) claim
+
+| Wave | Lane | Lead | Claimed (UTC) | Base | Status |
+|---|---|---|---|---|---|
+| P69 / resurrection | Station rebuild + delivery re-verification on a fresh clone (TL integrated: gates + the LIVE battery + honest gate states + the two-browser golden path) | Z.ai Code (TL, issue #2) | 2026-10-31 23:55 | main @ 80f6fe3 | **VERIFIED** (docs/evidence only on main; zero product change) |
+
+- Scope: NO product change. The fifteenth "go" landed on a reset sandbox; this row records the resurrection and the re-verified delivery: deps + db + :3000 restored; tsc 0 repo-wide; LIVE battery 398/0 across the ELEVEN sub-batches (= P68's record exactly); browser honest states (/live first-party shelf, /studio/live preflight, room-not-found, the fail-closed ops gate, 375px → 0px overflow); REAL two-browser golden path (host go-live → viewer REAL FRAMES 0.216→2.203, 320×180, readyState 4 → host mid-broadcast reload → ReattachCard → re-attach LIVE → End → the viewer's honest ended state) with DB facts (room ended; session ended, endReason host, durationMs 32374; host+viewer participant rows). Evidence: evidence/wfx2-live-platform-1-p69-resurrection/ (11 screenshots + acceptance-facts.json). The money gate stays CLOSED. The §4F/§4G money + operator residuals (R2 creds, billing API + LIVEKIT_EGRESS_ENABLED, real-traffic retention sweep) stay gated pending operator re-supply — the vault died with the sandbox again.
