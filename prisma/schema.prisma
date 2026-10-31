@@ -502,8 +502,15 @@ model LiveSession {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
+  // Phase 4: the presence-time concurrent viewer peak — the heartbeat path
+  // raises it, analytics summarizes it. APPROXIMATE by the presence law
+  // (never a billing/financial fact).
+  peakViewers   Int     @default(0)
+
   room         LiveRoom          @relation(fields: [roomId], references: [id], onDelete: Cascade)
   participants LiveParticipant[]
+  replay       LiveReplayAsset?
+  analytics    LiveAnalyticsSnapshot?
 
   @@unique([provider, providerRoomId])
   @@index([roomId])
@@ -920,4 +927,75 @@ model GiftEvent {
 
   @@index([sessionId, createdAt])
   @@index([roomId, createdAt])
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// WFX2-LIVE-PLATFORM-1 Phase 4 — replays and creator analytics (§4H).
+// Same laws: String enums (allowed values in comments), lifecycle rows
+// cascade with their session, every derived number is recomputed from
+// durable rows (never client-claimed), and the replay object is stored
+// WITHOUT an absolute URL — playback URLs are issued at read time.
+// ═══════════════════════════════════════════════════════════════════
+
+// One replay asset per session (v1). sink: "host-capture" |
+// "provider-egress" (ADR-0008's two sinks behind ONE lifecycle). status:
+// "recording" | "processing" | "ready" | "failed" | "expired".
+// visibility: "inherit" | "public" | "unlisted" | "hidden" (inherit follows
+// the room's visibility). storageKey names the object in the replay storage
+// seam — never a provider URL, never a secret. durationMs is the
+// RECORDER-reported media duration: advisory metadata, never a billing or
+// financial fact (the authoritative duration derives from the session
+// window). retentionExpiresAt is the retention law (REPLAY_RETENTION_DAYS);
+// a lazy sweep on read purges expired objects and marks the row "expired".
+model LiveReplayAsset {
+  id                 String    @id @default(cuid())
+  sessionId          String    @unique
+  roomId             String
+  sink               String    @default("host-capture")
+  status             String    @default("recording")
+  requestedById      String
+  mimeType           String?
+  storageKey         String?
+  sizeBytes          Int?
+  durationMs         Int?
+  visibility         String    @default("inherit")
+  error              String?
+  recordingStartedAt DateTime  @default(now())
+  stoppedAt          DateTime?
+  readyAt            DateTime?
+  retentionExpiresAt DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  session LiveSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
+  @@index([status, readyAt])
+}
+
+// The creator analytics snapshot — DERIVED from durable rows only
+// (participants / messages / reaction batches / gift events / matches plus
+// the session window). Recomputed server-side on every host read
+// (idempotent upsert): the snapshot can never drift from the rows it
+// summarizes. peakViewers rides the LiveSession column (presence-time max,
+// raised by the heartbeat path — the only concurrent-peak fact that exists).
+model LiveAnalyticsSnapshot {
+  id             String   @id @default(cuid())
+  sessionId      String   @unique
+  roomId         String
+  durationMs     Int      @default(0)
+  peakViewers    Int      @default(0)
+  uniqueViewers  Int      @default(0)
+  chatMessages   Int      @default(0)
+  reactionHearts Int      @default(0)
+  giftEvents     Int      @default(0)
+  giftCredits    Int      @default(0)
+  matchesRun     Int      @default(0)
+  computedAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  session LiveSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
 }

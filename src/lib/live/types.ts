@@ -449,6 +449,13 @@ export interface LiveStageDto {
   /** The frozen stage cap: host + GUEST_SLOTS_MAX remote guests. */
   guestsMax: number;
   participants: LiveStageParticipantDto[];
+  /**
+   * Phase 4 (additive): true while the session is being recorded. Every
+   * stage participant must SEE this (the REC indicator is a consent law,
+   * ADR-0008). OPTIONAL by law — old payloads may omit it; absent reads
+   * as false. Phase 4 routes always populate it.
+   */
+  recording?: boolean;
 }
 
 export type LiveMatchKind = "solo" | "team";
@@ -547,4 +554,88 @@ export interface GiftEventDto {
   matchId: string | null;
   matchTeamId: string | null;
   createdAt: string;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// WFX2-LIVE-PLATFORM-1 Phase 4 — replays and creator analytics (§4H)
+// (issue #2). Additive freeze (TL, 2026-10-31): everything below is
+// additive to the Phase 1/2/3 contracts. Same law — routes/UI speak
+// THESE types only; widening a union is a reviewed contract change.
+// ═══════════════════════════════════════════════════════════════════
+
+/** How the bytes were produced (ADR-0008's two sinks, one lifecycle). */
+export type LiveReplaySink = "host-capture" | "provider-egress";
+
+export type LiveReplayStatus =
+  | "recording"
+  | "processing"
+  | "ready"
+  | "failed"
+  | "expired";
+
+/** The replay asset as the client may see it. NEVER carries storageKey. */
+export interface LiveReplayAssetDto {
+  id: string;
+  roomId: string;
+  sessionId: string;
+  sink: LiveReplaySink;
+  status: LiveReplayStatus;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  /** Recorder-reported media duration — advisory, never a billing fact. */
+  durationMs: number | null;
+  visibility: "inherit" | "public" | "unlisted" | "hidden";
+  error: string | null;
+  recordingStartedAt: string;
+  stoppedAt: string | null;
+  readyAt: string | null;
+  retentionExpiresAt: string | null;
+}
+
+/** POST /api/live-rooms/[id]/replay/start body (host-only). */
+export interface StartReplayInput {
+  /** Default "host-capture"; "provider-egress" 409s when not configured. */
+  sink?: LiveReplaySink;
+}
+
+/** The discovery replay-shelf row (public ready replays only). */
+export interface LiveReplaySummaryDto {
+  roomId: string;
+  sessionId: string;
+  title: string;
+  hostHandle: string;
+  hostName: string;
+  readyAt: string;
+  durationMs: number | null;
+}
+
+/**
+ * The creator analytics snapshot — every number is server-DERIVED from
+ * durable rows (work order §3.4); nothing here is client-claimable.
+ * Watch-time/retention/stream-error metrics need event history and are
+ * honest Phase 4 residuals (documented in ADR-0008).
+ */
+export interface LiveAnalyticsSnapshotDto {
+  id: string;
+  sessionId: string;
+  roomId: string;
+  computedAt: string;
+  /** Server window: startedAt..endedAt (started sessions only). */
+  durationMs: number;
+  /** Presence-time concurrent peak (LiveSession.peakViewers). */
+  peakViewers: number;
+  /** Distinct viewer-role participant rows on the session. */
+  uniqueViewers: number;
+  /** Non-tombstoned chat rows (all kinds). */
+  chatMessages: number;
+  /** SUM over reaction batches (hearts). */
+  reactionHearts: number;
+  /** Gift events on the session (non-monetary dev gifts, §4F sandbox). */
+  giftEvents: number;
+  /** SUM(totalCredits) over those events — DEV credits, no cash value. */
+  giftCredits: number;
+  /** Matches run on the session (any terminal state). */
+  matchesRun: number;
+  /** The session's replay asset status, when an asset exists. */
+  replayStatus: LiveReplayStatus | null;
 }

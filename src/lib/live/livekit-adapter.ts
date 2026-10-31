@@ -13,12 +13,20 @@
  */
 import {
   AccessToken,
+  EgressClient,
+  EncodedFileOutput,
+  EncodedFileType,
   RoomServiceClient,
   WebhookReceiver,
   type WebhookEvent,
 } from "livekit-server-sdk";
 import { liveProviderConfig } from "./config";
-import { grantsForRole, type LiveProviderAdapter, type MintTokenOptions } from "./provider";
+import {
+  grantsForRole,
+  type LiveProviderAdapter,
+  type LiveRecordingCapability,
+  type MintTokenOptions,
+} from "./provider";
 import type { LivePlaybackPlan, LiveWebhookEvent } from "./types";
 
 function roomService(): RoomServiceClient {
@@ -28,6 +36,54 @@ function roomService(): RoomServiceClient {
   }
   return new RoomServiceClient(cfg.url, cfg.apiKey, cfg.apiSecret);
 }
+
+/**
+ * Phase 4 recording capability (ADR-0008): provider-side composite egress.
+ * The operator must DECLARE egress availability (LIVEKIT_EGRESS_ENABLED
+ * === "true"); the storage destination itself is configured on the egress
+ * deployment (or per-request via the EncodedFileOutput output oneof). An
+ * undeclared/unconfigured egress is an honest "not configured" state, never
+ * a guessed attempt (work order §3.8). The egress API endpoint derives from
+ * LIVEKIT_URL (wss://host → https://host).
+ */
+const livekitRecording: LiveRecordingCapability = {
+  get egressConfigured(): boolean {
+    const cfg = liveProviderConfig();
+    return cfg.configured && process.env.LIVEKIT_EGRESS_ENABLED === "true";
+  },
+
+  async startRoomEgress(roomName: string) {
+    if (!this.egressConfigured) throw new Error("live-egress-not-configured");
+    const cfg = liveProviderConfig();
+    if (!cfg.url || !cfg.apiKey || !cfg.apiSecret) {
+      throw new Error("live-provider-not-configured");
+    }
+    const httpUrl = cfg.url.replace(/^ws(s?):\/\//, "http$1://");
+    const client = new EgressClient(httpUrl, cfg.apiKey, cfg.apiSecret);
+    const fileOutput = new EncodedFileOutput({
+      fileType: EncodedFileType.MP4,
+      filepath:
+        process.env.LIVEKIT_EGRESS_FILEPATH ?? "wfl-replay/{room_name}-{time}",
+    });
+    const egress = await client.startRoomCompositeEgress(roomName, fileOutput);
+    return { egressId: egress.egressId };
+  },
+
+  async stopRoomEgress(egressId: string) {
+    if (!this.egressConfigured) return; // idempotent no-op by law
+    const cfg = liveProviderConfig();
+    if (!cfg.url || !cfg.apiKey || !cfg.apiSecret) return;
+    const httpUrl = cfg.url.replace(/^ws(s?):\/\//, "http$1://");
+    const client = new EgressClient(httpUrl, cfg.apiKey, cfg.apiSecret);
+    try {
+      await client.stopEgress(egressId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/not found|does not exist/i.test(msg)) return;
+      throw err;
+    }
+  },
+};
 
 let webhookReceiver: WebhookReceiver | null = null;
 function receiver(): WebhookReceiver {
@@ -68,6 +124,8 @@ function mapWebhookEvent(ev: WebhookEvent): LiveWebhookEvent {
 
 export const livekitAdapter: LiveProviderAdapter = {
   provider: "livekit",
+
+  recording: livekitRecording,
 
   isConfigured(): boolean {
     return liveProviderConfig().configured;

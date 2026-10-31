@@ -78,6 +78,18 @@ export const GIFT_SPEND_WINDOW_MAX = 500;
 /** Gift feed page cap. */
 export const GIFT_FEED_MAX = 50;
 
+// ── Phase 4 numeric laws (replays + analytics, §4H — every lane reads THESE) ──
+/** The host-capture upload cap (the honest dev-sink bound; R2 arrives later). */
+export const REPLAY_UPLOAD_MAX_BYTES = 64 * 1024 * 1024;
+/** A recorder claiming a longer take is lying — the finalize guard. */
+export const REPLAY_DURATION_MAX_MS = 4 * 60 * 60 * 1000;
+/** The retention law: ready replays expire (lazy sweep on read) after this. */
+export const REPLAY_RETENTION_DAYS = 30;
+/** The discovery replay-shelf size. */
+export const REPLAY_LIST_MAX = 12;
+/** Accepted container types for the upload (checked against the header). */
+export const REPLAY_MIME_TYPES = ["video/webm", "video/x-webm", "video/mp4"];
+
 /** The per-surface rate limits (the app-wide rateLimit() adapter). */
 export const RATE_LIMITS = {
   chat: { limit: 8, windowMs: 10_000 },
@@ -96,6 +108,11 @@ export const RATE_LIMITS = {
   inviteCreate: { limit: 6, windowMs: 60_000 },
   inviteRespond: { limit: 20, windowMs: 60_000 },
   matchStart: { limit: 3, windowMs: 60_000 },
+  // ── Phase 4 ──
+  replayStart: { limit: 5, windowMs: 5 * 60_000 },
+  replayStop: { limit: 10, windowMs: 60_000 },
+  replayVisibility: { limit: 20, windowMs: 60_000 },
+  analytics: { limit: 60, windowMs: 60_000 },
 } as const;
 
 /** Host and granted moderators share the moderation capability set. */

@@ -82,4 +82,27 @@ export interface LiveProviderAdapter {
   /** Verify a provider webhook signature and decode the event.
    * Returns null on ANY signature failure (callers must 401, never reconcile). */
   parseWebhook(body: string, authHeader: string | null): Promise<LiveWebhookEvent | null>;
+
+  /**
+   * Phase 4 (additive, OPTIONAL): provider-side composite recording
+   * (RoomCompositeEgress class). When absent or when `egressConfigured` is
+   * false, the "provider-egress" replay sink answers an honest
+   * conflict/503 and the "host-capture" sink remains — no fake success
+   * (work order §3.8). Implementations that offer egress MUST return a
+   * stoppable handle; stop is idempotent by law.
+   */
+  recording?: LiveRecordingCapability;
+}
+
+export interface LiveEgressHandle {
+  /** The provider's egress id (routing identity, not a secret). */
+  egressId: string;
+}
+
+export interface LiveRecordingCapability {
+  /** True only when the deployment can actually run composite egress. */
+  readonly egressConfigured: boolean;
+  startRoomEgress(roomName: string): Promise<LiveEgressHandle>;
+  /** Idempotent: stopping a finished/unknown egress must not throw. */
+  stopRoomEgress(egressId: string): Promise<void>;
 }
