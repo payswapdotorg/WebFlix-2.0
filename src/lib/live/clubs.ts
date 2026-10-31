@@ -206,8 +206,16 @@ async function bannedInHostRooms(hostId: string, userId: string): Promise<boolea
   return actions[0]?.action === "ban";
 }
 
-async function clubForHost(hostId: string): Promise<ClubRow> {
-  const club = await db.liveFanClub.findUnique({ where: { hostId }, include: clubInclude() });
+async function clubForHost(hostIdParam: string): Promise<ClubRow> {
+  // The identity-plane seam (TL integration): callers arrive from TWO planes
+  // — the room DTO's DURABLE shadow id (`wf-<sub>`, the viewer panel) and
+  // the session surface's sub (the studio manager's user.id). Resolve the
+  // param to the DURABLE owner id: the row as-is first, then the shadow
+  // mapping of the session plane. No row in either plane → honest 404 (a
+  // GET never creates identities).
+  const owner = await db.user.findUnique({ where: { id: hostIdParam }, select: { id: true } });
+  const durableId = owner ? hostIdParam : `wf-${hostIdParam}`;
+  const club = await db.liveFanClub.findUnique({ where: { hostId: durableId }, include: clubInclude() });
   if (!club) throw new LiveDomainError("not-found", "no club for this host");
   return club;
 }
@@ -278,6 +286,9 @@ export async function getClubOverview(
   hostId: string,
 ): Promise<LiveFanClubOverviewDto> {
   const club = await clubForHost(hostId);
+  // Every downstream query keys on the DURABLE owner id (the row's fact),
+  // never the caller-plane param the club was resolved from.
+  const durableHostId = club.hostId;
   const callerId = callerSessionUser ? (await resolveLiveIdentity(callerSessionUser)).id : null;
   const membership = callerId
     ? await db.liveFanClubMember.findUnique({
@@ -286,14 +297,14 @@ export async function getClubOverview(
     : null;
 
   const [missions, topRows, liveRoomRaw] = await Promise.all([
-    deriveMissions(hostId, callerId),
+    deriveMissions(durableHostId, callerId),
     db.liveFanClubMember.findMany({
       where: { clubId: club.id },
       orderBy: MEMBER_ORDER,
       take: CLUB_MEMBER_PREVIEW_MAX,
     }),
     db.liveRoom.findFirst({
-      where: { hostId, status: "live" },
+      where: { hostId: durableHostId, status: "live" },
       orderBy: { createdAt: "desc" },
       include: {
         host: { select: { handle: true, name: true } },
@@ -309,7 +320,7 @@ export async function getClubOverview(
   if (liveRoomRaw) {
     const maySee =
       liveRoomRaw.visibility !== "members" ||
-      callerId === hostId ||
+      callerId === durableHostId ||
       membership !== null;
     if (maySee) {
       const counts = await viewerCountsFor(liveRoomRaw.sessions.map((s) => s.id));
