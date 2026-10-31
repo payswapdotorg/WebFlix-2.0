@@ -14,6 +14,7 @@ next-env.d.ts
 # database (seed via: bun run db:push && bun run db:seed)
 db/*.db
 db/*.db-journal
+db/live-replays/
 
 # env
 .env
