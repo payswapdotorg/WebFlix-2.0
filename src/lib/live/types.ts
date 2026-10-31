@@ -199,6 +199,9 @@ export interface LiveRoomPolicyDto {
   chatEnabled: boolean;
   reactionsEnabled: boolean;
   slowModeSeconds: number;
+  /** Phase 3 (additive): the guest-stage and gift gates. */
+  guestsEnabled: boolean;
+  giftsEnabled: boolean;
   /** The caller's effective role for this room. */
   actorRole: "host" | "moderator" | "guest" | "viewer" | "anonymous";
   /** Whether the CALLER may chat right now (policy + sanctions combined). */
@@ -222,7 +225,12 @@ export type LiveModerationActionKind =
   | "unban"
   | "slow-mode"
   | "chat-enable"
-  | "chat-disable";
+  | "chat-disable"
+  /** Phase 3 (additive): the guest-stage and gift policy toggles. */
+  | "guests-enable"
+  | "guests-disable"
+  | "gifts-enable"
+  | "gifts-disable";
 
 /** One audited moderation decision. Rows are immutable (append-only). */
 export interface LiveModerationActionDto {
@@ -355,7 +363,12 @@ export type LiveStreamEventKind =
   | "room"
   | "poll"
   | "question"
-  | "moderation";
+  | "moderation"
+  /** Phase 3 (additive): invites, stage roster, matches, gifts. */
+  | "invite"
+  | "stage"
+  | "match"
+  | "gift";
 
 export type LiveStreamEvent =
   | { kind: "chat"; eventId: string; at: string; message: LiveChatMessageDto }
@@ -369,7 +382,11 @@ export type LiveStreamEvent =
       eventId: string;
       at: string;
       action: LiveModerationActionDto;
-    };
+    }
+  | { kind: "invite"; eventId: string; at: string; invite: LiveInviteDto }
+  | { kind: "stage"; eventId: string; at: string; stage: LiveStageDto }
+  | { kind: "match"; eventId: string; at: string; match: LiveMatchDto }
+  | { kind: "gift"; eventId: string; at: string; gift: GiftEventDto };
 
 /** GET /api/live-rooms/[id]/stream query params (the resume contract). */
 export interface LiveStreamParams {
@@ -377,4 +394,157 @@ export interface LiveStreamParams {
   chatCursor?: number;
   /** Include the initial chat backfill (default true). */
   backfill?: boolean;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// WFX2-LIVE-PLATFORM-1 Phase 3 — guests, matches, non-monetary gifts
+// (issue #2). Additive freeze (TL, 2026-11-04): everything below is
+// additive to the Phase 1/2 contracts. Same law — routes/UI speak THESE
+// types only; widening a union is a reviewed contract change.
+// ═══════════════════════════════════════════════════════════════════
+
+/** One host↔guest invitation/request row as the client may see it. */
+export interface LiveInviteDto {
+  id: string;
+  roomId: string;
+  inviteeId: string;
+  inviteeHandle: string;
+  inviteeName: string;
+  /** Who created the row: the host (an invitation) or the invitee (a request). */
+  inviterId: string;
+  direction: "host-invite" | "guest-request";
+  role: "guest";
+  status: LiveInviteStatus;
+  expiresAt: string;
+  createdAt: string;
+}
+
+/**
+ * POST /api/live-rooms/[id]/invites body. Host posts with `inviteeId`
+ * (invitation); a signed-in viewer posts WITHOUT it (self-request).
+ */
+export interface CreateLiveInviteInput {
+  inviteeId?: string;
+}
+
+/** POST /api/live-rooms/[id]/invites/[inviteId]/respond body. */
+export interface RespondLiveInviteInput {
+  action: "accept" | "decline";
+}
+
+/** One stage roster entry (host + guests ONLY — viewers never appear). */
+export interface LiveStageParticipantDto {
+  userId: string;
+  handle: string;
+  name: string;
+  role: "host" | "guest";
+  state: LiveParticipantState;
+  joinedAt: string;
+}
+
+/** The stage layout contract (work order §4D) — roster-driven layout. */
+export interface LiveStageDto {
+  sessionId: string;
+  guestsEnabled: boolean;
+  /** The frozen stage cap: host + GUEST_SLOTS_MAX remote guests. */
+  guestsMax: number;
+  participants: LiveStageParticipantDto[];
+}
+
+export type LiveMatchKind = "solo" | "team";
+
+export type LiveMatchStatus = "active" | "ended" | "cancelled";
+
+export interface LiveMatchMemberDto {
+  userId: string;
+  handle: string;
+  name: string;
+  /** Set when the member left mid-match; banked scores stand. */
+  leftAt: string | null;
+}
+
+/** Server-computed team standings (SUM over the append-only ScoreEvent). */
+export interface LiveMatchTeamDto {
+  id: string;
+  label: string;
+  position: number;
+  members: LiveMatchMemberDto[];
+  score: number;
+}
+
+/** The authoritative match snapshot. `serverNow` anchors countdowns. */
+export interface LiveMatchDto {
+  id: string;
+  roomId: string;
+  sessionId: string;
+  kind: LiveMatchKind;
+  status: LiveMatchStatus;
+  durationSeconds: number;
+  scoring: { reactions: boolean; gifts: boolean };
+  startedAt: string;
+  endsAt: string;
+  endedAt: string | null;
+  endReason: "host" | "timeout" | null;
+  winnerTeamId: string | null;
+  teams: LiveMatchTeamDto[];
+  serverNow: string;
+}
+
+/** POST /api/live-rooms/[id]/matches body (host-only). */
+export interface StartLiveMatchInput {
+  kind: LiveMatchKind;
+  /** Rosters of ACTIVE stage participant user ids; server-validated. */
+  teamA: string[];
+  teamB: string[];
+  durationSeconds?: number;
+  scoring?: { reactions?: boolean; gifts?: boolean };
+}
+
+/** One append-only scoring row as the client may render it. */
+export interface LiveScoreEventDto {
+  id: string;
+  matchId: string;
+  teamId: string;
+  actorId: string;
+  source: "reaction" | "gift";
+  amount: number;
+  createdAt: string;
+}
+
+/** The gift catalogue row (v1: NON-MONETARY dev gifts — zero cash value). */
+export interface GiftCatalogItemDto {
+  id: string;
+  name: string;
+  animationKind: "burst" | "float" | "sparkle" | "wave";
+  priceCredits: number;
+}
+
+/** POST /api/live-rooms/[id]/gifts body. clientRequestId = idempotency key. */
+export interface SendGiftInput {
+  giftItemId: string;
+  quantity: number;
+  clientRequestId: string;
+  /** When an ACTIVE match with gift scoring exists: the side to support. */
+  matchTeamId?: string;
+}
+
+/** The durable gift event as the room feed renders it. */
+export interface GiftEventDto {
+  id: string;
+  intentId: string;
+  roomId: string;
+  sessionId: string;
+  senderId: string;
+  senderHandle: string;
+  senderName: string;
+  recipientId: string;
+  giftItemId: string;
+  giftName: string;
+  animationKind: string;
+  quantity: number;
+  /** Server-computed quantity × catalogue price (dev credits). */
+  totalCredits: number;
+  matchId: string | null;
+  matchTeamId: string | null;
+  createdAt: string;
 }

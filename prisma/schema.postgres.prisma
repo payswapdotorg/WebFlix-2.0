@@ -466,6 +466,9 @@ model LiveRoom {
   chatEnabled      Boolean @default(true)
   reactionsEnabled Boolean @default(true)
   slowModeSeconds  Int     @default(0)
+  // Phase 3 room policy — the guest-stage and gift gates (same law).
+  guestsEnabled    Boolean @default(true)
+  giftsEnabled     Boolean @default(true)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -736,4 +739,179 @@ model EventRegistration {
   event LiveEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@id([eventId, userId])
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// WFX2-LIVE-PLATFORM-1 Phase 3 — guests, matches, non-monetary gifts
+// (issue #2). Same laws as Phase 1/2: String enums (allowed values in
+// comments), NO FKs on high-volume interaction rows (sender/actor ids
+// are shadow-user seam ids), and every side effect carries an
+// idempotency key. Match scoring is APPEND-ONLY (LiveScoreEvent): the
+// score state derives from validated events — never client-supplied.
+// ═══════════════════════════════════════════════════════════════════
+
+// A match between ACTIVE stage participants (host/guest roles) of ONE
+// session. kind: "solo" (exactly 1 member per team) | "team" (up to
+// MATCH_TEAM_SIZE_MAX per team). status: "active" | "ended" |
+// "cancelled". The scoring policy is explicit columns (which inputs
+// count), never a JSON blob. One ACTIVE match per session (guarded in
+// the domain service); the result derives ONLY from LiveScoreEvent rows.
+model LiveMatch {
+  id              String    @id @default(cuid())
+  roomId          String
+  sessionId       String
+  createdById     String
+  kind            String    @default("solo")
+  status          String    @default("active")
+  durationSeconds Int
+  reactionsScore  Boolean   @default(true)
+  giftsScore      Boolean   @default(true)
+  startedAt       DateTime  @default(now())
+  endsAt          DateTime
+  endedAt         DateTime?
+  endReason       String?   // "host" | "timeout" (lazy wall-clock expiry)
+  winnerTeamId    String?   // null on a draw or a cancelled match
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  teams       LiveMatchTeam[]
+  scoreEvents LiveScoreEvent[]
+  snapshots   LiveScoreSnapshot[]
+
+  @@index([sessionId, status])
+  @@index([roomId, createdAt])
+}
+
+// One side of a match. label: "A" | "B" (UI may present any display
+// name; the ledger stores id + position). position: 0 | 1.
+model LiveMatchTeam {
+  id       String @id @default(cuid())
+  matchId  String
+  label    String
+  position Int
+
+  match   LiveMatch         @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  members LiveMatchMember[]
+
+  @@index([matchId, position])
+}
+
+// Match roster membership. One team per (match, user) — the unique row
+// is the anti-double-roster law. leftAt records a mid-match leave;
+// banked LiveScoreEvent rows stand (the ledger never rewrites history).
+model LiveMatchMember {
+  id        String    @id @default(cuid())
+  matchId   String
+  teamId    String
+  userId    String
+  leftAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  team LiveMatchTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, userId])
+  @@index([teamId])
+}
+
+// THE append-only scoring ledger (work order §4E). source: "reaction" |
+// "gift". (matchId, clientEventId) is the duplicate-delivery law — a
+// replayed batch/gift returns the existing row and NEVER double-scores.
+// Amounts are validated server-side against the frozen caps; teamId and
+// actorId derive from match membership / validated intent at ingestion.
+model LiveScoreEvent {
+  id            String   @id @default(cuid())
+  matchId       String
+  teamId        String
+  actorId       String
+  source        String
+  amount        Int
+  clientEventId String
+  linkId        String?  // the reaction batch id / gift event id (trace)
+  createdAt     DateTime @default(now())
+
+  match LiveMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, clientEventId])
+  @@index([matchId, createdAt])
+}
+
+// Deterministic, auditable standings taken at a moment. kind: "final"
+// (one per team when the match ends — the result of record) |
+// "periodic" (reserved). Live standings at read time are
+// SUM(LiveScoreEvent); the final snapshot freezes them at end so the
+// recorded result can never drift afterwards.
+model LiveScoreSnapshot {
+  id        String   @id @default(cuid())
+  matchId   String
+  teamId    String
+  teamLabel String
+  kind      String   @default("final")
+  amount    Int
+  takenAt   DateTime @default(now())
+
+  match LiveMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId, takenAt])
+}
+
+// The ORIGINAL WebFlix gift catalogue (work order §4F/§9: original
+// names/mechanics, no TikTok labels or art). v1 is NON-MONETARY dev
+// gifting: priceCredits are integer DEV credits with ZERO cash value
+// (the UI must say so) used for match scoring and the abuse caps —
+// never a money amount; the wallet/ledger lands with the money gate.
+// id is a stable slug. animationKind: "burst" | "float" | "sparkle" | "wave".
+model GiftCatalogItem {
+  id            String  @id
+  name          String
+  animationKind String
+  priceCredits  Int
+  active        Boolean @default(true)
+  sortOrder     Int     @default(0)
+  createdAt     DateTime @default(now())
+}
+
+// The send intent — (sessionId, senderId, clientRequestId) is the
+// duplicate-suppression law. v1 rows are always status "accepted"
+// (hard validation failures answer errors and write nothing; the
+// status/rejectReason columns exist for the Phase 4/5 wallet-rejection
+// path). totalCredits is server-computed (quantity × catalogue price).
+model GiftIntent {
+  id              String   @id @default(cuid())
+  roomId          String
+  sessionId       String
+  senderId        String
+  giftItemId      String
+  quantity        Int
+  clientRequestId String
+  status          String   @default("accepted")
+  rejectReason    String?
+  totalCredits    Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  @@unique([sessionId, senderId, clientRequestId])
+  @@index([sessionId, createdAt])
+}
+
+// The durable room gift event — the feed row and the match-scoring
+// source. recipientId is the room HOST by law (v1 gifting targets the
+// creator). matchId/matchTeamId are set only when an ACTIVE match with
+// gift scoring accepted the send against that team. giftName is a
+// denormalized audit snapshot (catalogue rows are never renamed).
+model GiftEvent {
+  id           String   @id @default(cuid())
+  intentId     String   @unique
+  roomId       String
+  sessionId    String
+  senderId     String
+  recipientId  String
+  giftItemId   String
+  giftName     String
+  quantity     Int
+  totalCredits Int
+  matchId      String?
+  matchTeamId  String?
+  createdAt    DateTime @default(now())
+
+  @@index([sessionId, createdAt])
+  @@index([roomId, createdAt])
 }

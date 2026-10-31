@@ -56,6 +56,28 @@ export const EVENT_DESCRIPTION_MAX = 1000;
 /** Slow-mode ceiling (seconds between messages per sender). */
 export const SLOW_MODE_MAX_SECONDS = 300;
 
+// ── Phase 3 numeric laws (guests, matches, gifts — every lane reads THESE) ──
+/** Stage cap: host + up to N remote guests (work order §4D suggests 4). */
+export const GUEST_SLOTS_MAX = 4;
+/** Pending invite/request TTL (seconds) — expiry is a wall-clock sweep. */
+export const INVITE_TTL_SECONDS = 300;
+/** Match duration bounds (seconds) + the default when unspecified. */
+export const MATCH_DURATION_MIN = 30;
+export const MATCH_DURATION_MAX = 600;
+export const MATCH_DURATION_DEFAULT = 120;
+/** Per-side roster cap for "team" matches ("solo" is exactly 1 per side). */
+export const MATCH_TEAM_SIZE_MAX = 2;
+/** Gift quantity clamp per send intent. */
+export const GIFT_QTY_MAX = 10;
+/** Catalogue price bound (dev credits) — catalogue is server-seeded anyway. */
+export const GIFT_PRICE_MAX = 100;
+/** Rolling per-sender gift spend cap (dev credits). This is the v1 abuse
+ * bound; the balance/wallet ledger arrives only with the money gate. */
+export const GIFT_SPEND_WINDOW_MS = 60_000;
+export const GIFT_SPEND_WINDOW_MAX = 500;
+/** Gift feed page cap. */
+export const GIFT_FEED_MAX = 50;
+
 /** The per-surface rate limits (the app-wide rateLimit() adapter). */
 export const RATE_LIMITS = {
   chat: { limit: 8, windowMs: 10_000 },
@@ -69,6 +91,11 @@ export const RATE_LIMITS = {
   moderatorGrant: { limit: 10, windowMs: 60_000 },
   eventCreate: { limit: 4, windowMs: 10 * 60_000 },
   eventRegister: { limit: 20, windowMs: 60_000 },
+  // ── Phase 3 ──
+  gifts: { limit: 5, windowMs: 10_000 },
+  inviteCreate: { limit: 6, windowMs: 60_000 },
+  inviteRespond: { limit: 20, windowMs: 60_000 },
+  matchStart: { limit: 3, windowMs: 60_000 },
 } as const;
 
 /** Host and granted moderators share the moderation capability set. */
@@ -184,7 +211,14 @@ export async function resolveHandles(
 /** Narrow room shape the gates need (policy columns included). */
 export type LiveRoomPolicy = Pick<
   LiveRoom,
-  "id" | "hostId" | "status" | "chatEnabled" | "reactionsEnabled" | "slowModeSeconds"
+  | "id"
+  | "hostId"
+  | "status"
+  | "chatEnabled"
+  | "reactionsEnabled"
+  | "slowModeSeconds"
+  | "guestsEnabled"
+  | "giftsEnabled"
 >;
 
 export async function roomPolicyFor(roomId: string): Promise<LiveRoomPolicy | null> {
@@ -197,6 +231,8 @@ export async function roomPolicyFor(roomId: string): Promise<LiveRoomPolicy | nu
       chatEnabled: true,
       reactionsEnabled: true,
       slowModeSeconds: true,
+      guestsEnabled: true,
+      giftsEnabled: true,
     },
   });
 }

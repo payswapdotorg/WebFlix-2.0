@@ -118,6 +118,18 @@ export const livekitAdapter: LiveProviderAdapter = {
     return rooms.some((r) => r.name === roomName);
   },
 
+  async removeParticipant(roomName: string, identity: string): Promise<void> {
+    const svc = roomService();
+    // Idempotent by law: an unknown room/identity is already "gone".
+    try {
+      await svc.removeParticipant(roomName, identity);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/not found|does not exist/i.test(msg)) return;
+      throw err;
+    }
+  },
+
   async parseWebhook(body: string, authHeader: string | null): Promise<LiveWebhookEvent | null> {
     if (!authHeader) return null;
     try {
