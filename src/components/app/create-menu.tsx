@@ -25,12 +25,17 @@
  * https://www.youtube.com/live (noopener/noreferrer, _blank), carries the
  * honest reason in the tooltip + aria-label, and the app's live BROWSE
  * page keeps its honest home at /explore/live (the Explore hub card).
- * Parity-debt: the full go-live flow needs measured Live Control Room DOM
- * shapes + an ingestion surface (a future lane's seam).
+ * WFX2-LIVE-PLATFORM-1 (issue #2) — THE PARITY DEBT IS PAID: WebFlix now HAS
+ * a first-party streaming-ingestion surface (/studio/live — the Go Live
+ * preflight + console), so the "Go live" rung routes INTERNALLY to it, as
+ * youtube.com's rung routes to its own Live Control Room. The external
+ * YouTube fallback lane is retired from this menu (the YouTube live BROWSE
+ * surface keeps its honest home at /explore/live; WebFlix's OWN live rooms
+ * live at /live — the two are separate, first-party vs YouTube's).
  */
 import { useState } from "react";
 import Link from "next/link";
-import { ExternalLink, Pencil, Plus, UploadCloud, Video } from "lucide-react";
+import { Pencil, Plus, UploadCloud, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -74,22 +79,18 @@ export function CreateMenu() {
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          {/* P24-SEND (G10): the honest-degradation form — youtube.com's own
-              live surface, EXTERNAL (the Live Control Room is the creator's
-              stream-setup surface; WebFlix has no ingestion surface — the
-              tooltip + aria-label carry the honest reason). */}
-          <a
-            href="https://www.youtube.com/live"
-            target="_blank"
-            rel="noopener noreferrer"
+          {/* WFX2-LIVE-PLATFORM-1: the FIRST-PARTY Go Live — the creator's
+              preflight + broadcast console on WebFlix (the same shape as
+              youtube.com routing its own Create menu to its control room). */}
+          <Link
+            href="/studio/live"
             className="cursor-pointer"
             data-testid="create-go-live"
-            title="Go live opens YouTube's Live Control Room — WebFlix has no streaming setup; live browsing stays in Explore"
-            aria-label="Go live on YouTube — opens YouTube's live surface in a new tab; WebFlix has no streaming setup"
+            title="Go live on WebFlix — set up your camera and start your broadcast"
+            aria-label="Go live on WebFlix — opens the WebFlix live setup"
           >
             <Video className="size-4" aria-hidden="true" /> Go live
-            <ExternalLink className="size-3 opacity-60" aria-hidden="true" />
-          </a>
+          </Link>
         </DropdownMenuItem>
         {channelHandle && (
           <DropdownMenuItem asChild>
