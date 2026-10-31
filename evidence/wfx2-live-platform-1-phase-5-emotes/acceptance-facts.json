@@ -1,0 +1,94 @@
+{
+  "stamp": "7v7cnaa",
+  "identities": 3,
+  "steps": {
+    "registered": {
+      "host": "eb596747-8c23-4a8e-a59a-81f6f8286f2f",
+      "member": "cf0715b8-646e-4e65-983d-df582a066d37",
+      "nonmember": "248f64aa-ddb6-4203-bc75-a0be9a5f18ac"
+    },
+    "clubCreated": "Emote Station",
+    "memberCountAfterCreate": "0",
+    "emotesCreatedByManager": {
+      "rows": 2,
+      "expected": 2
+    },
+    "hostLive": true,
+    "liveRoomFound": true,
+    "roomId": "cmvwraqgq002hqufn0wo4ivaa",
+    "memberJoinedClub": true,
+    "hostEnded": true
+  },
+  "probes": {
+    "pickerHeartDisabled": false,
+    "pickerCrownDisabled": true,
+    "pickerCrownLockCopy": "👑 :crown: Level 5",
+    "pickerAppend": ":heart: ",
+    "memberGlyphRendered": true,
+    "hostGlyphRendered": true,
+    "memberCrownSend": {
+      "status": 403,
+      "body": {
+        "error": "forbidden",
+        "message": "emote-locked"
+      }
+    },
+    "memberPunctuationSend": {
+      "status": 200
+    },
+    "hostCrownSend": {
+      "status": 200
+    },
+    "nonmemberHeartDisabled": true,
+    "nonmemberCrownDisabled": true,
+    "mobile375OverflowX": 0
+  },
+  "db": {
+    "club": {
+      "id": "cmvwraptv002bqufn8x9ktm8d",
+      "name": "Emote Station",
+      "hostId": "wf-eb596747-8c23-4a8e-a59a-81f6f8286f2f"
+    },
+    "emotes": [
+      {
+        "id": "cmvwraq21002dqufn4p15l7v9",
+        "clubId": "cmvwraptv002bqufn8x9ktm8d",
+        "code": "heart",
+        "unicode": "❤️",
+        "requiredLevel": 1,
+        "createdAt": "2026-10-31T18:50:30.121Z",
+        "updatedAt": "2026-10-31T18:50:30.121Z"
+      },
+      {
+        "id": "cmvwraq72002fqufn9p51j1c9",
+        "clubId": "cmvwraptv002bqufn8x9ktm8d",
+        "code": "crown",
+        "unicode": "👑",
+        "requiredLevel": 5,
+        "createdAt": "2026-10-31T18:50:30.303Z",
+        "updatedAt": "2026-10-31T18:50:30.303Z"
+      }
+    ],
+    "msg": {
+      "id": "cmvwrazv4002tqufn57huyz2y",
+      "body": "hello :heart:",
+      "senderId": "wf-cf0715b8-646e-4e65-983d-df582a066d37"
+    },
+    "crownLocked": 0,
+    "punct": {
+      "id": "cmvwrb24q002wqufn0l6vfa2d"
+    },
+    "memberPoints": 2,
+    "award": {
+      "source": "chat",
+      "amount": 1,
+      "idempotencyKey": "chat:cmvwrazv4002tqufn57huyz2y"
+    },
+    "session": {
+      "status": "ended",
+      "endedAt": "2026-10-31T18:51:02.255Z",
+      "startedAt": "2026-10-31T18:50:30.769Z"
+    }
+  },
+  "errors": []
+}
