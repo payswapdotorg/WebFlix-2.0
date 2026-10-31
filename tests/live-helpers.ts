@@ -20,7 +20,11 @@ let ready = false;
 export function setupLiveDb() {
   beforeAll(async () => {
     const url = process.env.DATABASE_URL ?? "";
-    if (!url.includes("live-test")) {
+    // The LIVE battery shares db/live-test.db; lanes may iterate against
+    // their own live-<lane>-test.db. Anything that is not a live *-test
+    // database is refused (never the dev/prod dbs).
+    const dbFile = url.split("?")[0] ?? "";
+    if (!/(^|\/)live[a-z0-9-]*-test\.db$/.test(dbFile)) {
       throw new Error(
         "Refusing to run against a non-LIVE database — run via `bun run test:live`",
       );
