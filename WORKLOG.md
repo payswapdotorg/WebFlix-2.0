@@ -1739,3 +1739,20 @@ Stage Summary:
 - The four-stage TikTok-parity mandate stands COMPLETE and RE-VERIFIED (P74, docs-only, zero product change): audit → research/report → implementation (P70–P73) → acceptance, all recorded on main with the claims row, the WORKLOG, ADR-0012 and the frozen parity contracts.
 - THE RESIDUAL THAT MATTERS: SEVEN commits (the entire parity implementation + its acceptance + its records) exist only in LOCAL git — origin/main is at the audit. ONE replay push (`git push origin main`) + the issue #2 delivery comment land everything the moment the operator re-supplies the PAT. A sandbox reset before that push would lose the parity layer — the push is the single highest-value action awaiting the operator.
 - STILL GATED (unchanged): the money gate (legal/compliance/payment/KYC — zero money code, ADR-0012 §D-laws); the operator-gated residuals (R2 replay storage creds, provider costs/egress metering billing API + LIVEKIT_EGRESS_ENABLED, ops retention sweep on real traffic).
+
+---
+Task ID: P75-CREDENTIAL-RESUPPLY
+Agent: Z.ai Code (webflix-2.0 lane — TL, issue #2)
+Task: the operator re-supplied the credentials ("use my payswap PAT ... export it as env variable and use it for the rest of the project. I'll not be sending it to you again") — the exact action the P70–P73/P74 residuals awaited. This rung closes THE residual that matters: the replay push.
+
+Work Log:
+- VAULT RESURRECTED: /home/z/.secrets/webflix.env recreated OUTSIDE the repo (0600) with ALL the re-supplied credentials (2× GitHub PAT, 4× Neon, OpenRouter, 2× Vercel, E2B, Apify, 2× Composio, Upstash Redis URL+token); the PAT exported as GITHUB_PAT per the operator's instruction.
+- THE REPLAY PUSH LANED: `git push https://x-access-token:<PAT>@github.com/... main` (one-time URL injection, output-masked) → `511da63..6e1aa18 main -> main`. Origin/main now holds the ENTIRE parity layer: the audit+report (511da63), P70–P73 (0c866b8, d2c7a3b, 95b7ea2, 474c614), the two-browser acceptance (40ce791), the delivery record (f93fc16), the PK settle-claim + two-host acceptance (4b7b5ac), and the P74 replay-verification record (6e1aa18). Verified: `git rev-list --left-right --count origin/main...main` = 0/0.
+- ISSUE #2 DELIVERY COMMENT POSTED (comment 6557548645): the full parity delivery record in the issue's established format — the mandate, the report pointer, the nine-commit chain, the 12 suggestions per wave, the settle-claim law, the gates (tsc 0; 446/0 across fifteen sub-batches; both acceptance drives + evidence), the money gate CLOSED.
+- SECURITY SWEEP: remote URL clean (no PAT in .git/config); git config token scan clean; EXACT-value scan of all ten supplied secrets across the tracked tree → 0 hits; the only vault reference in committed docs is the PATH (/home/z/.secrets/webflix.env), never a value; /tmp comment payloads removed.
+- HONEST SCOPE NOTE: none of the re-supplied credentials map to the operator-gated PRODUCT residuals (R2 replay storage creds, provider billing API + LIVEKIT_EGRESS_ENABLED, real-traffic retention sweep) — those stay PENDING; no Neon/Upstash/Vercel wiring was attempted (no wave scope demands it and the money gate forbids inventing one).
+
+Stage Summary:
+- The single highest-value residual is CLOSED: the parity layer is durable on GitHub (origin/main == local main at 6e1aa18) and the issue #2 delivery record is posted. A sandbox reset can no longer lose the work.
+- The vault path is /home/z/.secrets/webflix.env (0600, outside the repo) — future rungs source it; the operator need not re-send.
+- STILL GATED (unchanged): the money gate; R2 replay creds; egress metering; the real-traffic retention sweep.
