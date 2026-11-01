@@ -1793,3 +1793,18 @@ Stage Summary:
 - P76's two gated verdicts are now ONE closed + ONE re-measured: the prod env upsert LANDED (200/200 — the exact one-API-call the ops doc said "is then ONE call" once the block lifts); the live Upstash PING stays egress-gated (fresh measurement, same wall).
 - The station is fully resurrected and every gate green on a fresh sandbox — the third reset (P69, P74, P77) and the cleanest recovery yet: the vault+origin discipline meant ZERO data loss (origin held everything; the vault rebuilt from the standing instruction in one step).
 - STILL GATED (the honest shortlist): the production deploy (Vercel team resource-creation block — the env pair + the latest code both await it); the live Upstash PING (sandbox egress); the money gate; LIVEKIT egress metering + billing API; the real-traffic retention sweep.
+---
+Task ID: P78-RESURRECTION-4
+Agent: Z.ai Code (webflix-2.0 lane — TL, issue #2)
+Task: the twenty-first "go" landed on the FOURTH sandbox reset (repo, vault, station all gone from disk). The rehearsed recovery drill ran end-to-end; both P77 gated retrials re-measured on the fresh sandbox — both stable.
+
+Work Log:
+- DRILL (the invariant, ~minutes): origin re-clone @ 2a7736f (zero data loss — the P77 push held; the origin-is-truth law pays for itself), vault rebuilt at /home/z/.secrets/webflix.env (0600) from the standing operator instruction, deps 886, db pushed, :3000 → 200, livekit-server 1.9.11 reinstalled on :7880 (release asset livekit_1.9.11_linux_amd64.tar.gz — the known-good name).
+- GATES: tsc 0. The FULL battery — ALL FIFTEEN lanes 0 fail, lane-by-lane FOREGROUND (2/27/89/91/27/20/77/36/15/13/8/11/11/8/11 = 446 pass) — the third consecutive exact 446/0 match. verify:ratelimit → fixture mode, 6/6 (0 fails).
+- RETRIAL #1 (Upstash live PING): the fourth sandbox shows the same DNS allowlist — upstash.io and api.neon.tech HTTP:000 / curl exit 6 (unresolvable); github/vercel/openrouter resolve. Four sandboxes, four identical walls: the egress verdict is a stable sandbox property, not a transient. The live PING stays honestly egress-gated; the fixture 6/6 stands as the sandbox-proof proof.
+- RETRIAL #2 (the activation deploy): POST /v13/deployments → 402 resource_creation_blocked again (env writes still allowed, resource creation still team-blocked). The re-supplied Upstash pair continues riding prod's encrypted envelope; it activates on the first successful deploy; the fail-open law keeps the interim safe (per-instance limiting, not an outage).
+- BROWSER: /live renders the honest first-party shelf — the "No one is live right now" / "Nothing is ever faked into this grid" empty state, "No scheduled events yet", the {"rooms":[]} API truth behind it; console clean; horizontal overflow 0px.
+
+Stage Summary:
+- The fourth reset changed nothing: origin held all work, the vault rebuilt in one step, every gate green again, both gated retrials stable. The system's durability now rests on the push-as-you-go law + the vault-outside-repo law — proven by four consecutive zero-loss recoveries.
+- STILL GATED (unchanged): the production deploy (Vercel team resource-creation block — the ONE operator action that would activate the new env pair + sync main @ 2a7736f to prod); the live Upstash PING (sandbox egress); the money gate; LIVEKIT egress metering + billing API; the real-traffic retention sweep.

@@ -770,3 +770,29 @@ re-runs gates → merges.
 - The money gate stays CLOSED. Remaining operator-gated residuals unchanged:
   the deploy block (above), the live Upstash PING (egress), LIVEKIT egress
   metering + billing API, the real-traffic retention sweep.
+
+## 2026-11-01 — WFX2-LIVE-PLATFORM-1 P78 (the fourth reset; the standing recovery drill re-run) claim
+
+| Wave | Lane | Lead | Claimed (UTC) | Base | Status |
+|---|---|---|---|---|---|
+| P78 / resurrection-4 | The twenty-first "go" landed on the FOURTH reset; origin re-clone, vault rebuild, station revival, all gates re-proven, both gated retrials re-measured (both stable: egress-walled PING, 402 deploy) | Z.ai Code (TL, issue #2) | 2026-11-01 23:02 | main @ 2a7736f | **LANED** (tsc 0; battery 446/0 ×15 lanes foreground — the third consecutive full re-proof; fixture 6/6; /live browser-clean with the honest zero state, 375px overflow 0) |
+
+- Scope: NO product change, NO new findings beyond stability confirmation. The
+  reset drill is now a rehearsed invariant: origin re-clone @ 2a7736f (zero
+  loss — the P77 push held), vault rebuilt at /home/z/.secrets/webflix.env
+  (0600), deps 886, db pushed, :3000 200, livekit 1.9.11 reinstalled (asset
+  livekit_1.9.11_linux_amd64.tar.gz) on :7880 200. Gates: tsc 0; ALL FIFTEEN
+  battery lanes 0 fail foreground (2/27/89/91/27/20/77/36/15/13/8/11/11/8/11 =
+  446 — third consecutive exact match); verify:ratelimit fixture 0 fails (6/6).
+- RETRIALS (both stable, honestly re-measured on the fourth sandbox):
+  (1) the live Upstash PING — upstash.io + api.neon.tech STILL HTTP:000
+  (curl exit 6, unresolvable; the DNS allowlist is a persistent sandbox
+  property, four for four); (2) the Vercel activation deploy — POST
+  /v13/deployments STILL 402 resource_creation_blocked (env writes remain
+  allowed; resource creation remains blocked). The re-supplied pair rides
+  prod's envelope awaiting the first successful deploy; fail-open law keeps
+  the interim safe.
+- Browser: /live renders the honest first-party shelf ("No one is live right
+  now" / "Nothing is ever faked into this grid"; "No scheduled events yet";
+  the {"rooms":[]} API truth behind it), console clean, horizontal overflow
+  0px. The money gate stays CLOSED. Operator-gated residuals unchanged.
