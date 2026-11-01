@@ -473,6 +473,10 @@ model LiveRoom {
   // Phase 5 room policy — the members-only chat gate (ADR-0010 §6):
   // only the room host's fan-club members (or staff/host) may chat.
   membersOnlyChat  Boolean @default(false)
+  // Parity P71 (additive) — the room announcement (the host clears by
+  // nulling; changes republish the room envelope). Char law: 280.
+  announcementBody      String?
+  announcementUpdatedAt DateTime?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -1125,4 +1129,21 @@ model LiveRoomGoal {
   updatedAt DateTime  @updatedAt
 
   @@index([roomId, status])
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// WFX2-LIVE-PLATFORM-1 Parity P71 — room richness (the TikTok-parity
+// layer, ADR-0012). The pinned message: the row IS the pin (one per room
+// by the unique roomId; unpin deletes). messageId/sessionId/pinnedById
+// are bare ids (the interaction-row law — no FK); a tombstoned pin is
+// deleted lazily on read (pins.ts).
+model LivePinnedMessage {
+  id        String   @id @default(cuid())
+  roomId    String   @unique
+  messageId String
+  sessionId String
+  pinnedById String
+  pinnedAt  DateTime @default(now())
+
+  @@index([roomId])
 }

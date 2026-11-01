@@ -42,11 +42,13 @@ import {
   Megaphone,
   MicOff,
   MoreVertical,
+  Pin,
   SendHorizontal,
   ShieldMinus,
   ShieldPlus,
   SmilePlus,
   Trash2,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { beaconOps } from "@/lib/live/ops-beacon";
@@ -80,6 +82,7 @@ import type {
   LiveChatMessageDto,
   LiveClubEmotesDto,
   LiveModerationActionDto,
+  LivePinnedMessageDto,
   LiveReportDto,
   LiveReportReason,
   LiveRoomPolicyDto,
@@ -174,6 +177,62 @@ export function LiveChatPanel({
   const [authLost, setAuthLost] = useState(false);
   const [localTombstones, setLocalTombstones] = useState<ReadonlySet<string>>(new Set());
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm>(null);
+
+  // ── Parity P71: the room's pinned message ──
+  // One GET per mount (the lazy tombstone sweep runs server-side) PLUS the
+  // `pin` envelopes via the page's ONE stream (a null pin = cleared). The
+  // latch is the render-phase adjustment pattern (guarded by the previously
+  // seen envelope id, never an effect).
+  const [pin, setPin] = useState<LivePinnedMessageDto | null>(null);
+  const [seenPinEnvelopeId, setSeenPinEnvelopeId] = useState<string | null>(null);
+  const pinEnvelope = stream.latestEnvelope;
+  if (
+    pinEnvelope &&
+    pinEnvelope.kind === "pin" &&
+    pinEnvelope.eventId !== seenPinEnvelopeId
+  ) {
+    setSeenPinEnvelopeId(pinEnvelope.eventId);
+    setPin(pinEnvelope.pin);
+  }
+  useEffect(() => {
+    const t = setTimeout(() => {
+      void liveFetch<{ pin: LivePinnedMessageDto | null }>(
+        `/api/live-rooms/${roomId}/pin`,
+        { method: "GET" },
+      ).then((res) => {
+        if (res.ok) setPin(res.data.pin);
+      });
+    }, 0);
+    return () => clearTimeout(t);
+  }, [roomId]);
+
+  const pinMessage = useCallback(
+    async (messageId: string) => {
+      const res = await liveFetch<{ pin: LivePinnedMessageDto }>(
+        `/api/live-rooms/${roomId}/pin`,
+        { body: { messageId } },
+      );
+      if (res.ok) {
+        setPin(res.data.pin);
+        toast.success("Message pinned");
+      } else {
+        toastLiveFailure(res.failure, "The message didn't pin.");
+      }
+    },
+    [roomId],
+  );
+
+  const unpinMessage = useCallback(async () => {
+    const res = await liveFetch<{ cleared: boolean }>(`/api/live-rooms/${roomId}/pin`, {
+      method: "DELETE",
+    });
+    if (res.ok) {
+      setPin(null);
+      toast.success("Pin removed");
+    } else {
+      toastLiveFailure(res.failure, "The pin didn't clear.");
+    }
+  }, [roomId]);
 
   // ── Phase 5-emotes: the room host's club emote map (ADR-0011) ──
   // One GET per mount PLUS a re-derive every time the picker OPENS: the
@@ -500,6 +559,39 @@ export function LiveChatPanel({
         </span>
       </CardHeader>
       <CardContent className="space-y-3">
+        {/* ── Parity P71: the pinned banner (the row IS the pin; a null pin
+            never renders; staff get the unpin control) ── */}
+        {pin && (
+          <div
+            data-testid="chat-pinned-banner"
+            className="flex items-start gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2"
+          >
+            <Pin className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden />
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">
+                Pinned
+              </p>
+              <p className="break-words text-sm leading-snug text-foreground/90">
+                {pin.body}
+              </p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                {pin.pinnedByName} · {formatRelativeDate(pin.pinnedAt)}
+              </p>
+            </div>
+            {canModerate && signedIn && (
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Remove pin"
+                data-testid="chat-unpin"
+                className="size-7 shrink-0"
+                onClick={() => void unpinMessage()}
+              >
+                <X aria-hidden />
+              </Button>
+            )}
+          </div>
+        )}
         {/* ── Message list ── */}
         <div
           ref={listRef}
@@ -527,6 +619,7 @@ export function LiveChatPanel({
                   onSetModerator={(userId, grant) => void setModerator(userId, grant)}
                   onReport={(message, reason) => void sendReport(message, reason)}
                   onConfirm={(pending) => setPendingConfirm(pending)}
+                  onPin={(messageId) => void pinMessage(messageId)}
                 />
               ))}
             </ul>
@@ -729,6 +822,8 @@ interface ChatRowProps {
   onSetModerator: (userId: string, grant: boolean) => void;
   onReport: (message: LiveChatMessageDto, reason: LiveReportReason) => void;
   onConfirm: (pending: NonNullable<PendingConfirm>) => void;
+  /** Parity P71: pin THIS message (host/moderator; one pin per room). */
+  onPin: (messageId: string) => void;
 }
 
 function ChatRow({
@@ -742,6 +837,7 @@ function ChatRow({
   onSetModerator,
   onReport,
   onConfirm,
+  onPin,
 }: ChatRowProps) {
   const announcement = message.kind !== "chat" && !deleted;
 
@@ -781,6 +877,18 @@ function ChatRow({
                   >
                     <span aria-hidden>★</span>
                     {message.senderClubBadge.level}
+                  </span>
+                )}
+                {/* Parity P71: the sender's room-loyalty level — server-derived
+                    at read (ROOM_XP_WEIGHTS / ROOM_LEVELS); null renders
+                    NOTHING (never a client-claimed level). */}
+                {typeof message.senderRoomLevel === "number" && message.senderRoomLevel > 0 && (
+                  <span
+                    data-testid="chat-room-level"
+                    title={`Room level ${message.senderRoomLevel} — earned in this room`}
+                    className="inline-flex shrink-0 items-center rounded-full border border-primary/30 bg-primary/10 px-1.5 py-px text-[10px] font-semibold leading-none text-primary"
+                  >
+                    LV{message.senderRoomLevel}
                   </span>
                 )}
                 <span className="shrink-0 truncate text-xs text-muted-foreground">
@@ -839,6 +947,12 @@ function ChatRow({
             </DropdownMenuTrigger>
             {showModMenu ? (
               <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuItem
+                  onClick={() => onPin(message.id)}
+                >
+                  <Pin aria-hidden /> Pin message
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() =>
                     onModerate(

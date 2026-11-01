@@ -58,6 +58,11 @@ export interface LiveRoomDto {
    * 24-room list).
    */
   policy?: LiveRoomPolicyDto;
+  /** Parity P71 (additive, optional): the host-set room announcement.
+   * null when none is set; the honest updated timestamp rides along and
+   * changes republish the room envelope (no new stream kind needed). */
+  announcementBody?: string | null;
+  announcementUpdatedAt?: string | null;
 }
 
 /** Broadcast lifecycle row. providerRoomId is a routing name, NOT a secret. */
@@ -164,6 +169,10 @@ export interface LiveChatMessageDto {
    * club — server-derived at read (ADR-0010 §5), never stored on the row,
    * never client-claimed. null when the sender is not a member. */
   senderClubBadge: LiveChatClubBadge;
+  /** Parity P71 (additive, optional): the sender's room-loyalty level —
+   * server-derived at read from the room's durable rows (ROOM_XP_WEIGHTS /
+   * ROOM_LEVELS); absent on old payloads, null when not derivable. */
+  senderRoomLevel?: number | null;
 }
 
 /** POST /api/live-rooms/[id]/chat body. clientMessageId = idempotency key. */
@@ -241,7 +250,11 @@ export type LiveModerationActionKind =
   | "gifts-disable"
   /** Phase 5 (additive): the members-only chat gate. */
   | "members-chat-enable"
-  | "members-chat-disable";
+  | "members-chat-disable"
+  /** Parity P71 (additive): the pin ledger (the row IS the pin; the
+   * audit trail records intent exactly like every other action). */
+  | "pin"
+  | "unpin";
 
 /** One audited moderation decision. Rows are immutable (append-only). */
 export interface LiveModerationActionDto {
@@ -381,7 +394,9 @@ export type LiveStreamEventKind =
   | "match"
   | "gift"
   /** Parity P70 (additive): LIVE goal create/progress/reached/close. */
-  | "goal";
+  | "goal"
+  /** Parity P71 (additive): the room's pinned message (set/cleared). */
+  | "pin";
 
 export type LiveStreamEvent =
   | { kind: "chat"; eventId: string; at: string; message: LiveChatMessageDto }
@@ -400,7 +415,24 @@ export type LiveStreamEvent =
   | { kind: "stage"; eventId: string; at: string; stage: LiveStageDto }
   | { kind: "match"; eventId: string; at: string; match: LiveMatchDto }
   | { kind: "gift"; eventId: string; at: string; gift: GiftEventDto }
-  | { kind: "goal"; eventId: string; at: string; goal: LiveGoalDto };
+  | { kind: "goal"; eventId: string; at: string; goal: LiveGoalDto }
+  /** Parity P71: a null pin means the pin was cleared (the room's banner
+   * unmounts); the body/author resolve at read time. */
+  | { kind: "pin"; eventId: string; at: string; pin: LivePinnedMessageDto | null };
+
+/** Parity P71 — the room's ONE pinned message as the room renders it. */
+export interface LivePinnedMessageDto {
+  id: string;
+  roomId: string;
+  messageId: string;
+  sessionId: string;
+  body: string;
+  kind: LiveChatKind;
+  pinnedById: string;
+  pinnedByHandle: string;
+  pinnedByName: string;
+  pinnedAt: string;
+}
 
 /** GET /api/live-rooms/[id]/stream query params (the resume contract). */
 export interface LiveStreamParams {

@@ -163,6 +163,8 @@ type RawRoom = {
   visibility: string;
   createdAt: Date;
   updatedAt: Date;
+  announcementBody: string | null;
+  announcementUpdatedAt: Date | null;
   host: { handle: string; name: string };
   sessions: RawSession[];
 };
@@ -189,6 +191,12 @@ export function mapRoom(
       room.visibility === "members" ? "members" : room.visibility === "unlisted" ? "unlisted" : "public",
     createdAt: room.createdAt.toISOString(),
     updatedAt: room.updatedAt.toISOString(),
+    // Parity P71 (additive): the host-set announcement rides the room DTO
+    // (the honest updated timestamp included; null when none is set).
+    announcementBody: room.announcementBody ?? null,
+    announcementUpdatedAt: room.announcementUpdatedAt
+      ? room.announcementUpdatedAt.toISOString()
+      : null,
     currentSession: current,
     viewerCount: current ? viewerCounts.get(current.id) ?? 0 : 0,
     isHost: callerId === null ? null : room.hostId === callerId,

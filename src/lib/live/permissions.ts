@@ -157,6 +157,17 @@ export const GOAL_TITLE_MAX = 80;
 /** Goal rows kept in a room's goal history answer. */
 export const GOAL_LIST_MAX = 10;
 
+// ── Parity P71 — room richness (ADR-0012) ──
+/** The room's announcement body clamp (the chat-body cap, reused by law). */
+export const ANNOUNCEMENT_BODY_MAX = CHAT_BODY_MAX;
+/** The room-loyalty XP weights (XP = 2×chat + 1×reaction + 1×gift credits,
+ * derived from durable rows since the room's FIRST session — read-time
+ * only, never stored, never client-claimed). */
+export const ROOM_XP_WEIGHTS = { chat: 2, reaction: 1, gift: 1 } as const;
+/** The level table: level = highest threshold ≤ XP (index 0 = level 0),
+ * capped at the table's last entry (level 7 = 15000 XP). */
+export const ROOM_LEVELS = [0, 50, 150, 400, 1000, 2500, 6000, 15000] as const;
+
 export const RATE_LIMITS = {
   chat: { limit: 8, windowMs: 10_000 },
   reactions: { limit: 12, windowMs: 10_000 },
@@ -192,6 +203,9 @@ export const RATE_LIMITS = {
   emoteSave: { limit: 20, windowMs: 60_000 },
   // ── Parity P70 — LIVE goals management (create/close; progress is free) ──
   goalManage: { limit: 10, windowMs: 60_000 },
+  // ── Parity P71 — pins + announcements management ──
+  pinManage: { limit: 20, windowMs: 60_000 },
+  announcementManage: { limit: 20, windowMs: 60_000 },
 } as const;
 
 /** Host and granted moderators share the moderation capability set. */

@@ -63,11 +63,16 @@ export type ClubBadgeMap = Map<string, { clubName: string; level: number }>;
  * Phase 5: `badges` is the CALLER-SCOPED badge map for THIS room's host
  * club (chat.ts badgesFor). Undefined/absent sender → `senderClubBadge:
  * null` — the badge is never stored on the row and never client-claimed.
+ *
+ * Parity P71: `levels` is the room-loyalty level map (pins.ts
+ * roomLevelsFor — read-time derivation over the room's durable rows).
+ * Absent map → `senderRoomLevel: null`.
  */
 export function mapChatMessage(
   row: LiveChatMessageRow,
   handles: HandleMap,
   badges?: ClubBadgeMap,
+  levels?: Map<string, number>,
 ): LiveChatMessageDto {
   const sender = handles.get(row.senderId);
   return {
@@ -83,6 +88,7 @@ export function mapChatMessage(
     createdAt: row.createdAt.toISOString(),
     deleted: row.deletedAt != null,
     senderClubBadge: badges?.get(row.senderId) ?? null,
+    senderRoomLevel: levels ? levels.get(row.senderId) ?? null : null,
   };
 }
 
@@ -158,7 +164,7 @@ export async function listChat(
     orderBy: { seq: "asc" },
     take: limit,
   });
-  const [handles, badges] = await Promise.all([
+  const [handles, badges, levels] = await Promise.all([
     handlesFor(rows.map((r) => r.senderId)),
     // Phase 5: the history/tail fan-out stamps the same read-derived badge
     // (ONE batched lookup; host id needed for the club join).
@@ -169,8 +175,14 @@ export async function listChat(
       });
       return badgesFor(host?.hostId ?? "", rows.map((r) => r.senderId));
     })(),
+    // Parity P71: the room-loyalty levels stamp through the same read
+    // (ONE bounded derivation over the page's sender ids).
+    (async () => {
+      const { roomLevelsFor } = await import("./pins");
+      return roomLevelsFor(roomId, rows.map((r) => r.senderId));
+    })(),
   ]);
-  return rows.map((r) => mapChatMessage(r, handles, badges));
+  return rows.map((r) => mapChatMessage(r, handles, badges, levels));
 }
 
 /**
@@ -268,6 +280,9 @@ export async function sendChat(
   // Phase 5: the sender's badge derives from the same host-club lookup the
   // gate uses (ONE batched read; failure renders no badge).
   const badges = await badgesFor(room.hostId, [actor.id]);
+  // Parity P71: the sender's room-loyalty level rides the same read.
+  const { roomLevelsFor } = await import("./pins");
+  const levels = await roomLevelsFor(roomId, [actor.id]);
   try {
     const row = await db.liveRoomMessage.create({
       data: {
@@ -282,7 +297,7 @@ export async function sendChat(
     // Phase 5 award law: the durable commit earns chat points (best-effort;
     // duplicate replays below never re-enter this path).
     await awardChatPoints(room.hostId, actor.id, row.id);
-    const message = mapChatMessage(row, handles, badges);
+    const message = mapChatMessage(row, handles, badges, levels);
     // Publish law: same-instance subscribers get instant fan-out; other
     // instances converge via the stream's DB tail (ADR-0006).
     publishLiveEvent(roomId, {
@@ -314,7 +329,7 @@ export async function sendChat(
           },
         },
       });
-      if (existing) return { message: mapChatMessage(existing, handles, badges), duplicate: true };
+      if (existing) return { message: mapChatMessage(existing, handles, badges, levels), duplicate: true };
     }
     throw err;
   }

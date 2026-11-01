@@ -8,6 +8,7 @@ import {
   Info,
   Loader2,
   LogIn,
+  Megaphone,
   RefreshCw,
   TriangleAlert,
   VideoOff,
@@ -1165,6 +1166,31 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
                     )}
                   </CardContent>
                 </Card>
+              )}
+
+              {/* Parity P71-2: the room announcement (the room DTO flows the
+                  honest body + updated timestamp; the `room` envelope keeps
+                  it fresh via the page's onRoomChange reload). */}
+              {room.announcementBody && (
+                <div
+                  data-testid="room-announcement"
+                  className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2"
+                >
+                  <Megaphone className="mt-0.5 size-3.5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                      Announcement
+                    </p>
+                    <p className="break-words text-sm text-foreground/90">
+                      {room.announcementBody}
+                    </p>
+                    {room.announcementUpdatedAt && (
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        Updated {formatRelativeDate(room.announcementUpdatedAt)}
+                      </p>
+                    )}
+                  </div>
+                </div>
               )}
 
               <LiveChatPanel

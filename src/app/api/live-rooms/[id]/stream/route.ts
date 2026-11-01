@@ -38,8 +38,9 @@ function roomStamp(room: {
   chatEnabled: boolean;
   reactionsEnabled: boolean;
   slowModeSeconds: number;
+  announcementUpdatedAt: Date | null;
 }): string {
-  return `${room.status}|${room.title}|${room.chatEnabled}|${room.reactionsEnabled}|${room.slowModeSeconds}`;
+  return `${room.status}|${room.title}|${room.chatEnabled}|${room.reactionsEnabled}|${room.slowModeSeconds}|${room.announcementUpdatedAt?.toISOString() ?? ""}`;
 }
 
 function reactionKey(total: LiveReactionTotalDto): string {
@@ -89,6 +90,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       chatEnabled: true,
       reactionsEnabled: true,
       slowModeSeconds: true,
+      announcementUpdatedAt: true,
     },
   });
   const initialRoomStamp: string | null = initialStampRow ? roomStamp(initialStampRow) : null;
@@ -280,6 +282,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
             chatEnabled: true,
             reactionsEnabled: true,
             slowModeSeconds: true,
+            announcementUpdatedAt: true,
           },
         });
         if (roomRow && roomStamp(roomRow) !== lastRoomStamp) {

@@ -91,6 +91,7 @@ import {
 } from "@/components/live/live-recorder-console";
 import { LiveReplayPanel } from "@/components/live/live-replay-panel";
 import { LiveGoalManager } from "@/components/live/live-goal-manager";
+import { LiveAnnouncementManager } from "@/components/live/live-announcement-manager";
 import { ReattachCard } from "@/components/live/live-reattach-card";
 import { useLivePresence, useLiveStream } from "@/components/live/use-live-stream";
 import { useLiveClub } from "@/hooks/use-live-club";
@@ -1253,6 +1254,15 @@ function LiveConsole({ room, playback, endFailure, onEnd, cameraId, micId }: Liv
           />
           {/* Parity P70-3: the host's LIVE-goal manager (start/progress/close). */}
           <LiveGoalManager roomId={room.id} latestEnvelope={stream.latestEnvelope} />
+          {/* Parity P71-2: the room-announcement setter (the room envelope
+              republishes — the viewer banner rides the room DTO). */}
+          <LiveAnnouncementManager
+            roomId={room.id}
+            initial={{
+              body: room.announcementBody ?? null,
+              updatedAt: room.announcementUpdatedAt ?? null,
+            }}
+          />
           <HostPolicyControls
             roomId={room.id}
             chatEnabled={chatEnabled}
