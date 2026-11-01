@@ -285,6 +285,16 @@ export function LiveGiftPanel({
                     {gift.quantity}
                     {" × "}
                     {gift.giftName}
+                    {/* Parity P70-1: the combo streak chip — the server's
+                        derived count, rendered verbatim (≥2 only). */}
+                    {(gift.comboCount ?? 0) >= 2 && (
+                      <span
+                        data-testid="gift-combo-chip"
+                        className="ml-1.5 inline-flex items-center rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-primary"
+                      >
+                        combo ×{gift.comboCount}
+                      </span>
+                    )}
                   </span>
                   <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
                     {gift.totalCredits} dev credits

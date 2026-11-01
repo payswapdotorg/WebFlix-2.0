@@ -90,6 +90,7 @@ import {
   type ProgramRecorder,
 } from "@/components/live/live-recorder-console";
 import { LiveReplayPanel } from "@/components/live/live-replay-panel";
+import { LiveGoalManager } from "@/components/live/live-goal-manager";
 import { ReattachCard } from "@/components/live/live-reattach-card";
 import { useLivePresence, useLiveStream } from "@/components/live/use-live-stream";
 import { useLiveClub } from "@/hooks/use-live-club";
@@ -1250,6 +1251,8 @@ function LiveConsole({ room, playback, endFailure, onEnd, cameraId, micId }: Liv
             signedIn
             streamReactionTotal={stream.reactionTotal?.total ?? null}
           />
+          {/* Parity P70-3: the host's LIVE-goal manager (start/progress/close). */}
+          <LiveGoalManager roomId={room.id} latestEnvelope={stream.latestEnvelope} />
           <HostPolicyControls
             roomId={room.id}
             chatEnabled={chatEnabled}

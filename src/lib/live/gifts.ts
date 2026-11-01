@@ -41,10 +41,12 @@ import { opsRateLimit } from "./ops";
 import {
   activeSanctions,
   activeSessionFor,
+  GIFT_COMBO_WINDOW_MS,
   GIFT_FEED_MAX,
   GIFT_QTY_MAX,
   GIFT_SPEND_WINDOW_MAX,
   GIFT_SPEND_WINDOW_MS,
+  GIFT_WALL_MAX,
   liveActorFor,
   RATE_LIMITS,
   resolveHandles,
@@ -53,7 +55,7 @@ import {
 import { publishLiveEvent } from "./hub";
 import { LiveDomainError } from "./rooms";
 import { ingestScore } from "./matches";
-import type { GiftCatalogItemDto, GiftEventDto, SendGiftInput } from "./types";
+import type { GiftCatalogItemDto, GiftEventDto, LiveTopGifterDto, SendGiftInput } from "./types";
 
 // ── The frozen v1 catalogue (original WebFlix names — work order §4F/§9) ──
 // Server-seeded, idempotent upsert-when-missing; rows are never renamed or
@@ -105,6 +107,7 @@ function mapGiftEvent(
   row: GiftEventRow,
   handles: HandleMap,
   catalog: CatalogMap,
+  comboCount?: number,
 ): GiftEventDto {
   const sender = handles.get(row.senderId);
   return {
@@ -124,7 +127,35 @@ function mapGiftEvent(
     matchId: row.matchId,
     matchTeamId: row.matchTeamId,
     createdAt: row.createdAt.toISOString(),
+    ...(comboCount !== undefined ? { comboCount } : {}),
   };
+}
+
+/**
+ * Parity P70-1 — the COMBO DERIVATION LAW: the streak for one send is the
+ * COUNT of that sender's same-item GiftEvent rows inside the frozen
+ * GIFT_COMBO_WINDOW_MS, anchored at the send's OWN createdAt (so an
+ * idempotent replay re-derives the SAME number the original answered —
+ * the window never "grows" after the fact). Read-time derivation over
+ * durable rows only: no new table, no stored counter, never client-claimed,
+ * never a money fact (each row in the streak is an independent, accepted,
+ * idempotent send — the combo is an OBSERVATION over them).
+ */
+async function deriveComboCount(
+  sessionId: string,
+  senderId: string,
+  giftItemId: string,
+  anchorAt: Date,
+): Promise<number> {
+  const agg = await db.giftEvent.count({
+    where: {
+      sessionId,
+      senderId,
+      giftItemId,
+      createdAt: { gt: new Date(anchorAt.getTime() - GIFT_COMBO_WINDOW_MS), lte: anchorAt },
+    },
+  });
+  return agg;
 }
 
 /**
@@ -192,7 +223,15 @@ async function committedEventFor(
   const event = await db.giftEvent.findUnique({ where: { intentId: intent.id } });
   if (!event) return null; // v1 always commits intent+event together
   const handles = await resolveHandles([event.senderId]);
-  return mapGiftEvent(event, handles, catalog);
+  // The replay re-derives the combo anchored at the ORIGINAL event's
+  // createdAt — the same streak the first answer carried.
+  const comboCount = await deriveComboCount(
+    event.sessionId,
+    event.senderId,
+    event.giftItemId,
+    event.createdAt,
+  );
+  return mapGiftEvent(event, handles, catalog, comboCount);
 }
 
 /**
@@ -381,7 +420,15 @@ export async function sendGift(
   }
 
   const handles = await resolveHandles([event.senderId]);
-  const gift = mapGiftEvent(event, handles, catalogMap);
+  // Parity P70-1: the combo streak derives AFTER the durable commit (the
+  // accepted row counts itself inside its own window).
+  const comboCount = await deriveComboCount(
+    event.sessionId,
+    event.senderId,
+    event.giftItemId,
+    event.createdAt,
+  );
+  const gift = mapGiftEvent(event, handles, catalogMap, comboCount);
   // Publish law: instant same-instance fan-out AFTER the durable commit
   // (skipped entirely on duplicate replays — the original already fanned).
   publishLiveEvent(roomId, {
@@ -390,6 +437,16 @@ export async function sendGift(
     at: gift.createdAt,
     gift,
   });
+  // Parity P70-3 hook: the accepted send may cross the room's open
+  // giftCredits goal — awaited inside the try (deterministic by return
+  // time) but best-effort by law: a failure NEVER fails the gift; the
+  // dynamic import keeps the gifts→goals edge acyclic.
+  try {
+    const { onRoomActivity } = await import("./goals");
+    await onRoomActivity(roomId, "giftCredits");
+  } catch (err) {
+    console.error("live goal gift activity failed", err);
+  }
   return match ? { gift, match } : { gift };
 }
 
@@ -419,7 +476,63 @@ export async function giftFeed(
     }),
     giftCatalog(),
   ]);
+  // Parity P70-1: the feed renders the streak too. ONE bounded candidate
+  // fetch (rows within one window of the OLDEST fetched row) covers every
+  // row's window — the in-memory derivation is O(candidates²) on ≤ ~2×take
+  // rows, trivial at the feed cap.
+  const oldest = rows[rows.length - 1]?.createdAt;
+  const candidates = oldest
+    ? await db.giftEvent.findMany({
+        where: {
+          roomId,
+          createdAt: { gte: new Date(oldest.getTime() - GIFT_COMBO_WINDOW_MS) },
+        },
+        select: { senderId: true, giftItemId: true, createdAt: true },
+      })
+    : [];
+  const comboForRow = (row: GiftEventRow): number =>
+    candidates.filter(
+      (c) =>
+        c.senderId === row.senderId &&
+        c.giftItemId === row.giftItemId &&
+        c.createdAt.getTime() > row.createdAt.getTime() - GIFT_COMBO_WINDOW_MS &&
+        c.createdAt.getTime() <= row.createdAt.getTime(),
+    ).length;
   const handles = await resolveHandles(rows.map((r) => r.senderId));
   const catalogMap = catalogByIds(catalog);
-  return rows.map((r) => mapGiftEvent(r, handles, catalogMap));
+  return rows.map((r) => mapGiftEvent(r, handles, catalogMap, comboForRow(r)));
+}
+
+/**
+ * Parity P70-2 — the TOP-SUPPORTERS WALL. Server SUM(totalCredits)
+ * GROUP BY senderId over the room's GiftEvent rows (the room's durable
+ * history — survives across sessions), top GIFT_WALL_MAX, ties broken by
+ * the most-recent send. Display names resolve at read time (the no-FK
+ * law). DEV credits — zero cash value (the ADR-0007 sandbox law extends
+ * verbatim; the wall carries no money semantics).
+ */
+export async function topGiftersFor(roomId: string): Promise<LiveTopGifterDto[]> {
+  const grouped = await db.giftEvent.groupBy({
+    by: ["senderId"],
+    where: { roomId },
+    _sum: { totalCredits: true },
+    _max: { createdAt: true },
+    orderBy: { _sum: { totalCredits: "desc" } },
+    take: GIFT_WALL_MAX * 4, // over-fetch so the tie-break sort is honest
+  });
+  const ranked = [...grouped]
+    .sort(
+      (a, b) =>
+        (b._sum.totalCredits ?? 0) - (a._sum.totalCredits ?? 0) ||
+        (b._max.createdAt?.getTime() ?? 0) - (a._max.createdAt?.getTime() ?? 0),
+    )
+    .slice(0, GIFT_WALL_MAX);
+  if (ranked.length === 0) return [];
+  const handles = await resolveHandles(ranked.map((r) => r.senderId));
+  return ranked.map((r) => ({
+    userId: r.senderId,
+    handle: handles.get(r.senderId)?.handle ?? "unknown",
+    displayName: handles.get(r.senderId)?.name ?? "Unknown",
+    totalCredits: r._sum.totalCredits ?? 0,
+  }));
 }

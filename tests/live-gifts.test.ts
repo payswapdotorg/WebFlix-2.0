@@ -47,10 +47,12 @@ import { ensureShadowUser } from "@/lib/watch/local-comments";
 import { db } from "@/lib/db";
 import { clearRateLimits } from "@/lib/youtube/cache";
 import {
+  GIFT_COMBO_WINDOW_MS,
   GIFT_PRICE_MAX,
   GIFT_QTY_MAX,
   GIFT_SPEND_WINDOW_MAX,
   GIFT_SPEND_WINDOW_MS,
+  GIFT_WALL_MAX,
   RATE_LIMITS,
 } from "@/lib/live/permissions";
 import { subscribeLiveRoom } from "@/lib/live/hub";
@@ -58,6 +60,7 @@ import type {
   GiftCatalogItemDto,
   GiftEventDto,
   LiveStreamEvent,
+  LiveTopGifterDto,
 } from "@/lib/live/types";
 
 setupLiveDb();
@@ -608,5 +611,236 @@ describe("live gifts — rate limit (429)", () => {
       if (i < limit) expect(status).toBe(200);
       else expect(status).toBe(429);
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// Parity P70 helper — a FRESH spender identity per call (the file's own
+// law: the spend window is GLOBAL per sender over a rolling 60s window, so
+// no block may spend on a shared identity a rerun would inherit).
+async function freshSpender(name: string): Promise<{ cookie: string; shadowId: string }> {
+  const claims = {
+    sub: `u_wfx2_p70_${crypto.randomUUID().slice(0, 8)}`,
+    name,
+    email: `${crypto.randomUUID().slice(0, 8)}@webflix.test`,
+  };
+  const cookie = await mintSessionCookie(claims);
+  const shadowId = (await ensureShadowUser(sessionUserOf(claims))).id;
+  return { cookie, shadowId };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Parity P70-1 — the COMBO DERIVATION LAW (ADR-0012): the streak is the
+// COUNT of the sender's same-item sends inside GIFT_COMBO_WINDOW_MS,
+// anchored at the send's own createdAt; read-time derivation over durable
+// rows — no stored counter, never client-claimed, never a money fact.
+describe("live gifts — combo streaks (parity P70-1)", () => {
+  test("rapid same-sender same-item sends climb 1→2→3 and the FEED carries the streak", async () => {
+    const { roomId } = await liveRoom();
+    const a = await freshSpender("Combo Sender A");
+    const first = await sendAs(a.cookie, roomId, {
+      giftItemId: "spark-cheer",
+      quantity: 1,
+      clientRequestId: "combo-a1-00001",
+    });
+    const second = await sendAs(a.cookie, roomId, {
+      giftItemId: "spark-cheer",
+      quantity: 1,
+      clientRequestId: "combo-a2-00002",
+    });
+    const third = await sendAs(a.cookie, roomId, {
+      giftItemId: "spark-cheer",
+      quantity: 1,
+      clientRequestId: "combo-a3-00003",
+    });
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(third.status).toBe(200);
+    expect(first.body.gift.comboCount).toBe(1);
+    expect(second.body.gift.comboCount).toBe(2);
+    expect(third.body.gift.comboCount).toBe(3);
+
+    // The feed renders the streak per row — each row's window anchors at
+    // its OWN createdAt, so the newest-first array carries 3, 2, 1.
+    const feed = await feedAs(roomId);
+    expect(feed.status).toBe(200);
+    const rows = feed.body.gifts as GiftEventDto[];
+    expect(rows).toHaveLength(3);
+    expect(rows[0]?.comboCount).toBe(3);
+    expect(rows[1]?.comboCount).toBe(2);
+    expect(rows[2]?.comboCount).toBe(1);
+  });
+
+  test("a different item starts its OWN streak (same window)", async () => {
+    const { roomId } = await liveRoom();
+    const a = await freshSpender("Combo Sender B");
+    await sendAs(a.cookie, roomId, {
+      giftItemId: "wave-hello",
+      quantity: 1,
+      clientRequestId: "combo-b1-00001",
+    });
+    await sendAs(a.cookie, roomId, {
+      giftItemId: "wave-hello",
+      quantity: 1,
+      clientRequestId: "combo-b2-00002",
+    });
+    const other = await sendAs(a.cookie, roomId, {
+      giftItemId: "burst-applause",
+      quantity: 1,
+      clientRequestId: "combo-b3-00003",
+    });
+    expect(other.status).toBe(200);
+    expect(other.body.gift.comboCount).toBe(1);
+  });
+
+  test("another sender's rapid sends do NOT join the streak", async () => {
+    const { roomId } = await liveRoom();
+    const a = await freshSpender("Combo Sender C1");
+    const b = await freshSpender("Combo Sender C2");
+    await sendAs(a.cookie, roomId, {
+      giftItemId: "wave-hello",
+      quantity: 1,
+      clientRequestId: "combo-c1-00001",
+    });
+    const bSend = await sendAs(b.cookie, roomId, {
+      giftItemId: "wave-hello",
+      quantity: 1,
+      clientRequestId: "combo-c2-00002",
+    });
+    expect(bSend.status).toBe(200);
+    expect(bSend.body.gift.comboCount).toBe(1);
+  });
+
+  test("the window is FROZEN at the send's createdAt — a backdated row outside it never joins", async () => {
+    const { roomId, sessionId } = await liveRoom();
+    const a = await freshSpender("Combo Sender D");
+    // A backdated same-item row 6s old (outside the 4s window) — inserted
+    // directly so no real 6s wait is needed.
+    const intent = await db.giftIntent.create({
+      data: {
+        roomId,
+        sessionId,
+        senderId: a.shadowId,
+        giftItemId: "float-lantern",
+        quantity: 1,
+        clientRequestId: `backdated-${crypto.randomUUID().slice(0, 8)}`,
+        status: "accepted",
+        totalCredits: 25,
+      },
+    });
+    await db.giftEvent.create({
+      data: {
+        intentId: intent.id,
+        roomId,
+        sessionId,
+        senderId: a.shadowId,
+        recipientId: hostShadowId,
+        giftItemId: "float-lantern",
+        giftName: "Floating Lantern",
+        quantity: 1,
+        totalCredits: 25,
+        createdAt: new Date(Date.now() - GIFT_COMBO_WINDOW_MS - 2_000),
+      },
+    });
+    const fresh = await sendAs(a.cookie, roomId, {
+      giftItemId: "float-lantern",
+      quantity: 1,
+      clientRequestId: "combo-d1-00001",
+    });
+    expect(fresh.status).toBe(200);
+    // The backdated row is OUTSIDE the window → the fresh send is streak 1.
+    expect(fresh.body.gift.comboCount).toBe(1);
+  });
+
+  test("an idempotent replay re-answers the SAME streak (anchored at the original createdAt)", async () => {
+    const { roomId } = await liveRoom();
+    const a = await freshSpender("Combo Sender E");
+    const original = await sendAs(a.cookie, roomId, {
+      giftItemId: "spark-cheer",
+      quantity: 1,
+      clientRequestId: "combo-e1-00001",
+    });
+    expect(original.body.gift.comboCount).toBe(1);
+    const replay = await sendAs(a.cookie, roomId, {
+      giftItemId: "spark-cheer",
+      quantity: 1,
+      clientRequestId: "combo-e1-00001",
+    });
+    expect(replay.status).toBe(200);
+    expect(replay.body.duplicate).toBe(true);
+    expect(replay.body.gift.id).toBe(original.body.gift.id);
+    expect(replay.body.gift.comboCount).toBe(1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// Parity P70-2 — the TOP-SUPPORTERS WALL (server SUM over the room's
+// GiftEvent rows, GIFT_WALL_MAX, ties by most-recent send; DEV credits).
+describe("live gifts — the top-supporters wall (parity P70-2)", () => {
+  test("ranks senders by SUM(totalCredits), caps at GIFT_WALL_MAX, resolves handles", async () => {
+    const { roomId } = await liveRoom();
+    const w1 = await freshSpender("Wall Rank One");
+    const w2 = await freshSpender("Wall Rank Two");
+    const w3 = await freshSpender("Wall Rank Three");
+    const w4 = await freshSpender("Wall Rank Cut");
+    await sendAs(w1.cookie, roomId, {
+      giftItemId: "burst-fireworks", // 100
+      quantity: 1,
+      clientRequestId: "wall-a1-00001",
+    });
+    await sendAs(w2.cookie, roomId, {
+      giftItemId: "spark-cheer", // 5 × 2 = 10
+      quantity: 2,
+      clientRequestId: "wall-a2-00002",
+    });
+    const { GET: roomDetailRoute } = await import("@/app/api/live-rooms/[id]/route");
+    const roomDetail = await roomDetailRoute(
+      reqWithCookie(`http://localhost/api/live-rooms/${roomId}`, "next-auth.session-token=none"),
+      { params: Promise.resolve({ id: roomId }) },
+    );
+    expect(roomDetail.status).toBe(200);
+    const detail = (await roomDetail.json()) as { room: { topGifters: LiveTopGifterDto[] } };
+    const wall = detail.room.topGifters;
+    expect(Array.isArray(wall)).toBe(true);
+    expect(wall.length).toBe(2);
+    expect(wall[0]?.userId).toBe(w1.shadowId);
+    expect(wall[0]?.totalCredits).toBe(100);
+    expect(wall[0]?.displayName).toBe("Wall Rank One");
+    expect(wall[1]?.totalCredits).toBe(10);
+
+    // The cap: three distinct senders is the wall's size — a fourth is cut.
+    await sendAs(w3.cookie, roomId, {
+      giftItemId: "wave-hello",
+      quantity: 1,
+      clientRequestId: "wall-a3-00003",
+    });
+    await sendAs(w4.cookie, roomId, {
+      giftItemId: "wave-hello",
+      quantity: 1,
+      clientRequestId: "wall-a4-00004",
+    });
+    const capped = await roomDetailRoute(
+      reqWithCookie(`http://localhost/api/live-rooms/${roomId}`, "next-auth.session-token=none"),
+      { params: Promise.resolve({ id: roomId }) },
+    );
+    const cappedWall = ((await capped.json()) as { room: { topGifters: LiveTopGifterDto[] } })
+      .room.topGifters;
+    expect(cappedWall.length).toBe(GIFT_WALL_MAX);
+    // Order holds: 100, 10, then the 1-credit tie between w3 and w4 breaks
+    // by the MOST-RECENT send — w4's was later.
+    expect(cappedWall.map((w) => w.totalCredits)).toEqual([100, 10, 1]);
+    expect(cappedWall[2]?.userId).toBe(w4.shadowId);
+  });
+
+  test("a room with no gifts answers an empty wall (honest empty state)", async () => {
+    const { roomId } = await liveRoom();
+    const { GET: roomDetailRoute } = await import("@/app/api/live-rooms/[id]/route");
+    const roomDetail = await roomDetailRoute(
+      reqWithCookie(`http://localhost/api/live-rooms/${roomId}`, "next-auth.session-token=none"),
+      { params: Promise.resolve({ id: roomId }) },
+    );
+    const wall = ((await roomDetail.json()) as { room: { topGifters: LiveTopGifterDto[] } }).room
+      .topGifters;
+    expect(wall).toEqual([]);
   });
 });

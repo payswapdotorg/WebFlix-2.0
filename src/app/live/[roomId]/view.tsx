@@ -33,6 +33,7 @@ import { LiveMatchPanel } from "@/components/live/live-match-panel";
 import { LiveGiftPanel } from "@/components/live/live-gift-panel";
 import { LiveClubPanel } from "@/components/live/live-club-panel";
 import { LiveReplayPanel } from "@/components/live/live-replay-panel";
+import { LiveGoalCard, LiveTopSupporters } from "@/components/live/live-support-shelf";
 import { useLiveStream } from "@/components/live/use-live-stream";
 import { beaconOps } from "@/lib/live/ops-beacon";
 import { Badge } from "@/components/ui/badge";
@@ -45,14 +46,19 @@ import type {
   GiftCatalogItemDto,
   GiftEventDto,
   LiveApiError,
+  LiveGoalDto,
   LiveInviteDto,
   LiveMatchDto,
   LivePlaybackPlan,
   LiveRoomDto,
   LiveSessionDto,
   LiveStageDto,
+  LiveTopGifterDto,
   SendGiftInput,
 } from "@/lib/live/types";
+
+/** Parity P70 (additive): the room surface carries the Top-supporters wall. */
+type ViewerRoomDto = LiveRoomDto & { topGifters?: LiveTopGifterDto[] };
 
 /**
  * WFX2-LIVE-PLATFORM-1 §7 Worker 2 — the first-party viewer room.
@@ -392,7 +398,7 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
     data,
     error: roomError,
     reload: reloadRoom,
-  } = useApi<{ room: LiveRoomDto }>(`/api/live-rooms/${roomId}`);
+  } = useApi<{ room: ViewerRoomDto }>(`/api/live-rooms/${roomId}`);
   const room = data?.room ?? null;
   const { user } = useWebFlixSession();
 
@@ -401,6 +407,9 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
   const [match, setMatch] = useState<LiveMatchDto | null>(null);
   const [gifts, setGifts] = useState<GiftEventDto[]>([]);
   const [catalogue, setCatalogue] = useState<GiftCatalogItemDto[]>([]);
+  // Parity P70-3: the room's goal history (the card renders the open or
+  // reached one); `goal` envelopes adopt verbatim below.
+  const [goals, setGoals] = useState<LiveGoalDto[]>([]);
   const [giftSending, setGiftSending] = useState(false);
   const [giftError, setGiftError] = useState<string | null>(null);
   const [myInvite, setMyInvite] = useState<LiveInviteDto | null>(null);
@@ -451,6 +460,14 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
         // Prepend + dedupe by id (at-least-once transport can re-deliver).
         setGifts((prev) =>
           [event.gift, ...prev.filter((g) => g.id !== event.gift.id)].slice(0, 50),
+        );
+        return;
+      }
+      if (event.kind === "goal") {
+        // Parity P70-3: the envelope IS the fresh goal state (create /
+        // reached flip / close all publish it) — adopt, dedupe by id.
+        setGoals((prev) =>
+          [event.goal, ...prev.filter((g) => g.id !== event.goal.id)].slice(0, 10),
         );
         return;
       }
@@ -593,9 +610,13 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
     const controller = new AbortController();
     const load = async () => {
       try {
-        const [catRes, feedRes] = await Promise.all([
+        const [catRes, feedRes, goalRes] = await Promise.all([
           fetch("/api/live/gifts", { cache: "no-store", signal: controller.signal }),
           fetch(`/api/live-rooms/${roomId}/gifts?limit=20`, {
+            cache: "no-store",
+            signal: controller.signal,
+          }),
+          fetch(`/api/live-rooms/${roomId}/goals`, {
             cache: "no-store",
             signal: controller.signal,
           }),
@@ -607,6 +628,10 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
         if (feedRes.ok) {
           const body = (await feedRes.json().catch(() => ({}))) as { gifts?: GiftEventDto[] };
           setGifts(body.gifts ?? []);
+        }
+        if (goalRes.ok) {
+          const body = (await goalRes.json().catch(() => ({}))) as { goals?: LiveGoalDto[] };
+          setGoals(body.goals ?? []);
         }
       } catch {
         /* aborted or offline — the stream re-derives what it can */
@@ -1054,6 +1079,10 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
 
               {match && <LiveMatchPanel match={match} />}
 
+              {/* Parity P70-3: the room's LIVE goal (progress derives server-side;
+                  the goal envelope keeps it fresh). */}
+              <LiveGoalCard goals={goals} />
+
               {/* ── Phase 3 guest surface: the caller's invite/request state ── */}
               {sessionLive &&
                 (room.policy?.actorRole === "viewer" || room.policy?.actorRole === "guest") &&
@@ -1197,6 +1226,11 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
                     : []
                 }
               />
+
+              {/* Parity P70-2: the Top-supporters wall (the server's SUM,
+                  non-monetary DEV credits — the sandbox label rides it). */}
+              <LiveTopSupporters topGifters={room.topGifters ?? []} />
+
 
               {/* ── Phase 5: the host's fan club (ADR-0010 — non-monetary) ── */}
               <LiveClubPanel

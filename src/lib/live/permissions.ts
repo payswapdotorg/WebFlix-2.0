@@ -141,6 +141,22 @@ export const EMOTES_PER_CLUB_MAX = 20;
 /** requiredLevel clamps to the club level ceiling. */
 export const EMOTE_REQUIRED_LEVEL_MAX = CLUB_LEVEL_MAX;
 
+// ── Parity P70 — gift & goal depth (the TikTok-parity layer, ADR-0012) ──
+/** A combo streak counts same-sender same-item sends inside this window
+ * (read-time derivation over GiftEvent rows — never stored, never claimed). */
+export const GIFT_COMBO_WINDOW_MS = 4_000;
+/** The Top-supporters wall size (server-derived SUM, ties by latest send). */
+export const GIFT_WALL_MAX = 3;
+/** The LIVE-goal kinds (GOAL_KINDS union — mirrored in types.ts). */
+export const GOAL_KINDS = ["hearts", "giftCredits", "chat"] as const;
+export type LiveGoalKind = (typeof GOAL_KINDS)[number];
+/** Goal target bounds (1..GOAL_TARGET_MAX — the counter the room chases). */
+export const GOAL_TARGET_MAX = 100_000;
+/** Optional goal title clamp. */
+export const GOAL_TITLE_MAX = 80;
+/** Goal rows kept in a room's goal history answer. */
+export const GOAL_LIST_MAX = 10;
+
 export const RATE_LIMITS = {
   chat: { limit: 8, windowMs: 10_000 },
   reactions: { limit: 12, windowMs: 10_000 },
@@ -174,6 +190,8 @@ export const RATE_LIMITS = {
   // ── Phase 5-emotes — host emote CRUD (usage rides the chat limiter:
   // an emote send IS a chat send, re-gated per request) ──
   emoteSave: { limit: 20, windowMs: 60_000 },
+  // ── Parity P70 — LIVE goals management (create/close; progress is free) ──
+  goalManage: { limit: 10, windowMs: 60_000 },
 } as const;
 
 /** Host and granted moderators share the moderation capability set. */

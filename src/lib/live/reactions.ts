@@ -154,6 +154,15 @@ export async function sendReactionBatch(
       at: new Date().toISOString(),
       total,
     });
+    // Parity P70-3 hook: the accepted batch may cross the room's open
+    // hearts goal — awaited inside the try (deterministic by return time),
+    // best-effort by law: a failure NEVER fails the reaction.
+    try {
+      const { onRoomActivity } = await import("./goals");
+      await onRoomActivity(roomId, "hearts");
+    } catch (err) {
+      console.error("live goal reaction activity failed", err);
+    }
   }
   return { total };
 }

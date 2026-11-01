@@ -379,7 +379,9 @@ export type LiveStreamEventKind =
   | "invite"
   | "stage"
   | "match"
-  | "gift";
+  | "gift"
+  /** Parity P70 (additive): LIVE goal create/progress/reached/close. */
+  | "goal";
 
 export type LiveStreamEvent =
   | { kind: "chat"; eventId: string; at: string; message: LiveChatMessageDto }
@@ -397,7 +399,8 @@ export type LiveStreamEvent =
   | { kind: "invite"; eventId: string; at: string; invite: LiveInviteDto }
   | { kind: "stage"; eventId: string; at: string; stage: LiveStageDto }
   | { kind: "match"; eventId: string; at: string; match: LiveMatchDto }
-  | { kind: "gift"; eventId: string; at: string; gift: GiftEventDto };
+  | { kind: "gift"; eventId: string; at: string; gift: GiftEventDto }
+  | { kind: "goal"; eventId: string; at: string; goal: LiveGoalDto };
 
 /** GET /api/live-rooms/[id]/stream query params (the resume contract). */
 export interface LiveStreamParams {
@@ -565,6 +568,10 @@ export interface GiftEventDto {
   matchId: string | null;
   matchTeamId: string | null;
   createdAt: string;
+  /** Parity P70 (additive, optional): the server-derived combo streak for
+   * THIS send (same sender + same item inside GIFT_COMBO_WINDOW_MS, anchored
+   * at createdAt). ≥2 renders the ×N burst chip; absent reads as no combo. */
+  comboCount?: number;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -876,4 +883,63 @@ export interface SaveLiveClubEmoteInput {
   code: string;
   unicode: string;
   requiredLevel?: number;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// WFX2-LIVE-PLATFORM-1 Parity P70 — gift & goal depth (the TikTok-parity
+// layer, docs/research/2026-10-31-webflix-live-tiktok-parity-audit.md §3
+// P70, ADR-0012). Additive freeze (TL, 2026-11-01). Same laws: derived-only
+// engagement facts (ADR-0008/0009 — progress is a READ-TIME derivation over
+// durable rows, never stored, never client-claimed); additive stream kinds;
+// non-monetary (the ADR-0010/0011 law extends verbatim). Routes/UI speak
+// THESE types only.
+// ═══════════════════════════════════════════════════════════════════
+
+/** P70-1 (additive, optional): the combo streak for THIS send — the count
+ * of the sender's same-item sends inside GIFT_COMBO_WINDOW_MS anchored at
+ * the event's createdAt (server-derived; ≥2 renders the ×N burst chip).
+ * Absent on old payloads — reads as no combo. */
+// (carried on GiftEventDto below as `comboCount?: number`)
+
+/** P70-2 — one Top-supporters wall row (server SUM over the room's
+ * GiftEvent rows; ties break by most-recent send). DEV credits — the
+ * non-monetary sandbox label rides the room surface verbatim. */
+export interface LiveTopGifterDto {
+  userId: string;
+  handle: string;
+  displayName: string;
+  totalCredits: number;
+}
+
+/** LiveRoomGoal.kind — the goal counter's source (GOAL_KINDS in
+ * permissions.ts is the frozen union; progress derives from THAT source's
+ * durable rows since the goal's createdAt, room-scoped). */
+export type LiveGoalKind = "hearts" | "giftCredits" | "chat";
+
+/** LiveRoomGoal.status — reached flips LAZILY on read/write; closed is the
+ * host's terminal state (the room may start the next goal after it). */
+export type LiveGoalStatus = "open" | "reached" | "closed";
+
+/** The LIVE goal as the room renders it: `progress` is ALWAYS the server's
+ * derivation at read time (hearts = Σ batch counts, giftCredits =
+ * Σ totalCredits, chat = non-tombstoned message count — all since
+ * createdAt, room-scoped). Never client-claimed. */
+export interface LiveGoalDto {
+  id: string;
+  roomId: string;
+  kind: LiveGoalKind;
+  title: string | null;
+  target: number;
+  status: LiveGoalStatus;
+  progress: number;
+  createdAt: string;
+  reachedAt: string | null;
+  closedAt: string | null;
+}
+
+/** POST /api/live-rooms/[id]/goals body — host-only. */
+export interface CreateLiveGoalInput {
+  kind: LiveGoalKind;
+  target: number;
+  title?: string;
 }

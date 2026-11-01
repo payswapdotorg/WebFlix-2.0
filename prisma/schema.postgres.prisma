@@ -1104,3 +1104,25 @@ model LiveClubEmote {
   @@unique([clubId, code])
   @@index([clubId])
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// WFX2-LIVE-PLATFORM-1 Parity P70 — LIVE Goals (the TikTok-parity
+// layer, docs/research/2026-10-31-webflix-live-tiktok-parity-audit.md).
+// Same laws: String enums (GOAL_KINDS in permissions.ts), bare roomId
+// (the interaction-row law — no FK), progress is DERIVED on read from
+// durable rows (never stored, never client-claimed). One open goal per
+// room is enforced in the domain (goals.ts), not by a partial index.
+model LiveRoomGoal {
+  id        String    @id @default(cuid())
+  roomId    String
+  kind      String    // "hearts" | "giftCredits" | "chat"
+  title     String?
+  target    Int
+  status    String    @default("open") // "open" | "reached" | "closed"
+  createdAt DateTime  @default(now())
+  reachedAt DateTime?
+  closedAt  DateTime?
+  updatedAt DateTime  @updatedAt
+
+  @@index([roomId, status])
+}

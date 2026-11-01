@@ -3,6 +3,7 @@ import { getSessionUser } from "@/lib/auth/session";
 import { getRoom, isClubMemberOfHost } from "@/lib/live/rooms";
 import { liveActorFor, activeSanctions, roomPolicyFor, activeSessionFor } from "@/lib/live/permissions";
 import { buildPolicyDto } from "@/lib/live/policy";
+import { topGiftersFor } from "@/lib/live/gifts";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +49,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
         });
       }
     }
-    return NextResponse.json({ room: { ...room, policy } });
+    // Parity P70-2: the Top-supporters wall rides the room surface (server
+    // SUM over the room's GiftEvent rows, GIFT_WALL_MAX, non-monetary DEV
+    // credits). Derived fresh per read — never stored, never claimed.
+    const topGifters = await topGiftersFor(id);
+    return NextResponse.json({ room: { ...room, policy, topGifters } });
   } catch (err) {
     console.error("GET /api/live-rooms/[id] failed", err);
     return NextResponse.json({ error: "provider-failed" }, { status: 502 });

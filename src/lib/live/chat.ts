@@ -291,6 +291,15 @@ export async function sendChat(
       at: message.createdAt,
       message,
     });
+    // Parity P70-3 hook: the accepted message may cross the room's open
+    // chat goal — awaited inside the try (deterministic by return time),
+    // best-effort by law: a failure NEVER fails the send.
+    try {
+      const { onRoomActivity } = await import("./goals");
+      await onRoomActivity(roomId, "chat");
+    } catch (err) {
+      console.error("live goal chat activity failed", err);
+    }
     return { message };
   } catch (err) {
     // IDEMPOTENCY LAW: a retried (sessionId, senderId, clientMessageId)
