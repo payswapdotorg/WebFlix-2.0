@@ -680,3 +680,22 @@ re-runs gates → merges.
 | P69 / resurrection | Station rebuild + delivery re-verification on a fresh clone (TL integrated: gates + the LIVE battery + honest gate states + the two-browser golden path) | Z.ai Code (TL, issue #2) | 2026-10-31 23:55 | main @ 80f6fe3 | **VERIFIED** (docs/evidence only on main; zero product change) |
 
 - Scope: NO product change. The fifteenth "go" landed on a reset sandbox; this row records the resurrection and the re-verified delivery: deps + db + :3000 restored; tsc 0 repo-wide; LIVE battery 398/0 across the ELEVEN sub-batches (= P68's record exactly); browser honest states (/live first-party shelf, /studio/live preflight, room-not-found, the fail-closed ops gate, 375px → 0px overflow); REAL two-browser golden path (host go-live → viewer REAL FRAMES 0.216→2.203, 320×180, readyState 4 → host mid-broadcast reload → ReattachCard → re-attach LIVE → End → the viewer's honest ended state) with DB facts (room ended; session ended, endReason host, durationMs 32374; host+viewer participant rows). Evidence: evidence/wfx2-live-platform-1-p69-resurrection/ (11 screenshots + acceptance-facts.json). The money gate stays CLOSED. The §4F/§4G money + operator residuals (R2 creds, billing API + LIVEKIT_EGRESS_ENABLED, real-traffic retention sweep) stay gated pending operator re-supply — the vault died with the sandbox again.
+
+## 2026-11-01 — WFX2-LIVE-PLATFORM-1 Parity P70–P73 (the TikTok-parity layer) claim
+
+| Wave | Lane | Lead | Claimed (UTC) | Base | Status |
+|---|---|---|---|---|---|
+| P70–P73 / parity | WFX2-LIVE-PLATFORM-1 the four-wave TikTok-parity implementation (TL integrated: 6 domain modules, 7 route files, 9 UI components, +48 pins, the two-browser acceptance) | Z.ai Code (TL, issue #2) | 2026-11-01 09:10 | main @ 9e1ece6 | **LANED** (P70 0c866b8 · P71 d2c7a3b · P72 95b7ea2 · P73 474c614 · acceptance 40ce791 — local main; ADR-0012; 446/446 across FIFTEEN sub-batches; two-browser acceptance in evidence/wfx2-live-platform-1-parity-p70-p73/) |
+
+- Scope: EVERY suggestion in docs/research/2026-10-31-webflix-live-tiktok-parity-audit.md §3
+  — combo gifts, the top-supporters wall, LIVE goals (P70); pinned messages, room
+  announcements, viewer loyalty levels (P71); the screen-share program source,
+  cross-room PK battles with the derived MVP (P72); room keyword filters + link
+  blocking, the trending shelf, go-live notifications reusing the orphaned
+  Notification model (P73). The §4F/§4G money gate stays CLOSED (zero money code;
+  ADR-0007/0010/0011 law extends verbatim). ADR-0012 freezes the parity laws;
+  docs/plans/wfx2-live-phase-parity-contracts.md freezes the contracts.
+- Honest residual: the six commits are durable in LOCAL git — the sandbox died
+  with the credential vault (P69 recorded the same death), so `git push origin main`
+  is ONE replay command the moment the operator re-supplies the PAT. The issue #2
+  delivery comment rides the same credential.

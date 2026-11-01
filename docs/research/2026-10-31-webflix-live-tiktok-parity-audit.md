@@ -195,7 +195,11 @@ All four waves obey the house laws: frozen contracts first (both Prisma variants
 
 | Wave | Suggestions | Base | Status |
 |---|---|---|---|
-| P70 | combo gifts · top supporters · LIVE goals | `9e1ece6` | **PENDING → see below** |
-| P71 | pinned messages · announcements · loyalty levels | | |
-| P72 | screen share · cross-room PK (+MVP) | | |
-| P73 | keyword filter + link block · trending shelf · go-live notify | | |
+| P70 | combo gifts · top supporters · LIVE goals | `9e1ece6` | **LANED** (0c866b8; combo derivation anchored at createdAt, the wall on the room GET, LiveRoomGoal + goals.ts + the awaited activity hooks; 11 goal pins + 7 combo/wall pins) |
+| P71 | pinned messages · announcements · loyalty levels | `0c866b8` | **LANED** (d2c7a3b; LivePinnedMessage (the row IS the pin) + pins.ts + the announcement columns + the ROOM_XP_WEIGHTS/ROOM_LEVELS derivation; 11 pins) |
+| P72 | screen share · cross-room PK (+MVP) | `d2c7a3b` | **LANED** (95b7ea2; ScreenShareControls inside the LiveKitRoom + LivePkBattle/LivePkScoreSnapshot + pk.ts (matchmaking, lazy finalize, MVP) + the LivePkBanner on both rooms + the pk tail floor; 8 pins) |
+| P73 | keyword filter + link block · trending shelf · go-live notify | `95b7ea2` | **LANED** (474c614; LiveRoomKeyword + the 422-flagged enforcement + blockLinks, trendingRooms + the /live shelf, fanOutGoLive + the bell/center merge + the read-mark; 11 pins) |
+| acceptance | the two-browser drive across all four waves | `474c614` | **VERIFIED** (40ce791; evidence/wfx2-live-platform-1-parity-p70-p73/ — 18 screenshots + acceptance-facts.json; DB facts: goal reached, pin row, announcement columns, keyword row, notification row, pk cancelled-no-winner, ledger kinds [pin, keyword-add×2]; console errors NONE on both contexts; mobile 375 overflow 0) |
+
+**Battery:** 398 → **446 pass / 0 fail** across **15 crash-safe sub-batches**. `tsc 0` repo-wide; eslint clean on every touched file. **ADR-0012** records the parity-layer laws; the frozen contracts: [`docs/plans/wfx2-live-phase-parity-contracts.md`](../plans/wfx2-live-phase-parity-contracts.md).
+**Honest residuals:** the two-browser PK drive covers the OPEN + CANCEL states and the pairing/finalize/MVP laws are battery-pinned (one live host in the driver); the money gate stays CLOSED (§5 non-goals unchanged); the push to origin waits on the operator credential re-supply (the vault died with the sandbox reset — recorded in the WORKLOG).
