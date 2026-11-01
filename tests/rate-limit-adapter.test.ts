@@ -109,6 +109,24 @@ describe("adapter-backed (Upstash path)", () => {
       expect(await rateLimit("home:ip", { limit: 1 })).toBe(true);
     }
   });
+
+  test("empty-string env vars ride the LOCAL path (budget enforced, never fail-open)", async () => {
+    // The P76 no-live-network law: the battery lanes run with the Upstash env
+    // CLEARED (empty string, not unset). An empty var is falsy for envRest(),
+    // so the limiter must fall to the LOCAL fixed window — enforcing budgets
+    // offline — and NOT to the fail-open always-allow. This pins lane
+    // determinism for any future ambient export of the vars.
+    process.env.UPSTASH_REDIS_REST_URL = "";
+    process.env.UPSTASH_REDIS_REST_TOKEN = "";
+    try {
+      expect(await rateLimit("local-pin:ip", { limit: 2 })).toBe(true);
+      expect(await rateLimit("local-pin:ip", { limit: 2 })).toBe(true);
+      expect(await rateLimit("local-pin:ip", { limit: 2 })).toBe(false); // local law, not fail-open
+    } finally {
+      delete process.env.UPSTASH_REDIS_REST_URL;
+      delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    }
+  });
 });
 
 describe("the livechat limiter behind the same adapter", () => {

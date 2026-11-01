@@ -715,3 +715,24 @@ re-runs gates → merges.
 | P75 / credential-resupply | The operator re-supplied the credentials; the replay push LANED origin/main == local main; the issue #2 delivery comment posted | Z.ai Code (TL, issue #2) | 2026-11-01 11:55 | main @ 6e1aa18 | **CLOSED** (the push residual is settled; docs-only commit follows) |
 
 - Scope: the operator delivered the credential vault re-supply (trace 1a196f0cdafc6e09). The PAT was vaulted OUTSIDE the repo (/home/z/.secrets/webflix.env, 0600 — the P69-recorded location, resurrected), exported as an env var per the operator's instruction, and used ONE-TIME in the push URL — never in git config, never in any committed file (verified: exact-value scan of all supplied secrets across the tracked tree = 0 hits; remote URL clean). `git push origin main` → `511da63..6e1aa18` — the ENTIRE parity layer (P70–P73 + the two-browser acceptance + the delivery record + the PK settle-claim + the P74 verification) is now durable on GitHub. The issue #2 delivery comment is posted (comment 6557548645). Origin/main == local main (rev-list 0/0). The money gate stays CLOSED; the operator-gated product residuals (R2 replay storage creds, egress metering billing API + LIVEKIT_EGRESS_ENABLED, real-traffic retention sweep) remain PENDING — none of the re-supplied credentials map to them.
+
+## 2026-11-01 — WFX2-LIVE-PLATFORM-1 P76 (the distributed rate-limiting rung) claim
+
+| Wave | Lane | Lead | Claimed (UTC) | Base | Status |
+|---|---|---|---|---|---|
+| P76 / distributed-ratelimit | The operator's "Distributed Rate Limiting (Upstash Redis)" supply landed: the verification tool, the empty-env law pin, the no-live-network script law, the prod reconcile | Z.ai Code (TL, issue #2) | 2026-11-01 12:45 | main @ 4b300d3 | **LANED** (fixture verdict 6/6; battery 15/15 green ×0 fail; cutover 112/0; tsc 0; eslint 0; the LIVE-endpoint verdict + the prod upsert honestly operator-gated) |
+
+- Scope: the capability was ALREADY shipped and pinned (the adapter + the LIVE
+  lanes' `opsRateLimit` seam — no new product code); this rung made it
+  operational: `scripts/verify-distributed-ratelimit.mjs` (+ the
+  `verify:ratelimit` script) with the LIVE and FIXTURE modes; the +1 pin
+  "empty-string env vars ride the LOCAL path (budget enforced, never
+  fail-open)"; `test:live` restructured into the airtight wrapper so the WHOLE
+  fifteen-lane chain inherits the cleared Upstash vars (the no-live-network
+  law made explicit); the ops doc records the re-supply, the egress map (the
+  sandbox DNS allowlist walls upstash.io + neon; github/vercel/openrouter/
+  apify resolve), the prod reconcile MISS (the primary Vercel token answers
+  402 team-blocked on writes; the fallback 403 — the stored prod pair stands
+  until the operator lifts the block), and the recon notes (R2 + Neon already
+  wired in prod). Dev posture unchanged (the documented degradation). The
+  money gate stays CLOSED (nothing money-shaped touched).

@@ -274,3 +274,53 @@ stays client-fetched from `/api/*`, which keep `force-dynamic` by law.
 - Both prior harvests' identity was never recorded at harvest time; from
   this date the probe output is the record (measured: 2026-10-16 set ==
   `yaslencatty@gmail.com`).
+
+## 2026-11-01 — the Upstash re-supply and the distributed rate-limiting rung (P76)
+
+The operator re-supplied the credential vault (the sandbox vault had died with
+a reset; see the WORKLOG P75/P76 entries). The Upstash REST pair rides the
+station vault at `/home/z/.secrets/webflix.env` (outside every repo, 0600).
+
+What this rung established:
+
+- **The distributed limiter is NOT new code.** `src/lib/youtube/upstash-cache.ts`
+  already carries the full law (INCR+PEXPIRE per-window keys, the 2026-09-30
+  `/pipeline` endpoint shape, fail-open on outage, the fixture stand-down) and
+  every LIVE domain (`opsRateLimit` → `rateLimit` → `rateLimitFixed`) rides it.
+  The cutover lane pins it (`tests/rate-limit-adapter.test.ts`, now +1 pin).
+- **New pin — the empty-env law:** with the vars set to EMPTY STRINGS the
+  limiter must ride the LOCAL fixed window (budgets enforced offline), never
+  the fail-open always-allow. This is what makes the battery lanes
+  deterministic under any future ambient export.
+- **The no-live-network law is now explicit in the scripts:** `test:live` runs
+  as a wrapper (`UPSTASH_REDIS_REST_URL= UPSTASH_REDIS_REST_TOKEN= bun run
+  test:live-lanes`) so the WHOLE fifteen-lane chain inherits the cleared vars;
+  `test:cutover` carries the same prefix. Tests never touch the real Redis.
+- **Verification tool:** `bun run verify:ratelimit`
+  (`scripts/verify-distributed-ratelimit.mjs`, committed, reads env, never
+  prints secrets). Two modes: LIVE (PING + budget round trip + TTL + DEL on a
+  unique probe key) and FIXTURE (a local `/pipeline` protocol server proving
+  the REAL `envRest()` fetch path + the fail-open law against a refusing
+  endpoint — the sandbox-proof mode). Fixture verdict 2026-11-01: 6/6 checks
+  green. The LIVE verdict is **egress-gated**: this sandbox's DNS allowlist
+  does not resolve `upstash.io` (github/vercel/openrouter/apify resolve;
+  upstash + neon do not) — run the live mode from an egress that can.
+- **Prod reconcile — honest miss (operator-gated):** the project
+  `webflix-2-0` already carries `UPSTASH_REDIS_REST_URL`/`_TOKEN`
+  (production,preview; values stored under Vercel's encrypted envelope and not
+  readable here). Upserting the re-supplied pair failed: the primary token
+  answers **402 — "Team exceeded our fair use limits and has been blocked"**
+  (writes blocked team-wide; reads work), the fallback token answers **403 —
+  Not authorized**. Until the team block is lifted (or a write-scoped token is
+  supplied), prod keeps its stored pair; the fail-open law makes a stale pair
+  degrade to per-instance limiting, not an outage.
+- **Recon note (recorded, unchanged):** the Vercel env also already carries
+  the R2 quartet (`R2_BUCKET/_ACCESS_KEY_ID/_SECRET_ACCESS_KEY/_S3_ENDPOINT`,
+  production,preview) — the "R2 replay storage creds" residual was a
+  sandbox-vault gap, not a prod gap; and `NEON_DATABASE_URL` rides prod for
+  the Postgres variant. Neither was modified by this rung.
+- **Dev posture unchanged (documented degradation):** the dev station keeps
+  running on the in-memory limiter and L1 cache — wiring unreachable creds
+  into dev would buy only fail-open noise. When egress allows, add the pair
+  to `.env.local` (gitignored) and restart; the adapter picks them up with no
+  code change.
