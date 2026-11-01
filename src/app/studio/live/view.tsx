@@ -92,6 +92,7 @@ import {
 import { LiveReplayPanel } from "@/components/live/live-replay-panel";
 import { LiveGoalManager } from "@/components/live/live-goal-manager";
 import { LiveAnnouncementManager } from "@/components/live/live-announcement-manager";
+import { ScreenShareControls } from "@/components/live/live-screen-share";
 import { ReattachCard } from "@/components/live/live-reattach-card";
 import { useLivePresence, useLiveStream } from "@/components/live/use-live-stream";
 import { useLiveClub } from "@/hooks/use-live-club";
@@ -1229,6 +1230,11 @@ function LiveConsole({ room, playback, endFailure, onEnd, cameraId, micId }: Liv
             {/* Phase 4: the host-capture recording sink (ADR-0008). Rendered
                 INSIDE the LiveKitRoom so the bridge can read the local tracks. */}
             <ProgramRecordingControls roomId={room.id} stageRecording={stageRecording} />
+            <Separator />
+            {/* Parity P72-1: the screen-share program source (the display
+                track rides the existing publisher rung; the browser's own
+                denial renders honestly). INSIDE the LiveKitRoom on purpose. */}
+            <ScreenShareControls />
           </CardContent>
         </Card>
       </div>

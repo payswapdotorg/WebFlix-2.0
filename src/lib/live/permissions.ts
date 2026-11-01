@@ -168,6 +168,12 @@ export const ROOM_XP_WEIGHTS = { chat: 2, reaction: 1, gift: 1 } as const;
  * capped at the table's last entry (level 7 = 15000 XP). */
 export const ROOM_LEVELS = [0, 50, 150, 400, 1000, 2500, 6000, 15000] as const;
 
+// ── Parity P72 — broadcast & PK depth (ADR-0012) ──
+/** PK battle duration bounds (seconds) + the default when unspecified. */
+export const PK_DURATION_MIN = 60;
+export const PK_DURATION_MAX = 600;
+export const PK_DURATION_DEFAULT = 120;
+
 export const RATE_LIMITS = {
   chat: { limit: 8, windowMs: 10_000 },
   reactions: { limit: 12, windowMs: 10_000 },
@@ -206,6 +212,8 @@ export const RATE_LIMITS = {
   // ── Parity P71 — pins + announcements management ──
   pinManage: { limit: 20, windowMs: 60_000 },
   announcementManage: { limit: 20, windowMs: 60_000 },
+  // ── Parity P72 — PK battle management (open/cancel; reads are free) ──
+  pkManage: { limit: 6, windowMs: 60_000 },
 } as const;
 
 /** Host and granted moderators share the moderation capability set. */

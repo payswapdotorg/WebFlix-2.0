@@ -396,7 +396,9 @@ export type LiveStreamEventKind =
   /** Parity P70 (additive): LIVE goal create/progress/reached/close. */
   | "goal"
   /** Parity P71 (additive): the room's pinned message (set/cleared). */
-  | "pin";
+  | "pin"
+  /** Parity P72 (additive): cross-room PK battle state. */
+  | "pk";
 
 export type LiveStreamEvent =
   | { kind: "chat"; eventId: string; at: string; message: LiveChatMessageDto }
@@ -418,7 +420,8 @@ export type LiveStreamEvent =
   | { kind: "goal"; eventId: string; at: string; goal: LiveGoalDto }
   /** Parity P71: a null pin means the pin was cleared (the room's banner
    * unmounts); the body/author resolve at read time. */
-  | { kind: "pin"; eventId: string; at: string; pin: LivePinnedMessageDto | null };
+  | { kind: "pin"; eventId: string; at: string; pin: LivePinnedMessageDto | null }
+  | { kind: "pk"; eventId: string; at: string; battle: LivePkBattleDto };
 
 /** Parity P71 — the room's ONE pinned message as the room renders it. */
 export interface LivePinnedMessageDto {
@@ -432,6 +435,56 @@ export interface LivePinnedMessageDto {
   pinnedByHandle: string;
   pinnedByName: string;
   pinnedAt: string;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// WFX2-LIVE-PLATFORM-1 Parity P72 — cross-room PK battles (ADR-0012).
+// Side scores are DERIVED at read time from each room's durable rows since
+// startsAt (reaction batch counts + gift credits — the derivation law);
+// only the final/MVP snapshots are ever stored. MVP = the winning side's
+// top contributor by reaction+gift sums (the report's own attribution).
+// ═══════════════════════════════════════════════════════════════════
+
+export type LivePkStatus = "open" | "active" | "final" | "cancelled";
+
+export interface LivePkSideDto {
+  roomId: string;
+  hostHandle: string;
+  hostName: string;
+  title: string;
+  /** The side's DERIVED score (reactions + gift credits since startsAt). */
+  score: number;
+}
+
+export interface LivePkMvpDto {
+  userId: string;
+  handle: string;
+  displayName: string;
+  points: number;
+  side: "a" | "b";
+}
+
+/** The battle as each room renders it. serverNow anchors the countdown. */
+export interface LivePkBattleDto {
+  id: string;
+  status: LivePkStatus;
+  sideA: LivePkSideDto | null;
+  /** null while the challenge is still OPEN (no opponent paired yet). */
+  sideB: LivePkSideDto | null;
+  /** The calling room's side in an ACTIVE/final battle. */
+  mySide: "a" | "b" | null;
+  startsAt: string;
+  endsAt: string;
+  finalizedAt: string | null;
+  winnerSide: "a" | "b" | null;
+  mvp: LivePkMvpDto | null;
+  durationSeconds: number;
+  serverNow: string;
+}
+
+/** POST /api/live-rooms/[id]/pk body — host-only. */
+export interface CreateLivePkInput {
+  durationSeconds?: number;
 }
 
 /** GET /api/live-rooms/[id]/stream query params (the resume contract). */

@@ -1154,3 +1154,49 @@ model LivePinnedMessage {
 
   @@index([roomId])
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// WFX2-LIVE-PLATFORM-1 Parity P72 — cross-room PK battles (the TikTok-
+// parity layer, ADR-0012). A host OPENs a challenge; the matchmaking read
+// pairs the OLDEST other-host open challenge → active with endsAt. SIDE
+// SCORE IS DERIVED (ADR-0008/0009): each side's durable rows since
+// startsAt (reaction batch counts + gift credits) — never stored, never
+// claimed. Lazy finalize on read past endsAt stamps the final snapshots
+// + winner + MVP; cancel banks NOTHING (pure derivation = zero residue).
+// roomAId/roomBId are bare room ids (the interaction-row law — no FK).
+// status: "open" | "active" | "final" | "cancelled". winnerSide:
+// "a" | "b" | null.
+model LivePkBattle {
+  id           String    @id @default(cuid())
+  roomAId      String
+  roomBId      String?
+  status       String    @default("open")
+  startsAt     DateTime
+  endsAt       DateTime
+  finalizedAt  DateTime?
+  winnerSide   String?
+  durationSec  Int
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([status, startsAt])
+  @@index([roomAId])
+  @@index([roomBId])
+}
+
+// The FINAL/MVP snapshot rows — written ONCE at lazy finalize (the only
+// battle facts that are ever stored; everything live is derived).
+// kind: "final" | "mvp". side: "a" | "b" ("a" on the mvp row's side
+// discriminator is meaningless — mvp rows carry the user's side in
+// `side` too, so the banner can attribute honestly).
+model LivePkScoreSnapshot {
+  id        String   @id @default(cuid())
+  battleId  String
+  side      String   // "a" | "b"
+  kind      String   // "final" | "mvp"
+  amount    Int
+  userId    String?  // the mvp row's contributor (null on final rows)
+  takenAt   DateTime @default(now())
+
+  @@index([battleId])
+}
