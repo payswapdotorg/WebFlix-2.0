@@ -324,3 +324,20 @@ What this rung established:
   into dev would buy only fail-open noise. When egress allows, add the pair
   to `.env.local` (gitignored) and restart; the adapter picks them up with no
   code change.
+
+## 2026-11-01 (later) — P77: the upsert LANDED on retry (the block lifted for env writes)
+
+The P77 fresh-sandbox retry PATCHed BOTH Upstash vars successfully
+(HTTP 200 on `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`,
+project `prj_QY8FWgOOcEHAXnkpeyqBFidsHlhj`) — the team fair-use block has
+LIFTED for **env writes**. The re-supplied pair now rides prod's encrypted
+envelope.
+
+The nuance that stays: **resource creation is still team-blocked** —
+`POST /v13/deployments` answers 402 `resource_creation_blocked`. Prod
+therefore still runs the Phase 4-OPS-era deployment with the OLD stored pair
+until the first successful deploy; the new pair (and main @ 9eaefd3) activate
+then. The fail-open law keeps the interim safe (a stale pair degrades to
+per-instance limiting, never an outage). The one-liner when the block lifts:
+`POST /v13/deployments {"name":"webflix-2-0","target":"production",
+"gitSource":{"type":"github","repoId":1393882125,"ref":"main"}}`.

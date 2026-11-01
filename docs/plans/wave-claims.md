@@ -736,3 +736,37 @@ re-runs gates → merges.
   until the operator lifts the block), and the recon notes (R2 + Neon already
   wired in prod). Dev posture unchanged (the documented degradation). The
   money gate stays CLOSED (nothing money-shaped touched).
+
+## 2026-11-01 — WFX2-LIVE-PLATFORM-1 P77 (the P76-residual retry on a fresh sandbox) claim
+
+| Wave | Lane | Lead | Claimed (UTC) | Base | Status |
+|---|---|---|---|---|---|
+| P77 / residual-retry | The twentieth "go" landed on a RESET sandbox; resurrection + the fresh-sandbox re-trial of P76's two gated verdicts — the Vercel prod upsert LANDED (200/200), the live Upstash verdict re-measured and still egress-walled | Z.ai Code (TL, issue #2) | 2026-11-01 17:06 | main @ 9eaefd3 | **LANED** (tsc 0; battery 446/0 across ALL FIFTEEN lanes re-run foreground; fixture verdict 6/6; browser / + /live clean, mobile-375 overflow 0; env upsert 200/200 — the deploy trigger stays 402 team-blocked) |
+
+- Scope: NO product change. The sandbox reset killed the repo clone AND the vault;
+  both resurrected first (origin re-clone at 9eaefd3; the vault rebuilt at
+  /home/z/.secrets/webflix.env 0600 from the operator's standing instruction).
+  Station: deps 886, db pushed, :3000 200, livekit-server 1.9.11 reinstalled
+  (the release asset is livekit_1.9.11_linux_amd64.tar.gz — the -server- name
+  404s) on :7880. Gates re-proven: tsc 0; the FULL fifteen-lane battery
+  446 pass / 0 fail (lane summaries: 2/27/89/91/27/20/77/36/15/13/8/11/11/8/11)
+  — run lane-by-lane in the FOREGROUND after two detached background runs were
+  killed by the sandbox mid-first-lane (the honest operational note: this
+  sandbox culls detached long jobs; `bun run dev` survived, backgrounded test
+  chains did not). verify:ratelimit fixture verdict 6/6 (0 fails).
+- THE P76 RETRIALS: (1) fresh-sandbox egress probe — upstash.io AND
+  api.neon.tech still HTTP:000 (the DNS allowlist persists; github/vercel/
+  openrouter resolve) ⇒ the LIVE Upstash PING verdict remains egress-gated,
+  re-measured and honestly recorded, not faked. (2) the Vercel prod upsert
+  RETRIED — the team block has LIFTED for env writes: both
+  UPSTASH_REDIS_REST_URL and _TOKEN PATCHed 200 on
+  prj_QY8FWgOOcEHAXnkpeyqBFidsHlhj (fresh updatedAt stamps) ⇒ the re-supplied
+  pair now rides prod's encrypted envelope. (3) the production deploy that
+  would ACTIVATE the pair (and sync main @ 9eaefd3 → prod, which sits at the
+  Phase 4-OPS era) POSTed 402 "resource_creation_blocked — Team exceeded our
+  fair use limits" — resource creation stays team-blocked even though env
+  writes pass; the pair activates on the first successful deploy, whenever the
+  operator lifts the block. The fail-open law keeps prod safe in the interim.
+- The money gate stays CLOSED. Remaining operator-gated residuals unchanged:
+  the deploy block (above), the live Upstash PING (egress), LIVEKIT egress
+  metering + billing API, the real-traffic retention sweep.
