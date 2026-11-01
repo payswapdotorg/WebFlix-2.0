@@ -1,0 +1,145 @@
+{
+  "startedAt": "2026-11-01T09:21:10.858Z",
+  "steps": [
+    {
+      "step": 0,
+      "name": "preflight",
+      "value": "stale live rooms ended (if any)"
+    },
+    {
+      "step": 1,
+      "name": "hostGoLive",
+      "value": "cmvxmezg5000kq95j7qdla81h"
+    },
+    {
+      "step": 1,
+      "name": "rivalGoLive",
+      "value": "cmvxmf5nw000tq95j7ulkjys1"
+    },
+    {
+      "step": 2,
+      "name": "openA",
+      "value": {
+        "status": "open"
+      }
+    },
+    {
+      "step": 2,
+      "name": "openAState",
+      "value": "open"
+    },
+    {
+      "step": 2,
+      "name": "openB",
+      "value": {
+        "status": 200,
+        "battle": "active",
+        "mySide": "b",
+        "sideATitle": "PK Station — Host A"
+      }
+    },
+    {
+      "step": 3,
+      "name": "hostBannerActive",
+      "value": {
+        "countdown": "1:00 left"
+      }
+    },
+    {
+      "step": 3,
+      "name": "rivalBannerActive",
+      "value": {
+        "countdown": "1:00 left"
+      }
+    },
+    {
+      "step": 4,
+      "name": "rivalHeartsBurst",
+      "value": "70 taps"
+    },
+    {
+      "step": 4,
+      "name": "hostHearts",
+      "value": 200
+    },
+    {
+      "step": 4,
+      "name": "scoresDuringActive",
+      "value": {
+        "a": 7,
+        "b": 39
+      }
+    },
+    {
+      "step": 5,
+      "name": "backdatedBattle",
+      "value": "cmvxmfc3h0010q95jfookcg2v"
+    },
+    {
+      "step": 5,
+      "name": "hostFinalLine",
+      "value": "Final — side b wins. MVP: Parity Viewer (45 pts)."
+    },
+    {
+      "step": 5,
+      "name": "rivalFinalLine",
+      "value": "Final — side b wins. MVP: Parity Viewer (45 pts)."
+    },
+    {
+      "step": 5,
+      "name": "mvpLineRendered",
+      "value": true
+    },
+    {
+      "step": 6,
+      "name": "dbFacts",
+      "value": {
+        "battle": {
+          "id": "cmvxmfc3h0010q95jfookcg2v",
+          "status": "final",
+          "roomAId": "cmvxmezg5000kq95j7qdla81h",
+          "roomBId": "cmvxmf5nw000tq95j7ulkjys1",
+          "winnerSide": "b",
+          "finalizedAt": "2026-11-01T09:22:29.343Z"
+        },
+        "finalSnapshots": [
+          {
+            "side": "a",
+            "amount": 7
+          },
+          {
+            "side": "b",
+            "amount": 45
+          }
+        ],
+        "mvpSnapshot": [
+          {
+            "side": "b",
+            "userId": "wf-u_parity_viewer",
+            "amount": 45
+          }
+        ]
+      }
+    },
+    {
+      "step": 6,
+      "name": "snapshotCountsLaw",
+      "value": {
+        "finalRows": 2,
+        "mvpRows": 1,
+        "expected": "exactly 2 final (side a + side b) + 1 mvp"
+      }
+    },
+    {
+      "step": 7,
+      "name": "bothEnded",
+      "value": true
+    }
+  ],
+  "errors": [],
+  "finishedAt": "2026-11-01T09:23:26.798Z",
+  "consoleErrors": {
+    "count": 0,
+    "sample": []
+  }
+}

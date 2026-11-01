@@ -204,9 +204,20 @@ async function lazyFinalize(battle: LivePkBattle): Promise<LivePkBattle> {
   ]);
   const winnerSide: "a" | "b" | null =
     scoreA === scoreB ? null : scoreA > scoreB ? "a" : "b";
-  const finalized = await db.livePkBattle.update({
-    where: { id: battle.id },
+  // THE SETTLE-CLAIM LAW (found BY the two-host acceptance: three concurrent
+  // readers — both consoles reloading + the stream tail — raced the naive
+  // update and tripled the snapshot rows). The conditional updateMany claims
+  // the settle ATOMICALLY: exactly ONE caller (count === 1) writes the
+  // snapshots; everyone else re-reads the settled row.
+  const claimed = await db.livePkBattle.updateMany({
+    where: { id: battle.id, status: "active" },
     data: { status: "final", finalizedAt: new Date(), winnerSide },
+  });
+  if (claimed.count === 0) {
+    return db.livePkBattle.findUniqueOrThrow({ where: { id: battle.id } });
+  }
+  const finalized = await db.livePkBattle.findUniqueOrThrow({
+    where: { id: battle.id },
   });
   const mvp = winnerSide
     ? await deriveMvp(

@@ -1705,3 +1705,19 @@ Stage Summary:
 - ALL 12 suggestions in the parity report are IMPLEMENTED, battery-pinned (446/0) and browser-verified; the audit → research → report → implement mandate is complete end to end.
 - ADR-0012 + docs/plans/wfx2-live-phase-parity-contracts.md freeze the parity layer; the report §6 record is filled per wave.
 - Gated: the money gate (legal/compliance/payment/KYC), the operator credentials for the push + the issue comment, and the pre-existing operator residuals (R2 replay storage, egress metering, real-traffic retention sweep).
+
+---
+Task ID: WFX2-LIVE-PARITY-P72-TWO-HOST
+Agent: Z.ai Code (webflix-2.0 lane — TL, issue #2)
+Task: the eighteenth "go" landed with the parity mandate already complete (P70–P73 LANED at f93fc16). The honest ungated residual was the wave-4 acceptance's own recorded gap: the two-browser PK drive covered OPEN + CANCEL only — the pairing, the ACTIVE battle, the lazy finalize and the MVP banner had never run in real browsers. This rung closes it AND ships a real product fix it surfaced.
+
+Work Log:
+- STATE RECONCILED: local main f93fc16 (7 ahead of origin), tree clean, no credential (the vault is still dead — the push residual stands). App :3000 + livekit :7880 healthy. No product drift since the last entry.
+- TWO-HOST PK ACCEPTANCE (scripts/pk-two-host-acceptance.mjs, three real Chromium contexts — host A, rival C, viewer B, fake camera/mic, the repo's own cookie mint): the preflight honestly ends any stale live room (a previous fatal run had left one — the studio honestly showed the ReattachCard instead of the go-live form, exactly the P68 law) → BOTH hosts go live → host A opens a challenge (waits, status open) → the rival opens → THE PAIRING (oldest-first matchmaking) → BOTH consoles render the ACTIVE banner with sides + mySide + a live countdown (1:00 left) → the viewer floods the rival room (70-tap burst through the 400ms batcher) while host A banks 7 hearts → the DERIVED SCORES read live during the battle (a=7, b=39..47 across runs) → the window is backdated (the battery's own law) → both consoles RE-ATTACH (the P68 card) → BOTH banners render the FINAL line: "Final — side b wins. MVP: Parity Viewer (45 pts)." → both streams end honestly. DB facts: battle final (winnerSide b, finalizedAt stamped); EXACTLY 2 final snapshots (a=7, b=45) + 1 MVP row (side b, viewer, 45). Evidence: evidence/wfx2-live-platform-1-parity-p70-p73/ + 4 screenshots (19–22) + pk-two-host-facts.json.
+- REAL BUG FOUND BY THE ACCEPTANCE: the first run's DB held THREE copies of the final/MVP snapshots — three concurrent readers (both consoles reloading + the stream tail's new pk floor) raced the naive lazy-finalize update and each wrote the snapshots. THE SETTLE-CLAIM LAW fixes it in pk.ts: the conditional updateMany claims the settle atomically (WHERE status = "active"); only the claimant (count === 1) writes the snapshots, everyone else re-reads the settled row. The battery's own idempotency pin (serial re-reads) never caught it — the concurrency was acceptance-only. pk battery re-green; FULL battery 446/0 twice after the fix; tsc 0.
+- GATES: tsc 0; eslint untouched-clean; battery 446/446 ×2; the dev server restarted clean on :3000 after the run.
+- HONEST RESIDUALS (unchanged): the push (origin/main 9e1ece6 vs local main 7+1 commits ahead) and the issue #2 delivery comment await the operator credential re-supply; the money gate stays CLOSED.
+
+Stage Summary:
+- The wave-4 acceptance's recorded honest gap is CLOSED: the cross-room PK battle is now browser-verified END TO END — pair → active (both rooms) → derived scores → finalize → the winner + MVP banner on both consoles — with the snapshot store provably race-free.
+- The acceptance earned its keep: it caught a concurrency bug the battery could not see, and the fix is a stronger law (the settle-claim) documented in pk.ts.
