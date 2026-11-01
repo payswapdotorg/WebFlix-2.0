@@ -1,0 +1,276 @@
+{
+  "startedAt": "2026-11-01T09:00:16.355Z",
+  "steps": [
+    {
+      "step": 0,
+      "name": "clubCreate",
+      "value": {
+        "status": 409,
+        "body": {
+          "error": "conflict",
+          "message": "one club per creator"
+        }
+      }
+    },
+    {
+      "step": 0,
+      "name": "clubJoin",
+      "value": {
+        "status": 200,
+        "body": {
+          "ok": true
+        }
+      }
+    },
+    {
+      "step": 1,
+      "name": "deviceTest",
+      "value": "go-live-preview-video visible"
+    },
+    {
+      "step": 1,
+      "name": "goLive",
+      "value": "live-console visible"
+    },
+    {
+      "step": 1,
+      "name": "roomId",
+      "value": "cmvxlnmfd008fq93b2jiog1pz"
+    },
+    {
+      "step": 2,
+      "name": "discovery",
+      "value": "live-badge visible"
+    },
+    {
+      "step": 2,
+      "name": "trendingBeforeEngagement",
+      "value": {
+        "shelfRendered": true
+      }
+    },
+    {
+      "step": 3,
+      "name": "viewerRoom",
+      "value": "live-room-viewer visible"
+    },
+    {
+      "step": 3,
+      "name": "goalEmptyState",
+      "value": "goal-empty visible"
+    },
+    {
+      "step": 4,
+      "name": "goalCreate",
+      "value": 201
+    },
+    {
+      "step": 4,
+      "name": "goalCardOpen",
+      "value": "goal-card visible via the goal envelope"
+    },
+    {
+      "step": 5,
+      "name": "heartsTapped",
+      "value": 8
+    },
+    {
+      "step": 5,
+      "name": "goalReached",
+      "value": "goal-reached-badge + celebration visible"
+    },
+    {
+      "step": 6,
+      "name": "comboSends",
+      "value": [
+        200,
+        200
+      ]
+    },
+    {
+      "step": 6,
+      "name": "comboCounts",
+      "value": [
+        1,
+        2
+      ]
+    },
+    {
+      "step": 6,
+      "name": "comboChipRendered",
+      "value": "gift-combo-chip visible"
+    },
+    {
+      "step": 7,
+      "name": "topSupporters",
+      "value": "top-supporters-list visible"
+    },
+    {
+      "step": 8,
+      "name": "roomLevelChip",
+      "value": "chat-room-level visible"
+    },
+    {
+      "step": 9,
+      "name": "chatMessageFound",
+      "value": true
+    },
+    {
+      "step": 9,
+      "name": "pin",
+      "value": 200
+    },
+    {
+      "step": 9,
+      "name": "pinnedBanner",
+      "value": "chat-pinned-banner visible"
+    },
+    {
+      "step": 10,
+      "name": "announcement",
+      "value": 200
+    },
+    {
+      "step": 10,
+      "name": "announcementBanner",
+      "value": "room-announcement visible"
+    },
+    {
+      "step": 11,
+      "name": "screenShareOutcome",
+      "value": "sharing"
+    },
+    {
+      "step": 11,
+      "name": "screenShareRestored",
+      "value": "stop → the share control is back"
+    },
+    {
+      "step": 12,
+      "name": "keywordAdded",
+      "value": "spamword in keyword-list"
+    },
+    {
+      "step": 12,
+      "name": "flaggedRendered",
+      "value": "flagged by the room's keyword filter — edit your message and try again."
+    },
+    {
+      "step": 12,
+      "name": "linkProbeOff",
+      "value": 200
+    },
+    {
+      "step": 12,
+      "name": "blockLinksOn",
+      "value": 200
+    },
+    {
+      "step": 12,
+      "name": "linkProbeOn",
+      "value": {
+        "status": 422,
+        "body": {
+          "error": "flagged",
+          "message": "links are blocked in this room"
+        }
+      }
+    },
+    {
+      "step": 12,
+      "name": "blockLinksOff",
+      "value": 200
+    },
+    {
+      "step": 13,
+      "name": "pkOpen",
+      "value": {
+        "status": 200,
+        "battleStatus": "open"
+      }
+    },
+    {
+      "step": 13,
+      "name": "pkBannerOpen",
+      "value": "pk-open visible on the viewer"
+    },
+    {
+      "step": 13,
+      "name": "pkCancel",
+      "value": {
+        "status": 200,
+        "battleStatus": "cancelled"
+      }
+    },
+    {
+      "step": 14,
+      "name": "trendingAfterEngagement",
+      "value": "live-trending visible"
+    },
+    {
+      "step": 15,
+      "name": "bellGoLiveRow",
+      "value": "the 'Parity Host is live' row rendered"
+    },
+    {
+      "step": 15,
+      "name": "notificationApiRow",
+      "value": {
+        "kind": "live",
+        "liveRoomId": "cmvxlnmfd008fq93b2jiog1pz"
+      }
+    },
+    {
+      "step": 16,
+      "name": "mobile375OverflowPx",
+      "value": 0
+    },
+    {
+      "step": 17,
+      "name": "ended",
+      "value": "live-ended-summary visible"
+    },
+    {
+      "step": 18,
+      "name": "dbFacts",
+      "value": {
+        "roomStatus": "ended",
+        "goal": {
+          "kind": "hearts",
+          "target": 6,
+          "status": "reached",
+          "reachedAt": "2026-11-01T09:00:43.898Z"
+        },
+        "pin": {
+          "messageId": "cmvxlovzx00ajq93b8vtygm25"
+        },
+        "announcement": {
+          "body": "Parity wave announcement — welcome to the station.",
+          "updatedAt": "2026-11-01T09:01:20.726Z"
+        },
+        "keywords": [
+          "spamword"
+        ],
+        "notifications": 1,
+        "pk": {
+          "status": "cancelled",
+          "winnerSide": null
+        },
+        "ledgerKinds": [
+          "pin",
+          "keyword-add",
+          "keyword-add"
+        ]
+      }
+    },
+    {
+      "step": 19,
+      "name": "consoleErrors",
+      "value": {
+        "host": [],
+        "viewer": []
+      }
+    }
+  ],
+  "finishedAt": "2026-11-01T09:01:40.000Z"
+}

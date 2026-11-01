@@ -7,6 +7,7 @@ import { connectedViewerCount } from "@/lib/live/presence";
 import { stageFor } from "@/lib/live/guests";
 import { currentMatch } from "@/lib/live/matches";
 import { giftFeed } from "@/lib/live/gifts";
+import { currentBattle } from "@/lib/live/pk";
 import { subscribeLiveRoom } from "@/lib/live/hub";
 import { db } from "@/lib/db";
 import type {
@@ -112,6 +113,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       let lastStageStamp = "";
       let lastMatchStamp = "";
       let lastGiftKey = "";
+      let lastPkStamp = "";
       const seenHubEvents = new Set<string>();
 
       const write = (chunk: string): void => {
@@ -261,6 +263,37 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
             lastMatchStamp = matchStamp;
             if (match) {
               send({ kind: "match", eventId: newEventId(), at: new Date().toISOString(), match });
+            }
+          }
+        }
+        // Parity P72 tail floor: the room's battle state + its DERIVED side
+        // scores re-derive from durable rows so multi-instance deployments
+        // converge within one tick (the hub fast path stays instant; the
+        // ADR-0006 single-instance ceiling extends verbatim to PK).
+        const pkRow = await db.livePkBattle.findFirst({
+          where: { OR: [{ roomAId: id }, { roomBId: id }] },
+          orderBy: { createdAt: "desc" },
+        });
+        if (pkRow && pkRow.status !== "open") {
+          const battle = await currentBattle(id);
+          if (battle) {
+            const pkStamp = `${battle.id}|${battle.status}|${battle.winnerSide ?? ""}|${battle.sideA?.score ?? 0}|${battle.sideB?.score ?? 0}`;
+            if (pkStamp !== lastPkStamp) {
+              lastPkStamp = pkStamp;
+              send({ kind: "pk", eventId: newEventId(), at: new Date().toISOString(), battle });
+            }
+          }
+        } else if (!pkRow || pkRow.status === "open") {
+          // An open challenge is state-only (no derived scores yet) — send
+          // it once so late tail subscribers learn the challenge exists.
+          const pkStamp = pkRow ? `${pkRow.id}|open` : "";
+          if (pkStamp !== lastPkStamp) {
+            lastPkStamp = pkStamp;
+            if (pkRow) {
+              const battle = await currentBattle(id);
+              if (battle) {
+                send({ kind: "pk", eventId: newEventId(), at: new Date().toISOString(), battle });
+              }
             }
           }
         }

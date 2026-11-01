@@ -35,6 +35,7 @@ import { LiveGiftPanel } from "@/components/live/live-gift-panel";
 import { LiveClubPanel } from "@/components/live/live-club-panel";
 import { LiveReplayPanel } from "@/components/live/live-replay-panel";
 import { LiveGoalCard, LiveTopSupporters } from "@/components/live/live-support-shelf";
+import { LivePkBanner } from "@/components/live/live-pk-banner";
 import { useLiveStream } from "@/components/live/use-live-stream";
 import { beaconOps } from "@/lib/live/ops-beacon";
 import { Badge } from "@/components/ui/badge";
@@ -1083,6 +1084,10 @@ export default function ViewerRoomView({ roomId }: { roomId: string }) {
               {/* Parity P70-3: the room's LIVE goal (progress derives server-side;
                   the goal envelope keeps it fresh). */}
               <LiveGoalCard goals={goals} />
+
+              {/* Parity P72: the cross-room PK banner (the pk envelope keeps
+                  it fresh; the lazy finalize runs server-side on read). */}
+              <LivePkBanner roomId={roomId} latestEnvelope={stream.latestEnvelope} />
 
               {/* ── Phase 3 guest surface: the caller's invite/request state ── */}
               {sessionLive &&

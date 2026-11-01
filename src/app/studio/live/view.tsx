@@ -94,6 +94,7 @@ import { LiveGoalManager } from "@/components/live/live-goal-manager";
 import { LiveAnnouncementManager } from "@/components/live/live-announcement-manager";
 import { ScreenShareControls } from "@/components/live/live-screen-share";
 import { LiveKeywordManager } from "@/components/live/live-keyword-manager";
+import { LivePkBanner } from "@/components/live/live-pk-banner";
 import { ReattachCard } from "@/components/live/live-reattach-card";
 import { useLivePresence, useLiveStream } from "@/components/live/use-live-stream";
 import { useLiveClub } from "@/hooks/use-live-club";
@@ -1262,6 +1263,8 @@ function LiveConsole({ room, playback, endFailure, onEnd, cameraId, micId }: Liv
           />
           {/* Parity P70-3: the host's LIVE-goal manager (start/progress/close). */}
           <LiveGoalManager roomId={room.id} latestEnvelope={stream.latestEnvelope} />
+          {/* Parity P72: the PK battle banner (the host's side of the war). */}
+          <LivePkBanner roomId={room.id} latestEnvelope={stream.latestEnvelope} />
           {/* Parity P71-2: the room-announcement setter (the room envelope
               republishes — the viewer banner rides the room DTO). */}
           <LiveAnnouncementManager
