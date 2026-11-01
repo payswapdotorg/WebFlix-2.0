@@ -174,6 +174,18 @@ export const PK_DURATION_MIN = 60;
 export const PK_DURATION_MAX = 600;
 export const PK_DURATION_DEFAULT = 120;
 
+// ── Parity P73 — safety, discovery & retention (ADR-0012) ──
+/** One blocked-keyword clamp (trimmed, lowercased, 1..KEYWORD_MAX). */
+export const KEYWORD_MAX = 60;
+/** Host-defined keywords per room (domain-enforced cap). */
+export const KEYWORDS_PER_ROOM_MAX = 50;
+/** The trending derivation window + shelf size (derived only — no table). */
+export const TRENDING_WINDOW_MS = 24 * 3_600_000;
+export const TRENDING_MAX = 6;
+/** The go-live fan-out cap (oldest-first club members; the honest dedupe
+ * is the (userId, liveRoomId) unique). */
+export const LIVE_NOTIFY_FANOUT_MAX = 200;
+
 export const RATE_LIMITS = {
   chat: { limit: 8, windowMs: 10_000 },
   reactions: { limit: 12, windowMs: 10_000 },
@@ -214,6 +226,8 @@ export const RATE_LIMITS = {
   announcementManage: { limit: 20, windowMs: 60_000 },
   // ── Parity P72 — PK battle management (open/cancel; reads are free) ──
   pkManage: { limit: 6, windowMs: 60_000 },
+  // ── Parity P73 — room keyword CRUD (host/mod; the audited ledger kinds) ──
+  keywordManage: { limit: 30, windowMs: 60_000 },
 } as const;
 
 /** Host and granted moderators share the moderation capability set. */
@@ -338,6 +352,7 @@ export type LiveRoomPolicy = Pick<
   | "guestsEnabled"
   | "giftsEnabled"
   | "membersOnlyChat"
+  | "blockLinks"
 >;
 
 export async function roomPolicyFor(roomId: string): Promise<LiveRoomPolicy | null> {
@@ -353,6 +368,7 @@ export async function roomPolicyFor(roomId: string): Promise<LiveRoomPolicy | nu
       guestsEnabled: true,
       giftsEnabled: true,
       membersOnlyChat: true,
+      blockLinks: true,
     },
   });
 }

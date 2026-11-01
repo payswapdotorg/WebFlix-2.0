@@ -92,6 +92,7 @@ const ACTION_FALLBACK: Record<LiveClubErrorCode, string> = {
   "provider-failed": "WebFlix couldn't complete that — nothing was changed.",
   "rate-limited":
     "You're doing that too fast — wait a moment and retry. Nothing was changed.",
+  flagged: "That was flagged by the room's filters — nothing was changed.",
   network: "Couldn't reach WebFlix — nothing was changed. Check your connection and retry.",
 };
 

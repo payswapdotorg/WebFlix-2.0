@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { Eye, Link2, Radio, RefreshCw, TriangleAlert, Video } from "lucide-react";
+import { Eye, Flame, Link2, Radio, RefreshCw, TriangleAlert, Video } from "lucide-react";
 import { useApi } from "@/hooks/use-api";
 import { useWebFlixSession } from "@/hooks/use-webflix-session";
 import { LiveEventsCard } from "@/components/live/live-events-card";
@@ -163,6 +163,45 @@ function GridShell({ children, testId, busy }: { children: React.ReactNode; test
   );
 }
 
+/**
+ * Parity P73-2 — the TRENDING shelf. Server derivation over the last 24h of
+ * durable rows (engagement = reactions + gift credits + chat), top 6,
+ * ZERO-ENGAGEMENT ROOMS EXCLUDED (the honest empty state — the shelf
+ * renders above the room grid ONLY when there is real signal).
+ */
+function TrendingShelf() {
+  const { data, loading } = useApi<{ rooms: LiveRoomDto[]; windowMs: number }>(
+    "/api/live/trending",
+  );
+  const rooms = data?.rooms ?? [];
+  if (!loading && rooms.length === 0) return null; // the honest empty state
+  return (
+    <section aria-label="Trending live rooms" className="mb-8" data-testid="live-trending">
+      <h2 className="mb-3 flex items-center gap-2 text-base font-semibold">
+        <Flame className="size-4 text-yt-red" aria-hidden /> Trending now
+        <span className="text-xs font-normal text-muted-foreground">
+          real engagement from the last 24 hours — reactions, gifts and chat
+        </span>
+      </h2>
+      {loading ? (
+        <div className="flex gap-4 overflow-hidden">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="aspect-video w-72 shrink-0 rounded-xl" />
+          ))}
+        </div>
+      ) : (
+        <div className="flex gap-4 overflow-x-auto pb-2">
+          {rooms.map((room) => (
+            <div key={room.id} className="w-72 shrink-0">
+              <RoomTile room={room} />
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 /** The honest error copy per API error code (502/429 are real possibilities). */
 function DiscoveryError({ code, onRetry }: { code: string; onRetry: () => void }) {
   const copy =
@@ -249,6 +288,10 @@ export default function LiveDiscoveryView() {
         <div className="mb-6">
           <LiveEventsCard signedIn={user !== null} />
         </div>
+
+        {/* Parity P73-2: the engagement-ranked shelf (renders only with real
+            signal — the honest empty state hides it entirely). */}
+        <TrendingShelf />
 
         {loading && (
           <GridShell testId="live-grid" busy>

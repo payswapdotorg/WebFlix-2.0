@@ -234,7 +234,11 @@ export type LiveHttpResult<T> =
  */
 export async function liveFetch<T>(
   url: string,
-  init: { method?: "GET" | "POST" | "DELETE"; body?: unknown; signal?: AbortSignal } = {},
+  init: {
+    method?: "GET" | "POST" | "DELETE" | "PATCH";
+    body?: unknown;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<LiveHttpResult<T>> {
   try {
     const res = await fetch(url, {

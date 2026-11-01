@@ -56,6 +56,8 @@ export function buildPolicyDto({ room, actor, sanctions, sessionLive, callerIsCl
     guestsEnabled: room.guestsEnabled,
     giftsEnabled: room.giftsEnabled,
     membersOnlyChat: room.membersOnlyChat,
+    // Parity P73: the link-blocking policy rides the caller-scoped DTO.
+    blockLinks: room.blockLinks,
     actorRole: actor.role,
     canChat,
     chatBlockedReason,

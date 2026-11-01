@@ -294,7 +294,15 @@ function CenterRow({
   read: boolean;
   onMarkRead: (id: string) => void;
 }) {
-  const href = n.videoId ? `/watch/${n.videoId}` : n.channel?.handle ? `/channel/${n.channel.handle}` : "#";
+  // Parity P73: the go-live deep link lands IN THE ROOM (the local "live"
+  // rows carry liveRoomId; the broker rows keep their video/channel hrefs).
+  const href = n.liveRoomId
+    ? `/live/${n.liveRoomId}`
+    : n.videoId
+      ? `/watch/${n.videoId}`
+      : n.channel?.handle
+        ? `/channel/${n.channel.handle}`
+        : "#";
   const thumbnail = n.videoId ? n.videoThumbnailUrl : n.channel?.avatarUrl || n.videoThumbnailUrl;
   const channelName = n.channel?.name ?? "";
   const title = channelName ? n.title.replace(channelName, "").trim() : n.title;

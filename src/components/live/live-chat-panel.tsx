@@ -175,6 +175,9 @@ export function LiveChatPanel({
     "banned" | "muted" | "chat-disabled" | null
   >(null);
   const [authLost, setAuthLost] = useState(false);
+  // Parity P73: the honest flagged copy (the room's keyword filter / link
+  // policy refused THIS body) — clears on the next successful send.
+  const [flaggedCopy, setFlaggedCopy] = useState<string | null>(null);
   const [localTombstones, setLocalTombstones] = useState<ReadonlySet<string>>(new Set());
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm>(null);
 
@@ -416,6 +419,7 @@ export function LiveChatPanel({
       // The message arrives via the stream like every other row — the
       // response is deliberately NOT appended (no double render).
       setDraft("");
+      setFlaggedCopy(null);
       return;
     }
     const { failure } = result;
@@ -462,6 +466,14 @@ export function LiveChatPanel({
       toast.error("Your session ended", {
         description: "Sign in again to keep chatting — the message was not sent.",
       });
+      return;
+    }
+    // Parity P73: the honest flagged state — the room's keyword filter (or
+    // link policy) blocked THIS body. The message was NOT sent and NOTHING
+    // was rewritten: the reason renders inline above the composer and the
+    // draft survives so the sender can reword it.
+    if (failure.code === "flagged") {
+      setFlaggedCopy(failure.message ?? "flagged by the room's keyword filter");
       return;
     }
     toastLiveFailure(failure, "The message was not sent.");
@@ -591,6 +603,17 @@ export function LiveChatPanel({
               </Button>
             )}
           </div>
+        )}
+        {/* ── Parity P73: the honest flagged state (the message was NOT
+            sent and NOT rewritten — the reason + the surviving draft) ── */}
+        {flaggedCopy && (
+          <p
+            role="alert"
+            data-testid="chat-flagged"
+            className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+          >
+            {flaggedCopy} — edit your message and try again.
+          </p>
         )}
         {/* ── Message list ── */}
         <div

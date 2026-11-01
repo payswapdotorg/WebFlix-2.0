@@ -91,6 +91,10 @@ export type NotificationDTO = {
   videoId: string | null;
   videoThumbnailUrl: string | null;
   channel: ChannelLite;
+  /** Parity P73 (additive, optional): the go-live deep link — present on
+   * the local "live" rows only; the bell/center prefer /live/[id] over the
+   * video/channel hrefs. */
+  liveRoomId?: string | null;
 };
 
 export type MeDTO = {

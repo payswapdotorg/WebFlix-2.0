@@ -8,6 +8,8 @@ import {
 import { hasSession } from "@/lib/youtube/session";
 import { rateLimit } from "@/lib/youtube/cache";
 import { authRequiredResponse, getSessionUser } from "@/lib/auth/session";
+import { ensureShadowUser } from "@/lib/watch/local-comments";
+import { localLiveNotifications } from "@/lib/notifications/live-merge";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +28,8 @@ export const dynamic = "force-dynamic";
  *             page, pageSize, hasMore }.
  */
 export async function GET(req: Request) {
-  if (!(await getSessionUser(req))) return authRequiredResponse();
+  const sessionUser = await getSessionUser(req);
+  if (!sessionUser) return authRequiredResponse();
   try {
     if (
       !(await rateLimit(`notifications-center:${req.headers.get("x-forwarded-for") ?? "local"}`))
@@ -35,13 +38,26 @@ export async function GET(req: Request) {
     }
     const params = new URL(req.url).searchParams;
     const { page, pageSize } = clampCenterPaging(params.get("page"), params.get("pageSize"));
-    const feed = await getNotificationsFeed();
-    const ordered = orderNotificationsUnreadFirst(feed.items);
+    // Parity P73-3 (additive): the caller's LOCAL unread go-live rows
+    // prepend the broker feed (bounded 10; DB-trouble → broker-feed-only,
+    // the honest fallback inside live-merge.ts).
+    const [feed, local] = await Promise.all([
+      getNotificationsFeed(),
+      (async () => {
+        try {
+          const identity = await ensureShadowUser(sessionUser);
+          return await localLiveNotifications(identity.id);
+        } catch {
+          return [];
+        }
+      })(),
+    ]);
+    const ordered = orderNotificationsUnreadFirst([...local, ...feed.items]);
     const { items, hasMore } = pageNotifications(ordered, page, pageSize);
     return NextResponse.json({
       items,
       total: ordered.length,
-      unread: feed.unread,
+      unread: feed.unread + local.filter((n) => !n.read).length,
       loginRequired: feed.loginRequired,
       pollIntervalMs: feed.pollIntervalMs,
       session: hasSession(),

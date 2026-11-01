@@ -214,6 +214,7 @@ const POLICY: LiveRoomPolicyDto = {
   guestsEnabled: true,
   giftsEnabled: true,
   membersOnlyChat: false,
+  blockLinks: false,
   actorRole: "viewer",
   canChat: true,
   chatBlockedReason: null,

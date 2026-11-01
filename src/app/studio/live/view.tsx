@@ -93,6 +93,7 @@ import { LiveReplayPanel } from "@/components/live/live-replay-panel";
 import { LiveGoalManager } from "@/components/live/live-goal-manager";
 import { LiveAnnouncementManager } from "@/components/live/live-announcement-manager";
 import { ScreenShareControls } from "@/components/live/live-screen-share";
+import { LiveKeywordManager } from "@/components/live/live-keyword-manager";
 import { ReattachCard } from "@/components/live/live-reattach-card";
 import { useLivePresence, useLiveStream } from "@/components/live/use-live-stream";
 import { useLiveClub } from "@/hooks/use-live-club";
@@ -1110,6 +1111,7 @@ function LiveConsole({ room, playback, endFailure, onEnd, cameraId, micId }: Liv
     guestsEnabled: true,
     giftsEnabled: true,
     membersOnlyChat,
+    blockLinks: false,
     actorRole: "host",
     canChat: true,
     chatBlockedReason: null,
@@ -1269,6 +1271,8 @@ function LiveConsole({ room, playback, endFailure, onEnd, cameraId, micId }: Liv
               updatedAt: room.announcementUpdatedAt ?? null,
             }}
           />
+          {/* Parity P73-1: the chat filters (blocked keywords + link policy). */}
+          <LiveKeywordManager roomId={room.id} />
           <HostPolicyControls
             roomId={room.id}
             chatEnabled={chatEnabled}

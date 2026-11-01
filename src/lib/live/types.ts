@@ -138,7 +138,9 @@ export type LiveApiError = {
     | "conflict"
     | "provider-not-configured"
     | "provider-failed"
-    | "rate-limited";
+    | "rate-limited"
+    /** Parity P73 (additive): the room's keyword filter flagged the body. */
+    | "flagged";
   message?: string;
 };
 
@@ -218,6 +220,9 @@ export interface LiveRoomPolicyDto {
   /** Phase 5 (additive): members-only chat — club members of the room
    * host may chat; everyone else receives the honest blocked reason. */
   membersOnlyChat: boolean;
+  /** Parity P73 (additive): the host's link-blocking policy (the composer
+   * explains the honest flagged state when a send hits 422). */
+  blockLinks: boolean;
   /** The caller's effective role for this room. */
   actorRole: "host" | "moderator" | "guest" | "viewer" | "anonymous";
   /** Whether the CALLER may chat right now (policy + sanctions combined). */
@@ -254,7 +259,10 @@ export type LiveModerationActionKind =
   /** Parity P71 (additive): the pin ledger (the row IS the pin; the
    * audit trail records intent exactly like every other action). */
   | "pin"
-  | "unpin";
+  | "unpin"
+  /** Parity P73 (additive): the room keyword-filter ledger. */
+  | "keyword-add"
+  | "keyword-remove";
 
 /** One audited moderation decision. Rows are immutable (append-only). */
 export interface LiveModerationActionDto {
@@ -485,6 +493,29 @@ export interface LivePkBattleDto {
 /** POST /api/live-rooms/[id]/pk body — host-only. */
 export interface CreateLivePkInput {
   durationSeconds?: number;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// WFX2-LIVE-PLATFORM-1 Parity P73 — safety, discovery & retention
+// (ADR-0012). The keyword filter is STAFF-VISIBLE; enforcement answers the
+// honest 422 flagged (nobody's message is rewritten). Trending is a
+// read-time derivation (no table). The go-live notification reuses the
+// orphaned Notification model (additive kind "live" + liveRoomId).
+// ═══════════════════════════════════════════════════════════════════
+
+/** One host-defined blocked keyword (stored lowercase; matched as a
+ * case-insensitive substring). */
+export interface LiveRoomKeywordDto {
+  id: string;
+  roomId: string;
+  pattern: string;
+  createdAt: string;
+}
+
+/** GET /api/live-rooms/[id]/keywords — the staff-visible filter state. */
+export interface LiveRoomKeywordsDto {
+  blockLinks: boolean;
+  keywords: LiveRoomKeywordDto[];
 }
 
 /** GET /api/live-rooms/[id]/stream query params (the resume contract). */

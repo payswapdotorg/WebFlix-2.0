@@ -22,7 +22,7 @@ import type { LiveProviderAdapter } from "./provider";
 import {
   liveProviderConfig,
 } from "./config";
-import { CLUB_POINTS_WATCH, PRESENCE_WINDOW_MS } from "./permissions";
+import { CLUB_POINTS_WATCH, PRESENCE_WINDOW_MS, TRENDING_MAX, TRENDING_WINDOW_MS } from "./permissions";
 import type {
   CreateLiveRoomInput,
   LivePlaybackPlan,
@@ -106,7 +106,10 @@ export class LiveDomainError extends Error {
       | "conflict"
       | "provider-not-configured"
       | "provider-failed"
-      | "rate-limited",
+      | "rate-limited"
+      /** Parity P73 (additive): the room's keyword filter flagged the body —
+       * the honest 422, never a silent rewrite or shadow-hide. */
+      | "flagged",
     message?: string,
   ) {
     super(message ?? code);
@@ -289,6 +292,64 @@ export async function listRooms(opts: {
 }
 
 /**
+ * Parity P73-2 — the TRENDING shelf (ADR-0012). A read-time derivation over
+ * the last TRENDING_WINDOW_MS (24h) of durable rows: engagement = Σ reaction
+ * counts + Σ gift credits + COUNT(non-tombstoned chat) per LIVE public room;
+ * top TRENDING_MAX (6), ZERO-ENGAGEMENT ROOMS EXCLUDED (the honest empty
+ * state — the shelf renders above the room list only when there is real
+ * signal). Derived only — no table, nothing stored, nothing claimed (the
+ * ADR-0008/0009 law).
+ */
+export async function trendingRooms(
+  sessionUser: WebFlixSessionUser | null,
+): Promise<{ rooms: LiveRoomDto[]; windowMs: number }> {
+  const callerId = sessionUser ? (await resolveLiveIdentity(sessionUser)).id : null;
+  const cutoff = new Date(Date.now() - TRENDING_WINDOW_MS);
+  const candidates = await db.liveRoom.findMany({
+    where: { visibility: "public", status: "live" },
+    include: roomInclude(),
+    orderBy: { createdAt: "desc" },
+    take: 48,
+  });
+  if (candidates.length === 0) return { rooms: [], windowMs: TRENDING_WINDOW_MS };
+  const ids = candidates.map((r) => r.id);
+  const [reactions, gifts, chats] = await Promise.all([
+    db.liveReactionBatch.groupBy({
+      by: ["roomId"],
+      where: { roomId: { in: ids }, createdAt: { gte: cutoff } },
+      _sum: { count: true },
+    }),
+    db.giftEvent.groupBy({
+      by: ["roomId"],
+      where: { roomId: { in: ids }, createdAt: { gte: cutoff } },
+      _sum: { totalCredits: true },
+    }),
+    db.liveRoomMessage.groupBy({
+      by: ["roomId"],
+      where: { roomId: { in: ids }, createdAt: { gte: cutoff }, deletedAt: null },
+      _count: { _all: true },
+    }),
+  ]);
+  const reactionBy = new Map(reactions.map((r) => [r.roomId, r._sum.count ?? 0]));
+  const giftBy = new Map(gifts.map((r) => [r.roomId, r._sum.totalCredits ?? 0]));
+  const chatBy = new Map(chats.map((r) => [r.roomId, r._count._all]));
+  const ranked = candidates
+    .map((r) => ({
+      room: r,
+      engagement:
+        (reactionBy.get(r.id) ?? 0) + (giftBy.get(r.id) ?? 0) + (chatBy.get(r.id) ?? 0),
+    }))
+    .filter((r) => r.engagement > 0)
+    .sort((a, b) => b.engagement - a.engagement)
+    .slice(0, TRENDING_MAX);
+  const counts = await viewerCountsFor(candidates.flatMap((r) => r.sessions.map((s) => s.id)));
+  return {
+    rooms: ranked.map((r) => mapRoom(r.room, counts, callerId)),
+    windowMs: TRENDING_WINDOW_MS,
+  };
+}
+
+/**
  * The caller's ACTIVE live room, if any — the re-attach probe behind
  * GET /api/studio/live-session (P68). Host-scoped by construction: the
  * query joins on the caller's own rooms only, ANY visibility (an unlisted
@@ -383,6 +444,16 @@ export async function startSession(
     create: { sessionId: session.id, userId: identity.id, role: "host", state: "connected" },
     update: { role: "host", state: "connected", lastSeenAt: new Date() },
   });
+  // Parity P73-3 — THE GO-LIVE FAN-OUT (the orphaned Notification model's
+  // first writers): the host's fan-club members hear "<host> is live" with
+  // the room deep link. Best-effort by law — a failure NEVER fails the
+  // go-live; awaited inside the try so the durable rows land by return.
+  try {
+    const { fanOutGoLive } = await import("./notify");
+    await fanOutGoLive(roomId, identity.id);
+  } catch (err) {
+    console.error("live go-live notification fan-out failed", err);
+  }
   return { room: mapRoom(fresh, new Map([[session.id, 0]]), identity.id), playback };
 }
 
@@ -654,6 +725,8 @@ export function liveErrorStatus(code: LiveDomainError["code"]): number {
       return 502;
     case "rate-limited":
       return 429;
+    case "flagged":
+      return 422;
   }
 }
 

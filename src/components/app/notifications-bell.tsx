@@ -170,7 +170,15 @@ export function NotificationsBell() {
 }
 
 function NotificationRow({ notification: n, read }: { notification: NotificationDTO; read: boolean }) {
-  const href = n.videoId ? `/watch/${n.videoId}` : n.channel ? `/channel/${n.channel.handle}` : "#";
+  // Parity P73: the go-live deep link lands IN THE ROOM (the local "live"
+  // rows carry liveRoomId; the broker rows keep their video/channel hrefs).
+  const href = n.liveRoomId
+    ? `/live/${n.liveRoomId}`
+    : n.videoId
+      ? `/watch/${n.videoId}`
+      : n.channel
+        ? `/channel/${n.channel.handle}`
+        : "#";
   return (
     <Link
       href={href}

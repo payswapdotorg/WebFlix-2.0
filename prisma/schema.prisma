@@ -248,20 +248,29 @@ model PlaylistItem {
 model Notification {
   id              String   @id @default(cuid())
   userId          String
-  sourceChannelId String
+  // Parity P73 (additive): nullable — a "live" notification's source is a
+  // LIVE ROOM (liveRoomId), not a YouTube channel; the YouTube-broker rows
+  // keep requiring the channel. Semantics of every other column unchanged.
+  sourceChannelId String?
   // "video" | "live" | "post" | "reply"
   kind            String   @default("video")
   title           String
   body            String
   videoId         String?
+  // Parity P73 (additive): the go-live deep link — one row per (user,
+  // room) is the dedupe law (the honest fan-out: a re-go-live on the same
+  // room never duplicates rows; NULL liveRoomId rows are exempt in SQLite
+  // and Postgres unique indexes).
+  liveRoomId      String?
   read            Boolean  @default(false)
   createdAt       DateTime @default(now())
 
-  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sourceChannel Channel @relation("NotificationSourceChannel", fields: [sourceChannelId], references: [id], onDelete: Cascade)
-  video         Video?  @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceChannel Channel? @relation("NotificationSourceChannel", fields: [sourceChannelId], references: [id], onDelete: Cascade)
+  video         Video?   @relation(fields: [videoId], references: [id], onDelete: Cascade)
 
   @@index([userId, read])
+  @@unique([userId, liveRoomId])
 }
 
 model MembershipTier {
@@ -483,6 +492,9 @@ model LiveRoom {
   // nulling; changes republish the room envelope). Char law: 280.
   announcementBody      String?
   announcementUpdatedAt DateTime?
+  // Parity P73 (additive) — the link-blocking policy (host/mod toggle;
+  // sendChat answers 422 flagged, nobody's message is rewritten).
+  blockLinks Boolean @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -1199,4 +1211,23 @@ model LivePkScoreSnapshot {
   takenAt   DateTime @default(now())
 
   @@index([battleId])
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// WFX2-LIVE-PLATFORM-1 Parity P73 — the room keyword filter (the TikTok-
+// parity layer, ADR-0012). Host/mod-defined blocked keywords (trimmed,
+// lowercased at write; matched case-insensitively as substrings at send).
+// Cap KEYWORDS_PER_ROOM_MAX=50 is domain-enforced (keywords.ts). createdById
+// is a bare id (the interaction-row law — no FK). Enforcement answers the
+// honest 422 flagged — nobody's message is silently rewritten or
+// shadow-hidden (the honesty rule).
+model LiveRoomKeyword {
+  id          String   @id @default(cuid())
+  roomId      String
+  pattern     String
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@unique([roomId, pattern])
+  @@index([roomId])
 }

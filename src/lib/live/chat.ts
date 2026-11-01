@@ -270,6 +270,20 @@ export async function sendChat(
   if (body.length < 1 || body.length > CHAT_BODY_MAX) {
     throw new LiveDomainError("invalid", `body must be 1..${CHAT_BODY_MAX} chars`);
   }
+  // Parity P73 — THE KEYWORD FILTER (the frozen gate order: post-validation,
+  // PRE-INSERT). A body containing any active pattern (case-insensitive
+  // substring) — or ANY URL when the room's blockLinks policy is on —
+  // answers the honest 422 flagged. Nobody's message is silently rewritten
+  // or shadow-hidden (the honesty rule); the composer renders the reason.
+  // The host/mod staff bypass does NOT apply: they wrote the filter.
+  {
+    const { flagForBody, roomPatterns } = await import("./keywords");
+    const patterns = await roomPatterns(roomId);
+    const flag = flagForBody(body, patterns, room.blockLinks);
+    if (flag !== null) {
+      throw new LiveDomainError("flagged", flag);
+    }
+  }
   const clientMessageId =
     typeof input.clientMessageId === "string" ? input.clientMessageId.trim() : "";
   if (clientMessageId.length < 8 || clientMessageId.length > 64) {

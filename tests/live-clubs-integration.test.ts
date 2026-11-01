@@ -257,6 +257,7 @@ describe("membersOnlyChat policy + send gate (policy.ts × chat.ts)", () => {
       guestsEnabled: true,
       giftsEnabled: true,
       membersOnlyChat: true,
+      blockLinks: false,
     };
     const actor = { id: VIEWER_ID, handle: "v", name: "V", role: "viewer" as const };
     const sanctions = { banned: false, mutedUntil: null };
