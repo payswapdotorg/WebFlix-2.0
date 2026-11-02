@@ -819,3 +819,23 @@ re-runs gates → merges.
   clean, horizontal overflow 0px). The money gate stays CLOSED. The
   operator-gated residuals stand unchanged; the ONE action that changes the
   picture remains lifting the Vercel team resource block.
+
+## 2026-11-02 — WFX2-LIVE-PLATFORM-1 P80 (the sixth reset; the drill still holds) claim
+
+| Wave | Lane | Lead | Claimed (UTC) | Base | Status |
+|---|---|---|---|---|---|
+| P80 / resurrection-6 | The twenty-third "go" landed on the SIXTH reset; the drill ran end-to-end: origin @ 689a3f9 (zero loss #6), vault rebuilt, station revived, gates 446/0 ×15 foreground (fifth consecutive exact match), both retrials stable | Z.ai Code (TL, issue #2) | 2026-11-02 (see stamp) | main @ 689a3f9 | **LANED** (tsc 0; fixture 6/6; egress 6/6 walled; deploy 402; browser clean, overflow 0) |
+
+- Scope: NO product change. Sixth reset, sixth zero-loss recovery: origin
+  re-clone @ 689a3f9, vault rebuilt (0600), deps 886, db pushed, :3000 200,
+  livekit 1.9.11 on :7880. Gates: tsc 0; ALL FIFTEEN battery lanes 0 fail
+  foreground (2/27/89/91/27/20/77/36/15/13/8/11/11/8/11 = 446 — fifth
+  consecutive exact match); fixture verdict 6/6 (6 true / 0 false).
+- RETRIALS (stable): the live Upstash PING — upstash.io + api.neon.tech still
+  HTTP:000 (sixth sandbox, sixth identical wall); the Vercel activation
+  deploy — still 402 resource_creation_blocked (env writes allowed, resource
+  creation blocked; the re-supplied pair rides prod's envelope; fail-open
+  keeps the interim safe).
+- Browser: /live honest zero state, console clean, overflow 0px. Money gate
+  CLOSED. Operator-gated residuals unchanged; the ONE lever remains lifting
+  the Vercel team resource block.

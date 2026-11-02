@@ -1821,3 +1821,16 @@ Work Log:
 
 Stage Summary:
 - The five-reset streak is now itself the durability proof: origin + the outside-repo vault law = zero work lost across five resets, with the battery verdict identical every time. All ungated work stays done; the residual shortlist stays operator-gated (the Vercel deploy block, the egress-walled live PING, the money gate, LIVEKIT egress metering, the real-traffic retention sweep).
+---
+Task ID: P80-RESURRECTION-6
+Agent: Z.ai Code (webflix-2.0 lane — TL, issue #2)
+Task: the twenty-third "go" landed on the SIXTH sandbox reset. The drill ran end-to-end; both gated retrials stable.
+
+Work Log:
+- DRILL: origin re-clone @ 689a3f9 (zero loss — sixth consecutive), vault rebuilt (0600), deps 886, db pushed, :3000 200, livekit 1.9.11 on :7880.
+- GATES: tsc 0; battery ALL FIFTEEN lanes 0 fail foreground (446 pass — fifth consecutive exact 446/0 match); fixture 6/6.
+- RETRIALS: Upstash live PING still egress-walled (6/6 sandboxes); activation deploy still 402 resource_creation_blocked.
+- BROWSER: /live honest zero state, console clean, overflow 0px.
+
+Stage Summary:
+- Six resets, six zero-loss recoveries, five identical 446/0 verdicts. The system's durability rests on the push-as-you-go + vault-outside-repo laws — proven six times. All ungated work done and durable; the residual shortlist stays operator-gated (Vercel deploy block, egress PING, money gate, egress metering, retention sweep).
