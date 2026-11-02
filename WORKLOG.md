@@ -1808,3 +1808,16 @@ Work Log:
 Stage Summary:
 - The fourth reset changed nothing: origin held all work, the vault rebuilt in one step, every gate green again, both gated retrials stable. The system's durability now rests on the push-as-you-go law + the vault-outside-repo law — proven by four consecutive zero-loss recoveries.
 - STILL GATED (unchanged): the production deploy (Vercel team resource-creation block — the ONE operator action that would activate the new env pair + sync main @ 2a7736f to prod); the live Upstash PING (sandbox egress); the money gate; LIVEKIT egress metering + billing API; the real-traffic retention sweep.
+---
+Task ID: P79-RESURRECTION-5
+Agent: Z.ai Code (webflix-2.0 lane — TL, issue #2)
+Task: the twenty-second "go" landed on the FIFTH sandbox reset. The rehearsed drill ran end-to-end; both gated retrials re-measured (both stable).
+
+Work Log:
+- DRILL: origin re-clone @ 3236d98 (zero loss — fifth consecutive), vault rebuilt (0600), deps 886, db pushed, :3000 200, livekit 1.9.11 on :7880.
+- GATES: tsc 0; battery ALL FIFTEEN lanes 0 fail foreground (446 pass — fourth consecutive exact 446/0 match); fixture verdict 6/6.
+- RETRIALS: (1) Upstash live PING — upstash.io + api.neon.tech still HTTP:000 on the fifth sandbox (the DNS allowlist is permanent here); (2) the activation deploy — still 402 resource_creation_blocked; the re-supplied pair rides prod's envelope; fail-open keeps the interim safe.
+- BROWSER: /live honest zero state, console clean, overflow 0px.
+
+Stage Summary:
+- The five-reset streak is now itself the durability proof: origin + the outside-repo vault law = zero work lost across five resets, with the battery verdict identical every time. All ungated work stays done; the residual shortlist stays operator-gated (the Vercel deploy block, the egress-walled live PING, the money gate, LIVEKIT egress metering, the real-traffic retention sweep).

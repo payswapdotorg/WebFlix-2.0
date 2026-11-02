@@ -796,3 +796,26 @@ re-runs gates → merges.
   now" / "Nothing is ever faked into this grid"; "No scheduled events yet";
   the {"rooms":[]} API truth behind it), console clean, horizontal overflow
   0px. The money gate stays CLOSED. Operator-gated residuals unchanged.
+
+## 2026-11-02 — WFX2-LIVE-PLATFORM-1 P79 (the fifth reset; the drill holds) claim
+
+| Wave | Lane | Lead | Claimed (UTC) | Base | Status |
+|---|---|---|---|---|---|
+| P79 / resurrection-5 | The twenty-second "go" landed on the FIFTH reset; the drill ran end-to-end again: origin @ 3236d98 (zero loss), vault rebuilt, station revived, gates 446/0 ×15 foreground (fourth consecutive exact match), both retrials stable | Z.ai Code (TL, issue #2) | 2026-11-02 07:26 | main @ 3236d98 | **LANED** (tsc 0; fixture 6/6; egress 5/5 walled; deploy 402; browser /live clean, overflow 0) |
+
+- Scope: NO product change. Fifth reset, fifth zero-loss recovery — origin
+  re-clone @ 3236d98, vault rebuilt (/home/z/.secrets/webflix.env, 0600),
+  deps 886, db pushed, :3000 200, livekit 1.9.11 on :7880. Gates: tsc 0; ALL
+  FIFTEEN battery lanes 0 fail foreground (2/27/89/91/27/20/77/36/15/13/8/11/
+  11/8/11 = 446 — fourth consecutive exact match); verify:ratelimit fixture
+  6/6 (6 true / 0 false).
+- RETRIALS (stable, re-measured): the live Upstash PING — upstash.io +
+  api.neon.tech still HTTP:000 (fifth sandbox, fifth identical wall; the
+  egress verdict is a permanent sandbox property); the Vercel activation
+  deploy — still 402 resource_creation_blocked (env writes allowed, resource
+  creation team-blocked; the re-supplied pair rides prod's envelope awaiting
+  the first successful deploy; fail-open law keeps the interim safe).
+- Browser: /live clean (honest zero state, {"rooms":[]} behind it, console
+  clean, horizontal overflow 0px). The money gate stays CLOSED. The
+  operator-gated residuals stand unchanged; the ONE action that changes the
+  picture remains lifting the Vercel team resource block.
