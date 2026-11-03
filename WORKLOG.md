@@ -1852,3 +1852,16 @@ Stage Summary:
 - Both operator complaints are FIXED at the root: playback continuity now covers every in-SPA player re-creation path (and the account roundtrip no longer kills the player at all), and the home feed reshuffles per navigation with the viewer's own feedback honored — youtube.com's actual behaviors, honestly derived (no fake inventory, no cache fragmentation, no schema change).
 - The purge-sweep law proved its worth in the same rung it was exercised: it caught the db-import cut before it could land. The proxy pattern is the established reconciliation.
 - STILL GATED (unchanged): the production deploy (Vercel team resource block — these fixes go live with it); the live Upstash PING (egress); the money gate; LIVEKIT egress metering; the real-traffic retention sweep.
+---
+Task ID: P82-RESURRECTION-7
+Agent: Z.ai Code (webflix-2.0 lane — TL, issue #2)
+Task: the twenty-fifth "go" landed on the SEVENTH sandbox reset. The drill ran end-to-end from origin @ 349541e (P81 held); all gates re-green on the fresh station; both gated retrials stable; P81's two live proofs re-replicated.
+
+Work Log:
+- DRILL: origin re-clone @ 349541e (zero loss — SEVENTH consecutive; the origin-is-truth law caught a stale continuation summary that claimed P81 "not started" while origin carried the full landed fixes), vault rebuilt (0600, outside the repo), deps installed, db pushed, :3000 200 (ready 662ms), livekit 1.9.11 on :7880 (asset `livekit_1.9.11_linux_amd64.tar.gz`).
+- GATES: tsc 0; battery ALL FIFTEEN lanes 0 fail foreground via the canonical test:live-lanes chain (446 pass — SIXTH consecutive exact 446/0; per-lane 2/27/89/91/27/20/77/36/15/13/8/11/11/8/11 identical); fixture verdict 6/6 ok:true. A head-truncated first battery attempt got SIGPIPE-killed mid-lane — discarded and re-run whole (new micro-law: capture to a file, count afterwards).
+- RETRIALS: (1) Upstash live PING — upstash.io + api.neon.tech still HTTP:000 on the SEVENTH sandbox (the DNS allowlist is permanent; 7/7); (2) the activation deploy — the canonical one-liner answers the stable 402 resource_creation_blocked (an invented teamId in a first probe answered 403 "Not authorized" — the documented fallback-token signature; scope pollution, not a change; env writes stay open from P77).
+- BROWSER: home renders 48 watch links (mobile-375 overflow 0, console clean); P81 mini law re-verified — the mini survives the watch → /signin SPA navigation in the real browser; /live honest zero state, overflow 0px, console clean; P81 rotation law re-verified — 3 × /api/home → 3 distinct recommended orders.
+
+Stage Summary:
+- Seven resets, seven zero-loss recoveries, six identical 446/0 verdicts. The durability proof is now boring — exactly as it should be. All ungated work (through P81's two product fixes) is done and durable on origin; the residual shortlist stays operator-gated (Vercel deploy block, egress PING, money gate, LIVEKIT egress metering, retention sweep).

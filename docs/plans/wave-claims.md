@@ -900,3 +900,50 @@ re-runs gates → merges.
   survives watch → /signin SPA nav (previously destroyed), console clean.
 - Money gate stays CLOSED (nothing money-shaped touched). The operator-gated
   residuals stand unchanged.
+
+## 2026-11-03 — P82-RESURRECTION-7 claim (the twenty-fifth "go" landed on the SEVENTH sandbox reset)
+
+| Wave | Lane | Lead | Claimed (UTC) | Base | Status |
+|---|---|---|---|---|---|
+| P82 / resurrection-7 | Seventh full-stack reset (repo + vault + station all gone from disk) — the rehearsed drill resurrected everything from origin @ 349541e with ZERO data loss; all gates re-green; both gated retrials stable | Z.ai Code (TL, issue #2) | 2026-11-03 15:12 | main @ 349541e (P81) | **LANED** (tsc 0; battery 446/0 ×15 lanes foreground — SIXTH consecutive exact 446/0, per-lane 2/27/89/91/27/20/77/36/15/13/8/11/11/8/11 identical; fixture verdict 6/6; P81's live proofs re-replicated: 3 × /api/home → 3 distinct orders, the mini survives the watch → /signin SPA nav in the real browser; /live honest zero state, overflow 0px) |
+
+- DRILL (7th consecutive zero-loss recovery — the invariant now eight-for-eight
+  including the pre-P77 resets): origin re-clone @ 349541e (the P81 product
+  fixes held — origin-is-truth pays again; the continuation summary was stale
+  and claimed P81 "not started", the ledger/origin said otherwise), vault
+  rebuilt at /home/z/.secrets/webflix.env (0600, outside the repo), deps
+  installed, db pushed to db/webflix2.db (the stray bare `bunx prisma db
+  push` that resolved to the scaffold path was harmless — the repo's own
+  scripts pin `DATABASE_URL=file:../db/webflix2.db` inline), :3000 → 200
+  (ready in 662ms), livekit-server 1.9.11 reinstalled on :7880 (the known-good
+  asset name `livekit_1.9.11_linux_amd64.tar.gz` — no `-server-` prefix).
+- GATES: tsc 0. The FULL battery — ALL FIFTEEN lanes 0 fail, foreground via
+  the canonical `test:live-lanes` chain (446 pass; per-lane 2/27/89/91/27/
+  20/77/36/15/13/8/11/11/8/11 — the sixth consecutive EXACT match; a first
+  attempt truncated by `head` got SIGPIPE-killed mid-lane and was discarded
+  and re-run whole — the truncation lesson is now "capture to a file, count
+  afterwards"). Fixture verdict `verify:ratelimit` 6/6 ok:true, verified:true
+  (the printed ConnectionRefused is the fail-open law being exercised, as
+  designed).
+- RETRIAL #1 (Upstash live PING): the SEVENTH sandbox shows the same DNS
+  allowlist — upstash.io and api.neon.tech HTTP:000 / curl exit 6; github
+  resolves 200. The egress verdict is a permanent sandbox property (7/7).
+- RETRIAL #2 (the activation deploy): the canonical one-liner (NO team-scope
+  param — a first attempt with an invented `teamId` answered 403 "Not
+  authorized", the documented fallback-token signature; without it the
+  primary token answers the stable 402 `resource_creation_blocked`) — the
+  resource-creation block stands; env writes stay open (P77's 200s), the
+  re-supplied pair keeps riding prod's encrypted envelope, fail-open keeps
+  the interim safe.
+- BROWSER (on the fresh station): home renders 48 watch links (mobile-375
+  overflow 0, console clean); the P81 mini law re-verified live — the mini
+  region SURVIVES the watch → /signin SPA navigation (miniSurvived:true,
+  previously destroyed); /live honest zero state ("No one is live right
+  now" / "Nothing is ever faked into this grid"), console clean, overflow
+  0px; the P81 rotation law re-verified live — 3 consecutive /api/home calls
+  → 3 distinct recommended first-8s.
+- Money gate stays CLOSED (nothing money-shaped touched). The operator-gated
+  residuals stand unchanged: the production deploy (Vercel team
+  resource-creation block — P81's fixes and the env pair await the first
+  successful deploy), the live Upstash PING (egress), the money gate,
+  LIVEKIT egress metering + billing API, the real-traffic retention sweep.
