@@ -377,6 +377,16 @@ export interface YoutubePlayerProps {
   videoId: string;
   /** seek here once the player is ready (resume / ?t= share links) */
   startSec?: number | null;
+  /**
+   * P81-a — the live-position restore: the host's ~1/s playhead mirror for
+   * the CURRENT videoId, read ONCE at player creation (the []-mount effect
+   * freezes it — no per-tick prop churn into the [videoId, startSec] lane).
+   * When the latch startSec is absent and the mirror shows real progress
+   * (≥3s), a re-created player (bare-route roundtrip, blocked-swap remount,
+   * dev StrictMode double-mount) resumes ~1s-accurate instead of restarting
+   * at 0 — the "miniplayer resets the play" fix. Never for live (no seek).
+   */
+  resumeSecOnMount?: number | null;
   /** ~1/sec while playing */
   onProgress?: (sec: number, durationSec: number) => void;
   onEnded?: () => void;
@@ -394,6 +404,7 @@ export interface YoutubePlayerProps {
 export function YoutubePlayer({
   videoId,
   startSec,
+  resumeSecOnMount,
   onProgress,
   onEnded,
   onStateChange,
@@ -589,6 +600,26 @@ export function YoutubePlayer({
                 startAppliedRef.current = true;
                 try {
                   created?.seekTo(startSec, true);
+                } catch {
+                  /* not seekable yet — user can seek */
+                }
+              }
+              // P81-a — the live-position restore law: a re-created player
+              // with no explicit latch resumes from the host's playhead
+              // mirror (read at mount — the re-creation render carried the
+              // live positionSec; the store resets it only on takeover, so
+              // it always belongs to THIS videoId). ≥3s keeps sub-3s plays
+              // honest (a restart IS the correct resume for a 2s watch).
+              if (
+                !startAppliedRef.current &&
+                !(startSec && startSec > 0) &&
+                resumeSecOnMount &&
+                resumeSecOnMount >= 3 &&
+                !liveRef.current
+              ) {
+                startAppliedRef.current = true;
+                try {
+                  created?.seekTo(resumeSecOnMount, true);
                 } catch {
                   /* not seekable yet — user can seek */
                 }

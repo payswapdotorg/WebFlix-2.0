@@ -26,6 +26,8 @@ import { decodeCursor } from "@/lib/youtube/cursors";
 import { GET as getHome } from "@/app/api/home/route";
 import { GET as listVideosRoute } from "@/app/api/videos/route";
 import { GET as getShorts } from "@/app/api/shorts/route";
+import { getHomeFeed } from "@/lib/youtube/feeds";
+import { mapVideos } from "@/lib/youtube/mappers";
 import type { HomeFeedDTO, VideoDTO, VideoPageDTO } from "@/lib/types";
 
 const FIXTURE_DIR = "tests/fixtures/yt";
@@ -219,7 +221,10 @@ describe("the compose mapping — REAL search data → the home rails", () => {
   test("per-query result sets merge in query order and dedupe by id", async () => {
     const up = mergeUpstream();
     setUpstream(up.impl);
-    const feed = await feedOf();
+    // P81-b — the ORDER law is a property of the DERIVATION (seed null = the
+    // legacy unrotated order); the route itself now rotates per request, so
+    // the order/set pins run at the library level.
+    const feed = await getHomeFeed("All");
 
     // every synthetic (disjoint) result from the second query reached the feed
     const synthIds = Array.from({ length: 8 }, (_, i) => `SYNTHHR000${i + 1}`);
@@ -444,5 +449,165 @@ describe("caching laws — no new uncached upstream paths", () => {
     expect(data.items.length).toBeGreaterThan(0);
     expect(data.items[0].id).toBe("vCxGMKtyAHE"); // the same real seed
     expect(globalFetchCalls).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P81-b — the home variety layer (the "always the same videos" fix):
+// per-request seeded rotation over the FULL pool + the viewer's WebFlix-local
+// exclusion (VideoSignal: not-interested + dont-recommend-channel) on every
+// rail. Rotation is POST-cache derivation — the shared upstream keys stay
+// unseeded (the caching-laws describe above still applies untouched).
+// ---------------------------------------------------------------------------
+
+/** deep-clone helper (structured enough for the fixture JSON) */
+const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
+
+/** the first videoRenderer node anywhere in the fixture (the clone base) */
+function firstVideoRenderer(node: unknown): any {
+  if (!node || typeof node !== "object") return null;
+  const obj = node as Record<string, unknown>;
+  if (obj.videoRenderer) return obj.videoRenderer;
+  for (const key of Object.keys(obj)) {
+    const found = firstVideoRenderer(obj[key]);
+    if (found) return found;
+  }
+  return null;
+}
+
+const baseVR = firstVideoRenderer(searchLofi);
+
+/**
+ * A synthetic search page: `count` DISTINCT videoRenderers (id prefix+index),
+ * every item wearing the SAME channel (browseId `channelBrowseId`) so the
+ * channel-exclusion pin can remove a whole page's worth of pool items.
+ */
+function synthSearchPage(prefix: string, count: number, channelBrowseId: string): unknown {
+  const items = Array.from({ length: count }, (_, i) => {
+    const vr = clone(baseVR);
+    vr.videoId = `${prefix}${String(i).padStart(11 - prefix.length, "0")}`;
+    if (vr.title?.runs?.[0]) vr.title.runs[0].text = `${prefix} item ${i}`;
+    // the mapper's search path reads ownerText/longBylineText/shortBylineText
+    // runs (the fixture carries longBylineText — patch every byline shape)
+    for (const byline of ["ownerText", "longBylineText", "shortBylineText"]) {
+      const run = (vr as Record<string, any>)?.[byline]?.runs?.[0];
+      if (run) {
+        run.text = `Channel ${prefix}`;
+        if (!run.navigationEndpoint) run.navigationEndpoint = {};
+        run.navigationEndpoint.browseEndpoint = {
+          browseId: channelBrowseId,
+          canonicalBaseUrl: `/@${channelBrowseId}`,
+        };
+      }
+    }
+    return { videoRenderer: vr };
+  });
+  return { contents: items };
+}
+
+const PAGE_A = synthSearchPage("aaa", 20, "CHAN_AAAA");
+const PAGE_B = synthSearchPage("bbb", 20, "CHAN_BBBB");
+const PAGE_C = synthSearchPage("ccc", 20, "CHAN_CCCC");
+
+const varietyUpstream = () => {
+  const up = upstreamFake({
+    search: (query: string) => {
+      // the REAL compose queries → one synthetic page each (distinct pools)
+      if (query === "most viewed youtube videos") return { body: PAGE_A };
+      if (query === "trending music") return { body: PAGE_B };
+      if (query === "popular gaming") return { body: PAGE_C };
+      return { body: PAGE_A }; // the because-you-watched channel second pass
+    },
+  });
+  return up;
+};
+
+describe("P81-b — the home variety layer (rotation + exclusion)", () => {
+  test("seed null → the legacy unrotated order (the merge order, rails removed)", async () => {
+    const up = varietyUpstream();
+    setUpstream(up.impl);
+    const feed = await getHomeFeed("All", { seed: null });
+    expect(feed.source).toBe("search-compose");
+    // the pool merge order is a-page → b-page → c-page; minus rails/shorts
+    // the first recommended item is the pool's first eligible video
+    const pool = [...mapVideos(PAGE_A, { dedupe: true }), ...mapVideos(PAGE_B, { dedupe: true }), ...mapVideos(PAGE_C, { dedupe: true })];
+    const eligible = pool.filter(
+      (v) => v.id !== feed.hero?.id && !v.isShort && !feed.becauseYouWatched?.videos.some((b) => b.id === v.id),
+    );
+    expect(feed.recommended[0]?.id).toBe(eligible[0]?.id);
+  });
+
+  test("the same seed → the same order (the deterministic law)", async () => {
+    const up = varietyUpstream();
+    setUpstream(up.impl);
+    const a = await getHomeFeed("All", { seed: 424242 });
+    const b = await getHomeFeed("All", { seed: 424242 });
+    expect(a.recommended.map((v) => v.id)).toEqual(b.recommended.map((v) => v.id));
+  });
+
+  test("different seeds → different orders (per-request reshuffle, youtube parity)", async () => {
+    const up = varietyUpstream();
+    setUpstream(up.impl);
+    const orders = new Set<string>();
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const feed = await getHomeFeed("All", { seed });
+      orders.add(feed.recommended.map((v) => v.id).join(","));
+    }
+    expect(orders.size).toBeGreaterThanOrEqual(3); // 5 seeds → ≥3 distinct orders
+  });
+
+  test("the full-pool law: a wide pool surfaces DIFFERENT ITEMS per seed (not a re-order of the same 24)", async () => {
+    const up = varietyUpstream();
+    setUpstream(up.impl);
+    const union = new Set<string>();
+    for (const seed of [11, 22, 33, 44, 55, 66]) {
+      const feed = await getHomeFeed("All", { seed });
+      expect(feed.recommended.length).toBe(24); // the rail stays full
+      for (const v of feed.recommended) union.add(v.id);
+    }
+    // the pool is ~60 eligible items; six seeds must surface well past 24
+    expect(union.size).toBeGreaterThan(24);
+  });
+
+  test("the exclusion law: a hidden video leaves EVERY rail", async () => {
+    const up = varietyUpstream();
+    setUpstream(up.impl);
+    const base = await getHomeFeed("All", { seed: 777 });
+    const hiddenId = base.recommended[3]!.id; // any pool item
+    const feed = await getHomeFeed("All", {
+      seed: 777,
+      excludeVideoIds: new Set([hiddenId]),
+    });
+    const allIds = [
+      feed.hero?.id,
+      ...feed.recommended.map((v) => v.id),
+      ...(feed.becauseYouWatched?.videos.map((v) => v.id) ?? []),
+      ...feed.shorts.map((v) => v.id),
+    ].filter((x): x is string => typeof x === "string");
+    expect(allIds).not.toContain(hiddenId);
+  });
+
+  test("the channel exclusion law: a hidden channel's videos leave the pool", async () => {
+    const up = varietyUpstream();
+    setUpstream(up.impl);
+    // CHAN_AAAA owns every 'aaa' page item
+    const feed = await getHomeFeed("All", {
+      seed: 888,
+      excludeChannelIds: new Set(["CHAN_AAAA"]),
+    });
+    const ids = feed.recommended.map((v) => v.id);
+    expect(ids.some((id) => id.startsWith("aaa"))).toBe(false);
+    expect(ids.some((id) => id.startsWith("bbb"))).toBe(true);
+    expect(ids.some((id) => id.startsWith("ccc"))).toBe(true);
+  });
+
+  test("the route serves the variety feed (per-request seed, signed-out = no exclusion)", async () => {
+    const up = varietyUpstream();
+    setUpstream(up.impl);
+    const res = await getHome(new Request("http://localhost/api/home"));
+    expect(res.status).toBe(200);
+    const feed = (await res.json()) as HomeFeedDTO;
+    expect(feed.source).toBe("search-compose");
+    expect(feed.recommended.length).toBe(24);
   });
 });

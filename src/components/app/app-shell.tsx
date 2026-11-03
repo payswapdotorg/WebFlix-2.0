@@ -54,6 +54,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         disableTransitionOnChange
       >
         {children}
+        {/* P81-a — the player host rides the bare pages too: the account
+            roundtrip (watch → /signin → back) previously UNMOUNTED the
+            layer, destroying the live iframe and restarting playback from
+            the stale latch when the host came back. The mini is a
+            position:fixed overlay — it costs the standalone auth layout
+            nothing and playback now survives the whole roundtrip. */}
+        <PlayerHostLayer />
       </ThemeProvider>
     );
   }

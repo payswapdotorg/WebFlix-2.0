@@ -839,3 +839,64 @@ re-runs gates → merges.
 - Browser: /live honest zero state, console clean, overflow 0px. Money gate
   CLOSED. Operator-gated residuals unchanged; the ONE lever remains lifting
   the Vercel team resource block.
+
+## 2026-11-03 — WFX2-PRODUCT-1 P81 (two operator bug reports → two shipped fixes) claim
+
+| Wave | Lane | Lead | Claimed (UTC) | Base | Status |
+|---|---|---|---|---|---|
+| P81-a / miniplayer-continuity | The operator: "the miniplayer resets the play when you change pages" — the live-position restore law (re-created players resume from the host's ~1/s playhead mirror) + the bare-route law (the player host rides /signin//signup) | Z.ai Code (TL, issue #2) | 2026-11-03 01:21 | main @ b34d02b | **LANED** (7 new pins in tests/miniplayer-restore.test.tsx; watch lane 712/0; browser-confirmed: the mini survives the watch → /signin SPA nav; tsc 0; lint clean) |
+| P81-b / home-variety | The operator: "the home video suggestions always seem to be the same videos" — per-request seeded rotation over the FULL pool (the youtube signed-out-home behavior) + the viewer's WebFlix-local exclusion (VideoSignal) on every rail | Z.ai Code (TL, issue #2) | 2026-11-03 01:21 | main @ b34d02b | **LANED** (7 new pins in tests/home-compose.test.ts; cutover 119/0; rotation LIVE-proven: 3 consecutive /api/home calls → 3 distinct orders; the purge-sweep law re-proven via the home-variety proxy) |
+
+- Scope: TWO product fixes (the first product-change rung since the parity
+  layer), no schema change, no new upstream paths, no cache-key changes.
+- **P81-a diagnosis** (the persistence architecture was already test-pinned
+  for client-side nav — the wrapper never unmounts on <Link> routes): the REAL
+  reset paths were (1) the in-memory positionSec mirror (~1/s) was NEVER used
+  as a restore source — any player re-creation restored the stale attach-time
+  latch (usually 0); (2) the AppShell `bare` branch rendered /signin//signup
+  WITHOUT the PlayerHostLayer — unmounting the portal and DESTROYING the live
+  iframe (created?.destroy()) while the store still held videoId — the account
+  roundtrip restarted playback from scratch; (3) the blocked-swap
+  (fallback↔iframe) re-created the player at the stale latch. FIXES:
+  (1) `resumeSecOnMount` — the layer passes the playhead mirror; the player's
+  creation onReady seeks to it once when no explicit latch exists (≥3s guard;
+  never for live; the value is frozen at mount so the [videoId, startSec]
+  effect lane is untouched — no per-tick loadVideoById risk); (2) the bare
+  branch now renders the layer (the mini is a position:fixed overlay — the
+  auth layout costs nothing); (3) both covered by (1). Hard-document
+  navigations (guest gates) stay by-design (the mini never survives a reload —
+  the documented law; the watch page's localStorage/server resume covers
+  re-opens).
+- **P81-b diagnosis**: home selection was FULLY deterministic — YouTube's own
+  browse/search order over shared IP-wide caches, fixed slice(0,24), no seed,
+  no shuffle, no per-user identity, and the not-interested/dont-recommend
+  signals were WRITTEN but never READ by home. FIXES (read-time derivation,
+  ADR-0008 law): `getHomeFeed(category, variety?)` rotates the FULL eligible
+  pool (no pre-slice — with a pool wider than 24, different seeds surface
+  different ITEMS, not a re-order of the same 24) via the playlist lane's
+  seededShuffle (same seed → same order), and filters every rail (hero, shorts,
+  because, recommended) by the viewer's hidden video/channel sets. The route
+  derives `variety` per request: seed = makeShuffleSeed() (youtube's measured
+  per-navigation reshuffle), exclusion resolved through the NEW
+  src/lib/watch/home-variety.ts proxy — THE PURGE-SWEEP LAW CAUGHT THE FIRST
+  CUT (the route had a direct db import): refactored to the action-proxy
+  pattern (/api/videos/[id] reads the viewer's Watch-Later the same way) —
+  the route stays db-import-free; the proxy reads ONLY the viewer's OWN
+  VideoSignal rows + the signaled videos' channel mapping, never renders
+  inventory. Category + Recently-uploaded chips fetch WIDE (48) so rotation
+  still serves a full 24-grid. The compose cursor derives from the UNROTATED
+  pool (documented trade-off: a rotated first page spreads its shown ids
+  across the pool, so the scroll continues into the live search continuations
+  — fresh items instead of re-treading the rotated pool). Signed-out →
+  rotation only (honest zero). Best-effort law: any proxy failure degrades to
+  rotation-only, never a feed failure.
+- GATES: tsc 0; eslint clean on every touched file; test:cutover 119/0 (the
+  purge-sweep law + 7 new variety pins; the route-level merge-order pin moved
+  to the library level where it belongs — the route now legitimately rotates);
+  test:watch 712/0 (incl. the 7 new restore/bare-route pins); the FULL LIVE
+  battery 446/0 across all FIFTEEN lanes (foreground, sixth+ run); LIVE API
+  proof: 3 consecutive /api/home calls → 3 distinct recommended orders;
+  browser: home renders 48 watch links (mobile-375 overflow 0), the mini
+  survives watch → /signin SPA nav (previously destroyed), console clean.
+- Money gate stays CLOSED (nothing money-shaped touched). The operator-gated
+  residuals stand unchanged.

@@ -275,6 +275,7 @@ export function PlayerHostLayer() {
                   handleRef={playerHost.handleRef}
                   videoId={videoId}
                   startSec={startSec}
+                  resumeSecOnMount={positionSec}
                   onProgress={(sec, dur) => playerHost.progress(sec, dur)}
                   onEnded={() => playerHost.ended()}
                   onStateChange={(st) => playerHost.stateChange(st)}

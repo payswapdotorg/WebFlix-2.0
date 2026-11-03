@@ -41,6 +41,55 @@ import { buildSearchParam, parseSearchFilters } from "./filters";
 import type { ContinueVideoDTO, HomeFeedDTO, HomeFeedSource, VideoDTO } from "@/lib/types";
 import { HOME_CHIPS, RECENTLY_UPLOADED_CHIP } from "@/lib/categories";
 import { getLiveSurface } from "./live-surface";
+import { seededShuffle } from "@/lib/playlist/shuffle";
+
+// ---------------------------------------------------------------------------
+// P81-b — the home variety layer (the "always the same videos" fix)
+// ---------------------------------------------------------------------------
+
+/**
+ * P81-b — the per-request variety inputs the /api/home route derives:
+ *  - `seed` — a fresh server-side seed PER REQUEST (youtube.com's signed-out
+ *    home reshuffles its inventory per navigation — the measured behavior
+ *    this mirrors). Rotation is POST-cache derivation: the shared upstream
+ *    cache keys stay UNSEEDED (no cache fragmentation), the seed only
+ *    reorders/windows the already-fetched pool.
+ *  - `excludeVideoIds` / `excludeChannelIds` — the viewer's WebFlix-local
+ *    feedback (VideoSignal rows: not-interested + dont-recommend-channel),
+ *    filtered from EVERY rail. Read-time derivation — no schema change, no
+ *    durable rows; a signed-out request excludes nothing (honest zero).
+ */
+export interface HomeVariety {
+  seed: number | null;
+  excludeVideoIds?: ReadonlySet<string>;
+  excludeChannelIds?: ReadonlySet<string>;
+}
+
+/** The exclusion law: a hidden video or a hidden channel leaves ALL rails. */
+function homeIsHidden(v: VideoDTO, variety?: HomeVariety): boolean {
+  if (!variety) return false;
+  if (variety.excludeVideoIds?.has(v.id)) return true;
+  if (variety.excludeChannelIds?.has(v.channel.id)) return true;
+  return false;
+}
+
+/** Filter a pool by the viewer's hidden video/channel sets. */
+function homeFiltered(videos: VideoDTO[], variety?: HomeVariety): VideoDTO[] {
+  if (!variety || (variety.excludeVideoIds?.size ?? 0) + (variety.excludeChannelIds?.size ?? 0) === 0) {
+    return videos;
+  }
+  return videos.filter((v) => !homeIsHidden(v, variety));
+}
+
+/**
+ * The rotation law: a seeded Fisher–Yates over the WHOLE pool (the seeded
+ * shuffle is the playlist lane's shared pure util — same seed → same order).
+ * seed null (the legacy caller) → the input order untouched.
+ */
+function homeRotated(videos: VideoDTO[], seed: number | null): VideoDTO[] {
+  if (seed === null || videos.length <= 1) return videos;
+  return seededShuffle(videos, seed);
+}
 
 // ---------------------------------------------------------------------------
 // home feed
@@ -118,20 +167,27 @@ function fetchHomeBrowseResponse(): Promise<unknown> {
   );
 }
 
-export async function getHomeFeed(rawCategory: string | null): Promise<HomeFeedDTO> {
+export async function getHomeFeed(rawCategory: string | null, variety?: HomeVariety): Promise<HomeFeedDTO> {
   const category = HOME_CHIPS.includes(rawCategory ?? "") ? (rawCategory as string) : "All";
+  // P81-b — one rotation opinion per request: the seed applies to the
+  // recommended pools of EVERY rung/mode below.
+  const seed = variety?.seed ?? null;
 
   // REA-3 — the dynamic chip family (youtube.com's measured home ladder,
   // 2026-10-17): "Recently uploaded" and live-scoped "Live" are feed
   // modes of their own, NOT label-as-query text searches.
   if (category === RECENTLY_UPLOADED_CHIP || category === "Live") {
+    // P81-b — the pool is fetched WIDE (48) so the exclusion + rotation can
+    // still serve a full 24-grid; the legacy path fetched exactly 24.
+    const chipPool = await dynamicChipVideos(category, 48);
+    const chipPoolFiltered = homeFiltered(chipPool, variety);
     return {
       hero: null,
       trending: [],
       continueWatching: [],
       becauseYouWatched: null,
       shorts: [],
-      recommended: await dynamicChipVideos(category, 24),
+      recommended: homeRotated(chipPoolFiltered, seed).slice(0, 24),
       recommendedCursor: null, // these grids carry no chain yet — the honest end
       chips: HOME_CHIPS,
       source: "search-compose",
@@ -140,14 +196,16 @@ export async function getHomeFeed(rawCategory: string | null): Promise<HomeFeedD
 
   if (category !== "All") {
     // category mode: search-backed flat grid (architecture parity map: chips → search)
+    // P81-b — the same wide-pool + exclusion + rotation treatment.
     const page = await getSearchVideoPage(category, { type: "video" }, undefined, 48);
+    const gridFiltered = homeFiltered(page.videos, variety);
     return {
       hero: null,
       trending: [],
       continueWatching: [],
       becauseYouWatched: null,
       shorts: [],
-      recommended: page.videos,
+      recommended: homeRotated(gridFiltered, seed).slice(0, 24),
       recommendedCursor: page.nextCursor,
       chips: HOME_CHIPS,
       source: "search-compose", // the category grid is composed from real search data
@@ -160,16 +218,18 @@ export async function getHomeFeed(rawCategory: string | null): Promise<HomeFeedD
   try {
     response = await fetchHomeBrowseResponse();
   } catch {
-    return composeHomeFeedFromSearch(); // rung 3 — both browse rungs missed
+    return composeHomeFeedFromSearch(variety); // rung 3 — both browse rungs missed
   }
   if (homeResponseIsEmpty(response)) {
     // the walled 200-but-empty shape with no last-good → rung 3
-    return composeHomeFeedFromSearch();
+    return composeHomeFeedFromSearch(variety);
   }
 
   const shelves = mapHomeShelves(response);
-  const feedVideos = mapVideos(response, { dedupe: true });
-  const shorts = mapShorts(response, 12);
+  // P81-b — the viewer's hidden videos/channels leave the WHOLE feed before
+  // any rail derives (the hero itself rotates out when hidden).
+  const feedVideos = homeFiltered(mapVideos(response, { dedupe: true }), variety);
+  const shorts = mapShorts(response, 12).filter((s) => !homeIsHidden(s, variety));
 
   const hero = feedVideos.find((v) => !v.isShort && !v.isLive) ?? null;
   const heroId = hero?.id ?? "";
@@ -194,7 +254,13 @@ export async function getHomeFeed(rawCategory: string | null): Promise<HomeFeedD
     ...shorts.map((s) => s.id),
     ...(becauseYouWatched?.videos.map((v) => v.id) ?? []),
   ]);
-  const recommended = feedVideos.filter((v) => !railIds.has(v.id) && !v.isShort).slice(0, 24);
+  // P81-b — the FULL pool (no pre-slice): rotation first, THEN the visible
+  // 24 — with a pool wider than the rail, different seeds surface different
+  // ITEMS, not just a different order of the same 24.
+  const recommended = homeRotated(
+    feedVideos.filter((v) => !railIds.has(v.id) && !v.isShort),
+    seed,
+  ).slice(0, 24);
   const recommendedCursor = feedContinuationToken(response);
 
   // continue watching: history SSR (session only; omit gracefully otherwise)
@@ -560,9 +626,11 @@ function consumedPoolPrefix(merged: VideoDTO[], heroId: string, recommended: Vid
  * prefix the feed showed, then the seed queries' live continuations carry
  * the scroll on (the /api/videos All-mode path speaks the same envelopes).
  */
-async function composeHomeFeedFromSearch(): Promise<HomeFeedDTO> {
+async function composeHomeFeedFromSearch(variety?: HomeVariety): Promise<HomeFeedDTO> {
   const pool = await composeSearchPool(); // throws only when search itself fails
-  const merged = pool.videos;
+  const seed = variety?.seed ?? null;
+  // P81-b — the viewer's hidden videos/channels leave the compose pool first.
+  const merged = homeFiltered(pool.videos, variety);
 
   const hero = merged.find((v) => !v.isShort && !v.isLive) ?? null;
   const heroId = hero?.id ?? "";
@@ -578,7 +646,16 @@ async function composeHomeFeedFromSearch(): Promise<HomeFeedDTO> {
     ...shorts.map((s) => s.id),
     ...(becauseYouWatched?.videos.map((v) => v.id) ?? []),
   ]);
-  const recommended = merged.filter((v) => !railIds.has(v.id) && !v.isShort).slice(0, 24);
+  // P81-b — full-pool rotation (same law as the browse rung): rotation over
+  // EVERYTHING non-rail/non-short, then the visible 24. The continuation
+  // cursor still derives from the UNROTATED pool order (consumedPoolPrefix
+  // over `merged`) — the scrolled pages resume after the pool items the
+  // feed COULD have shown; a rotated first page spreads its shown ids
+  // across the pool, so the prefix naturally extends to the pool's end and
+  // the scroll continues into the live search continuations (fresh items
+  // instead of re-treading the already-rotated pool — recorded trade-off).
+  const recommendedUnrotated = merged.filter((v) => !railIds.has(v.id) && !v.isShort);
+  const recommended = homeRotated(recommendedUnrotated, seed).slice(0, 24);
   const recommendedCursor = nextComposeCursor(
     consumedPoolPrefix(merged, heroId, recommended),
     pool.tokens,
