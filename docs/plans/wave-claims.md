@@ -1006,3 +1006,63 @@ re-runs gates → merges.
   answers 403 — scope pollution, not a change).
 - Money gate stays CLOSED (nothing money-shaped touched). The operator-gated
   residuals stand unchanged.
+
+## 2026-11-03 — P84-RESURRECTION-8 claim (the twenty-sixth "go" landed on the EIGHTH sandbox reset)
+
+| Wave | Lane | Lead | Claimed (UTC) | Base | Status |
+|---|---|---|---|---|---|
+| P84 / resurrection-8 | Eighth full-stack reset (repo + vault + livekit binary + station all gone from disk again) — the rehearsed drill resurrected everything from origin @ 6db622f with ZERO data loss, and origin had MOVED: P83's comment-plane reconciliation landed between the last drill and this "go" (ledger read first, zero redo); all gates re-green incl. a LIVE P83 comment-plane proof on the fresh station; both gated retrials stable | Z.ai Code (TL, issue #2) | 2026-11-03 19:48 | main @ 6db622f (P83) | **LANED** (tsc 0; battery 446/0 ×15 lanes foreground — SEVENTH consecutive exact 446/0, per-lane 2/27/89/91/27/20/77/36/15/13/8/11/11/8/11 identical; fixture 6/6 ok:true — seventh consecutive; P83's live proof re-replicated: real signup through the UI, signed-in composer renders without the stale gate, a comment posted through the real composer with the "posted on WebFlix" disclosure) |
+
+- DRILL (8th consecutive zero-loss recovery): origin re-clone @ 6db622f —
+  origin-is-truth pays AGAIN (the continuation summary knew nothing of P83;
+  the ledger tail showed the comment-gate reconciliation already LANED, so
+  the drill number skipped to P84 — no product redo); vault rebuilt at
+  /home/z/.secrets/webflix.env (0600, 15 vars, outside the repo); deps
+  installed (886 packages); db pushed to db/webflix2.db. NEW DRILL STEP
+  written into the law: a freshly pushed db is EMPTY — `/api/me` answers
+  500 `Demo user @you missing — run: bun run db:seed` until the seed runs;
+  `bun run db:seed` (demo user + playlists + notifications + comments)
+  is now part of the canonical bring-up order (install → db:push →
+  db:seed → dev). Station: :3000 → 200, livekit-server 1.9.11 (the
+  no-`-server-`-prefix asset) on :7880 → 200.
+- GATES: tsc 0. The FULL battery — ALL FIFTEEN lanes 0 fail, foreground,
+  output captured to a file and counted afterwards (the P82 micro-law):
+  446 pass, per-lane 2/27/89/91/27/20/77/36/15/13/8/11/11/8/11 — the
+  SEVENTH consecutive EXACT match. Fixture `verify:ratelimit` 6/6 ok:true
+  (seventh consecutive; the printed ConnectionRefused remains the
+  fail-open law being exercised, as designed).
+- RETRIAL #1 (Upstash live PING): the NINTH observed sandbox shows the same
+  DNS allowlist — HTTP:000 / curl exit 6. The egress wall is now measured
+  9/9 — a permanent sandbox property, not a transient.
+- RETRIAL #2 (the activation deploy): the canonical one-liner (NO team
+  param, verbatim from docs/ops/vercel-env.md) answers the stable 402
+  `resource_creation_blocked` ("Your Team exceeded our fair use limits and
+  has been blocked") — unchanged; env writes stay open, fail-open keeps the
+  interim safe.
+- BROWSER (on the fresh station, all in the real UI): home renders 48 watch
+  links, 0 broken imgs, overflow 0px on desktop AND mobile-375; the P81
+  rotation law re-verified live — 3 × /api/home → 3 fully disjoint top-6
+  orders; /live honest zero state (both copy lines, 0 faked cards); search
+  `/search?q=music` renders 42 watch results + channel rows (the `/results`
+  shape 404s by design — the route is `/search?q=`); /subscriptions honest
+  guest wall; the watch page renders the honest playback-unavailable
+  fallback (YouTube's bot-wall blocks ALL headless embeds this session —
+  a third-party block, never faked through; the P81 mini law therefore not
+  re-runnable THIS session — it was live-proven twice on this exact code,
+  P81 and P82). THE P83 LAW RE-VERIFIED LIVE ON THE RESURRECTED STATION:
+  a real account created through the signup UI → the watch page renders the
+  signed-in composer (no stale "Sign in to continue to comment" gate) → a
+  comment typed and posted through the real composer → appears in the
+  thread with the "posted on WebFlix" disclosure.
+- NEW RESIDUAL OBSERVATION (recorded, not blocking): a cosmetic hydration
+  attribute-drift in the GLOBAL mobile-nav Sheet trigger — Radix generates
+  a different `aria-controls` auto-id server vs client
+  (`radix-_R_156lb_` vs `radix-_R_4kplb_`), attribute-level only, the tree
+  fully functional, the component untouched by P83 (comment-plane files
+  only) — flagged as a candidate for a future sweep rung.
+- Money gate stays CLOSED (nothing money-shaped touched). The operator-gated
+  residuals stand unchanged: the production deploy (Vercel team
+  resource-creation block — P81's fixes, P83's reconciliation and the env
+  pair await the first successful deploy), the live Upstash PING (egress),
+  the money gate, LIVEKIT egress metering + billing API, the real-traffic
+  retention sweep.
