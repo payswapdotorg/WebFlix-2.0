@@ -1066,3 +1066,79 @@ re-runs gates → merges.
   pair await the first successful deploy), the live Upstash PING (egress),
   the money gate, LIVEKIT egress metering + billing API, the real-traffic
   retention sweep.
+
+## 2026-11-03 — WFX2-TIKTOK-SHORTS-EXPERIENCE-1 claim (the operator's work order: TikTok becomes a first-class source inside WebFlix Shorts)
+
+| Wave | Lane | Lead | Claimed (UTC) | Base | Status |
+|---|---|---|---|---|---|
+| WFX2-TIKTOK-SHORTS-EXPERIENCE-1 | The operator's architect work order (PR #4 / issue #3): one Shorts experience, multiple sources — TikTok plays in the shared /shorts feed through the official Embed Player with active-slide lifecycle; URL import is the first content path; M1 acceptance = two real TikTok posts playing sequentially in the shared feed with only the active one playing; YouTube Shorts untouched | Z.ai Code (TL, issue #2; work order PR #4) | 2026-11-03 20:0x | main @ 5059db0 (P84 record; work order branch 2603223) | **DISPATCHED** (TL: contract freeze, shared shell integration, acceptance. File-ownership freeze: shared shell + contracts = TL; TikTok player adapter = TL (solo console); library/import APIs = TL (solo console); UX surfaces = TL (solo console). Solo-console note: no second lead is active on this repo — the worker split in the work order collapses onto the TL sequentially, milestone order M0→M1 priority per the operator's message.) |
+
+## 2026-11-03 — WFX2-TIKTOK-SHORTS-EXPERIENCE-1 M0+M1 claim (the operator's TikTok work order: the shared Shorts experience)
+
+| Wave | Lane | Lead | Claimed (UTC) | Base | Status |
+|---|---|---|---|---|---|
+| WFX2-TIKTOK-SHORTS-EXPERIENCE-1 | M0+M1 LANED: the shared Shorts feed shell (ADR 0013) extracted from the proven YouTube mechanics; the YouTube adapter refactored onto it behavior-identically; the TikTok adapter ships — /shorts?source=tiktok renders the curated posts in the REAL vertical feed through the official Embed Player under the active-slide lifecycle (exactly one iframe per feed, pause-then-unmount command law, origin+source validated inbound, narrowest targetOrigin outbound); /api/tiktok/feed cursor pages + the page-1 deep-link splice; /tiktok/v/[id] redirects into the shared experience; the capability map (TikTok never claims a like/comment/follow write); the 2026-10-28 param audit fixed `muted` → `force_muted` | Z.ai Code (TL, issue #2; work order PR #4) | 2026-11-03 22:5x | main @ 5059db0 (P84) | **LANED** (tsc 0; eslint 0 on touched; the FULL repo battery 2902/0 across 25 lane groups — the TikTok lane 66→111 with four new test files; the live lanes 446/0 ×15, EIGHTH consecutive exact; the M1 browser proof: the active-slide law walked three real posts with exactly one iframe at every step, URL/back/reload/deep-link/keyboard/375px all verified, the honest 12s timeout surface real-wall-verified) |
+
+- ADR 0013 (`docs/adr/0013-shorts-source-boundary.md`): ONE presentation
+  experience, many providers — the shell owns mechanics only (height
+  contract, snap, IO active-slide 0.6, keyboard, paging trigger,
+  loading/error/empty chrome); adapters own DTOs, players, action routes;
+  source selection is server-read URL state (`?source=tiktok`,
+  `?post=<id>` deep link); the capability map is the action-truth source.
+- THE PLAYER (tiktok-feed-player.tsx): mounts the iframe only through the
+  pause-then-unmount beat (the official `pause` rides out WHILE the iframe
+  lives, then the unmount guarantees silence — at most one player exists
+  per feed, ever); inbound messages trusted only when BOTH event.origin is
+  TIKTOK_PLAYER_ORIGIN (now exported from the URL law — the tiktok-law
+  lane caught the stray literal, the law holds) AND event.source is the
+  mounted iframe's contentWindow; 3002 AUTOPLAY_ERROR shows the explicit
+  tap-to-play recovery (NOT the error banner — the terminal-banner law
+  stays for real failures); visibilitychange pauses (a viewer's own pause
+  is never overridden); the 12s readiness guard + one-shot telemetry ride
+  from P59-R4 unchanged.
+- THE DATA (api/tiktok/feed + library.getTikTokFeedPage): the
+  `{ items, nextCursor }` shape law; cursor = last post id, walks the
+  curated universe in curated order with dedupe; the page-1 deep-link
+  splice leads with ANY valid canonical post id (resolved through the
+  honest oEmbed-or-fallback lane) so the /tiktok/v/[id] compatibility
+  redirect and future import deep links work before M2's persistence;
+  invalid cursor/post → 400; the limit clamps to the curated cap.
+- THE PARAM AUDIT (the work order's mandatory audit): the embed-player
+  docs updated 2026-10-28 renamed the start-muted param to `force_muted`;
+  the code's pre-10-28 `muted` name is retired (the URL law builds only
+  documented params now; the pinned test asserts the retired name never
+  surfaces). The feed autoplays muted (`autoplay=1&force_muted=1` + loop)
+  with TikTok's native volume control for unmute — the YouTube-shorts
+  muted-autoplay posture, honestly derived.
+- GATES: tsc 0; eslint 0 on every touched file (the react-hooks
+  set-state-in-effect law forced the mount transitions into timer
+  callbacks — same semantics, compliant structure); the FULL repo battery
+  2902/0 (boot 872, watch 712, liveshorts 150, cutover 119, auth 133,
+  community 35, notifications 41, p36 134, netflix 149, tiktok 111, live
+  lanes 446) — the live per-lane sequence EXACT for the eighth consecutive
+  run.
+- BROWSER (M1 acceptance, real Chromium): the active-slide law walked
+  THREE real posts (keyboard ArrowDown; iframe src flipped 6718…→7206…→
+  7157… with EXACTLY ONE tiktok iframe at every step); the URL-state law
+  (default YouTube 25 slides; the selector click flips via replace;
+  reload preserves TikTok; back returns to the previous PAGE — the flip
+  leaves no entry; the deep link splices); /tiktok/v/[id] server-redirects
+  into the shared feed at that post; attribution honest (@scout2015 + the
+  TikTok badge; metadata-less posts render no fabricated identity); the
+  rail ships Share + Open-on-TikTok and ZERO like/comment/follow
+  affordances; mobile-375 overflow 0px; YouTube regression green.
+- THE BLOCKED POINT (operator-gated): "at least one successful real
+  viewer-browser playback" — TikTok's embed routing GEO-WALLS this
+  sandbox's egress: the player document redirects to TikTok's region
+  landing (`hk/about`), no player JS boots, no protocol message arrives;
+  measured for three posts AND the pre-existing hub player surface (the
+  wall predates this work — P58/P59 measured the same). The designed
+  recovery exercised live: the honest 12s timeout banner + the outbound
+  link + the one-shot telemetry POST. The final playback proof lands with
+  the first viewer network TikTok serves (the production deploy or any
+  non-walled egress). Evidence: evidence/wfx2-tiktok-shorts-experience/m1/.
+- Money gate stays CLOSED (nothing money-shaped touched). M2 (import +
+  persistence + curator rules), M3 (UX pass: save/hide/report affordances
+  once persistence exists, home/search shelf deep-link pass), M4 (Display
+  API — operator-gated on app approval + credentials) and M5 (hardening +
+  the deployed-SHA verification) follow.

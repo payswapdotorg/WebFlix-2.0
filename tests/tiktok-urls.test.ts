@@ -78,14 +78,19 @@ describe("tiktokPlayerEmbedUrl — the official Embed Player params", () => {
     expect(u.searchParams.get("autoplay")).toBeNull();
   });
 
-  test("documented params are settable (music_info/description/rel/loop/muted)", () => {
-    const url = tiktokPlayerEmbedUrl(DOCS_ID, { musicInfo: false, description: false, rel: true, loop: true, muted: true });
+  test("documented params are settable (music_info/description/rel/loop/force_muted)", () => {
+    // WFX2-TIKTOK-SHORTS-EXPERIENCE-1 param audit: the 2026-10-28 embed-player
+    // docs renamed the start-muted param to `force_muted` — the pinned law
+    // follows the current contract 1:1.
+    const url = tiktokPlayerEmbedUrl(DOCS_ID, { musicInfo: false, description: false, rel: true, loop: true, forceMuted: true });
     const u = new URL(url);
     expect(u.searchParams.get("music_info")).toBe("0");
     expect(u.searchParams.get("description")).toBe("0");
     expect(u.searchParams.get("rel")).toBe("1");
     expect(u.searchParams.get("loop")).toBe("1");
-    expect(u.searchParams.get("muted")).toBe("1");
+    expect(u.searchParams.get("force_muted")).toBe("1");
+    // the retired pre-2026-10-28 name must never surface in a built URL
+    expect(u.searchParams.get("muted")).toBeNull();
   });
 
   test("invalid ids throw (the URL law refuses to build a broken embed)", () => {

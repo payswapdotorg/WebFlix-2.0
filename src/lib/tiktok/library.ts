@@ -268,3 +268,76 @@ export async function searchTikTokLibrary(q: string): Promise<TikTokSearchResult
     note: videos.length > 0 ? "From WebFlix's curated TikTok shelf." : null,
   };
 }
+
+/**
+ * WFX2-TIKTOK-SHORTS-EXPERIENCE-1 — the /shorts TikTok feed page payload
+ * (ADR 0013 §6): the SAME `{ items, nextCursor }` shape law as the YouTube
+ * shorts feed, over the curated library in curated order.
+ *
+ * - Cursor paging: `cursor` is the last post id of the previous page; the
+ *   next page starts AFTER it in the curated order (an unknown cursor
+ *   honestly restarts from the top).
+ * - Deep-link splice: a valid `post` id (the /shorts?source=tiktok&post=
+ *   contract) resolves through getTikTokVideo — the honest DTO either way —
+ *   and LEADS page 1, so ANY canonical TikTok post deep-links into the
+ *   shared feed before M2's import lands. Splicing is page-1 behavior only
+ *   (a cursor present = paging mode).
+ * - Dedupe by post id; the page cap keeps iframe volume bounded (the
+ *   embed-domain usage-limit law — the feed mounts players lazily anyway).
+ * - Dead posts are NOT filtered (consistent with the hub): the viewer-side
+ *   player is the only liveness witness, and its honest error banner +
+ *   outbound link is the law for a post the ledger never saw die.
+ */
+export interface TikTokFeedPageDTO {
+  items: TikTokVideoDTO[];
+  nextCursor: string | null;
+}
+
+export const TIKTOK_FEED_PAGE_DEFAULT = 12;
+export const TIKTOK_FEED_PAGE_MAX = 40;
+
+export async function getTikTokFeedPage(opts: {
+  cursor?: string | null;
+  post?: string | null;
+  limit?: number;
+} = {}): Promise<TikTokFeedPageDTO> {
+  const limit = Math.min(
+    Math.max(Math.floor(opts.limit ?? TIKTOK_FEED_PAGE_DEFAULT) || TIKTOK_FEED_PAGE_DEFAULT, 1),
+    TIKTOK_FEED_PAGE_MAX,
+  );
+  const universe = curatedPostIds();
+
+  const out: TikTokVideoDTO[] = [];
+  const seen = new Set<string>();
+
+  // Page-1 deep-link splice (the `post` contract): resolve through the same
+  // honest lane as every other row; an invalid id is ignored, not fatal.
+  const deepLinkPost = opts.post && isTikTokPostId(opts.post) ? opts.post : null;
+  if (!opts.cursor && deepLinkPost) {
+    out.push(await getTikTokVideo(deepLinkPost));
+    seen.add(deepLinkPost);
+  }
+
+  // The curated flow, starting after the cursor when paging.
+  let startIdx = 0;
+  if (opts.cursor) {
+    const at = universe.indexOf(opts.cursor);
+    startIdx = at === -1 ? 0 : at + 1;
+  }
+  for (let i = startIdx; i < universe.length && out.length < limit; i++) {
+    const id = universe[i];
+    if (seen.has(id)) continue;
+    out.push(await getTikTokVideo(id));
+    seen.add(id);
+  }
+
+  // nextCursor: the last curated row served, only while the universe has
+  // more to give (a page that exhausted the universe honestly ends paging).
+  const last = out[out.length - 1] ?? null;
+  const lastIsCurated = last !== null && universe.includes(last.postId);
+  const hasMore = lastIsCurated && universe.indexOf(last.postId) < universe.length - 1;
+  return {
+    items: out,
+    nextCursor: hasMore && last ? last.postId : null,
+  };
+}

@@ -34,7 +34,9 @@ interface PlayerErrorValue {
   errorType?: string;
 }
 
-function describeError(code: number | undefined, type: string | undefined): TikTokPlayerError {
+/** Exported for the feed's active-slide controller (ADR 0013: the two
+ * TikTok player hosts share the ONE error vocabulary — same provider side). */
+export function describeError(code: number | undefined, type: string | undefined): TikTokPlayerError {
   const c = typeof code === "number" ? code : 0;
   const t = typeof type === "string" && type ? type : "PLAYER_ERROR";
   if (c >= 1000 && c <= 1099) {

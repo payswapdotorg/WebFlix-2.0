@@ -69,6 +69,12 @@ export function parseTikTokVideoUrl(input: string): ParsedTikTokVideo | null {
   return { postId: id, author: atUser ? atUser.slice(1) || null : null };
 }
 
+/** The official Embed Player's origin — the narrowest postMessage
+ * targetOrigin and the inbound-message origin check (the feed protocol's
+ * law, ADR 0013; this lives here because ADR 0004 §1 makes this file the
+ * only tiktok.com string source in the codebase). */
+export const TIKTOK_PLAYER_ORIGIN = "https://www.tiktok.com";
+
 export interface TikTokPlayerOptions {
   /** Show music info (official param, default 0 — WebFlix ships 1: attribution). */
   musicInfo?: boolean;
@@ -79,7 +85,11 @@ export interface TikTokPlayerOptions {
   rel?: boolean;
   loop?: boolean;
   autoplay?: boolean;
-  muted?: boolean;
+  /** WFX2-TIKTOK-SHORTS-EXPERIENCE-1 param audit (the work order's mandatory
+   * audit against the embed-player docs updated 2026-10-28): the documented
+   * start-muted param is `force_muted` — the pre-2026-10-28 docs' `muted`
+   * name this file previously built is NOT in the current contract. */
+  forceMuted?: boolean;
   controls?: boolean;
   timestamp?: boolean;
   closedCaption?: boolean;
@@ -109,7 +119,7 @@ export function tiktokPlayerEmbedUrl(postId: string, opts: TikTokPlayerOptions =
   });
   if (opts.loop) params.set("loop", "1");
   if (opts.autoplay) params.set("autoplay", "1");
-  if (opts.muted) params.set("muted", "1");
+  if (opts.forceMuted) params.set("force_muted", "1");
   return `https://www.tiktok.com/player/v1/${postId}?${params.toString()}`;
 }
 
