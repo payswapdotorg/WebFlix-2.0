@@ -947,3 +947,62 @@ re-runs gates → merges.
   resource-creation block — P81's fixes and the env pair await the first
   successful deploy), the live Upstash PING (egress), the money gate,
   LIVEKIT egress metering + billing API, the real-traffic retention sweep.
+
+## 2026-11-03 — P83-PRODUCT-SWEEP claim (the proactive sweep → the stale comment-gate reconciliation)
+
+| Wave | Lane | Lead | Claimed (UTC) | Base | Status |
+|---|---|---|---|---|---|
+| P83 / local-lane-ui-reconciliation | The operator-quality sweep (no reset this round; both gated retrials re-measured stable) found ONE real bug cluster: the pre-P36 public-mode comment gates still block a signed-in WebFlix user from writing comments the server happily serves (the P36 LOCAL lane needs ONLY the WebFlix session) — composer dialog "Sign in to continue to comment", row reply/like/edit/delete/heart/pin/report gates, shorts equivalents. Fixed at the root: the `operatorSession` gate is retired from the whole comment plane; the only honest write gate left is the account session (`guest`) | Z.ai Code (TL, issue #2) | 2026-11-03 16:2x | main @ 33fbad1 | **LANED** (6 src files, −200/+54; composer pins reconciled 1:1 — the public-mode dialog pin flipped to the P83 reconciliation pin + the guest-box pin; tsc 0; eslint 0 on touched; watch 712/0, liveshorts 150/0, cutover 119/0, FULL battery 446/0 ×15 exact; LIVE UI proof: signed-in comment posted through the real composer with the local:true disclosure, guest box intact) |
+
+- DIAGNOSIS (the sweep): walked home (48 watch links, rails honest, 0 broken
+  imgs), watch (structure + write paths), signup (real account through the
+  UI), the authenticated write plane, search (43 results), /subscriptions
+  (honest guest wall). THREE no-op symptoms on the watch page (like click,
+  subscribe click, "sign in to comment" while signed in) reduced to TWO
+  honest laws and ONE bug:
+  - video like/dislike + subscribe = the per-user OFFICIAL YouTube lane →
+    honest 503 `youtube-not-configured` + toast in an unconnected deployment
+    (BY DESIGN — untouched);
+  - the comment plane = the P36 WebFlix-local store → the server needs ONLY
+    the WebFlix session (every sub-route verified: /api/comments,
+    /api/comments/[id] edit-delete, like, heart, pin, report, restore — all
+    `getSessionUser`-only);
+  - THE BUG: the UI still carried the pre-P36 `operatorSession` gates —
+    a signed-in user saw "Comment... → Sign in to continue to comment"
+    (dialog copy described the retired single-tenant broker architecture)
+    while the server would 201 the local comment; row-level reply/like/
+    edit/delete/heart/pin/report had the same stale gate.
+- FIX (the reconciliation, minimal and total): `operatorSession` is REMOVED
+  from the entire comment component tree (comment-composer, comment-row ×3
+  pass-downs, comments-section, watch-page state + pass-down,
+  shorts-comments-sheet composer call, shorts-comment-row props + recursion);
+  the composer's public-mode branch + both rows' "Not available through
+  WebFlix" dialogs (their non-guest triggers became unreachable) are retired;
+  every write gate collapses to `guest` (the account session) — which keeps
+  the P2-AU guest box + redirect law byte-identical. The shorts sheet keeps
+  `operatorSession` ONLY where it stays honest (the operator-as-creator
+  heart/pin display detection).
+- HONEST TEST RECONCILIATION: the composer's public-mode dialog pin (a
+  pre-P36 behavior pin) flipped 1:1 into (a) the P83 reconciliation pin
+  (signed-in write composer renders regardless of the operator YouTube
+  session; the retired dialog never renders) and (b) the guest-box pin
+  (textarea absent, "Sign in to comment" present, /signin link, no fake
+  write). The two prop-only references (comment-local-rung's section mount,
+  liveshorts-api's rowProps) dropped the prop. Totals unchanged: watch 712,
+  liveshorts 150.
+- GATES: tsc 0; eslint 0 on every touched file (repo-wide 0 errors); watch
+  712/0; liveshorts 150/0; cutover 119/0; the FULL LIVE battery 446/0 across
+  all FIFTEEN lanes foreground (per-lane 2/27/89/91/27/20/77/36/15/13/8/11/
+  11/8/11 — seventh consecutive exact match).
+- LIVE PROOF (real browser, real account created through the signup UI): the
+  signed-in watch page renders the REAL composer (textarea, no stale gate);
+  a comment typed and posted through the UI → appears in the thread with the
+  "posted on WebFlix" disclosure; sign-out → the guest box returns (no fake
+  write); home 48 links; search 43 results; /subscriptions honest guest
+  wall; overflow 0px everywhere probed; console clean.
+- RETRIALS (both stable on this sandbox): Upstash live PING still egress-
+  walled (8/8 sandboxes); the activation deploy still 402
+  `resource_creation_blocked` (canonical one-liner; a teamId-polluted probe
+  answers 403 — scope pollution, not a change).
+- Money gate stays CLOSED (nothing money-shaped touched). The operator-gated
+  residuals stand unchanged.

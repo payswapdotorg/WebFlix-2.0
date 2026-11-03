@@ -73,8 +73,6 @@ export interface CommentRowProps {
   viewer: ViewerDto | null;
   viewerIsCreator: boolean;
   creatorName: string;
-  /** false in public mode → signed-out states for the write affordances */
-  operatorSession?: boolean;
   /** WFX2-P2-AU: no WebFlix account → writes route to the sign-in prompt */
   guest?: boolean;
   /** WFX2-P6-CR: the watch payload's snapshot (the local rung's shadow rows) */
@@ -100,7 +98,6 @@ export function CommentRow({
   viewer,
   viewerIsCreator,
   creatorName,
-  operatorSession = true,
   guest = false,
   video,
   depth,
@@ -132,20 +129,17 @@ export function CommentRow({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
-  const [signInOpen, setSignInOpen] = useState(false);
 
-  /** WFX2-P2-AU: the account gate — guests go to /signin (redirect back);
-   * public-mode operator gaps keep the honest "Sign in to continue" dialog. */
+  /** WFX2-P2-AU: the account gate — guests go to /signin (redirect back).
+   * The pre-P36 public-mode dialog is retired: every comment action (like,
+   * reply, edit, delete, heart, pin, report) is a WebFlix-session local lane
+   * — the only honest gate left is the account session itself. */
   const promptSignIn = () => {
-    if (guest) {
-      window.location.assign(signInHref(`/watch/${videoId}`));
-      return;
-    }
-    setSignInOpen(true);
+    window.location.assign(signInHref(`/watch/${videoId}`));
   };
 
   const toggleLike = async (value: LikeValue) => {
-    if (guest || !operatorSession) {
+    if (guest) {
       promptSignIn(); // YouTube parity: signed-out → sign-in prompt
       return;
     }
@@ -453,7 +447,7 @@ export function CommentRow({
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
-                {comment.isOwn && operatorSession && !guest && (
+                {comment.isOwn && !guest && (
                   <DropdownMenuItem
                     onClick={() => setEditing(true)}
                     className="cursor-pointer gap-3 py-2.5 text-sm"
@@ -488,14 +482,14 @@ export function CommentRow({
                 )}
                 {!comment.isOwn && (
                   <DropdownMenuItem
-                    onClick={() => (!operatorSession || guest ? promptSignIn() : setReportOpen(true))}
+                    onClick={() => (guest ? promptSignIn() : setReportOpen(true))}
                     className="cursor-pointer gap-3 py-2.5 text-sm"
                   >
                     <Flag className="size-4" aria-hidden="true" />
                     Report
                   </DropdownMenuItem>
                 )}
-                {comment.isOwn && operatorSession && !guest && (
+                {comment.isOwn && !guest && (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
@@ -521,7 +515,6 @@ export function CommentRow({
               parentText={comment.body}
               replyParams={comment.replyParams}
               viewer={viewer}
-              operatorSession={operatorSession}
               guest={guest}
               video={video}
               placeholder="Add a reply..."
@@ -581,7 +574,6 @@ export function CommentRow({
                     viewer={viewer}
                     viewerIsCreator={viewerIsCreator}
                     creatorName={creatorName}
-                    operatorSession={operatorSession}
                     guest={guest}
                     video={video}
                     depth={1}
@@ -649,7 +641,6 @@ export function CommentRow({
                       viewer={viewer}
                       viewerIsCreator={viewerIsCreator}
                       creatorName={creatorName}
-                      operatorSession={operatorSession}
                       guest={guest}
                       video={video}
                       depth={depth + 1}
@@ -697,35 +688,6 @@ export function CommentRow({
         commentText={comment.body}
         onReported={() => onReported(comment.id)}
       />
-
-      {/* WFX2-P36 — the public-mode action gate: comment likes/reports have
-          no official YouTube API, so the honest dialog says so (the pre-P36
-          copy claimed the operator's session — retired with the lane) */}
-      <Dialog open={signInOpen} onOpenChange={setSignInOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Not available through WebFlix</DialogTitle>
-            <DialogDescription>
-              This action isn&apos;t supported by the official YouTube API — open the video on
-              YouTube to do it there. (Comments you write on WebFlix are stored on WebFlix.)
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setSignInOpen(false)} className="rounded-full">
-              Close
-            </Button>
-            <Button asChild className="rounded-full">
-              <a
-                href={`https://www.youtube.com/watch?v=${videoId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Open on YouTube
-              </a>
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </article>
   );
 }

@@ -1865,3 +1865,19 @@ Work Log:
 
 Stage Summary:
 - Seven resets, seven zero-loss recoveries, six identical 446/0 verdicts. The durability proof is now boring — exactly as it should be. All ungated work (through P81's two product fixes) is done and durable on origin; the residual shortlist stays operator-gated (Vercel deploy block, egress PING, money gate, LIVEKIT egress metering, retention sweep).
+---
+Task ID: P83-PRODUCT-SWEEP
+Agent: Z.ai Code (webflix-2.0 lane — TL, issue #2)
+Task: the twenty-sixth "go" landed on a LIVING station (no reset). Both gated retrials re-measured stable. The rung: a proactive operator-quality sweep across the product's real surfaces — it found one real bug cluster, fixed it at the root, pinned it, and live-proved it.
+
+Work Log:
+- SWEEP: home (48 watch links, rails honest, 0 broken images), watch structure + write paths, a REAL account created through the signup UI, the authenticated write plane, search (43 results, 0 overflow), /subscriptions (honest guest wall). Three no-op symptoms (like click, subscribe click, "sign in to comment" while signed in) reduced to two honest laws (video like/subscribe = the per-user OFFICIAL YouTube lane → honest 503 youtube-not-configured + toast in an unconnected deployment — BY DESIGN) and ONE bug: the comment plane's pre-P36 `operatorSession` UI gates — a signed-in WebFlix user was shown "Comment... → Sign in to continue to comment" (copy describing the retired single-tenant broker) while every comment sub-route (create/reply/edit/delete/like/heart/pin/report/restore) needs ONLY the WebFlix session and would 201.
+- FIX: `operatorSession` retired from the whole comment component tree (composer branch + dialog, watch row gates + "Not available through WebFlix" dialog, section pass-down, watch-page state, shorts sheet composer call, shorts row props + recursion). Every write gate collapses to `guest` — the P2-AU guest box + /signin redirect law stays byte-identical. The shorts sheet keeps operatorSession only for the honest operator-as-creator display detection. 6 src files, −200/+54.
+- HONEST TEST RECONCILIATION: the composer's pre-P36 dialog pin flipped 1:1 into the P83 reconciliation pin (signed-in write composer in every posture; retired dialog never renders) + the guest-box pin (no textarea, "Sign in to comment", /signin link, no fake write); two prop-only refs dropped. Totals hold: watch 712/0, liveshorts 150/0, cutover 119/0.
+- GATES: tsc 0; eslint 0 (repo-wide 0 errors); FULL battery 446/0 ×15 lanes foreground — per-lane exact, SEVENTH consecutive 446/0.
+- LIVE PROOF: signed-in watch page renders the REAL composer; a comment posted through the UI appears in the thread with the "posted on WebFlix" disclosure; sign-out → the guest box returns; console clean; overflow 0px everywhere probed.
+- RETRIALS: Upstash live PING egress-walled (8/8 sandboxes identical); activation deploy 402 resource_creation_blocked (canonical; a teamId-polluted probe answers 403 — scope pollution, corrected during P82, recorded).
+
+Stage Summary:
+- The sweep discipline paid: the operator's last two bugs were found by manual browsing; this rung found the third by walking the app the same way — and the purge-sweep/origin laws kept the diagnosis honest (the server law was already right; only the UI lagged behind P36).
+- STILL GATED (unchanged): the production deploy (Vercel team resource-creation block), the live Upstash PING (egress), the money gate, LIVEKIT egress metering, the real-traffic retention sweep.

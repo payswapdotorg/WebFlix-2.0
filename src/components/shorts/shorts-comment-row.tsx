@@ -83,8 +83,6 @@ export interface ShortsCommentRowProps {
   videoId: string;
   /** WFX2-P6-CR: nullable — anonymous viewers still read the thread */
   viewer: ViewerDto | null;
-  /** false in public mode → signed-out states for the write affordances */
-  operatorSession: boolean;
   /** WFX2-P2-AU: no WebFlix account → writes route to the sign-in prompt */
   guest: boolean;
   /** WFX2-P6-CR: the watch payload's snapshot (the local rung's shadow rows) */
@@ -101,7 +99,6 @@ export function ShortsCommentRow({
   comment,
   videoId,
   viewer,
-  operatorSession,
   guest,
   video,
   viewerIsCreator = false,
@@ -122,25 +119,21 @@ export function ShortsCommentRow({
   );
   const [threadLoading, setThreadLoading] = useState(false);
   const [threadLoadingMore, setThreadLoadingMore] = useState(false);
-  const [signInOpen, setSignInOpen] = useState(false);
   // ---- creator write state (P17): starts at the canonical truth, then
   // optimistic set → server truth → honest revert (the row's like idiom) ----
   const [hearted, setHearted] = useState(comment.heartedByCreator);
   const [pinned, setPinned] = useState(comment.pinned);
 
-  /** P15/P13: guests go to /signin (redirect back to /shorts); public-mode
-   * operator gaps keep the honest "Sign in to continue" dialog. */
+  /** P15/P13: guests go to /signin (redirect back to /shorts). The pre-P36
+   * public-mode dialog is retired: the comment actions are WebFlix-session
+   * local lanes — the only honest gate left is the account session. */
   const promptSignIn = () => {
-    if (guest) {
-      window.location.assign(signInHref("/shorts"));
-      return;
-    }
-    setSignInOpen(true);
+    window.location.assign(signInHref("/shorts"));
   };
 
   // ---- PER-COMMENT LIKE: the watch `comment-row` idiom (optimistic + revert) ----
   const toggleLike = async (value: LikeValue) => {
-    if (guest || !operatorSession) {
+    if (guest) {
       promptSignIn();
       return;
     }
@@ -375,7 +368,7 @@ export function ShortsCommentRow({
             <button
               type="button"
               onClick={() => {
-                if (guest || !operatorSession) {
+                if (guest) {
                   promptSignIn();
                   return;
                 }
@@ -442,7 +435,6 @@ export function ShortsCommentRow({
               parentText={comment.body}
               replyParams={comment.replyParams}
               viewer={viewer}
-              operatorSession={operatorSession}
               guest={false}
               video={video}
               placeholder="Add a reply..."
@@ -495,7 +487,6 @@ export function ShortsCommentRow({
                       comment={r}
                       videoId={videoId}
                       viewer={viewer}
-                      operatorSession={operatorSession}
                       guest={guest}
                       video={video}
                       viewerIsCreator={viewerIsCreator}
@@ -518,39 +509,6 @@ export function ShortsCommentRow({
           </div>
         )}
       </div>
-
-      {/* WFX2-P36 — the public-mode action gate: comment likes/reports have
-          no official YouTube API, so the honest dialog says so (the pre-P36
-          copy claimed the operator's session — retired with the lane) */}
-      <Dialog open={signInOpen} onOpenChange={setSignInOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Not available through WebFlix</DialogTitle>
-            <DialogDescription>
-              This action isn&apos;t supported by the official YouTube API — open the video on
-              YouTube to do it there. (Comments you write on WebFlix are stored on WebFlix.)
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="ghost"
-              onClick={() => setSignInOpen(false)}
-              className="rounded-full"
-            >
-              Close
-            </Button>
-            <Button asChild className="rounded-full">
-              <a
-                href={`https://www.youtube.com/watch?v=${videoId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Open on YouTube
-              </a>
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </article>
   );
 }

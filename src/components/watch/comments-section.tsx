@@ -6,9 +6,9 @@
  * optimistic insert, rows, reply threads, "Show more" server cursor
  * pagination, honest empty state.
  *
- * WFX2-B-S: `operatorSession` (from /api/watch/session) drives the
- * signed-out composer state ("Comment..." box → "Sign in to continue to
- * comment") and the row-level write gates in public mode.
+ * WFX2-B-S → P83 RECONCILIATION: the pre-P36 `operatorSession` gates are
+ * retired — the comment lane is the WebFlix-local store (P36), so the only
+ * honest write gate is the WebFlix account session (`guest`).
  *
  * WFX2-P2-AU: `guest` (no WebFlix account session) drives the account
  * gates — the youtube.com "Sign in to comment" composer box and the
@@ -53,7 +53,6 @@ export function CommentsSection({
   viewer,
   viewerIsCreator,
   creatorName,
-  operatorSession = true,
   guest = false,
   video,
 }: {
@@ -62,8 +61,6 @@ export function CommentsSection({
   viewer: ViewerDto | null;
   viewerIsCreator: boolean;
   creatorName: string;
-  /** false in public mode → YouTube-parity signed-out states */
-  operatorSession?: boolean;
   /** WFX2-P2-AU: no WebFlix account → account gates on every write */
   guest?: boolean;
   /** WFX2-P6-CR: the watch payload's snapshot (the local rung's shadow rows) */
@@ -248,7 +245,6 @@ export function CommentsSection({
         <CommentComposer
           videoId={videoId}
           viewer={viewer}
-          operatorSession={operatorSession}
           guest={guest}
           video={video}
           onSubmitted={(c) => {
@@ -288,7 +284,6 @@ export function CommentsSection({
               viewer={viewer}
               viewerIsCreator={viewerIsCreator}
               creatorName={creatorName}
-              operatorSession={operatorSession}
               guest={guest}
               video={video}
               depth={0}

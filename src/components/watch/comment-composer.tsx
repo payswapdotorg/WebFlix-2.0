@@ -7,13 +7,15 @@
  * non-empty, emoji picker; posts via the canonical `/api/comments` route
  * (the honest LOCAL lane — the server tier owns the routing).
  *
- * Signed-out states, two honest layers (WFX2-P2-AU):
- *  - WebFlix GUEST (no account session) → youtube.com's watch-page
- *    "Sign in to comment" box — the red Sign in affordance links /signin
- *    with the redirect back to this watch page;
- *  - public mode (operator session not configured) → the "Comment..."
- *    affordance → "Sign in to continue to comment" dialog.
- * Never a fake write, either way.
+ * Signed-out state, one honest layer (WFX2-P2-AU): a WebFlix GUEST (no
+ * account session) gets youtube.com's watch-page "Sign in to comment" box —
+ * the red Sign in affordance links /signin with the redirect back to this
+ * watch page. A signed-in WebFlix user ALWAYS gets the write composer: the
+ * comment lane is the WebFlix-local store (P36 — no operator YouTube session
+ * involved), so the pre-P36 public-mode dialog ("Sign in to continue to
+ * comment") was retired — it gated a write the server happily serves and
+ * its copy described an architecture that no longer exists. Never a fake
+ * write, either way.
  *
  * WFX2-P6-CR: `viewer` is nullable (anonymous viewers still read); the
  * submit forwards the parent's live replyParams + the watch payload's
@@ -31,14 +33,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { toastActionError } from "@/lib/watch/connection-client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { EmojiPicker } from "./emoji-picker";
 import { cn } from "@/lib/utils";
 import { post } from "@/lib/watch/client";
@@ -54,7 +48,6 @@ export function CommentComposer({
   parentText,
   replyParams,
   viewer,
-  operatorSession = true,
   guest = false,
   video,
   placeholder = "Comment...",
@@ -74,8 +67,6 @@ export function CommentComposer({
   replyParams?: string | null;
   /** WFX2-P6-CR: nullable — anonymous viewers get the gate states below */
   viewer: ViewerDto | null;
-  /** false in public mode → the signed-out affordance (YouTube parity) */
-  operatorSession?: boolean;
   /** WFX2-P2-AU: no WebFlix account session → the "Sign in to comment" box */
   guest?: boolean;
   /** WFX2-P6-CR: the watch payload's snapshot (the local rung's shadow rows) */
@@ -90,7 +81,6 @@ export function CommentComposer({
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [focused, setFocused] = useState(false);
-  const [signInOpen, setSignInOpen] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
   const autogrow = () => {
@@ -148,7 +138,7 @@ export function CommentComposer({
   };
 
   const empty = body.trim().length === 0;
-  const showCounter = operatorSession && (focused || body.length > 0);
+  const showCounter = focused || body.length > 0;
 
   // ---- WebFlix guest: youtube.com's exact "Sign in to comment" box ----
   if (guest) {
@@ -169,49 +159,6 @@ export function CommentComposer({
           </Link>
         </div>
       </div>
-    );
-  }
-
-  // ---- signed-out (public mode): YouTube's signed-out comment box ----
-  if (!operatorSession) {
-    return (
-      <>
-        <div className="flex w-full gap-3">
-          <Avatar className={cn(compact ? "size-6" : "size-9 sm:size-10")}>
-            <AvatarFallback aria-hidden="true">
-              <span className="text-xs text-muted-foreground">?</span>
-            </AvatarFallback>
-          </Avatar>
-          <button
-            type="button"
-            onClick={() => setSignInOpen(true)}
-            className="min-w-0 flex-1 border-b border-border pb-1.5 pt-2 text-left text-sm text-muted-foreground transition hover:border-foreground"
-            aria-label="Comment — sign in to comment"
-          >
-            Comment...
-          </button>
-        </div>
-        <Dialog open={signInOpen} onOpenChange={setSignInOpen}>
-          <DialogContent className="sm:max-w-sm">
-            <DialogHeader>
-              <DialogTitle>Sign in to continue to comment</DialogTitle>
-              <DialogDescription>
-                WebFlix comments act on the operator&apos;s YouTube session (single-tenant live
-                mode). No session is configured right now — public reads work, writes need the
-                session.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setSignInOpen(false)} className="rounded-full">
-                Cancel
-              </Button>
-              <Button asChild className="rounded-full">
-                <a href="/account">Sign in</a>
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </>
     );
   }
 

@@ -945,7 +945,6 @@ describe("WFX2-P6-CR UI — CommentsSection with a null viewer (anonymous read)"
         viewer={null}
         viewerIsCreator={false}
         creatorName="Rick Astley"
-        operatorSession={false}
         guest
       />
     );

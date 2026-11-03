@@ -319,7 +319,6 @@ export function ShortsCommentsSheet({
               <CommentComposer
                 videoId={videoId}
                 viewer={viewer}
-                operatorSession={operatorSession}
                 guest={false}
                 video={video}
                 placeholder="Add a comment..."
@@ -357,7 +356,6 @@ export function ShortsCommentsSheet({
                         comment={comment}
                         videoId={videoId}
                         viewer={viewer}
-                        operatorSession={operatorSession}
                         guest={guest}
                         video={video}
                         viewerIsCreator={viewerIsCreator}

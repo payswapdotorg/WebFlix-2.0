@@ -1,11 +1,12 @@
 /// <reference types="bun-types" />
 /**
- * WFX2-B-S tests — the comment composer's YouTube-parity states:
+ * WFX2-B-S → P83 tests — the comment composer's YouTube-parity states:
  * "Comment..." placeholder, the 0/10000 char counter, the Comment button
- * disabled until non-empty, the canonical /api/posts submit, and the
- * signed-out (public mode) "Sign in to continue to comment" state that
- * links the account flow. happy-dom + createRoot/act (the
- * ambient-backdrop test pattern) with a stubbed fetch + sonner.
+ * disabled until non-empty, the canonical /api/comments submit, the
+ * signed-in write composer in EVERY deployment posture (the P36 local lane
+ * — no operator YouTube session involved), and the guest "Sign in to
+ * comment" box. happy-dom + createRoot/act (the ambient-backdrop test
+ * pattern) with a stubbed fetch + sonner.
  */
 import { afterEach, beforeEach, describe, expect, test, mock } from "bun:test";
 import { Window } from "happy-dom";
@@ -96,7 +97,7 @@ const q = (sel: string): HTMLElement | null =>
 const all = (sel: string): HTMLElement[] =>
   host ? Array.from(host.querySelectorAll(sel) as unknown as HTMLElement[]) : [];
 
-async function render(opts: { operatorSession?: boolean; onSubmitted?: (c: any) => void } = {}) {
+async function render(opts: { guest?: boolean; onSubmitted?: (c: any) => void } = {}) {
   host = win.document.createElement("div");
   win.document.body.appendChild(host);
   root = createRoot(host as unknown as Parameters<typeof createRoot>[0]);
@@ -104,8 +105,8 @@ async function render(opts: { operatorSession?: boolean; onSubmitted?: (c: any) 
     root!.render(
       <CommentComposer
         videoId="dQw4w9WgXcQ"
-        viewer={VIEWER}
-        operatorSession={opts.operatorSession}
+        viewer={opts.guest ? null : VIEWER}
+        guest={opts.guest}
         onSubmitted={opts.onSubmitted ?? (() => {})}
       />
     );
@@ -200,25 +201,25 @@ describe("CommentComposer — YouTube parity states", () => {
     expect(got).toHaveLength(1); // optimistic insert contract kept
   });
 
-  test("signed-out (public mode): the Comment... affordance opens the Sign in dialog", async () => {
-    await render({ operatorSession: false });
-    // no textarea — the write surface never fakes an editable composer
-    expect(q("textarea")).toBeNull();
-    const affordance = all("button").find((b) => (b.textContent ?? "").trim() === "Comment...");
-    expect(affordance).toBeDefined();
-    await act(async () => {
-      affordance!.click();
-    });
-    await act(async () => {});
-    // radix portals the dialog into document.body — assert against the document
-    expect(win.document.body.textContent).toContain("Sign in to continue to comment");
-    const links = Array.from(win.document.querySelectorAll("a"));
-    expect(links.some((a) => a.getAttribute("href") === "/account")).toBe(true);
+  test("P83 reconciliation: the signed-in write composer renders regardless of the operator YouTube session (the local lane needs only the WebFlix session)", async () => {
+    // the composer no longer carries operatorSession at all — a signed-in
+    // WebFlix user gets the REAL textarea + submit in every deployment posture
+    await render();
+    const ta = q("textarea") as unknown as HTMLTextAreaElement;
+    expect(ta).not.toBeNull();
+    expect(submitButton()).not.toBeNull();
+    // the retired dialog + affordance never render for a signed-in user
+    expect(win.document.body.textContent).not.toContain("Sign in to continue to comment");
+    expect(all("button").find((b) => (b.textContent ?? "").trim() === "Comment...")).toBeUndefined();
   });
 
-  test("signed-out state renders no submit button (never a fake write)", async () => {
-    await render({ operatorSession: false });
+  test("guest: the Sign in to comment box (P2-AU law kept; never a fake write)", async () => {
+    await render({ guest: true });
+    expect(q("textarea")).toBeNull();
+    expect(win.document.body.textContent).toContain("Sign in to comment");
     expect(submitButton()).toBeNull();
     expect(submitted).toHaveLength(0);
+    const links = Array.from(win.document.querySelectorAll("a"));
+    expect(links.some((a) => a.getAttribute("href")?.startsWith("/signin")).valueOf()).toBe(true);
   });
 });
