@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getTikTokRail } from "@/lib/tiktok/library";
+import { publicImportIds } from "@/lib/tiktok/imports";
 import { rateLimit } from "@/lib/youtube/cache";
 
 export const dynamic = "force-dynamic";
@@ -9,13 +10,15 @@ export const dynamic = "force-dynamic";
  * universe with every post honestly resolved through the keyless oEmbed lane.
  * A walled egress degrades to honest unavailable cards (the embed players
  * themselves ride the viewer's browser and keep working) — never fake rows.
+ * M2: PUBLIC community imports append after the curated flow (the import
+ * layer's own DB read; a DB failure degrades to the curated shelf only).
  */
 export async function GET(req: Request) {
   try {
     if (!(await rateLimit(`tiktok:${req.headers.get("x-forwarded-for") ?? "local"}`))) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
-    const rail = await getTikTokRail();
+    const rail = await getTikTokRail({ extraIds: await publicImportIds() });
     // oEmbed answers move on the 6h/24h cache TTLs — the same short shared
     // cache (+ SWR) their Netflix siblings run (P51-AUDIT S4 doctrine).
     return NextResponse.json(rail, {

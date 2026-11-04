@@ -45,6 +45,7 @@ model User {
   netflixWatchEvents NetflixWatchEvent[]
   liveRoomsOwned LiveRoom[] @relation("LiveRoomHost")
   liveFanClubOwned LiveFanClub[] @relation("LiveFanClubHost")
+  tiktokImports TikTokImport[]
 }
 
 model Channel {
@@ -1230,4 +1231,27 @@ model LiveRoomKeyword {
 
   @@unique([roomId, pattern])
   @@index([roomId])
+}
+
+// WFX2-TIKTOK-SHORTS-EXPERIENCE-1 M2 — imported TikTok posts (ADR 0013 §7,
+// the work order's "canonical URL paste/import + private saves + curator-
+// public collection rules"). ONE row per canonical post id (the dedupe
+// law — a repeat import is idempotent). Imports are PRIVATE saves by
+// default: they ride only the importer's own feed; the owner's visibility
+// flip ("private" → "public") is the curator rule that admits the post to
+// EVERY viewer's composed universe. These are WebFlix-local shelves — no
+// TikTok write API is implied (ADR 0004). visibility allowed values:
+// "private" | "public" (SQLite: no enums — union-typed in imports.ts).
+model TikTokImport {
+  id         String   @id @default(cuid())
+  postId     String   @unique
+  authorHint String?
+  importedBy String
+  visibility String   @default("private")
+  createdAt  DateTime @default(now())
+
+  importer User @relation(fields: [importedBy], references: [id], onDelete: Cascade)
+
+  @@index([visibility, createdAt])
+  @@index([importedBy, createdAt])
 }

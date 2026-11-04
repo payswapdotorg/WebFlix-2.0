@@ -1,33 +1,39 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
-import { ExternalLink, Share2 } from "lucide-react";
+import { EyeOff, Globe2, Trash2, ExternalLink, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { useApi } from "@/hooks/use-api";
+import { useWebFlixSession } from "@/hooks/use-webflix-session";
 import { ShortsFeedShell, ShortsSlideChevrons } from "@/components/shorts/shorts-feed-shell";
 import { ShortsSourceSelector } from "@/components/shorts/shorts-source-selector";
+import { TikTokImportDialog } from "@/components/shorts/tiktok/tiktok-import-dialog";
 import { TikTokFeedPlayer } from "@/components/tiktok/tiktok-feed-player";
 import { SHORTS_SOURCE_CAPABILITIES } from "@/lib/shorts/feed-contracts";
 import type { TikTokFeedPageDTO } from "@/lib/tiktok/library";
-import type { TikTokVideoDTO } from "@/lib/tiktok/types";
+import type { TikTokImportVisibility, TikTokVideoDTO } from "@/lib/tiktok/types";
 
 /**
- * ADR 0013 / WFX2-TIKTOK-SHORTS-EXPERIENCE-1 M1 — the TikTok adapter of the
- * one Shorts experience: a real vertical feed of curated TikTok posts played
+ * ADR 0013 / WFX2-TIKTOK-SHORTS-EXPERIENCE-1 — the TikTok adapter of the
+ * one Shorts experience: a real vertical feed of TikTok posts played
  * through the OFFICIAL Embed Player under the shared shell's active-slide
  * lifecycle (exactly one iframe exists per feed — the active slide's).
  *
  * Data law: cursor pages from /api/tiktok/feed (the `{ items, nextCursor }`
  * shape law), deduped by post id, capped at MAX_ITEMS; a `post` deep link
- * splices the requested post FIRST on page 1 (any canonical post works —
- * M2's import extends the library, not this feed's mechanics).
+ * splices the requested post FIRST on page 1. M2: the server composes
+ * curated + PUBLIC imports + the viewer's own private saves, and stamps
+ * viewer-scoped fields (`visibility`/`owned`); a fresh client-side import
+ * splices FIRST so the importer sees it immediately.
  *
  * Action law (the work order's contract §7/§8 + ADR 0013 §5): the rail
  * renders ONLY what the capability map AND this rung's implementation both
- * allow — TikTok has NO official like/comment/follow write API, so the rail
- * ships the honest affordances only: Share (copies the canonical TikTok
- * URL) and Open on TikTok. WebFlix-local save/hide/report land with M2/M3
- * persistence; rendering them now would be fake affordances.
+ * allow — TikTok has NO official like/comment/follow write API, so the
+ * rail ships the honest affordances only: Share (copies the canonical
+ * TikTok URL) and Open on TikTok. M2 adds the WebFlix-local import +
+ * OWNER manage affordances (visibility flip / remove — WebFlix shelf
+ * membership, never a TikTok write); visibility chips are factual
+ * ("Only you" / "Imported").
  *
  * Attribution law (contract §6): creator/caption/music render ONLY when the
  * metadata lane verified them — missing fields stay missing, never
@@ -50,7 +56,64 @@ async function shareTikTokPost(item: TikTokVideoDTO) {
 }
 
 /** The source-specific action rail (mirrors the YouTube rail's geometry). */
-function TikTokFeedRail({ item }: { item: TikTokVideoDTO }) {
+function TikTokFeedRail({
+  item,
+  onVisibilityFlipped,
+  onRemoved,
+}: {
+  item: TikTokVideoDTO;
+  onVisibilityFlipped: (postId: string, visibility: TikTokImportVisibility) => void;
+  onRemoved: (postId: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  async function flip(next: TikTokImportVisibility) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/tiktok/import/${encodeURIComponent(item.postId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ visibility: next }),
+      });
+      if (res.ok) {
+        onVisibilityFlipped(item.postId, next);
+        toast.success(
+          next === "public"
+            ? "Now visible to every viewer's TikTok feed"
+            : "Back to your private saves",
+        );
+      } else {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        toast.error(body.error ?? "Could not update the TikTok import");
+      }
+    } catch {
+      toast.error("Could not update the TikTok import");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/tiktok/import/${encodeURIComponent(item.postId)}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        onRemoved(item.postId);
+        toast.success("Removed from the TikTok shelf");
+      } else {
+        toast.error("Could not remove the TikTok import");
+      }
+    } catch {
+      toast.error("Could not remove the TikTok import");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div
       className="absolute bottom-16 right-3 z-20 flex flex-col items-center gap-2"
@@ -79,12 +142,50 @@ function TikTokFeedRail({ item }: { item: TikTokVideoDTO }) {
           <ExternalLink className="size-full" aria-hidden="true" />
         </a>
       ) : null}
+      {item.owned ? (
+        <>
+          <button
+            type="button"
+            onClick={() => void flip(item.visibility === "public" ? "private" : "public")}
+            disabled={busy}
+            aria-label={item.visibility === "public" ? "Make private — only you" : "Make public — every viewer"}
+            data-testid="tiktok-shorts-flip"
+            title={item.visibility === "public" ? "Make private — only you" : "Make public — every viewer"}
+            className="flex h-12 w-12 items-center justify-center rounded-full bg-black/30 p-3 text-white backdrop-blur transition-transform duration-150 hover:scale-105 focus-visible:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:opacity-50"
+          >
+            {item.visibility === "public" ? (
+              <EyeOff className="size-full" aria-hidden="true" />
+            ) : (
+              <Globe2 className="size-full" aria-hidden="true" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => void remove()}
+            disabled={busy}
+            aria-label="Remove from the TikTok shelf"
+            data-testid="tiktok-shorts-remove"
+            title="Remove from the TikTok shelf"
+            className="flex h-12 w-12 items-center justify-center rounded-full bg-black/30 p-3 text-white backdrop-blur transition-transform duration-150 hover:scale-105 focus-visible:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:opacity-50"
+          >
+            <Trash2 className="size-full" aria-hidden="true" />
+          </button>
+        </>
+      ) : null}
     </div>
   );
 }
 
 export function TikTokShortsFeed({ post }: { post?: string | null }) {
-  // ---- seed page (deep-link splice happens server-side on page 1) ----------
+  const wfSession = useWebFlixSession();
+  const authenticated =
+    wfSession.status === "authenticated"
+      ? true
+      : wfSession.status === "unauthenticated"
+        ? false
+        : null;
+
+  // ---- seed page (deep-link splice + M2 composition happen server-side) ---
   const seedUrl = useMemo(
     () =>
       post
@@ -106,11 +207,16 @@ export function TikTokShortsFeed({ post }: { post?: string | null }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const loadingMoreRef = useRef(false);
 
+  // M2: client-side imports splice FIRST (the importer sees the post now;
+  // the server composition dedupes it out on the next reload).
+  const [clientImports, setClientImports] = useState<TikTokVideoDTO[]>([]);
+
   const seedItems = seedPage?.items ?? [];
   const items = useMemo(() => {
     const seen = new Set<string>();
     const out: TikTokVideoDTO[] = [];
     for (const video of [
+      ...clientImports,
       ...seedItems,
       ...loadedPages.flatMap((page) => page.items),
     ]) {
@@ -120,7 +226,7 @@ export function TikTokShortsFeed({ post }: { post?: string | null }) {
       if (out.length >= MAX_ITEMS) break;
     }
     return out;
-  }, [seedItems, loadedPages]);
+  }, [clientImports, seedItems, loadedPages]);
   const nextCursor =
     loadedPages.length > 0
       ? loadedPages[loadedPages.length - 1].nextCursor
@@ -159,6 +265,37 @@ export function TikTokShortsFeed({ post }: { post?: string | null }) {
     loadMore();
   }, [loadMore]);
 
+  const onVisibilityFlipped = useCallback((postId: string, visibility: TikTokImportVisibility) => {
+    setClientImports((prev) =>
+      prev.map((v) => (v.postId === postId ? { ...v, visibility } : v)),
+    );
+    setLoadedPages((pages) =>
+      pages.map((page) => ({
+        ...page,
+        items: page.items.map((v) => (v.postId === postId ? { ...v, visibility } : v)),
+      })),
+    );
+  }, []);
+
+  const onRemoved = useCallback((postId: string) => {
+    setClientImports((prev) => prev.filter((v) => v.postId !== postId));
+    setLoadedPages((pages) =>
+      pages.map((page) => ({
+        ...page,
+        items: page.items.filter((v) => v.postId !== postId),
+      })),
+    );
+    // The seed page holds the composed segment too — drop the row there.
+    reloadSeed();
+  }, [reloadSeed]);
+
+  const onImported = useCallback(
+    (imported: TikTokVideoDTO) => {
+      setClientImports((prev) => [imported, ...prev.filter((v) => v.postId !== imported.postId)]);
+    },
+    [],
+  );
+
   const slideAriaLabel = useCallback(
     (item: TikTokVideoDTO) => item.title || (item.author ? `TikTok by @${item.author}` : "TikTok post"),
     [],
@@ -172,7 +309,7 @@ export function TikTokShortsFeed({ post }: { post?: string | null }) {
         ? ({
             kind: "empty",
             message:
-              "No TikTok posts in the curated shelf yet. Canonical post URLs arrive through the hub and import (M2) — the official player already rides.",
+              "No TikTok posts in the shelf yet. Add one with the Add TikTok button — the official player already rides.",
           } as const)
         : ({ kind: "ready" } as const);
 
@@ -180,7 +317,16 @@ export function TikTokShortsFeed({ post }: { post?: string | null }) {
     <ShortsFeedShell<TikTokVideoDTO>
       state={state}
       ariaLabel="TikTok feed"
-      chrome={<ShortsSourceSelector source="tiktok" />}
+      chrome={
+        <div className="flex w-full items-center gap-2">
+          <ShortsSourceSelector source="tiktok" />
+          {CAPS.canImport ? (
+            <div className="ml-auto pr-4 sm:pr-6">
+              <TikTokImportDialog authenticated={authenticated} onImported={onImported} />
+            </div>
+          ) : null}
+        </div>
+      }
       items={items}
       getItemKey={(item) => item.postId}
       slideAriaLabel={slideAriaLabel}
@@ -228,10 +374,31 @@ export function TikTokShortsFeed({ post }: { post?: string | null }) {
                     {item.title}
                   </p>
                 ) : null}
+
+                {/* M2 visibility chips — factual shelf membership, never a
+                    metric: a private save is the owner's only; a public
+                    import says so. Curated rows carry no chip. */}
+                {item.visibility ? (
+                  <p
+                    className={
+                      "mt-2 w-fit rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide " +
+                      (item.visibility === "private"
+                        ? "bg-white/15 text-white/90"
+                        : "bg-emerald-600/70 text-white")
+                    }
+                    data-testid="tiktok-shorts-visibility"
+                  >
+                    {item.visibility === "private" ? "Only you" : "Imported"}
+                  </p>
+                ) : null}
               </div>
             </div>
 
-            <TikTokFeedRail item={item} />
+            <TikTokFeedRail
+              item={item}
+              onVisibilityFlipped={onVisibilityFlipped}
+              onRemoved={onRemoved}
+            />
 
             {/* desktop prev/next chevrons (the shared pair) */}
             <ShortsSlideChevrons control={control} />

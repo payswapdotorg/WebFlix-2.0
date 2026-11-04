@@ -151,7 +151,10 @@ describe("TikTokShortsFeed — the shared-shell rendering", () => {
   test("the deep-link post prop rides the seed URL (the splice contract)", async () => {
     useApiData = page([feedItem(ID_B)]);
     await render(createElement(TikTokShortsFeed, { post: ID_B }));
-    expect(useApiUrls[0]).toBe(`/api/tiktok/feed?post=${ID_B}`);
+    // M2: the component also fetches the account session for the import
+    // affordance — the FEED lane's URLs are what the splice contract pins.
+    const feedUrls = useApiUrls.filter((u) => u?.startsWith("/api/tiktok/feed"));
+    expect(feedUrls).toEqual([`/api/tiktok/feed?post=${ID_B}`]);
   });
 
   test("cursor pages ride the load-more trigger via nextCursor", async () => {
@@ -234,7 +237,7 @@ describe("TikTokShortsFeed — the honest states", () => {
   test("an empty library renders the honest empty state", async () => {
     useApiData = page([]);
     await render(createElement(TikTokShortsFeed, { post: null }));
-    expect(win.document.body.textContent).toContain("No TikTok posts in the curated shelf yet");
+    expect(win.document.body.textContent).toContain("No TikTok posts in the shelf yet");
   });
 
   test("the source flip routes through the canonical href (scroll: false)", async () => {

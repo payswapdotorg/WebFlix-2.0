@@ -25,7 +25,7 @@ import {
   tiktokPlayerEmbedUrl,
   tiktokVideoUrl,
 } from "./urls";
-import type { TikTokRailDTO, TikTokSearchResultsDTO, TikTokSource, TikTokVideoDTO } from "./types";
+import type { TikTokRailDTO, TikTokSearchResultsDTO, TikTokSource, TikTokVideoDTO, TikTokImportVisibility } from "./types";
 
 /** The curated universe's hard cap (per-domain rate limits stay benign). */
 export const TIKTOK_CURATED_CAP = 40;
@@ -109,6 +109,35 @@ function curatedFallbackDTO(postId: string, author: string): TikTokVideoDTO {
     source: "tiktok-curated",
     unavailable: false,
     unavailableReason: null,
+  };
+}
+
+/**
+ * WFX2-TIKTOK-SHORTS-EXPERIENCE-1 M2 — the imported-post fallback card: the
+ * P59-R2 law extended to imports. When the metadata lane walls for an
+ * imported post, the card still renders the handle the importer's own URL
+ * carried (`authorHint` — factual: the importer pasted it), with the honest
+ * `tiktok-imported` provenance and no fabricated title/thumbnail. PURE —
+ * no DB here; the request layer owns the hints (the shared cached DTO
+ * must never carry viewer- or row-scoped data).
+ */
+export function importedFallbackDTO(postId: string, authorHint: string | null): TikTokVideoDTO {
+  const handle = authorHint ? authorHint.replace(/^@/, "").trim() : "";
+  return {
+    postId,
+    author: handle || null,
+    authorUrl: handle ? tiktokAuthorUrl(handle) : null,
+    title: null,
+    thumbnailUrl: null,
+    width: null,
+    height: null,
+    embedUrl: tiktokPlayerEmbedUrl(postId),
+    deepLinkUrl: tiktokVideoUrl(handle || null, postId),
+    source: "tiktok-imported",
+    unavailable: false,
+    unavailableReason: null,
+    visibility: null,
+    owned: null,
   };
 }
 
@@ -213,9 +242,18 @@ export async function getTikTokVideo(postId: string): Promise<TikTokVideoDTO> {
  * The hub composition: every curated post resolved (concurrently), each
  * honestly successful or honestly unavailable. `unavailable` on the RAIL
  * means every video failed — the hub renders the notice, never fake rows.
+ * M2: `extraIds` (the DB-backed import ids) APPEND after the curated flow
+ * (deduped) so the hub rail and the search lane see the community imports
+ * too — the request layer reads the DB and passes them; this function
+ * itself stays DB-free.
  */
-export async function getTikTokRail(): Promise<TikTokRailDTO> {
-  const ids = curatedPostIds();
+export async function getTikTokRail(opts: { extraIds?: readonly string[] } = {}): Promise<TikTokRailDTO> {
+  const seen = new Set<string>();
+  const ids = [...curatedPostIds(), ...(opts.extraIds ?? [])].filter((id) => {
+    if (!isTikTokPostId(id) || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
   const videos = await Promise.all(ids.map((id) => getTikTokVideo(id)));
   const ok = videos.filter((v) => !v.unavailable);
   // P59-R2: provenance reflects what actually served the cards — oEmbed when
@@ -243,15 +281,23 @@ export async function getTikTokRail(): Promise<TikTokRailDTO> {
  * matches against whatever metadata the cache holds — no metadata (walled
  * egress) → no matches → the shelf renders nothing, never a placeholder.
  */
-export async function searchTikTokLibrary(q: string): Promise<TikTokSearchResultsDTO> {
+export async function searchTikTokLibrary(
+  q: string,
+  opts: { extraIds?: readonly string[] } = {}
+): Promise<TikTokSearchResultsDTO> {
   const query = q.trim();
-  const ids = curatedPostIds();
+  const seen = new Set<string>();
+  const ids = [...curatedPostIds(), ...(opts.extraIds ?? [])].filter((id) => {
+    if (!isTikTokPostId(id) || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
   if (!query || ids.length === 0) {
     return { q, videos: [], universeSize: ids.length, source: "", note: null };
   }
   const needle = query.toLowerCase();
   const tokens = needle.split(/\s+/).filter(Boolean).slice(0, 6);
-  const rail = await getTikTokRail();
+  const rail = await getTikTokRail({ extraIds: opts.extraIds });
   const videos = rail.videos.filter((v) => {
     if (v.unavailable) return false;
     const hay = `${v.title ?? ""} ${v.author ?? ""}`.toLowerCase();
@@ -284,6 +330,12 @@ export async function searchTikTokLibrary(q: string): Promise<TikTokSearchResult
  *   (a cursor present = paging mode).
  * - Dedupe by post id; the page cap keeps iframe volume bounded (the
  *   embed-domain usage-limit law — the feed mounts players lazily anyway).
+ * - M2 imports: `extraIds` (the request layer's DB-backed ids — public
+ *   imports for everyone, plus the signed-in viewer's own private saves)
+ *   APPEND after the curated flow in the order given, deduped. The cursor
+ *   law is unchanged (walk the composed order); the nextCursor stays the
+ *   last SERVED id (curated or imported alike) and an unknown cursor
+ *   honestly restarts from the top. THE MODULE STAYS DB-FREE.
  * - Dead posts are NOT filtered (consistent with the hub): the viewer-side
  *   player is the only liveness witness, and its honest error banner +
  *   outbound link is the law for a post the ledger never saw die.
@@ -300,12 +352,18 @@ export async function getTikTokFeedPage(opts: {
   cursor?: string | null;
   post?: string | null;
   limit?: number;
+  extraIds?: readonly string[];
 } = {}): Promise<TikTokFeedPageDTO> {
   const limit = Math.min(
     Math.max(Math.floor(opts.limit ?? TIKTOK_FEED_PAGE_DEFAULT) || TIKTOK_FEED_PAGE_DEFAULT, 1),
     TIKTOK_FEED_PAGE_MAX,
   );
-  const universe = curatedPostIds();
+  const seenUniverse = new Set<string>();
+  const universe = [...curatedPostIds(), ...(opts.extraIds ?? [])].filter((id) => {
+    if (!isTikTokPostId(id) || seenUniverse.has(id)) return false;
+    seenUniverse.add(id);
+    return true;
+  });
 
   const out: TikTokVideoDTO[] = [];
   const seen = new Set<string>();

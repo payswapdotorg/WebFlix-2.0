@@ -11,11 +11,33 @@
 export type TikTokSource =
   | "tiktok-oembed"
   | "tiktok-curated"
+  | "tiktok-imported"
   | "last-good"
   | "";
 
+/** WFX2-TIKTOK-SHORTS-EXPERIENCE-1 M2 — the import visibility law (ADR 0013
+ * §7): "private" rides only the owner's feed; "public" admits the post to
+ * every viewer's composed universe. SQLite has no enums — the DB column is
+ * a String with this union (schema comment law). */
+export type TikTokImportVisibility = "private" | "public";
+
+/**
+ * VIEWER-SCOPED stamps — set ONLY by the request layer (import/feed routes)
+ * AFTER the shared cached DTO resolves; the cached lane itself never stores
+ * them (one cached DTO serves every viewer — a session field inside it
+ * would leak one viewer's shelf into another's). `undefined` = the row is
+ * not DB-backed (curated) or the caller is a guest.
+ */
+export interface TikTokViewerStamp {
+  /** The post's import visibility when DB-backed (curated rows: null). */
+  visibility?: TikTokImportVisibility | null;
+  /** True when the ACTING viewer imported this row (drives the owner's
+   * manage affordances; never derivable from a shared cache). */
+  owned?: boolean | null;
+}
+
 /** One curated TikTok post, as the hub/cards/player pages consume it. */
-export interface TikTokVideoDTO {
+export interface TikTokVideoDTO extends TikTokViewerStamp {
   /** Numeric-string TikTok post id (the oEmbed `embed_product_id`). */
   postId: string;
   /** oEmbed enrichment — optional by contract (a minimal oEmbed answer

@@ -64,6 +64,11 @@ export interface ShortsSourceCapabilities {
   canReport: boolean;
   /** an honest outbound link to the post on the provider's site. */
   canOpenOutbound: boolean;
+  /** WFX2-TIKTOK-SHORTS-EXPERIENCE-1 M2 — the WebFlix-local canonical-URL
+   * paste/import (a private save by default; the owner's visibility flip
+   * is the curator rule). WebFlix-local ONLY — it claims no TikTok write
+   * (ADR 0004). */
+  canImport: boolean;
 }
 
 export const SHORTS_SOURCE_CAPABILITIES: Record<ShortsSource, ShortsSourceCapabilities> = {
@@ -76,6 +81,7 @@ export const SHORTS_SOURCE_CAPABILITIES: Record<ShortsSource, ShortsSourceCapabi
     canHide: true,
     canReport: true,
     canOpenOutbound: true,
+    canImport: false,
   },
   tiktok: {
     canLike: false,
@@ -86,5 +92,6 @@ export const SHORTS_SOURCE_CAPABILITIES: Record<ShortsSource, ShortsSourceCapabi
     canHide: true,
     canReport: true,
     canOpenOutbound: true,
+    canImport: true,
   },
 };

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { searchTikTokLibrary } from "@/lib/tiktok/library";
+import { publicImportIds } from "@/lib/tiktok/imports";
 import { rateLimit } from "@/lib/youtube/cache";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +17,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
     const q = (new URL(req.url).searchParams.get("q") ?? "").slice(0, 120);
-    const results = await searchTikTokLibrary(q);
+    const results = await searchTikTokLibrary(q, { extraIds: await publicImportIds() });
     return NextResponse.json(results, {
       headers: { "Cache-Control": "s-maxage=300, stale-while-revalidate=86400" },
     });

@@ -6,12 +6,25 @@
  * clamp, and the dedupe guarantee. The upstream seam is injected; no
  * network anywhere (lane law).
  */
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test, mock } from "bun:test";
 import { NextRequest } from "next/server";
 import { readFileSync } from "node:fs";
 
 import { clearCache, clearRateLimits } from "@/lib/youtube/cache";
 import { setTikTokUpstream, type TikTokUpstreamFetch } from "@/lib/tiktok/upstream";
+
+// The import seam is MOCKED DB-FREE here (the lane law): these files pin
+// the route mechanics, not the persistence layer — the DB-backed import
+// battery lives in tiktok-imports.test.ts. Mocked public/extra segments
+// keep the universe exactly the curated list regardless of db state.
+mock.module("@/lib/tiktok/imports", () => ({
+  publicImportIds: async () => [],
+  composedFeedExtraIds: async () => ({ extraIds: [], hintByPostId: new Map(), ownPostIds: new Set() }),
+  decorateFeedPage: async (items: unknown) => items,
+  importUserId: async (u: { id: string }) => u.id,
+  TIKTOK_IMPORT_CAP: 40,
+}));
+
 
 const FIXTURE = JSON.parse(readFileSync("tests/fixtures/tiktok/oembed.json", "utf8"));
 const DOCS_ID = "6718335390845095173";

@@ -12,6 +12,7 @@ mock.module("@/lib/tiktok/library", () => ({
   getTikTokVideo: () => Promise.reject(new Error("boom")),
   getTikTokRail: () => Promise.reject(new Error("boom")),
   searchTikTokLibrary: () => Promise.reject(new Error("boom")),
+  importedFallbackDTO: () => Promise.reject(new Error("boom")),
   TIKTOK_SEED: [],
   TIKTOK_CURATED_CAP: 40,
 }));
