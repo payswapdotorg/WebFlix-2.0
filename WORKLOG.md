@@ -2037,3 +2037,15 @@ Stage Summary:
   - CHEVRONS: the TikTok shelf's forward chevron pages scrollLeft 0→884 in one click (max 3752), edge states correct.
 - GATES: FULL battery 2954/0 foreground-to-file exit 0 (26 lane summaries all "0 fail"; a naive fail-sum "36" artifact was digits inside test NAMES like "P36 failed official read" — zero (fail) markers). typecheck/lint untouched (no product code changed this lane).
 - Money gate stays CLOSED (nothing money-shaped touched).
+
+Task ID: P92-DELIVERY-LEG-PARTIAL (the operator's credential touch: fresh PAT + fresh Vercel token, re-delivered after the eleventh reset took the vault)
+Date: 2026-11-04
+Base: main @ fafca0b (P91)
+Claim: The vault is rebuilt and the three-delivery commits ARE on origin main — but the Vercel leg is still blocked: the freshly delivered token answers invalidToken at every endpoint tried, and no auto-deploy fired within the watch window. One deploy trigger remains between the operator and the thumbnails.
+
+Stage Summary:
+- VAULT REBUILT: /home/z/.secrets/webflix.env back at 0600 with both delivered tokens (GITHUB_PAT, VERCEL_TOKEN_2); sourcing verified. The Neon slots (NEON_API_KEY_4 / NEON_WEBFLIX2_PROD_URL) remain absent since the reset — re-add on the next operator touch if Neon work resumes.
+- PUSH LANDED: one-time-URL push (PAT masked, never echoed) carried a8a713f..fafca0b to origin main — P89 (thumbnail hardening R5–R8) + P90 (mute + shelf chevrons) + P91 (forensics) are now ON GITHUB. Branch protection noted "bypassed rule violations — 3 of 3 required status checks expected" (the operator's ruleset allows the bypass; push exit 0).
+- VERCEL LEG BLOCKED: POST /v13/deployments → 403 forbidden invalidToken:true; GET /v2/user → the same (3 attempts across ~5 minutes, token stored byte-exact at 60 chars, vcp_ prefix). The token is not recognized at Vercel's side — likely a transcription/creation slip, not an API-law issue (the request body is the proven P87/M5 one-liner).
+- AUTO-DEPLOY WATCH: the P87 deploy was created via gitSource, so the push MAY have hooked a git integration — production polled for the P90 marker (`webflix:shorts:muted` in the /shorts chunks) 6×45s: not-yet at every poll. If the integration exists the build may still land late; otherwise the deploy needs a valid token (or a manual "Redeploy" from the operator's dashboard on main @ fafca0b).
+- Money gate stays CLOSED (nothing money-shaped touched).
