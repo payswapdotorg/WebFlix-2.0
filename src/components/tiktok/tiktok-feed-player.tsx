@@ -13,6 +13,7 @@ import {
   useTikTokOEmbed,
 } from "@/components/tiktok/tiktok-preview-client";
 import { TikTokThumbnailImage } from "@/components/tiktok/tiktok-thumbnail-image";
+import { useShortsMuted } from "@/components/shorts/shorts-mute";
 
 /**
  * ADR 0013 / WFX2-TIKTOK-SHORTS-EXPERIENCE-1 M1 — the TikTok feed player:
@@ -41,6 +42,14 @@ import { TikTokThumbnailImage } from "@/components/tiktok/tiktok-thumbnail-image
  *    lives in lib/tiktok/urls.ts); a 3002 AUTOPLAY_ERROR shows an explicit
  *    tap-to-play recovery; the 12s readiness timeout and the error banners
  *    carry the outbound TikTok link. No fabricated media ever renders.
+ *  - P90 MUTE LAW: the Embed Player documents NO mute command (the outbound
+ *    protocol carries play/pause only), so the ShortsMuteButton's flip
+ *    RE-MOUNTS the iframe with the documented `force_muted` param flipped.
+ *    The click is the user gesture (sticky activation — the unmuted mount
+ *    may play with sound), and the restart is the honest cost of a
+ *    protocol that cannot re-target a live player's volume. The native
+ *    player controls remain usable alongside; the mount param is OUR
+ *    button's contract, not a claim about the player's live volume.
  *  - P89 POSTER LAW (docs/research/2026-11-04-tiktok-thumbnail-hover-play-
  *    research.md R7): when the server DTO carries no thumbnailUrl, the
  *    poster/starting-cover hydrates through the same official CORS-open
@@ -109,10 +118,15 @@ export function TikTokFeedPlayer({
     autoplayBlocked: boolean;
     forPost: string;
   }>({ error: null, ready: false, timedOut: false, autoplayBlocked: false, forPost: postId });
-  // Render-phase reset on post change (the house pattern — no setState in
-  // an effect body).
-  if (state.forPost !== postId) {
-    setState({ error: null, ready: false, timedOut: false, autoplayBlocked: false, forPost: postId });
+  // P90 — the mute preference drives the mount param, so the reset identity
+  // is (post, muted): a flip re-boots the pending cover with the new param
+  // (the render-phase reset idiom — the house pattern).
+  const [isMuted] = useShortsMuted();
+  const mountKey = `${postId}:${isMuted ? "muted" : "sound"}`;
+  // Render-phase reset on post/mute change (the house pattern — no setState
+  // in an effect body).
+  if (state.forPost !== mountKey) {
+    setState({ error: null, ready: false, timedOut: false, autoplayBlocked: false, forPost: mountKey });
   }
 
   // MOUNT LAW, refined: the iframe stays mounted through the pause-then-
@@ -150,10 +164,10 @@ export function TikTokFeedPlayer({
     () =>
       tiktokPlayerEmbedUrl(postId, {
         autoplay: true,
-        forceMuted: true,
+        forceMuted: isMuted,
         loop: true,
       }),
-    [postId],
+    [postId, isMuted],
   );
 
   useEffect(() => {
@@ -265,7 +279,9 @@ export function TikTokFeedPlayer({
       document.removeEventListener("visibilitychange", onVisibility);
       clearTimer();
     };
-  }, [active, postId, readyTimeoutMs]);
+    // mountKey re-arms the listeners + readiness guard on a P90 mute-flip
+    // re-mount (the new iframe needs its own budget; telemetry re-ones).
+  }, [active, mountKey, postId, readyTimeoutMs]);
 
   // COMMAND LAW on inactive: the official `pause` rides out WHILE the iframe
   // still lives; the unmount beat follows as the guarantee (a re-activation
@@ -308,7 +324,7 @@ export function TikTokFeedPlayer({
         <>
           <iframe
             ref={iframeRef}
-            key={postId}
+            key={mountKey}
             src={src}
             title={item.title ? `${item.title} — TikTok` : "TikTok player"}
             // The allow list mirrors the official oEmbed html sample.

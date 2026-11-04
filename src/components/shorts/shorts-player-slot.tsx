@@ -15,11 +15,20 @@
  *
  * The contract stays `{ videoId, active, posterUrl }`; inactive slides keep
  * the poster (the iframe mounts only for the active slide, as before).
+ *
+ * P90 — the mute transport: `enablejsapi=1` + the shared shorts-mute
+ * preference at mount, with live mute/unMute/setVolume IFrame API commands
+ * riding the ShortsMuteButton's flips (no reload, no re-render).
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { probeEmbedHealth } from "@/components/watch/youtube-player";
 import { PlayerFallback } from "@/components/player/player-fallback";
+import {
+  getShortsMuted,
+  sendYouTubePlayerCommand,
+  subscribeShortsMuted,
+} from "@/components/shorts/shorts-mute";
 
 const YT_EMBED_BASE = "https://www.youtube.com/embed";
 
@@ -57,6 +66,31 @@ export function ShortsPlayerSlot({
     setProbedFor({ videoId, active });
     setWallVerdict("pending");
   }
+
+  // P90 — the mute transport: the embed mounts with `enablejsapi=1` and the
+  // shared preference's value at mount; a later flip rides the official
+  // IFrame API commands through the narrowest origin (mute / unMute — the
+  // ShortsMuteButton's transport; NO re-render, so the src never reloads
+  // the iframe mid-play). The first subscription's async hydration also
+  // corrects a stored "unmuted" right after mount. The mount value is a
+  // lazy useState read (the module store, once per instance — never a ref
+  // read in render), so the src stays frozen for this mount's lifetime.
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const [mutedAtMount] = useState(() => getShortsMuted());
+
+  useEffect(() => {
+    if (!active) return; // the commands only ever target the playing slide
+    return subscribeShortsMuted((mutedNow) => {
+      if (!iframeRef.current) return;
+      if (mutedNow) {
+        sendYouTubePlayerCommand(iframeRef.current, "mute");
+      } else {
+        sendYouTubePlayerCommand(iframeRef.current, "unMute");
+        // unMute alone can leave volume at 0 on some embeds — restore it.
+        sendYouTubePlayerCommand(iframeRef.current, "setVolume", [100]);
+      }
+    });
+  }, [active]);
 
   useEffect(() => {
     if (!active) return; // only the playing slide probes
@@ -99,10 +133,11 @@ export function ShortsPlayerSlot({
       ) : active ? (
         <>
           <iframe
+            ref={iframeRef}
             key={active ? "on" : "off"}
-            src={`${YT_EMBED_BASE}/${videoId}?playsinline=1&autoplay=1&mute=1&controls=0${
-              isLive ? "" : "&loop=1&playlist=" + videoId
-            }&rel=0`}
+            src={`${YT_EMBED_BASE}/${videoId}?enablejsapi=1&playsinline=1&autoplay=1&mute=${
+              mutedAtMount ? 1 : 0
+            }&controls=0${isLive ? "" : "&loop=1&playlist=" + videoId}&rel=0`}
             title={videoId}
             loading="lazy"
             allow="autoplay; encrypted-media; picture-in-picture"

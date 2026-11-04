@@ -159,6 +159,21 @@ describe("TikTokShelf — the M3 home shelf", () => {
     await render(createElement(TikTokShelf, null));
     expect(q('[data-testid="tiktok-home-shelf"]')).toBeNull();
   });
+
+  // P90 — the scroll affordance (the ShelfScroller chevron law): the
+  // operator's report — the horizontal shelf reads as stuck on desktop.
+  test("the row rides the chevron-paged scroller (the scroll affordance)", async () => {
+    useApiData = rail([railItem(ID_A), railItem(ID_B)]);
+    await render(createElement(TikTokShelf, null));
+    expect(q('[data-testid="tiktok-home-shelf-row-scroller"]')).toBeTruthy();
+    expect(q('[data-testid="tiktok-home-shelf-row"]')).toBeTruthy();
+    const left = q('[data-testid="tiktok-home-shelf-row-page-left"]') as HTMLButtonElement | null;
+    const right = q('[data-testid="tiktok-home-shelf-row-page-right"]') as HTMLButtonElement | null;
+    expect(left?.getAttribute("aria-label")).toBe("Scroll TikTok back");
+    expect(right?.getAttribute("aria-label")).toBe("Scroll TikTok forward");
+    // at the left edge the back chevron is honestly disabled
+    expect(left?.disabled).toBe(true);
+  });
 });
 
 // ---- P88 — the client preview lane (thumbnails + hover-play) ----------------

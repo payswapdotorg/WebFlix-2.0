@@ -27,6 +27,7 @@ import { ShortsFeedShell, ShortsSlideChevrons } from "@/components/shorts/shorts
 import { ShortsSourceSelector } from "@/components/shorts/shorts-source-selector";
 import { TikTokImportDialog } from "@/components/shorts/tiktok/tiktok-import-dialog";
 import { TikTokFeedPlayer } from "@/components/tiktok/tiktok-feed-player";
+import { ShortsMuteButton } from "@/components/shorts/shorts-mute";
 import { SHORTS_SOURCE_CAPABILITIES } from "@/lib/shorts/feed-contracts";
 import type { TikTokFeedPageDTO } from "@/lib/tiktok/library";
 import type { TikTokImportVisibility, TikTokVideoDTO } from "@/lib/tiktok/types";
@@ -220,6 +221,10 @@ function TikTokFeedRail({
       className="absolute bottom-16 right-3 z-20 flex flex-col items-center gap-2"
       data-testid="tiktok-shorts-rail"
     >
+      {/* P90 — the mute toggle: the shared shorts preference; the feed
+          player translates the flip through the documented force_muted
+          re-mount (the Embed Player documents no mute command). */}
+      <ShortsMuteButton />
       {CAPS.canShare ? (
         <button
           type="button"

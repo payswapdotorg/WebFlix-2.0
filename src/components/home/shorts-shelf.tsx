@@ -4,6 +4,7 @@ import Link from "next/link";
 import { SquarePlay } from "lucide-react";
 import { displayViews } from "@/lib/format";
 import { useHoverPreview } from "@/components/video/video-hover-preview";
+import { ShelfScroller } from "@/components/home/shelf-scroller";
 import type { VideoDTO } from "@/lib/types";
 
 /**
@@ -34,11 +35,13 @@ export function ShortsShelf({ shorts }: { shorts: VideoDTO[] }) {
       <h2 className="flex items-center gap-2 px-4 text-lg font-semibold text-foreground sm:px-6 sm:text-xl">
         <SquarePlay className="size-6 text-yt-red" strokeWidth={2.2} /> Shorts
       </h2>
-      <div className="no-scrollbar mt-3 flex gap-4 overflow-x-auto px-4 pb-2 sm:px-6">
+      {/* P90 — the scroll affordance rides (the ShelfScroller chevron law);
+          the row classes + native swipe contract are unchanged. */}
+      <ShelfScroller label="Shorts" testId="shorts-home-shelf-row">
         {shorts.map((short) => (
           <ShortsTile key={short.id} short={short} />
         ))}
-      </div>
+      </ShelfScroller>
     </section>
   );
 }

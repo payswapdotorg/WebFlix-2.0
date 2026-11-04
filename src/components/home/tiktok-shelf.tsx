@@ -11,6 +11,7 @@ import {
   useTikTokOEmbed,
 } from "@/components/tiktok/tiktok-preview-client";
 import { TikTokThumbnailImage } from "@/components/tiktok/tiktok-thumbnail-image";
+import { ShelfScroller } from "@/components/home/shelf-scroller";
 import type { TikTokRailDTO, TikTokVideoDTO } from "@/lib/tiktok/types";
 
 /**
@@ -141,11 +142,13 @@ export function TikTokShelf() {
           · curated and community-imported posts
         </span>
       </h2>
-      <div className="no-scrollbar mt-3 flex gap-4 overflow-x-auto px-4 pb-2 sm:px-6">
+      {/* P90 — the scroll affordance rides (the ShelfScroller chevron law);
+          the row classes + native swipe contract are unchanged. */}
+      <ShelfScroller label="TikTok" testId="tiktok-home-shelf-row">
         {videos.map((video) => (
           <TikTokHomeTile key={video.postId} video={video} />
         ))}
-      </div>
+      </ShelfScroller>
     </section>
   );
 }

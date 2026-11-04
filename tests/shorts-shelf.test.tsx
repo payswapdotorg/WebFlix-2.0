@@ -189,6 +189,20 @@ describe("P22-A — the shorts shelf: youtube.com-parity sizing", () => {
     expect(q('[aria-label="Shorts shelf"]')).toBeNull();
     expect(host?.innerHTML).toBe("");
   });
+
+  // P90 — the scroll affordance (the ShelfScroller chevron law): the
+  // operator's report — the horizontal shelf reads as stuck on desktop.
+  test("the row rides the chevron-paged scroller (the scroll affordance)", async () => {
+    await renderShelf();
+    expect(q('[data-testid="shorts-home-shelf-row-scroller"]')).toBeTruthy();
+    expect(q('[data-testid="shorts-home-shelf-row"]')).toBeTruthy();
+    const left = q('[data-testid="shorts-home-shelf-row-page-left"]') as HTMLButtonElement | null;
+    const right = q('[data-testid="shorts-home-shelf-row-page-right"]') as HTMLButtonElement | null;
+    expect(left?.getAttribute("aria-label")).toBe("Scroll Shorts back");
+    expect(right?.getAttribute("aria-label")).toBe("Scroll Shorts forward");
+    // at the left edge the back chevron is honestly disabled
+    expect(left?.disabled).toBe(true);
+  });
 });
 
 describe("P22-A — shorts tiles preview on hover (the [data-no-preview] policy is gone)", () => {

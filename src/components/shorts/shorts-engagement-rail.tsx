@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { post } from "@/lib/watch/client";
 import { toastActionError } from "@/lib/watch/connection-client";
 import { signInHref } from "@/lib/auth/client";
+import { ShortsMuteButton } from "@/components/shorts/shorts-mute";
 import type { LikeResultDto, LikeValue } from "@/lib/watch/types";
 import type { ShortDTO } from "@/lib/youtube/shorts";
 import { soundTokenToKeyLink } from "@/lib/youtube/sound-key";
@@ -422,6 +423,9 @@ export function ShortsEngagementRail({
 
   return (
     <div className="absolute bottom-16 right-3 z-20 flex flex-col items-center gap-2">
+      {/* P90 — the mute toggle: the shared shorts preference; the player
+          slot translates the flip through the official IFrame API. */}
+      <ShortsMuteButton />
       {/* Like — LIVE via the watch seam (was display-only; the seam landed). */}
       <RailAction
         label="Like this short"
