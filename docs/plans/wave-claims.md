@@ -1187,3 +1187,17 @@ re-runs gates → merges.
 - THE AUTO-DEPLOY IS STALLED TOO: the project's git link is verified (github payswapdotorg/WebFlix-2.0) and 6 READY production deployments exist from the P65 era (newest sha a4c190518ad7) — but ZERO deployments (all states) in the last 48h despite today's pushes (e88e78a included): the fair-use block stopped git-driven deploys as well. Production lags main by the entire P66→P86 chain.
 - THE UNBLOCK IS OPERATOR-SIDE ONLY: no token can create a deployment while the team is fair-use blocked. Required: a dashboard/billing action on vercel.com as the account owner (resolve the fair-use block — usage window reset or plan change), and if a fresh token was intended, mint it at vercel.com/account/tokens. M5's deployed-SHA verification remains gated on exactly this.
 - No code changed in this addendum (recon only); the money gate stays CLOSED.
+
+## Wave P87 — WFX2-TIKTOK-SHORTS-EXPERIENCE-1 M5 (production deployment leg)
+
+| Wave | Lane | Lead | Claimed (UTC) | Base | Status |
+|---|---|---|---|---|---|
+| P87 | M5-production (Vercel unblock → READY + deployed-SHA verification) | Z.ai Code (TL, issue #2) | 2026-11-04 13:40 UTC | 3475af8 | SHIPPED 11259fb |
+
+- THE OPERATOR DELIVERED: a fresh vcp_… token (payswap account) cleared the P86 fair-use 402 on first contact (402 → 400 missing_project_settings → 200 with framework=nextjs); webflix-2-0 re-created under the unblocked scope.
+- DATABASE_URL RESURRECTED: api.neon.tech globally NXDOMAIN → console.neon.tech/api/v2 with NEON_API_KEY_4 direct resource probes returned the pooled URI for webflix2-prod (restless-breeze-74749954, br-lucky-cherry-b72yomwa, neondb/neondb_owner); vault slot NEON_WEBFLIX2_PROD_URL restored — double-quoted (the URI's `&` breaks unquoted bash sourcing: backgrounded subshell assignment + phantom `sslmode=require` command = the empty-string P1012).
+- ADDITIVE-ONLY SCHEMA PROOF: read-only `migrate diff` (224 lines, zero DROPs, one NOT NULL relax, all-NULL new pair) → vercel.json db push gains --accept-data-loss (the repo's own db:push law); commit 11259fb pushed clean on the primary PAT.
+- READY + SHA-VERIFIED: dpl_EPQsGWAFKxVPwgTdtJ5VbnQyiABn READY; meta githubCommitSha 11259fb700ffc167d67c00b3bc33e904e3cfda42 == git rev-parse main; ssoProtection null → https://webflix-2-0-tay-nurs-projects.vercel.app/ public.
+- PRODUCTION BROWSER LAWS PROVEN: exactly one TikTok official-player iframe per feed; ArrowDown/ArrowUp swap the active post keeping the iframe count at 1 (active-player law); TikTok shelf deep-links into the shared feed; YouTube default + honest headless fallback; zero console errors. Evidence: evidence/wfx2-tiktok-shorts-experience/M5-production/.
+- HONEST DEGRADES: UPSTASH in-memory (vault pair NXDOMAIN-dead, prod pair unreadable); YT_COOKIES/BROKER/GOOGLE/LIVEKIT/R2 lanes off until re-delivered; stale a4c1905 still on the old scope's domains (operator-side re-point).
+- Money gate stays CLOSED. M4 remains operator-gated (Display API approval); the work order's Definition of Done now has every non-optional milestone shipped (M0-M3 product, M5 production leg).
