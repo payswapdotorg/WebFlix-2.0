@@ -1950,3 +1950,15 @@ Stage Summary:
 - BROWSER (M3 acceptance, real Chromium, 1440x900 + 375x812): home shelf 17 tiles all carrying the canonical deep link (tiles[0]/tiles[16] checked) and the click-through landing in the feed AT the post; the ⋯ menu listing exactly the honest set; signed-in Save on a curated post answering the live no-op toast; Not-interested dropping the slide 12→11; Report opening the outbound tab (tiktok.com/hk/about — the geo-landing; the ACTION is the honest posture); the M2 curator loop re-proven THROUGH the stamp overlay — import @scout2015/video/7419999999999999999 → "Only you" → flip "Imported" → rail 17→18 + home shelf 18 (the interim 0 was the client fetch in flight) → owner manage buttons verified on the deep-linked row (the reload row-18 depth explained: composition depth, not a stamp gap) → remove → rail 17 and DB rows 0; the hub hand-off + CTA; the search Browse/cards; the YouTube flip regression (25 slides); mobile-375 overflow 0px on /, /shorts?source=tiktok and /tiktok; console clean after clear+reload. The in-sandbox playback geo-wall (the M1 record) is untouched by M3.
 - Evidence: evidence/wfx2-tiktok-shorts-experience/m3/EVIDENCE.md; ledger Wave P86.
 - Follows: M4 (Display API — operator-gated on app approval + credentials) and M5 (hardening + the deployed-SHA verification once the Vercel team block resolves).
+
+Task ID: P86-ADDENDUM-VERCEL-RECON (release-constraint recon — no code)
+Date: 2026-11-04
+Base: main @ e88e78a (P86 M3)
+Claim: The operator provided a Vercel token for the deployment attempt; the recon sharpened the standing residual into its root cause and recorded the exact unblock path.
+
+Stage Summary:
+- The operator-supplied token (byte-identical to the vault's VERCEL_TOKEN_FALLBACK) is rejected by every Vercel endpoint with invalidToken:true — dead at Vercel's side, not a scope issue.
+- The primary token's reads work (user, teams, projects, deployment history); the deployment one-liner's 402 is now precise: "Your Team exceeded our fair use limits and has been blocked" (vercel.link/fair-use) — a TEAM-LEVEL fair-use block, confirmed as the root cause the old 402 residual was hinting at.
+- The webflix-2-0 project's git link is correct (github payswapdotorg/WebFlix-2.0) and its 6 READY production deployments (P65 era, newest a4c190518ad7) prove the pipeline worked before the block; ZERO deployments in the last 48h despite today's pushes → git auto-deploy is stalled by the same block. Production lags main by the P66→P86 chain.
+- Unblock path (operator-side only): resolve the fair-use block in the Vercel dashboard (billing/usage) and, if a fresh token is wanted, mint one at vercel.com/account/tokens. M5's deployed-SHA verification stays gated on this — honestly recorded, not claimed.
+- Money gate stays CLOSED.
