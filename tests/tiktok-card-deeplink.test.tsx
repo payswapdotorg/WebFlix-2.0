@@ -151,3 +151,74 @@ describe("TikTokSearchShelf — the M3 Browse law", () => {
     expect(q('[data-testid="tiktok-search-shelf"]')).toBeNull();
   });
 });
+
+// ---- P88 — the client preview lane ------------------------------------------
+
+const sleepP88 = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+describe("TikTokCard — the P88 client preview lane", () => {
+  test("a server-walled lane hydrates the official oEmbed thumbnail client-side", async () => {
+    const realIO = (globalThis as Record<string, unknown>).IntersectionObserver;
+    (globalThis as Record<string, unknown>).IntersectionObserver = class {
+      private cb: (entries: Array<{ isIntersecting: boolean }>) => void;
+      constructor(cb: (entries: Array<{ isIntersecting: boolean }>) => void) {
+        this.cb = cb;
+      }
+      observe() {
+        this.cb([{ isIntersecting: true }]);
+      }
+      disconnect() {}
+      unobserve() {}
+    };
+    (globalThis as Record<string, unknown>).fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          embed_product_id: ID_A,
+          thumbnail_url: "https://cdn.tiktok.example/card-thumb.jpg",
+        }),
+        { status: 200 }
+      )) as unknown as typeof fetch;
+    // title present, thumbnail walled → hydration fills ONLY the thumbnail
+    await render(createElement(TikTokCard, { video: cardItem(ID_A) }));
+    await act(async () => {
+      await sleepP88(20);
+    });
+    const img = q('[data-testid="tiktok-card-thumb"]') as unknown as HTMLImageElement | null;
+    expect(img?.getAttribute("src")).toBe("https://cdn.tiktok.example/card-thumb.jpg");
+    (globalThis as Record<string, unknown>).IntersectionObserver = realIO;
+  });
+
+  test("hover past the dwell mounts the official player; leave unmounts it", async () => {
+    const winObj = win as unknown as Record<string, unknown>;
+    const realMM = winObj.matchMedia;
+    winObj.matchMedia = (query: string) => ({
+      matches: !query.includes("coarse"),
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    });
+    await render(createElement(TikTokCard, { video: cardItem(ID_A) }));
+    const card = q('[data-testid="tiktok-card"]')!;
+    await act(() => {
+      card.dispatchEvent(new win.MouseEvent("mouseover", { bubbles: true }) as unknown as Event);
+    });
+    await act(async () => {
+      await sleepP88(600); // past the dwell
+    });
+    const iframe = q('iframe[data-testid="tiktok-card-preview"]') as unknown as
+      | HTMLIFrameElement
+      | null;
+    expect(iframe).not.toBeNull();
+    expect(iframe!.getAttribute("src") ?? "").toContain("force_muted=1");
+    expect(iframe!.getAttribute("src") ?? "").toContain("autoplay=1");
+    await act(() => {
+      card.dispatchEvent(new win.MouseEvent("mouseout", { bubbles: true }) as unknown as Event);
+    });
+    expect(q('[data-testid="tiktok-card-preview"]')).toBeNull();
+    winObj.matchMedia = realMM;
+  });
+});

@@ -160,3 +160,177 @@ describe("TikTokShelf — the M3 home shelf", () => {
     expect(q('[data-testid="tiktok-home-shelf"]')).toBeNull();
   });
 });
+
+// ---- P88 — the client preview lane (thumbnails + hover-play) ----------------
+
+const ID_C = "7157587293451062574";
+const ID_D = "7322301313134415134";
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** An IO stub that reports the intersection synchronously on observe(). */
+function intersectingIO(): unknown {
+  return class {
+    private cb: (entries: Array<{ isIntersecting: boolean }>) => void;
+    constructor(cb: (entries: Array<{ isIntersecting: boolean }>) => void) {
+      this.cb = cb;
+    }
+    observe() {
+      this.cb([{ isIntersecting: true }]);
+    }
+    disconnect() {}
+    unobserve() {}
+  };
+}
+
+function setFinePointer(winObj: unknown, fine: boolean): () => void {
+  const real = (winObj as Record<string, unknown>).matchMedia;
+  (winObj as Record<string, unknown>).matchMedia = (query: string) => ({
+    matches: fine ? !query.includes("coarse") : query.includes("coarse"),
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  });
+  return () => {
+    (winObj as Record<string, unknown>).matchMedia = real;
+  };
+}
+
+describe("TikTokShelf — the P88 client preview lane", () => {
+  beforeEach(() => {
+    try {
+      win.sessionStorage.clear();
+    } catch {
+      /* storage-less environments hydrate without the cache */
+    }
+  });
+
+  test("a server-walled lane hydrates the official oEmbed thumbnail client-side", async () => {
+    const realIO = (globalThis as Record<string, unknown>).IntersectionObserver;
+    (globalThis as Record<string, unknown>).IntersectionObserver = intersectingIO();
+    const requested: string[] = [];
+    (globalThis as Record<string, unknown>).fetch = (async (input: RequestInfo | URL) => {
+      requested.push(String(input));
+      return new Response(
+        JSON.stringify({
+          embed_product_id: ID_A,
+          thumbnail_url: "https://cdn.tiktok.example/thumb-A.jpg",
+          title: "A real caption",
+          author_name: "scout2015",
+        }),
+        { status: 200 }
+      );
+    }) as unknown as typeof fetch;
+    useApiData = rail([railItem(ID_A, { thumbnailUrl: null, title: null, author: null })]);
+    await render(createElement(TikTokShelf, null));
+    await act(async () => {
+      await sleep(20);
+    });
+    const img = q('[data-testid="tiktok-tile-thumb"]') as unknown as HTMLImageElement | null;
+    expect(img?.getAttribute("src")).toBe("https://cdn.tiktok.example/thumb-A.jpg");
+    // the hydration fills the caption + author too (official oEmbed fields)
+    const shelf = q('[data-testid="tiktok-home-shelf"]');
+    expect(shelf?.textContent).toContain("A real caption");
+    expect(shelf?.textContent).toContain("@scout2015");
+    // the URL law: the request is built through lib/tiktok/urls.ts — the
+    // same player-shape target the server lane uses when the author is null
+    expect(requested[0]?.startsWith("https://www.tiktok.com/oembed?url=")).toBe(true);
+    expect(requested[0]).toContain(
+      encodeURIComponent(`https://www.tiktok.com/player/v1/${ID_A}`)
+    );
+    (globalThis as Record<string, unknown>).IntersectionObserver = realIO;
+  });
+
+  test("a foreign embed_product_id is honest absence — the fallback tile stays", async () => {
+    const realIO = (globalThis as Record<string, unknown>).IntersectionObserver;
+    (globalThis as Record<string, unknown>).IntersectionObserver = intersectingIO();
+    (globalThis as Record<string, unknown>).fetch = (async () =>
+      new Response(JSON.stringify({ embed_product_id: "9999999999999999999" }), {
+        status: 200,
+      })) as unknown as typeof fetch;
+    useApiData = rail([railItem(ID_C, { thumbnailUrl: null, title: null, author: null })]);
+    await render(createElement(TikTokShelf, null));
+    await act(async () => {
+      await sleep(20);
+    });
+    expect(q('[data-testid="tiktok-tile-thumb"]')).toBeNull();
+    // the fallback names the source honestly — never a fabricated identity
+    expect(q('[data-testid="tiktok-home-shelf"]')?.textContent).toContain("TikTok");
+    (globalThis as Record<string, unknown>).IntersectionObserver = realIO;
+  });
+
+  test("hover past the dwell mounts the official muted-autoplay player; leave unmounts it", async () => {
+    const restore = setFinePointer(win, true);
+    useApiData = rail([railItem(ID_B)]);
+    await render(createElement(TikTokShelf, null));
+    const tile = q('[data-testid="tiktok-home-tile"]')!;
+    await act(() => {
+      tile.dispatchEvent(new win.MouseEvent("mouseover", { bubbles: true }) as unknown as Event);
+    });
+    await act(async () => {
+      await sleep(250); // inside the 450ms dwell — no preview yet
+    });
+    expect(q('[data-testid="tiktok-tile-preview"]')).toBeNull();
+    await act(async () => {
+      await sleep(400); // past the dwell
+    });
+    const iframe = q('iframe[data-testid="tiktok-tile-preview"]') as unknown as
+      | HTMLIFrameElement
+      | null;
+    expect(iframe).not.toBeNull();
+    const src = iframe!.getAttribute("src") ?? "";
+    expect(src.startsWith(`https://www.tiktok.com/player/v1/${ID_B}`)).toBe(true);
+    expect(src).toContain("autoplay=1");
+    expect(src).toContain("force_muted=1");
+    expect(src).toContain("loop=1");
+    expect(src).toContain("music_info=0");
+    expect(src).toContain("rel=0");
+    await act(() => {
+      tile.dispatchEvent(new win.MouseEvent("mouseout", { bubbles: true }) as unknown as Event);
+    });
+    expect(q('[data-testid="tiktok-tile-preview"]')).toBeNull();
+    // the static face returns after the preview unmounts
+    expect(q('[data-testid="tiktok-home-tile"]')?.textContent).toContain("TikTok");
+    restore();
+  });
+
+  test("leaving before the dwell cancels the preview", async () => {
+    const restore = setFinePointer(win, true);
+    useApiData = rail([railItem(ID_D)]);
+    await render(createElement(TikTokShelf, null));
+    const tile = q('[data-testid="tiktok-home-tile"]')!;
+    await act(() => {
+      tile.dispatchEvent(new win.MouseEvent("mouseover", { bubbles: true }) as unknown as Event);
+    });
+    await act(async () => {
+      await sleep(200);
+    });
+    await act(() => {
+      tile.dispatchEvent(new win.MouseEvent("mouseout", { bubbles: true }) as unknown as Event);
+    });
+    await act(async () => {
+      await sleep(500); // past the dwell — the cancelled timer never fires
+    });
+    expect(q('[data-testid="tiktok-tile-preview"]')).toBeNull();
+    restore();
+  });
+
+  test("coarse pointers never preview (hover does not exist there)", async () => {
+    const restore = setFinePointer(win, false);
+    useApiData = rail([railItem(ID_B)]);
+    await render(createElement(TikTokShelf, null));
+    const tile = q('[data-testid="tiktok-home-tile"]')!;
+    await act(() => {
+      tile.dispatchEvent(new win.MouseEvent("mouseover", { bubbles: true }) as unknown as Event);
+    });
+    await act(async () => {
+      await sleep(600); // past the dwell
+    });
+    expect(q('[data-testid="tiktok-tile-preview"]')).toBeNull();
+    restore();
+  });
+});

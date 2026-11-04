@@ -49,7 +49,6 @@ mock.module("@/lib/queue/queue-actions", () => ({ addToQueue: async () => ({ sta
 const { default: SearchPage } = await import("@/app/search/view");
 
 let viewParams = "q=lofi";
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let viewData: any = null;
 
 const loadFixture = (): unknown => {

@@ -205,6 +205,10 @@ export function ShortsFeedShell<T>({
         aria-busy={loadingMore}
         className="slim-scrollbar min-h-0 w-full flex-1 snap-y snap-mandatory overflow-y-auto overscroll-contain"
       >
+        {/* eslint-disable react-hooks/refs -- the closures below read
+            slideRefs at EVENT time only (scrollIntoView on click/keyboard);
+            render itself never touches a ref value. A react-hooks v6
+            conservative false positive on closures created in render. */}
         {items.map((item, index) => {
           const control: ShortsSlideControl = {
             index,
@@ -229,6 +233,7 @@ export function ShortsFeedShell<T>({
             </section>
           );
         })}
+        {/* eslint-enable react-hooks/refs */}
       </div>
     );
   }
