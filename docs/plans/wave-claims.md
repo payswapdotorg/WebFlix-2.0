@@ -1201,3 +1201,15 @@ re-runs gates → merges.
 - PRODUCTION BROWSER LAWS PROVEN: exactly one TikTok official-player iframe per feed; ArrowDown/ArrowUp swap the active post keeping the iframe count at 1 (active-player law); TikTok shelf deep-links into the shared feed; YouTube default + honest headless fallback; zero console errors. Evidence: evidence/wfx2-tiktok-shorts-experience/M5-production/.
 - HONEST DEGRADES: UPSTASH in-memory (vault pair NXDOMAIN-dead, prod pair unreadable); YT_COOKIES/BROKER/GOOGLE/LIVEKIT/R2 lanes off until re-delivered; stale a4c1905 still on the old scope's domains (operator-side re-point).
 - Money gate stays CLOSED. M4 remains operator-gated (Display API approval); the work order's Definition of Done now has every non-optional milestone shipped (M0-M3 product, M5 production leg).
+
+## Wave P88 — the TikTok client preview lane (thumbnails + hover-play)
+
+| Wave | Lane | Lead | Claimed (UTC) | Base | Status |
+|---|---|---|---|---|---|
+| P88 | preview-lane (oEmbed hydration + official hover-play) | Z.ai Code (TL, issue #2) | 2026-11-04 14:35 UTC | a04bd28 | SHIPPED 6aaa912 |
+
+- THE OPERATOR ASK, SHIPPED: TikTok tiles carry thumbnails and play on hover exactly like the YouTube shorts shelf — on OFFICIAL lanes only (CORS-open keyless oEmbed viewer-side; the official Embed Player with the audited force_muted/autoplay/loop/rel params).
+- THE HONEST LADDER: server oEmbed cache → viewer-side hydration (in-view gated, max-3 concurrency, 6h TTL, foreign-row guard) → fallback tile; server values win, only nulls fill, failures degrade to the honest tile (proven on the walled sandbox: 17/17 fallbacks with zero fabrications).
+- THE ACTIVE-PLAYER LAW EXTENDS TO TILES: one preview iframe at a time, unmount on leave (production-verified: mount with exact params → leave → 0 iframes), coarse pointers never preview (proven in pointerless headless).
+- GATES: tiktok lane 145/0 (+7), full battery 2936/0 (+7), typecheck/lint clean; production READY with sha match (6aaa912be96e2c7030b6affa59fa69afcd33778c == origin main). Evidence: evidence/wfx2-tiktok-shorts-experience/p88-preview-lane/.
+- Money gate stays CLOSED.
