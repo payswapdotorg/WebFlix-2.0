@@ -1,8 +1,26 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
-import { EyeOff, Globe2, Trash2, ExternalLink, Share2 } from "lucide-react";
+import {
+  Ban,
+  BookmarkPlus,
+  EyeOff,
+  Flag,
+  Globe2,
+  MoreVertical,
+  Trash2,
+  ExternalLink,
+  Share2,
+} from "lucide-react";
 import { toast } from "sonner";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { signInHref } from "@/lib/auth/client";
 import { useApi } from "@/hooks/use-api";
 import { useWebFlixSession } from "@/hooks/use-webflix-session";
 import { ShortsFeedShell, ShortsSlideChevrons } from "@/components/shorts/shorts-feed-shell";
@@ -35,6 +53,16 @@ import type { TikTokImportVisibility, TikTokVideoDTO } from "@/lib/tiktok/types"
  * membership, never a TikTok write); visibility chips are factual
  * ("Only you" / "Imported").
  *
+ * M3 (source capabilities, the work order's M3 rung): the ⋯ More menu
+ * ships the remaining capability-map affordances, each WebFlix-local and
+ * honest — Save to my shelf (the M2 import lane reused per-item; a
+ * curated or already-imported post answers the honest no-op), Not
+ * interested (a SESSION-LOCAL hide — the slide leaves this viewing only;
+ * no persistence is claimed), and Report on TikTok (the outbound posture:
+ * TikTok owns moderation of its content, WebFlix claims no moderation
+ * lane it does not have — the map's canReport is true for TikTok through
+ * this honest outbound form).
+ *
  * Attribution law (contract §6): creator/caption/music render ONLY when the
  * metadata lane verified them — missing fields stay missing, never
  * fabricated. The "TikTok" source label is always truthful (it names the
@@ -44,6 +72,9 @@ import type { TikTokImportVisibility, TikTokVideoDTO } from "@/lib/tiktok/types"
 const MAX_ITEMS = 60;
 
 const CAPS = SHORTS_SOURCE_CAPABILITIES.tiktok;
+
+/** The M3 viewer-stamp overlay shape (the unified flip/save re-render law). */
+type TikTokViewerStampOverlay = Partial<Pick<TikTokVideoDTO, "owned" | "visibility">>;
 
 async function shareTikTokPost(item: TikTokVideoDTO) {
   const link = item.deepLinkUrl;
@@ -55,17 +86,87 @@ async function shareTikTokPost(item: TikTokVideoDTO) {
   }
 }
 
+/**
+ * M3 Save to my shelf — the per-item form of the M2 import: POST the
+ * canonical URL to /api/tiktok/import. Outcomes are the import route's own
+ * honest answers: a fresh row (private save), the curated no-op, or the
+ * idempotent repeat. NEVER claims a TikTok write.
+ */
+async function saveToMyShelf(item: TikTokVideoDTO): Promise<
+  | { kind: "created" }
+  | { kind: "curated" }
+  | { kind: "already" }
+  | { kind: "auth" }
+  | { kind: "error"; message?: string }
+> {
+  try {
+    const res = await fetch("/api/tiktok/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: item.deepLinkUrl }),
+    });
+    if (res.status === 401) return { kind: "auth" };
+    const body = (await res.json().catch(() => ({}))) as {
+      post?: TikTokVideoDTO;
+      alreadyImported?: boolean;
+      curated?: boolean;
+      error?: string;
+    };
+    if (!res.ok || !body.post) return { kind: "error", message: body.error };
+    if (body.curated) return { kind: "curated" };
+    if (body.alreadyImported) return { kind: "already" };
+    return { kind: "created" };
+  } catch {
+    return { kind: "error" };
+  }
+}
+
 /** The source-specific action rail (mirrors the YouTube rail's geometry). */
 function TikTokFeedRail({
   item,
+  authenticated,
   onVisibilityFlipped,
   onRemoved,
+  onHidden,
+  onSaved,
 }: {
   item: TikTokVideoDTO;
+  authenticated: boolean | null;
   onVisibilityFlipped: (postId: string, visibility: TikTokImportVisibility) => void;
   onRemoved: (postId: string) => void;
+  onHidden: (postId: string) => void;
+  onSaved: (postId: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
+
+  async function save() {
+    if (busy) return;
+    if (authenticated === false) {
+      // The AU gate: guests route to /signin and come straight back
+      // (the import dialog's own gate law).
+      window.location.assign(signInHref(`/shorts?source=tiktok&post=${encodeURIComponent(item.postId)}`));
+      return;
+    }
+    if (authenticated === null) return; // the session is still resolving
+    setBusy(true);
+    try {
+      const result = await saveToMyShelf(item);
+      if (result.kind === "created") {
+        onSaved(item.postId);
+        toast.success("Saved to your TikTok shelf — only you");
+      } else if (result.kind === "curated") {
+        toast.info("Already in every viewer's TikTok feed");
+      } else if (result.kind === "already") {
+        toast.info("Already in the WebFlix TikTok shelf");
+      } else if (result.kind === "auth") {
+        window.location.assign(signInHref(`/shorts?source=tiktok&post=${encodeURIComponent(item.postId)}`));
+      } else {
+        toast.error(result.message ?? "Could not save the TikTok post");
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function flip(next: TikTokImportVisibility) {
     if (busy) return;
@@ -172,6 +273,73 @@ function TikTokFeedRail({
           </button>
         </>
       ) : null}
+      {/* M3 — the ⋯ More menu (the YouTube rail's own slot): the remaining
+          capability-map affordances, each WebFlix-local and honest. */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label="More actions"
+            aria-haspopup="menu"
+            data-testid="tiktok-shorts-more"
+            className="flex h-12 w-12 items-center justify-center rounded-full bg-black/30 p-3 text-white backdrop-blur transition-transform duration-150 hover:scale-105 focus-visible:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 motion-reduce:transition-none motion-reduce:hover:scale-100"
+          >
+            <MoreVertical className="size-full" aria-hidden="true" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" side="top" className="w-56">
+          {CAPS.canImport ? (
+            <DropdownMenuItem
+              disabled={busy || !!item.owned}
+              onClick={() => void save()}
+              className="cursor-pointer gap-3 py-3 text-sm"
+              data-testid="tiktok-shorts-save"
+            >
+              <BookmarkPlus className="size-4" aria-hidden="true" />
+              {item.owned ? "Saved to your shelf" : "Save to my shelf"}
+            </DropdownMenuItem>
+          ) : null}
+          {CAPS.canHide ? (
+            <DropdownMenuItem
+              onClick={() => {
+                // The WebFlix-local hide: a SESSION-LOCAL signal — the
+                // slide leaves this viewing only; no persistence claim.
+                onHidden(item.postId);
+                toast.success("Hidden for this session");
+              }}
+              className="cursor-pointer gap-3 py-3 text-sm"
+              data-testid="tiktok-shorts-hide"
+            >
+              <Ban className="size-4" aria-hidden="true" />
+              Not interested
+            </DropdownMenuItem>
+          ) : null}
+          {CAPS.canReport ? (
+            <DropdownMenuItem
+              onClick={() => {
+                // The honest outbound report posture: TikTok owns
+                // moderation of its content; WebFlix claims no moderation
+                // lane it does not have (ADR 0004).
+                window.open(item.deepLinkUrl, "_blank", "noopener,noreferrer");
+              }}
+              className="cursor-pointer gap-3 py-3 text-sm"
+              data-testid="tiktok-shorts-report"
+            >
+              <Flag className="size-4" aria-hidden="true" />
+              Report on TikTok
+            </DropdownMenuItem>
+          ) : null}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={() => void shareTikTokPost(item)}
+            className="cursor-pointer gap-3 py-3 text-sm"
+            data-testid="tiktok-shorts-copy-link"
+          >
+            <Share2 className="size-4" aria-hidden="true" />
+            Copy TikTok link
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }
@@ -210,6 +378,16 @@ export function TikTokShortsFeed({ post }: { post?: string | null }) {
   // M2: client-side imports splice FIRST (the importer sees the post now;
   // the server composition dedupes it out on the next reload).
   const [clientImports, setClientImports] = useState<TikTokVideoDTO[]>([]);
+  // M3: the session-local hide (the ⋯ Not interested law) — the slide
+  // leaves THIS viewing only; a reload restores the composed universe and
+  // nothing is persisted (the honest no-persistence claim).
+  const [hiddenIds, setHiddenIds] = useState<ReadonlySet<string>>(new Set());
+  // M3 — the unified viewer-stamp overlay: viewer-scoped fields
+  // (`visibility`/`owned`) applied LAST on the composed items, so a flip or
+  // a per-item save re-renders EVERY row source (the client splice, a
+  // loaded cursor page, AND the server-composed seed segment) without
+  // touching the shared caches (the DB-free law: stamps live per-viewing).
+  const [viewerStamps, setViewerStamps] = useState<Record<string, TikTokViewerStampOverlay>>({});
 
   const seedItems = seedPage?.items ?? [];
   const items = useMemo(() => {
@@ -220,13 +398,15 @@ export function TikTokShortsFeed({ post }: { post?: string | null }) {
       ...seedItems,
       ...loadedPages.flatMap((page) => page.items),
     ]) {
+      if (hiddenIds.has(video.postId)) continue;
       if (seen.has(video.postId)) continue;
       seen.add(video.postId);
-      out.push(video);
+      const stamp = viewerStamps[video.postId];
+      out.push(stamp ? { ...video, ...stamp } : video);
       if (out.length >= MAX_ITEMS) break;
     }
     return out;
-  }, [clientImports, seedItems, loadedPages]);
+  }, [clientImports, seedItems, loadedPages, hiddenIds, viewerStamps]);
   const nextCursor =
     loadedPages.length > 0
       ? loadedPages[loadedPages.length - 1].nextCursor
@@ -266,15 +446,9 @@ export function TikTokShortsFeed({ post }: { post?: string | null }) {
   }, [loadMore]);
 
   const onVisibilityFlipped = useCallback((postId: string, visibility: TikTokImportVisibility) => {
-    setClientImports((prev) =>
-      prev.map((v) => (v.postId === postId ? { ...v, visibility } : v)),
-    );
-    setLoadedPages((pages) =>
-      pages.map((page) => ({
-        ...page,
-        items: page.items.map((v) => (v.postId === postId ? { ...v, visibility } : v)),
-      })),
-    );
+    // The stamp overlay re-renders every row source at once (see the
+    // viewerStamps law above); the stores keep their structural rows.
+    setViewerStamps((prev) => ({ ...prev, [postId]: { ...prev[postId], visibility } }));
   }, []);
 
   const onRemoved = useCallback((postId: string) => {
@@ -285,7 +459,14 @@ export function TikTokShortsFeed({ post }: { post?: string | null }) {
         items: page.items.filter((v) => v.postId !== postId),
       })),
     );
-    // The seed page holds the composed segment too — drop the row there.
+    // The stamp dies with the row; the seed page holds the composed
+    // segment too — drop it there.
+    setViewerStamps((prev) => {
+      if (!(postId in prev)) return prev;
+      const next = { ...prev };
+      delete next[postId];
+      return next;
+    });
     reloadSeed();
   }, [reloadSeed]);
 
@@ -295,6 +476,26 @@ export function TikTokShortsFeed({ post }: { post?: string | null }) {
     },
     [],
   );
+
+  // M3: the session-local hide — filter at the composed-items level (the
+  // seed/loaded/client stores stay intact so a reload restores everything).
+  const onHidden = useCallback((postId: string) => {
+    setHiddenIds((prev) => {
+      const next = new Set(prev);
+      next.add(postId);
+      return next;
+    });
+  }, []);
+
+  // M3: the per-item save stamps the viewer-owned fields through the SAME
+  // overlay as the visibility flip — the server composition agrees on the
+  // next fetch.
+  const onSaved = useCallback((postId: string) => {
+    setViewerStamps((prev) => ({
+      ...prev,
+      [postId]: { ...prev[postId], owned: true, visibility: "private" },
+    }));
+  }, []);
 
   const slideAriaLabel = useCallback(
     (item: TikTokVideoDTO) => item.title || (item.author ? `TikTok by @${item.author}` : "TikTok post"),
@@ -396,8 +597,11 @@ export function TikTokShortsFeed({ post }: { post?: string | null }) {
 
             <TikTokFeedRail
               item={item}
+              authenticated={authenticated}
               onVisibilityFlipped={onVisibilityFlipped}
               onRemoved={onRemoved}
+              onHidden={onHidden}
+              onSaved={onSaved}
             />
 
             {/* desktop prev/next chevrons (the shared pair) */}

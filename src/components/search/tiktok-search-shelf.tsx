@@ -10,8 +10,13 @@ import type { TikTokSearchResultsDTO } from "@/lib/tiktok/types";
  * P58 — the TikTok shelf on /search, ADDITIVE to the YouTube results after
  * the Netflix shelf (ADR 0004 §4): curated-library matches riding the same
  * query, rendered only when the library actually answers with real matches
- * (the honest absence — never a placeholder row). Results open the WebFlix
- * embed page (`/tiktok/v/<id>`).
+ * (the honest absence — never a placeholder row).
+ *
+ * WFX2-TIKTOK-SHORTS-EXPERIENCE-1 M3 — the deep-link pass: results open the
+ * shared Shorts feed AT the post (the card's canonical href law), and the
+ * Browse header link opens the TikTok source in the shared feed
+ * (`/shorts?source=tiktok`) — the old `/tiktok` hub stays a compatibility
+ * surface only.
  */
 export function TikTokSearchShelf({ q }: { q: string }) {
   const { data } = useApi<TikTokSearchResultsDTO>(
@@ -30,7 +35,7 @@ export function TikTokSearchShelf({ q }: { q: string }) {
           <span className="text-xs font-normal text-muted-foreground">· curated shelf</span>
         </h2>
         <Link
-          href="/tiktok"
+          href="/shorts?source=tiktok"
           className="flex shrink-0 items-center gap-0.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           Browse <ChevronRight className="size-4" />

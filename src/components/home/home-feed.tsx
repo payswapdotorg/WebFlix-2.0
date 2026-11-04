@@ -5,6 +5,7 @@ import { useApi } from "@/hooks/use-api";
 import { CategoryChips } from "./category-chips";
 import { ContinueWatchingRail } from "./video-rail";
 import { ShortsShelf } from "./shorts-shelf";
+import { TikTokShelf } from "./tiktok-shelf";
 import { RecommendedGrid, useRecommendedInfiniteScroll } from "./recommended-grid";
 import { Skeleton } from "@/components/ui/skeleton";
 import { normalizeCategory, HOME_DYNAMIC_CHIPS } from "@/lib/categories";
@@ -115,6 +116,11 @@ export function HomeFeed() {
                 loading={false}
               />
               <ShortsShelf shorts={firstShorts} />
+              {/* WFX2-TIKTOK-SHORTS-EXPERIENCE-1 M3 — the TikTok shelf rides
+                  NEAR the home Shorts shelf (the work order's "Search and
+                  home" contract); it hides gracefully and every tile
+                  deep-links into the shared feed at its post. */}
+              <TikTokShelf />
               <RecommendedGrid
                 videos={recommendedVideos.slice(FIRST_BLOCK_END, MID_BLOCK_END)}
                 loading={false}

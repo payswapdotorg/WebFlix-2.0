@@ -45,8 +45,11 @@ export function shortsSourceHref(source: ShortsSource, postId?: string | null): 
  * - tiktok: NO like/dislike/comment/follow — TikTok has no approved
  *   documented write API for third parties (ADR 0004; the work order's
  *   contract §8: never show an action that claims a TikTok write). The
- *   honest affordances are WebFlix-local (share the canonical URL, report)
- *   and the outbound "Open on TikTok".
+ *   honest affordances are WebFlix-local (share the canonical URL, the
+ *   session-local hide, the per-item import save) and the outbound lane:
+ *   "Open on TikTok" plus "Report on TikTok" — TikTok owns moderation of
+ *   its content, so canReport rides the honest OUTBOUND posture (M3),
+ *   never a WebFlix moderation claim.
  */
 export interface ShortsSourceCapabilities {
   /** like/dislike through the provider's official write lane. */

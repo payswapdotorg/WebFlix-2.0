@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
+import { shortsSourceHref } from "@/lib/shorts/feed-contracts";
 import type { TikTokVideoDTO } from "@/lib/tiktok/types";
 
 /**
@@ -8,12 +9,18 @@ import type { TikTokVideoDTO } from "@/lib/tiktok/types";
  * fake thumbnail). Plain lazy <img> for the thumbnail: TikTok thumbnails ride
  * unpredictable signed-CDN hosts, and next/image's remotePatterns churn buys
  * nothing here (documented residual in the research record §5).
+ *
+ * WFX2-TIKTOK-SHORTS-EXPERIENCE-1 M3 — the deep-link pass: the card opens
+ * the shared Shorts feed AT that post (`/shorts?source=tiktok&post=<id>`,
+ * the canonical in-app href law) — direct, no legacy `/tiktok/v/<id>` hop
+ * (that route remains the compatibility redirect only). Every surface that
+ * renders this card (hub, search, home shelf) deep-links the same way.
  */
 export function TikTokCard({ video }: { video: TikTokVideoDTO }) {
   return (
     <div className="group relative w-[160px] shrink-0" data-testid="tiktok-card">
       <Link
-        href={`/tiktok/v/${video.postId}`}
+        href={shortsSourceHref("tiktok", video.postId)}
         className="block overflow-hidden rounded-lg bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         aria-label={video.title ? `${video.title} — TikTok` : `TikTok post ${video.postId}`}
       >

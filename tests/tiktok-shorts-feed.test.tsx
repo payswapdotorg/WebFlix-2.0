@@ -35,6 +35,7 @@ for (const key of [
   "CustomEvent",
   "MessageEvent",
   "Event",
+  "MouseEvent",
   "getComputedStyle",
   "requestAnimationFrame",
   "cancelAnimationFrame",
@@ -247,5 +248,154 @@ describe("TikTokShortsFeed — the honest states", () => {
       (q('[data-testid="shorts-source-youtube"]') as unknown as HTMLButtonElement).click();
     });
     expect(routerReplaces).toEqual([{ href: "/shorts", scroll: false }]);
+  });
+});
+
+// --------------------------------------------------------------------------
+// WFX2-TIKTOK-SHORTS-EXPERIENCE-1 M3 — the source capabilities (the ⋯ More
+// menu): Save to my shelf (the per-item import), the session-local Not
+// interested, and the honest outbound Report on TikTok. NEVER a
+// like/comment/follow claim.
+// --------------------------------------------------------------------------
+
+/** The G12 open-menu idiom (the sound-rail battery's own). */
+async function openMore(index = 0) {
+  const more = all('[data-testid="tiktok-shorts-more"]')[index] as unknown as HTMLButtonElement;
+  expect(more).toBeTruthy();
+  await act(async () => {
+    more.dispatchEvent(
+      new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0 }),
+    );
+  });
+  await act(async () => {});
+}
+
+function menuItems(): string[] {
+  return Array.from(
+    win.document.querySelectorAll("[role='menuitem']") as unknown as HTMLElement[],
+  ).map((el) => (el.textContent ?? "").trim());
+}
+
+/** A signed-in session payload merged into the feed page (the useApi mock
+ * serves EVERY url — the session hook rides the same lane). */
+function pageSignedIn(items: TikTokVideoDTO[]): TikTokFeedPageDTO {
+  return {
+    ...page(items),
+    user: { id: "user-1", email: "viewer@webflix.test", name: "Viewer", avatarSeed: 1 },
+  } as unknown as TikTokFeedPageDTO;
+}
+
+describe("TikTokShortsFeed — the M3 ⋯ More menu (source capabilities)", () => {
+  test("the menu ships the honest capability set and ZERO like/comment/follow claims", async () => {
+    useApiData = page([feedItem(ID_A)]);
+    await render(createElement(TikTokShortsFeed, { post: null }));
+    expect(all('[data-testid="tiktok-shorts-more"]')).toHaveLength(1);
+    await openMore();
+    const items = menuItems();
+    expect(items).toContain("Save to my shelf");
+    expect(items).toContain("Not interested");
+    expect(items).toContain("Report on TikTok");
+    expect(items).toContain("Copy TikTok link");
+    // the never-claims-a-write law holds inside the menu too
+    for (const banned of ["like", "dislike", "comment", "follow"]) {
+      expect(items.some((t) => t.toLowerCase().includes(banned))).toBe(false);
+    }
+  });
+
+  test("Save as a guest short-circuits at the AU gate — no import POST fires", async () => {
+    const importPosts: string[] = [];
+    (globalThis as Record<string, unknown>).fetch = async (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      if (String(input) === "/api/tiktok/import" && init?.method === "POST") {
+        importPosts.push(String(input));
+      }
+      return new Response("{}", { status: 200 });
+    };
+    const assigned: string[] = [];
+    const loc = win.location as unknown as { assign: (s: string) => void };
+    const realAssign = loc.assign;
+    loc.assign = (s: string) => {
+      assigned.push(s);
+    };
+    try {
+      useApiData = page([feedItem(ID_A)]);
+      await render(createElement(TikTokShortsFeed, { post: null }));
+      await openMore();
+      await act(async () => {
+        (win.document.querySelector("[data-testid='tiktok-shorts-save']") as HTMLElement).click();
+      });
+    } finally {
+      loc.assign = realAssign;
+    }
+    // the gate fired BEFORE the network: no POST rode
+    expect(importPosts).toHaveLength(0);
+    // and the viewer was routed to sign in with the deep-link back
+    expect(assigned).toHaveLength(1);
+    expect(assigned[0]).toContain("/signin?redirect=");
+    expect(assigned[0]).toContain(
+      encodeURIComponent(`/shorts?source=tiktok&post=${ID_A}`),
+    );
+  });
+
+  test("Save (signed-in) rides the import lane and stamps the row owned", async () => {
+    let importBody: unknown = null;
+    (globalThis as Record<string, unknown>).fetch = async (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      if (String(input) === "/api/tiktok/import" && init?.method === "POST") {
+        importBody = JSON.parse(String(init.body));
+        return new Response(
+          JSON.stringify({ post: feedItem(ID_A, { owned: true, visibility: "private" }) }),
+          { status: 201 },
+        );
+      }
+      return new Response("{}", { status: 200 });
+    };
+    useApiData = pageSignedIn([feedItem(ID_A)]);
+    await render(createElement(TikTokShortsFeed, { post: null }));
+    await openMore();
+    await act(async () => {
+      (win.document.querySelector("[data-testid='tiktok-shorts-save']") as HTMLElement).click();
+    });
+    // the per-item form of the M2 import: the CANONICAL url rides
+    expect(importBody).toEqual({ url: feedItem(ID_A).deepLinkUrl });
+    // the stamp overlay re-rendered the row: the Only-you chip + the owned
+    // menu state (disabled, "Saved to your shelf")
+    expect(q('[data-testid="tiktok-shorts-visibility"]')?.textContent).toContain("Only you");
+    await openMore();
+    expect(menuItems()).toContain("Saved to your shelf");
+  });
+
+  test("Not interested hides the slide for this session only", async () => {
+    useApiData = page([feedItem(ID_A), feedItem(ID_B)]);
+    await render(createElement(TikTokShortsFeed, { post: null }));
+    expect(all('[role="feed"] > section')).toHaveLength(2);
+    await openMore(0);
+    await act(async () => {
+      (win.document.querySelector("[data-testid='tiktok-shorts-hide']") as HTMLElement).click();
+    });
+    // the slide left THIS viewing
+    expect(all('[role="feed"] > section')).toHaveLength(1);
+    expect(win.document.body.textContent).not.toContain(`Post ${ID_A}`);
+    expect(win.document.body.textContent).toContain(`Post ${ID_B}`);
+  });
+
+  test("Report on TikTok is the honest OUTBOUND posture", async () => {
+    const opened: string[] = [];
+    (win as unknown as Record<string, unknown>).open = (
+      url: string,
+    ) => {
+      opened.push(url);
+    };
+    useApiData = page([feedItem(ID_A)]);
+    await render(createElement(TikTokShortsFeed, { post: null }));
+    await openMore();
+    await act(async () => {
+      (win.document.querySelector("[data-testid='tiktok-shorts-report']") as HTMLElement).click();
+    });
+    expect(opened).toEqual([feedItem(ID_A).deepLinkUrl]);
   });
 });
