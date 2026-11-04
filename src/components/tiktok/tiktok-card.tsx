@@ -9,6 +9,7 @@ import {
   useTikTokHoverPlay,
   useTikTokOEmbed,
 } from "@/components/tiktok/tiktok-preview-client";
+import { TikTokThumbnailImage } from "@/components/tiktok/tiktok-thumbnail-image";
 import type { TikTokVideoDTO } from "@/lib/tiktok/types";
 
 /**
@@ -29,6 +30,11 @@ import type { TikTokVideoDTO } from "@/lib/tiktok/types";
  * author fill — never fabricated), and a fine-pointer hover with a 450ms
  * dwell mounts the official Embed Player muted-autoplaying; leaving the
  * card unmounts it (the pause-then-unmount law). The tap still deep-links.
+ *
+ * P89 — the research lane (docs/research/2026-11-04-tiktok-thumbnail-
+ * hover-play-research.md): the thumbnail rides TikTokThumbnailImage —
+ * `referrerPolicy="no-referrer"` (R5) and an expired-signed-URL `onError`
+ * that restores the honest fallback tile (R6).
  */
 export function TikTokCard({ video }: { video: TikTokVideoDTO }) {
   const [inViewRef, inView] = useInViewOnce<HTMLDivElement>();
@@ -63,23 +69,21 @@ export function TikTokCard({ video }: { video: TikTokVideoDTO }) {
               allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
               className="absolute inset-0 size-full border-0"
             />
-          ) : meta.thumbnailUrl ? (
-            // Plain <img> by design (ADR 0004 §4): TikTok thumbnails ride
-            // unpredictable signed-CDN hosts — no next/image remotePatterns.
-            <img
+          ) : (
+            <TikTokThumbnailImage
               src={meta.thumbnailUrl}
               alt={label}
-              loading="lazy"
-              data-testid="tiktok-card-thumb"
+              testId="tiktok-card-thumb"
               className="absolute inset-0 size-full object-cover transition-opacity group-hover:opacity-90"
+              fallback={
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-muted text-muted-foreground">
+                  <span className="text-xs font-semibold uppercase tracking-wide">TikTok</span>
+                  <span className="px-2 text-center text-[10px] leading-tight">
+                    {video.unavailable ? "Metadata unavailable — embed still plays" : "Post"}
+                  </span>
+                </div>
+              }
             />
-          ) : (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-muted text-muted-foreground">
-              <span className="text-xs font-semibold uppercase tracking-wide">TikTok</span>
-              <span className="px-2 text-center text-[10px] leading-tight">
-                {video.unavailable ? "Metadata unavailable — embed still plays" : "Post"}
-              </span>
-            </div>
           )}
         </div>
       </Link>

@@ -185,6 +185,51 @@ describe("TikTokCard — the P88 client preview lane", () => {
     });
     const img = q('[data-testid="tiktok-card-thumb"]') as unknown as HTMLImageElement | null;
     expect(img?.getAttribute("src")).toBe("https://cdn.tiktok.example/card-thumb.jpg");
+    // R5 — the card's thumbnail requests no-referrer (the single img law)
+    expect(img?.getAttribute("referrerpolicy")).toBe("no-referrer");
+    // R8 — the hydration warmed the origin (both connection kinds, once)
+    expect(
+      win.document.head.querySelectorAll(
+        'link[rel="preconnect"][href="https://www.tiktok.com"]'
+      ).length
+    ).toBe(2);
+    (globalThis as Record<string, unknown>).IntersectionObserver = realIO;
+  });
+
+  test("an expired signed URL errors into the honest minimal card (R6)", async () => {
+    const realIO = (globalThis as Record<string, unknown>).IntersectionObserver;
+    (globalThis as Record<string, unknown>).IntersectionObserver = class {
+      private cb: (entries: Array<{ isIntersecting: boolean }>) => void;
+      constructor(cb: (entries: Array<{ isIntersecting: boolean }>) => void) {
+        this.cb = cb;
+      }
+      observe() {
+        this.cb([{ isIntersecting: true }]);
+      }
+      disconnect() {}
+      unobserve() {}
+    };
+    const R6_ID = "7301567890123456789";
+    (globalThis as Record<string, unknown>).fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          embed_product_id: R6_ID,
+          thumbnail_url: "https://cdn.tiktok.example/expired-card.jpg",
+        }),
+        { status: 200 }
+      )) as unknown as typeof fetch;
+    await render(createElement(TikTokCard, { video: cardItem(R6_ID) }));
+    await act(async () => {
+      await sleepP88(20);
+    });
+    const img = q('[data-testid="tiktok-card-thumb"]') as unknown as HTMLImageElement | null;
+    expect(img?.getAttribute("src")).toBe("https://cdn.tiktok.example/expired-card.jpg");
+    await act(() => {
+      img!.dispatchEvent(new win.Event("error", { bubbles: true }) as unknown as Event);
+    });
+    // the honest minimal card replaces the broken image (id + embed handoff)
+    expect(q('[data-testid="tiktok-card-thumb"]')).toBeNull();
+    expect(q('[data-testid="tiktok-card"]')?.textContent).toContain("TikTok");
     (globalThis as Record<string, unknown>).IntersectionObserver = realIO;
   });
 

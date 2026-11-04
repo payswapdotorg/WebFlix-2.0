@@ -232,6 +232,16 @@ describe("TikTokShelf — the P88 client preview lane", () => {
     });
     const img = q('[data-testid="tiktok-tile-thumb"]') as unknown as HTMLImageElement | null;
     expect(img?.getAttribute("src")).toBe("https://cdn.tiktok.example/thumb-A.jpg");
+    // R5 — every TikTok thumbnail img requests no-referrer (the feed poster's
+    // law, now the single TikTokThumbnailImage law)
+    expect(img?.getAttribute("referrerpolicy")).toBe("no-referrer");
+    // R8 — the hydration warmed BOTH connections to the player/oEmbed origin
+    // (the CORS lane for the fetch, the classic lane for the iframe)
+    const warms = win.document.head.querySelectorAll(
+      'link[rel="preconnect"][href="https://www.tiktok.com"]'
+    );
+    expect(warms.length).toBe(2);
+    expect(Array.from(warms).some((l) => l.getAttribute("crossorigin") === "anonymous")).toBe(true);
     // the hydration fills the caption + author too (official oEmbed fields)
     const shelf = q('[data-testid="tiktok-home-shelf"]');
     expect(shelf?.textContent).toContain("A real caption");
@@ -242,6 +252,37 @@ describe("TikTokShelf — the P88 client preview lane", () => {
     expect(requested[0]).toContain(
       encodeURIComponent(`https://www.tiktok.com/player/v1/${ID_A}`)
     );
+    (globalThis as Record<string, unknown>).IntersectionObserver = realIO;
+  });
+
+  test("an expired signed URL errors into the honest fallback tile (R6)", async () => {
+    const realIO = (globalThis as Record<string, unknown>).IntersectionObserver;
+    (globalThis as Record<string, unknown>).IntersectionObserver = intersectingIO();
+    const R6_ID = "7254018729996265233";
+    (globalThis as Record<string, unknown>).fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          embed_product_id: R6_ID,
+          thumbnail_url: "https://cdn.tiktok.example/expired.jpg",
+          title: "Expired thumb",
+          author_name: "scout2015",
+        }),
+        { status: 200 }
+      )) as unknown as typeof fetch;
+    useApiData = rail([railItem(R6_ID, { thumbnailUrl: null, title: null, author: null })]);
+    await render(createElement(TikTokShelf, null));
+    await act(async () => {
+      await sleep(20);
+    });
+    const img = q('[data-testid="tiktok-tile-thumb"]') as unknown as HTMLImageElement | null;
+    expect(img?.getAttribute("src")).toBe("https://cdn.tiktok.example/expired.jpg");
+    // the signed URL expired — the CDN 404s and the img errors:
+    await act(() => {
+      img!.dispatchEvent(new win.Event("error", { bubbles: true }) as unknown as Event);
+    });
+    // the honest fallback tile replaces the broken image — never a broken glyph
+    expect(q('[data-testid="tiktok-tile-thumb"]')).toBeNull();
+    expect(q('[data-testid="tiktok-home-shelf"]')?.textContent).toContain("TikTok");
     (globalThis as Record<string, unknown>).IntersectionObserver = realIO;
   });
 

@@ -10,6 +10,7 @@ import {
   useTikTokHoverPlay,
   useTikTokOEmbed,
 } from "@/components/tiktok/tiktok-preview-client";
+import { TikTokThumbnailImage } from "@/components/tiktok/tiktok-thumbnail-image";
 import type { TikTokRailDTO, TikTokVideoDTO } from "@/lib/tiktok/types";
 
 /**
@@ -29,6 +30,8 @@ import type { TikTokRailDTO, TikTokVideoDTO } from "@/lib/tiktok/types";
  *   fabricated identity. P88: a server-walled lane hydrates the official
  *   CORS-open oEmbed CLIENT-SIDE (the same viewer-side lane the embed
  *   rides) — and still falls back honestly when even that is unreachable.
+ *   P89 (the research lane): the img is TikTokThumbnailImage —
+ *   no-referrer requests (R5) + expired-signed-URL error fallback (R6).
  * - The tile ladder matches the home ShortsShelf scale (168 → 296), so
  *   the two shelves read as siblings of the one experience.
  * - P88 hover-play: the YouTube shorts-tile contract (450ms dwell, fine
@@ -92,17 +95,14 @@ function TikTokHomeTile({ video }: { video: TikTokVideoDTO }) {
             allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
             className="absolute inset-0 size-full border-0"
           />
-        ) : meta.thumbnailUrl ? (
-          // Plain <img> by design (ADR 0004 §4) — the TikTokCard law.
-          <img
+        ) : (
+          <TikTokThumbnailImage
             src={meta.thumbnailUrl}
             alt={label}
-            loading="lazy"
-            data-testid="tiktok-tile-thumb"
+            testId="tiktok-tile-thumb"
             className="absolute inset-0 h-full w-full object-cover transition-transform duration-200 group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+            fallback={<TikTokTile postId={video.postId} />}
           />
-        ) : (
-          <TikTokTile postId={video.postId} />
         )}
         {!previewing ? (
           <span className="absolute left-2 top-2 z-10 rounded bg-foreground px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-background">

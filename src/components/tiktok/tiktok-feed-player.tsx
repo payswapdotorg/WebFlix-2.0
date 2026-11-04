@@ -8,6 +8,11 @@ import {
   describeError as describeTikTokPlayerError,
   TIKTOK_PLAYER_READY_TIMEOUT_MS,
 } from "@/components/tiktok/tiktok-embed-player";
+import {
+  useInViewOnce,
+  useTikTokOEmbed,
+} from "@/components/tiktok/tiktok-preview-client";
+import { TikTokThumbnailImage } from "@/components/tiktok/tiktok-thumbnail-image";
 
 /**
  * ADR 0013 / WFX2-TIKTOK-SHORTS-EXPERIENCE-1 M1 — the TikTok feed player:
@@ -36,6 +41,14 @@ import {
  *    lives in lib/tiktok/urls.ts); a 3002 AUTOPLAY_ERROR shows an explicit
  *    tap-to-play recovery; the 12s readiness timeout and the error banners
  *    carry the outbound TikTok link. No fabricated media ever renders.
+ *  - P89 POSTER LAW (docs/research/2026-11-04-tiktok-thumbnail-hover-play-
+ *    research.md R7): when the server DTO carries no thumbnailUrl, the
+ *    poster/starting-cover hydrates through the same official CORS-open
+ *    client oEmbed lane the tiles ride (active-or-in-view gated — the
+ *    YouTube slides already poster while booting; the walled black cover
+ *    was the last non-parity face). The caption/attribution fields are NOT
+ *    hydrated here — the feed's attribution law (contract §6) stays the
+ *    verified-server-lane's; only the visual poster closes the gap.
  */
 
 /** The pause-then-unmount beat (ADR 0013 command law): when the slide goes
@@ -119,6 +132,19 @@ export function TikTokFeedPlayer({
   // Whether the LAST pause was ours (visibility) — a viewer's own native
   // pause is never overridden by an auto-resume.
   const pausedByUsRef = useRef(false);
+
+  // P89 R7 — the poster hydration lane: the official client oEmbed fills the
+  // poster only when the server DTO left it null (server values always win;
+  // the same in-view + TTL + foreign-row laws as the tiles).
+  const [posterViewRef, posterInView] = useInViewOnce<HTMLDivElement>();
+  const hydratedMeta = useTikTokOEmbed({
+    postId,
+    author: item.author,
+    thumbnailUrl: item.thumbnailUrl,
+    title: item.title,
+    enabled: active || posterInView,
+  });
+  const posterUrl = hydratedMeta.thumbnailUrl;
 
   const src = useMemo(
     () =>
@@ -263,22 +289,20 @@ export function TikTokFeedPlayer({
 
   return (
     <div
+      ref={posterViewRef}
       className="relative aspect-[9/16] h-full w-full max-h-full overflow-hidden rounded-2xl bg-black"
       data-testid="tiktok-feed-player"
       data-active={active ? "true" : "false"}
     >
       {/* Verified poster under the embed when the metadata lane supplied one
-          (missing stays missing — no fabricated imagery). */}
-      {item.thumbnailUrl ? (
-        <img
-          src={item.thumbnailUrl}
-          alt=""
-          loading="lazy"
-          referrerPolicy="no-referrer"
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 h-full w-full object-cover"
-        />
-      ) : null}
+          (missing stays missing — no fabricated imagery). R5/R6: the img
+          rides TikTokThumbnailImage (no-referrer; an expired signed URL
+          drops out honestly). */}
+      <TikTokThumbnailImage
+        src={posterUrl}
+        alt=""
+        className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+      />
 
       {mounted ? (
         <>
@@ -303,15 +327,11 @@ export function TikTokFeedPlayer({
               aria-label="Starting TikTok playback…"
               className="absolute inset-0 z-20 bg-black"
             >
-              {item.thumbnailUrl ? (
-                <img
-                  src={item.thumbnailUrl}
-                  alt=""
-                  referrerPolicy="no-referrer"
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-0 h-full w-full object-cover"
-                />
-              ) : null}
+              <TikTokThumbnailImage
+                src={posterUrl}
+                alt=""
+                className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+              />
             </div>
           ) : null}
 

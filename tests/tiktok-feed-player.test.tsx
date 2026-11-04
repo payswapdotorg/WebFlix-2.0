@@ -218,6 +218,40 @@ describe("TikTokFeedPlayer — the active-slide mount law", () => {
     );
     expect(all("img")).toHaveLength(0);
   });
+
+  test("P89 R7: a server-walled DTO hydrates the poster through the client oEmbed lane", async () => {
+    try {
+      win.sessionStorage.clear();
+    } catch {
+      /* storage-less environments hydrate without the cache */
+    }
+    const R7_ID = "7410258934671205893";
+    (globalThis as Record<string, unknown>).fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          embed_product_id: R7_ID,
+          thumbnail_url: "https://cdn.tiktok.example/poster-hydrated.jpg",
+        }),
+        { status: 200 }
+      )) as unknown as typeof fetch;
+    await render(
+      createElement(TikTokFeedPlayer, {
+        item: itemDTO({ postId: R7_ID, thumbnailUrl: null, title: null, author: null }),
+        active: true, // the active slide hydrates without waiting on the IO gate
+      }),
+    );
+    await act(async () => {
+      await sleep(20);
+    });
+    // the under-layer poster AND the starting cover both carry the hydrated
+    // official thumbnail (the YouTube slides' posterUrl parity)
+    const posters = all('img[src="https://cdn.tiktok.example/poster-hydrated.jpg"]');
+    expect(posters.length).toBe(2);
+    // R5 — the same single-img law: no-referrer requests
+    expect(posters[0]?.getAttribute("referrerpolicy")).toBe("no-referrer");
+    // the caption law is untouched: hydration does NOT fabricate attribution
+    expect(all('[data-testid="tiktok-shorts-caption"]')).toHaveLength(0);
+  });
 });
 
 // ---------------------------------------------------------------------------

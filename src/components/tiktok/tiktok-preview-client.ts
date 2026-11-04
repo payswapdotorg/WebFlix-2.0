@@ -45,7 +45,40 @@ import {
   tiktokOEmbedApiUrl,
   tiktokPlayerEmbedUrl,
   tiktokVideoUrl,
+  TIKTOK_PLAYER_ORIGIN,
 } from "@/lib/tiktok/urls";
+
+/** The R8 lanes already warmed this page-load (per-connection-kind, once). */
+const preconnected = new Set<string>();
+
+function ensurePreconnect(key: string, crossOrigin: boolean): void {
+  if (preconnected.has(key)) return;
+  try {
+    if (typeof document !== "undefined" && document.head) {
+      const link = document.createElement("link");
+      link.rel = "preconnect";
+      link.href = TIKTOK_PLAYER_ORIGIN; // the URL law's own origin export
+      if (crossOrigin) link.crossOrigin = "anonymous";
+      document.head.appendChild(link);
+      preconnected.add(key);
+    }
+  } catch {
+    // no DOM — the fetch/iframe paths this warms do not exist either
+  }
+}
+
+/**
+ * R8 (docs/research/2026-11-04-tiktok-thumbnail-hover-play-research.md §5) —
+ * warm the browser's connections to the ONE origin both client lanes hit:
+ * the CORS-eligible connection for the hydration oEmbed fetch and the
+ * classic connection for the hover-preview iframe. Inserted links are the
+ * deterministic form of react-dom's resource API (same DOM effect, no app
+ * context needed) — once per connection kind per page-load.
+ */
+export function preconnectTikTok(): void {
+  ensurePreconnect("cors", true);
+  ensurePreconnect("classic", false);
+}
 
 // ---------------------------------------------------------------------------
 // The oEmbed hydration lane (thumbnails + title/author fill)
@@ -209,6 +242,7 @@ export function useTikTokOEmbed(input: {
     // network — both paths settle ASYNC so the setState never runs
     // synchronously within the effect (the cascading-render rule).
     const cached = memory.get(postId) ?? readCache(postId);
+    if (!cached) preconnectTikTok(); // R8 — warm the origin before the fetch
     const source = cached
       ? Promise.resolve(cached)
       : fetchOEmbedMeta(postId, author);
@@ -272,6 +306,7 @@ export function useTikTokHoverPlay(): TikTokHoverPlay {
         ? window.matchMedia("(pointer: fine)").matches
         : false;
     if (!fine || timerRef.current !== null) return;
+    preconnectTikTok(); // R8 — the preview iframe hits the same origin
     timerRef.current = setTimeout(() => {
       timerRef.current = null;
       setPreviewing(true);

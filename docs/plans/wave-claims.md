@@ -1207,9 +1207,15 @@ re-runs gates → merges.
 | Wave | Lane | Lead | Claimed (UTC) | Base | Status |
 |---|---|---|---|---|---|
 | P88 | preview-lane (oEmbed hydration + official hover-play) | Z.ai Code (TL, issue #2) | 2026-11-04 14:35 UTC | a04bd28 | SHIPPED 6aaa912 |
+| P89 | thumbnail-research report + the R5–R8 hardening (no-referrer imgs, expired-URL fallback, feed-poster hydration, dual preconnect) | Z.ai Code (TL, issue #2) | 2026-11-04 17:35 UTC | a8a713f | SHIPPED (local) |
 
 - THE OPERATOR ASK, SHIPPED: TikTok tiles carry thumbnails and play on hover exactly like the YouTube shorts shelf — on OFFICIAL lanes only (CORS-open keyless oEmbed viewer-side; the official Embed Player with the audited force_muted/autoplay/loop/rel params).
 - THE HONEST LADDER: server oEmbed cache → viewer-side hydration (in-view gated, max-3 concurrency, 6h TTL, foreign-row guard) → fallback tile; server values win, only nulls fill, failures degrade to the honest tile (proven on the walled sandbox: 17/17 fallbacks with zero fabrications).
 - THE ACTIVE-PLAYER LAW EXTENDS TO TILES: one preview iframe at a time, unmount on leave (production-verified: mount with exact params → leave → 0 iframes), coarse pointers never preview (proven in pointerless headless).
 - GATES: tiktok lane 145/0 (+7), full battery 2936/0 (+7), typecheck/lint clean; production READY with sha match (6aaa912be96e2c7030b6affa59fa69afcd33778c == origin main). Evidence: evidence/wfx2-tiktok-shorts-experience/p88-preview-lane/.
+- Money gate stays CLOSED.
+
+- THE REPORT LANDED: docs/research/2026-11-04-tiktok-thumbnail-hover-play-research.md — the option space (O1–O8, H1–H3) with measured evidence (the edge-wide CORS `*` on the oEmbed path re-proven 2026-11-04), the YouTube⇄TikTok parity contract table, and R1–R8 with per-row status; R1–R4 map to the shipped P88 lane, R5–R8 implemented in this lane.
+- THE HARDENING: TikTokThumbnailImage is the single thumbnail img law (no-referrer always; onError → honest fallback for expired signed URLs); the feed slide poster hydrates client-side when the server DTO is null (attribution law untouched); preconnectTikTok warms both connection kinds to the player/oEmbed origin (the URL-law test caught the draft literal — TIKTOK_PLAYER_ORIGIN rides).
+- GATES: tiktok lane 148/0 (+3), full battery 2939/0, typecheck/lint clean; browser-verified locally (preconnect links live in-view, hover mount/leave, feed one-iframe, 375px 0px overflow). Push capability: the ninth reset took the vault — commit is LOCAL; push+deploy ride the operator's next credential touch. Evidence: evidence/wfx2-tiktok-shorts-experience/p89-research-hardening/.
 - Money gate stays CLOSED.
