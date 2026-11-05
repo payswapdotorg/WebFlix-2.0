@@ -295,8 +295,16 @@ export function ShortsEngagementRail({
   const [wlBusy, setWlBusy] = useState(false);
 
   const gate = () => {
-    // never a guest write — the watch page's account gate idiom
-    window.location.assign(signInHref("/shorts"));
+    // P94-c guest gate (the gap report's G4): an INLINE prompt — the feed
+    // keeps its position; the navigation happens only when the viewer
+    // chooses Sign in (the hard /signin page-load that ejected guests from
+    // the feed is dead; the redirect param still returns them to /shorts).
+    toast.error("Sign in to like, dislike and save shorts", {
+      action: {
+        label: "Sign in",
+        onClick: () => window.location.assign(signInHref("/shorts")),
+      },
+    });
   };
 
   // ---- Like / Dislike — the watch seam, the ActionRow idiom ----------------

@@ -45,8 +45,21 @@ describe("the tiktok module's import law", () => {
     const names = libFiles.map((f) => f.split("/").pop()).sort();
     // WFX2-TIKTOK-SHORTS-EXPERIENCE-1 M2 added imports.ts (the DB-backed
     // import layer — the ONLY lib/tiktok module that touches the database;
-    // library.ts stays DB-free for its env-less battery).
-    expect(names).toEqual(["curated.ts", "dead.ts", "imports.ts", "library.ts", "types.ts", "upstream.ts", "urls.ts"]);
+    // library.ts stays DB-free for its env-less battery). P94-a added
+    // channels.ts (the derived creator channel — DB-free like library.ts)
+    // and P94-b added oauth.ts (the Login Kit seam — no youtube imports;
+    // its token helpers are self-contained AES-GCM copies of the P36 idiom).
+    expect(names).toEqual([
+      "channels.ts",
+      "curated.ts",
+      "dead.ts",
+      "imports.ts",
+      "library.ts",
+      "oauth.ts",
+      "types.ts",
+      "upstream.ts",
+      "urls.ts",
+    ]);
   });
 });
 

@@ -151,3 +151,100 @@ export function tiktokAuthorUrl(author: string): string {
   }
   return `https://www.tiktok.com/@${encodeURIComponent(handle)}`;
 }
+
+// ---------------------------------------------------------------------------
+// P94-a — the channel lane (the same URL law, extended to profile shapes)
+// ---------------------------------------------------------------------------
+
+/** A plausible TikTok handle: 1–30 word/dot/dash chars (the same shape
+ * tiktokAuthorUrl has always enforced, now shared). */
+export const TIKTOK_HANDLE_RE = /^[\w.\-]{1,30}$/;
+
+/** Strip the leading `@` (and trim) — the canonical in-corpus handle form. */
+export function normalizeTikTokHandle(raw: string): string {
+  return raw.replace(/^@/, "").trim();
+}
+
+/** True when `raw` is a format-valid TikTok handle. */
+export function isTikTokHandle(raw: string): boolean {
+  return TIKTOK_HANDLE_RE.test(normalizeTikTokHandle(raw));
+}
+
+/**
+ * Parse a TikTok profile reference into its handle — the P94-b profile-link
+ * lane's input law. Accepts:
+ * - `https://www.tiktok.com/@handle` (+ `m.tiktok.com/@handle`, `tiktok.com/@handle`,
+ *   with any query/hash — the share shape carries `?lang=en` etc.)
+ * - a bare `@handle` / `handle`
+ * Video/player URLs honestly null (they are post references, not profiles —
+ * parseTikTokVideoUrl owns those). Short links (`vm.tiktok.com`) null — the
+ * same no-network-hop law as the post parser.
+ */
+export function parseTikTokProfileUrl(input: string): { handle: string } | null {
+  const raw = (input ?? "").trim();
+  if (!raw) return null;
+  if (!raw.includes("/") && !raw.includes("?")) {
+    const bare = normalizeTikTokHandle(raw);
+    return TIKTOK_HANDLE_RE.test(bare) ? { handle: bare } : null;
+  }
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    // Scheme-less pastes ("tiktok.com/@handle" — exactly what the settings
+    // card's own placeholder advertises) get the https default once.
+    try {
+      url = new URL(`https://${raw}`);
+    } catch {
+      return null;
+    }
+  }
+  const host = url.hostname.toLowerCase();
+  if (host !== "www.tiktok.com" && host !== "m.tiktok.com" && host !== "tiktok.com") {
+    return null;
+  }
+  const segs = url.pathname.split("/").filter(Boolean);
+  const atIdx = segs.findIndex((s) => s.startsWith("@"));
+  if (atIdx === -1) return null;
+  // A profile path ENDS at the @handle — `/@user/video/<id>` is a POST
+  // reference (parseTikTokVideoUrl's business), never a profile; the
+  // profile-link lane must not swallow post URLs.
+  if (atIdx !== segs.length - 1) return null;
+  const handle = normalizeTikTokHandle(segs[atIdx]);
+  return TIKTOK_HANDLE_RE.test(handle) ? { handle } : null;
+}
+
+/**
+ * The canonical IN-APP href for a TikTok creator's channel page
+ * (`/tiktok/<handle>` — the P94-a surface; the /@handle form normalizes to
+ * the same route). Lives here beside tiktokAuthorUrl so every surface links
+ * creators through one builder.
+ */
+export function tiktokChannelHref(handle: string): string {
+  const clean = normalizeTikTokHandle(handle);
+  if (!TIKTOK_HANDLE_RE.test(clean)) {
+    throw new Error(`invalid TikTok author handle: ${handle}`);
+  }
+  return `/tiktok/${encodeURIComponent(clean)}`;
+}
+
+/** The TikTok Login Kit authorize URL (P94-b) — built here so the OAuth
+ * seam stays within the URL law like every other tiktok.com consumer. */
+export function tiktokAuthorizeUrl(opts: {
+  clientKey: string;
+  redirectUri: string;
+  state: string;
+  scope: string;
+  codeChallenge?: string | null;
+}): string {
+  const params = new URLSearchParams({
+    client_key: opts.clientKey,
+    response_type: "code",
+    scope: opts.scope,
+    redirect_uri: opts.redirectUri,
+    state: opts.state,
+  });
+  if (opts.codeChallenge) params.set("code_challenge", opts.codeChallenge);
+  // Login Kit v2 (developers.tiktok.com — the web authorization endpoint).
+  return `https://www.tiktok.com/v2/auth/authorize/?${params.toString()}`;
+}

@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 import { shortsSourceHref } from "@/lib/shorts/feed-contracts";
+import { creatorHandleFromVideo } from "@/lib/tiktok/channels";
+import { isTikTokHandle, tiktokChannelHref } from "@/lib/tiktok/urls";
 import {
   tikTokTilePreviewUrl,
   useInViewOnce,
@@ -46,6 +48,12 @@ export function TikTokCard({ video }: { video: TikTokVideoDTO }) {
     enabled: inView,
   });
   const { hoverProps, previewing } = useTikTokHoverPlay();
+  // P94-a — the verifiable creator handle: the server DTO's own identity
+  // first (cited handle / author_url), a format-valid hydrated author
+  // second — the internal channel link when one holds.
+  const creator =
+    creatorHandleFromVideo(video) ??
+    (meta.author && isTikTokHandle(meta.author) ? meta.author.replace(/^@/, "") : null);
   const label = meta.title ? `${meta.title} — TikTok` : `TikTok post ${video.postId}`;
   return (
     <div
@@ -66,6 +74,9 @@ export function TikTokCard({ video }: { video: TikTokVideoDTO }) {
               src={tikTokTilePreviewUrl(video.postId)}
               title={meta.title ? `TikTok preview: ${meta.title}` : `TikTok preview ${video.postId}`}
               data-testid="tiktok-card-preview"
+              // P94-c1 (gap report G3): the sandbox pins the hover preview
+              // out of top-level navigation (the wall-page hijack vector).
+              sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-presentation"
               allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
               className="absolute inset-0 size-full border-0"
             />
@@ -94,9 +105,20 @@ export function TikTokCard({ video }: { video: TikTokVideoDTO }) {
           </p>
         ) : null}
         <div className="flex items-center justify-between gap-1">
-          <span className="truncate text-[11px] text-muted-foreground">
-            {meta.author ? `@${meta.author}` : `id ${video.postId}`}
-          </span>
+          {creator ? (
+            <Link
+              href={tiktokChannelHref(creator)}
+              className="truncate text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+              aria-label={`Open @${creator}'s TikTok channel on WebFlix`}
+              data-testid="tiktok-card-creator"
+            >
+              @{meta.author ?? creator}
+            </Link>
+          ) : (
+            <span className="truncate text-[11px] text-muted-foreground">
+              {meta.author ? `@${meta.author}` : `id ${video.postId}`}
+            </span>
+          )}
           <a
             href={video.deepLinkUrl}
             target="_blank"

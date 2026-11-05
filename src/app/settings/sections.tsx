@@ -19,11 +19,14 @@ import { SessionAvatar } from "@/components/app/account-menu";
 import { useApi } from "@/hooks/use-api";
 import { useWebFlixSession } from "@/hooks/use-webflix-session";
 import { useYouTubeConnection } from "@/hooks/use-youtube-connection";
+import { useTikTokConnection } from "@/hooks/use-tiktok-connection";
 import { relativeTime } from "@/lib/watch/format";
 import {
   YOUTUBE_OAUTH_CONNECT_HREF,
   type YouTubeConnectionState,
 } from "@/lib/watch/connection-client";
+import type { TikTokConnectionState } from "@/lib/watch/tiktok-connection-client";
+import { Input } from "@/components/ui/input";
 import { useAutoplayPreference } from "./use-autoplay-pref";
 
 /**
@@ -44,6 +47,7 @@ export const SCOPE_MANAGED_LABEL = "MANAGED ON YOUTUBE.COM";
 export const SECTIONS = [
   { id: "account", label: "Account" },
   { id: "youtube-connection", label: "YouTube account" },
+  { id: "tiktok-connection", label: "TikTok account" },
   { id: "notifications", label: "Notifications" },
   { id: "playback", label: "Playback and performance" },
   { id: "appearance", label: "Appearance" },
@@ -282,6 +286,342 @@ export function YouTubeConnectionSection() {
         )}
       </div>
     </SettingsSection>
+  );
+}
+
+/** The /settings?ttc=<code> outcome banner (the TikTok OAuth callback's verdict). */
+function TikTokOutcomeBanner({ code }: { code: string }) {
+  const tone =
+    code === "connected"
+      ? "border-emerald-500/40 bg-emerald-500/5 text-foreground"
+      : code === "denied" || code === "signin" || code === "state"
+        ? "border-border bg-secondary/40 text-foreground"
+        : "border-amber-500/40 bg-amber-500/5 text-foreground";
+  const copy =
+    code === "connected"
+      ? "Your TikTok account is connected."
+      : code === "denied"
+        ? "The connect was cancelled."
+        : code === "signin"
+          ? "Sign in again to finish connecting."
+          : code === "state"
+            ? "The connect request expired — try again."
+            : "TikTok refused the connect — try again in a moment.";
+  return (
+    <p
+      role="status"
+      data-testid="tiktok-connect-outcome"
+      data-ttc={code}
+      className={`rounded-xl border px-4 py-3 text-sm ${tone}`}
+    >
+      {copy}
+    </p>
+  );
+}
+
+/** The honest TikTok capability lines — what is WebFlix-local, what has no
+ * third-party API at all (ADR 0004: no TikTok write API exists). */
+function TikTokCapabilityLines() {
+  return (
+    <ul className="flex flex-col gap-1 text-sm text-muted-foreground">
+      <li>Runs on WebFlix: save to your shelf, share, visibility flips, your channel page.</li>
+      <li>Runs on TikTok only: likes, comments, follows — no third-party write API exists, so those buttons hand off to TikTok.</li>
+      <li>A profile link is unverified — it names your creator identity locally; Login Kit verifies it when the deployment is configured.</li>
+    </ul>
+  );
+}
+
+/** The interim profile-link form — the connect action that works TODAY
+ * without a TikTok developer app (the gap report's G2 interim lane). */
+function TikTokProfileLinkForm({ onLinked }: { onLinked: () => void }) {
+  const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function link() {
+    if (busy || !value.trim()) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/connection/tiktok/link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profileUrl: value.trim() }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        linked?: { handle: string };
+      };
+      if (res.ok && body.ok && body.linked) {
+        toast.success(`Linked @${body.linked.handle} — your TikTok channel page knows it's you`);
+        setValue("");
+        onLinked();
+      } else {
+        toast.error(body.error ?? "Could not link that profile");
+      }
+    } catch {
+      toast.error("Could not link that profile — try again");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form
+      className="flex flex-col gap-2 sm:flex-row"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void link();
+      }}
+    >
+      <Input
+        // NOTE: deliberately NOT type="url" — the browser's constraint
+        // validation silently blocks scheme-less pastes ("tiktok.com/@handle",
+        // exactly what the placeholder advertises) before the form ever
+        // submits. The URL law owns the parsing and answers its honest 400.
+        type="text"
+        inputMode="url"
+        autoComplete="off"
+        placeholder="tiktok.com/@yourhandle"
+        aria-label="Your TikTok profile URL"
+        data-testid="tiktok-link-input"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        className="min-w-0 flex-1"
+      />
+      <Button type="submit" disabled={busy || !value.trim()} data-testid="tiktok-link-submit">
+        {busy ? "Linking…" : "Link your profile"}
+      </Button>
+    </form>
+  );
+}
+
+export function TikTokConnectionSection() {
+  const { state, loading, reload } = useTikTokConnection();
+
+  // the OAuth callback's outcome banner (?ttc=… — the callback redirects
+  // here with the honest outcome code; read client-side, the house pattern)
+  const [ttcOutcome, setTtcOutcome] = useState<string | null>(null);
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get("ttc");
+    if (!code) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- hydration of the URL param (SSR renders no banner) — the watch-page idiom
+    setTtcOutcome(code);
+    if (code === "connected") reload(); // the connection just changed — re-probe
+  }, [reload]);
+
+  return (
+    <SettingsSection
+      id="tiktok-connection"
+      title="TikTok account"
+      scope="managed"
+      description="Your own TikTok creator identity. WebFlix claims no TikTok writes — no third-party write API exists — so your likes, comments and follows hand off to TikTok while your shelf, channel page and visibility flips run here."
+    >
+      {ttcOutcome && <TikTokOutcomeBanner code={ttcOutcome} />}
+      <div role="status" aria-live="polite" data-connection-loading={loading || undefined}>
+        {loading || !state ? (
+          <ConnectionCheckingCard />
+        ) : (
+          <TikTokAccountCard state={state} onRecheck={reload} />
+        )}
+      </div>
+    </SettingsSection>
+  );
+}
+
+function TikTokAccountCard({
+  state,
+  onRecheck,
+}: {
+  state: TikTokConnectionState;
+  onRecheck: () => void;
+}) {
+  const checkedAgo = relativeTime(state.checkedAt) || "just now";
+  const account = state.account;
+  const linked = state.linked;
+
+  // ---- linked (the interim profile-link binding) ----
+  if (state.status === "linked" && linked) {
+    return (
+      <Card className="gap-3 rounded-xl py-5" data-connection-state="linked">
+        <CardHeader className="px-5">
+          <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+            <CheckCircle2 className="size-5 shrink-0 text-emerald-500" aria-hidden="true" />
+            Linked as @{linked.handle}
+          </CardTitle>
+          <CardDescription>
+            An unverified WebFlix-local link — it names your creator identity so your channel page
+            and shelf know it&apos;s you. It is not a TikTok authorization; no TikTok write is
+            claimed or performed.
+            {linked.connectedAt && relativeTime(linked.connectedAt)
+              ? ` Linked ${relativeTime(linked.connectedAt)}.`
+              : ""}
+          </CardDescription>
+          <CardAction>
+            <span className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onRecheck}
+                aria-label="Recheck the TikTok account connection"
+              >
+                <RotateCw className="size-4" aria-hidden="true" />
+                Recheck
+              </Button>
+              <TikTokDisconnectButton onDone={onRecheck} />
+            </span>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 px-5 text-sm text-muted-foreground">
+          <TikTokCapabilityLines />
+          {state.oauth.configured ? null : (
+            <p className="text-xs">
+              Login Kit connect is not configured on this deployment — the profile link is the
+              working lane; the OAuth lane lights up when TIKTOK_CLIENT_KEY/SECRET land.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // ---- connected / needs-reauth (the Login Kit OAuth binding) ----
+  if (state.status === "connected" || state.status === "needs-reauth") {
+    return (
+      <Card
+        className="gap-3 rounded-xl py-5"
+        data-connection-state={state.status === "connected" ? "connected" : "needs-reauth"}
+      >
+        <CardHeader className="px-5">
+          <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+            {state.status === "connected" ? (
+              <CheckCircle2 className="size-5 shrink-0 text-emerald-500" aria-hidden="true" />
+            ) : (
+              <AlertTriangle className="size-5 shrink-0 text-amber-500" aria-hidden="true" />
+            )}
+            {state.status === "connected"
+              ? `Connected as ${account?.nickname ?? (account?.handle ? `@${account.handle}` : "your TikTok account")}`
+              : "Re-connect your TikTok account"}
+          </CardTitle>
+          <CardDescription>
+            {state.status === "connected"
+              ? "Your TikTok identity is bound through the official Login Kit grant — your WebFlix-local TikTok actions know it's you."
+              : "TikTok expired or revoked the authorization — re-connect to refresh the binding."}
+            {account?.connectedAt && relativeTime(account.connectedAt)
+              ? ` Connected ${relativeTime(account.connectedAt)}.`
+              : ""}
+          </CardDescription>
+          <CardAction>
+            <span className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onRecheck}
+                aria-label="Recheck the TikTok account connection"
+              >
+                <RotateCw className="size-4" aria-hidden="true" />
+                Recheck
+              </Button>
+              <TikTokDisconnectButton onDone={onRecheck} />
+            </span>
+          </CardAction>
+        </CardHeader>
+        {state.status === "needs-reauth" ? (
+          <CardContent className="px-5">
+            <ConnectButton href="/api/connection/tiktok/oauth/start" label="Connect with TikTok (Login Kit)" />
+          </CardContent>
+        ) : null}
+      </Card>
+    );
+  }
+
+  // ---- not-configured (the OAuth lane's setup state) + not-connected ----
+  const notConfigured = state.status === "not-configured";
+  return (
+    <Card
+      className="gap-3 rounded-xl py-5"
+      data-connection-state={notConfigured ? "not-configured" : "not-connected"}
+    >
+      <CardHeader className="px-5">
+        <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+          <PlugZap className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          Connect your TikTok account
+        </CardTitle>
+        <CardDescription>
+          Link your profile today (works everywhere), or connect through TikTok&apos;s official
+          Login Kit when this deployment is configured. WebFlix never performs a TikTok write.
+        </CardDescription>
+        <CardAction>
+          <span className="flex flex-wrap items-center gap-2">
+            <ConnectButton href="/api/connection/tiktok/oauth/start" label="Connect with TikTok (Login Kit)" />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRecheck}
+              aria-label="Recheck the TikTok account connection"
+            >
+              <RotateCw className="size-4" aria-hidden="true" />
+              Recheck
+            </Button>
+          </span>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 px-5 text-sm text-muted-foreground">
+        <div>
+          <p className="mb-2 font-medium text-foreground">Link your profile (works today)</p>
+          <TikTokProfileLinkForm onLinked={onRecheck} />
+        </div>
+        <TikTokCapabilityLines />
+        {notConfigured && state.oauth.missingEnv.length > 0 ? (
+          <p className="text-xs">
+            Login Kit setup: missing environment variables{" "}
+            <code className="rounded bg-secondary px-1.5 py-0.5 font-mono text-xs text-foreground">
+              {state.oauth.missingEnv.join(", ")}
+            </code>
+            {state.oauth.redirectUri ? (
+              <>
+                {" "}— register this redirect URI in your TikTok for Developers app:{" "}
+                <code className="rounded bg-secondary px-1.5 py-0.5 font-mono text-xs break-all text-foreground">
+                  {state.oauth.redirectUri}
+                </code>
+              </>
+            ) : null}
+            .
+          </p>
+        ) : null}
+        <p className="text-xs">Checked {checkedAgo}.</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TikTokDisconnectButton({ onDone }: { onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  async function disconnect() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/connection/tiktok/disconnect", { method: "POST" });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        toast.error(body.error ?? `Disconnect failed (HTTP ${res.status})`);
+      }
+    } catch {
+      toast.error("Disconnect failed — try again");
+    } finally {
+      setBusy(false);
+      onDone(); // force a fresh probe whatever happened
+    }
+  }
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() => void disconnect()}
+      disabled={busy}
+      data-testid="tiktok-disconnect"
+    >
+      {busy ? "Removing…" : "Disconnect"}
+    </Button>
   );
 }
 

@@ -11,6 +11,7 @@ import {
   PlaybackSection,
   PrivacySection,
   SECTIONS,
+  TikTokConnectionSection,
   YouTubeConnectionSection,
 } from "./sections";
 
@@ -86,6 +87,7 @@ export function SettingsView() {
         <div className="min-w-0 flex-1">
           <AccountSection />
           <YouTubeConnectionSection />
+          <TikTokConnectionSection />
           <NotificationsSection />
           <PlaybackSection />
           <AppearanceSection />

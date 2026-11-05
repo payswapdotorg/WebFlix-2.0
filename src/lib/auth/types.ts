@@ -79,3 +79,43 @@ export interface WebFlixYouTubeConnection {
   connectedAt: string;
   updatedAt: string;
 }
+
+/**
+ * P94-b — the per-user TikTok account connection (the gap report's G2): the
+ * P36 pattern cloned for the second source. TWO binding modes share the
+ * record:
+ *  - mode "oauth" — the official TikTok Login Kit grant (TIKTOK_CLIENT_KEY/
+ *    SECRET); tokens are AES-256-GCM blobs produced by
+ *    src/lib/tiktok/oauth.ts (encryptSecret) — plaintext never stored.
+ *  - mode "profile_link" — the INTERIM lane that works without a developer
+ *    app: the user pasted their own profile URL and WebFlix linked it
+ *    UNVERIFIED (`status: "linked"`). It claims no TikTok authorization —
+ *    it names the creator whose channel page the user manages locally.
+ * Stored under `wf:tt:conn:<userId>` — a SEPARATE keyspace from the YouTube
+ * connection (wf:yt:conn:) and the cache entries (tt:*).
+ */
+export interface WebFlixTikTokConnection {
+  userId: string;
+  /** which binding lane produced this record */
+  mode: "oauth" | "profile_link";
+  /** the creator handle the binding names (no leading @) */
+  handle: string;
+  /** TikTok's display name when a verified lane carried it (else null) */
+  nickname: string | null;
+  /** TikTok's avatar URL when a verified lane carried it (else null) */
+  avatarUrl: string | null;
+  /** Login Kit ids (oauth mode only) */
+  openId: string | null;
+  unionId: string | null;
+  /** the granted scope string (user.info.basic family; profile_link: "") */
+  scope: string;
+  /** AES-256-GCM blobs (oauth mode only; null for profile_link) */
+  accessTokenEnc: string | null;
+  refreshTokenEnc: string | null;
+  /** epoch ms (oauth mode only; 0 for profile_link) */
+  accessExpiresAt: number;
+  /** "connected" (oauth grant live) | "needs_reauth" | "linked" (unverified profile link) */
+  status: "connected" | "needs_reauth" | "linked";
+  connectedAt: string;
+  updatedAt: string;
+}

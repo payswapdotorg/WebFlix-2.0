@@ -13,6 +13,7 @@ import {
   Share2,
 } from "lucide-react";
 import { toast } from "sonner";
+import Link from "next/link";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,6 +29,8 @@ import { ShortsSourceSelector } from "@/components/shorts/shorts-source-selector
 import { TikTokImportDialog } from "@/components/shorts/tiktok/tiktok-import-dialog";
 import { TikTokFeedPlayer } from "@/components/tiktok/tiktok-feed-player";
 import { ShortsMuteButton } from "@/components/shorts/shorts-mute";
+import { creatorHandleFromVideo } from "@/lib/tiktok/channels";
+import { tiktokChannelHref } from "@/lib/tiktok/urls";
 import { SHORTS_SOURCE_CAPABILITIES } from "@/lib/shorts/feed-contracts";
 import type { TikTokFeedPageDTO } from "@/lib/tiktok/library";
 import type { TikTokImportVisibility, TikTokVideoDTO } from "@/lib/tiktok/types";
@@ -143,9 +146,20 @@ function TikTokFeedRail({
   async function save() {
     if (busy) return;
     if (authenticated === false) {
-      // The AU gate: guests route to /signin and come straight back
-      // (the import dialog's own gate law).
-      window.location.assign(signInHref(`/shorts?source=tiktok&post=${encodeURIComponent(item.postId)}`));
+      // P94-c guest gate (the gap report's G4): an INLINE prompt — the feed
+      // keeps its position; the navigation happens only when the viewer
+      // chooses Sign in. The hard-redirect storm the production walk
+      // flagged (guest tap → full /signin page load → position lost) is
+      // dead; the redirect param still carries the post deep link.
+      toast.error("Sign in to save TikToks to your shelf", {
+        action: {
+          label: "Sign in",
+          onClick: () =>
+            window.location.assign(
+              signInHref(`/shorts?source=tiktok&post=${encodeURIComponent(item.postId)}`),
+            ),
+        },
+      });
       return;
     }
     if (authenticated === null) return; // the session is still resolving
@@ -160,7 +174,16 @@ function TikTokFeedRail({
       } else if (result.kind === "already") {
         toast.info("Already in the WebFlix TikTok shelf");
       } else if (result.kind === "auth") {
-        window.location.assign(signInHref(`/shorts?source=tiktok&post=${encodeURIComponent(item.postId)}`));
+        // P94-c guest gate (G4) — inline, position-preserving (above).
+        toast.error("Sign in to save TikToks to your shelf", {
+          action: {
+            label: "Sign in",
+            onClick: () =>
+              window.location.assign(
+                signInHref(`/shorts?source=tiktok&post=${encodeURIComponent(item.postId)}`),
+              ),
+          },
+        });
       } else {
         toast.error(result.message ?? "Could not save the TikTok post");
       }
@@ -225,6 +248,21 @@ function TikTokFeedRail({
           player translates the flip through the documented force_muted
           re-mount (the Embed Player documents no mute command). */}
       <ShortsMuteButton />
+      {/* P94 (G6, partial) — Save to my shelf as a FIRST-CLASS rail slot
+          (the WebFlix-local import lane; owners already see their manage
+          affordances below — a saved post shows the flip/remove pair). */}
+      {CAPS.canImport && !item.owned ? (
+        <button
+          type="button"
+          onClick={() => void save()}
+          disabled={busy}
+          aria-label="Save to my shelf"
+          data-testid="tiktok-shorts-rail-save"
+          className="flex h-12 w-12 items-center justify-center rounded-full bg-black/30 p-3 text-white backdrop-blur transition-transform duration-150 hover:scale-105 focus-visible:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:opacity-50"
+        >
+          <BookmarkPlus className="size-full" aria-hidden="true" />
+        </button>
+      ) : null}
       {CAPS.canShare ? (
         <button
           type="button"
@@ -539,7 +577,11 @@ export function TikTokShortsFeed({ post }: { post?: string | null }) {
       onEnterLastTwo={onEnterLastTwo}
       loadingMore={loadingMore}
       loadingMoreLabel="Loading more TikToks"
-      renderSlide={(item, control) => (
+      renderSlide={(item, control) => {
+        // P94-a — the verifiable creator handle (author_url's @handle wins,
+        // a format-valid author handle second) — the internal channel link.
+        const creator = creatorHandleFromVideo(item);
+        return (
         <>
           {/* 9:16 player column — the SAME geometry wrapper as YouTube's
               slides (the one-experience law) */}
@@ -555,7 +597,19 @@ export function TikTokShortsFeed({ post }: { post?: string | null }) {
                     ♪
                   </span>
                   {item.author ? (
-                    item.authorUrl ? (
+                    creator ? (
+                      // P94-a (G1) — the creator rides the INTERNAL channel
+                      // page; the outbound law survives on the channel page
+                      // itself and the rail's Open-on-TikTok affordance.
+                      <Link
+                        href={tiktokChannelHref(creator)}
+                        data-testid="tiktok-shorts-creator"
+                        aria-label={`Open @${creator}'s TikTok channel on WebFlix`}
+                        className="pointer-events-auto w-fit truncate text-sm font-semibold text-white transition-opacity hover:opacity-80"
+                      >
+                        @{item.author}
+                      </Link>
+                    ) : item.authorUrl ? (
                       <a
                         href={item.authorUrl}
                         target="_blank"
@@ -613,7 +667,8 @@ export function TikTokShortsFeed({ post }: { post?: string | null }) {
             <ShortsSlideChevrons control={control} />
           </div>
         </>
-      )}
+        );
+      }}
     />
   );
 }

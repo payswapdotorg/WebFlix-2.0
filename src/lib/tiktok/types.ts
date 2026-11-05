@@ -88,3 +88,46 @@ export type TikTokPlayerError = {
   type: string;
   message: string;
 };
+
+// ---------------------------------------------------------------------------
+// P94-a — the channel lane (the derived creator page, the mandate's surface)
+// ---------------------------------------------------------------------------
+
+/**
+ * One TikTok creator's channel — DERIVED from the composed corpus (curated +
+ * community imports), never fabricated. oEmbed carries no avatar/banner/
+ * stats, so every field here is either factual (handle, postCount, the
+ * outbound profile URL) or a verified-metadata best-effort (nickname,
+ * banner) with honest nulls the UI renders as labeled fallbacks.
+ */
+export interface TikTokChannelDTO {
+  /** The canonical in-corpus handle (no leading @). */
+  handle: string;
+  /** oEmbed `author_name` when any of the creator's posts verified it; null
+   * renders the handle (the attribution law: verified fields only). */
+  nickname: string | null;
+  /**
+   * An avatar CANDIDATE only — the aggregator (`unavatar.io/tiktok/<handle>`)
+   * resolves viewer-side; the UI keeps an initials/glyph fallback for the
+   * honest miss. Null when the handle is avatar-unbuildable (never today).
+   */
+  avatarUrl: string | null;
+  /** The outbound tiktok.com profile URL (the URL law's own builder). */
+  profileUrl: string;
+  /** How many of the creator's posts ride WebFlix's composed shelf (real). */
+  postCount: number;
+  /** The latest verified post thumbnail — the banner candidate; null keeps
+   * the honest gradient banner. */
+  bannerUrl: string | null;
+}
+
+/** The channel-page payload: the derived channel + its posts + the honest
+ * depth disclosure (universeSize = how many posts the shelf searched). */
+export interface TikTokChannelPageDTO {
+  channel: TikTokChannelDTO;
+  videos: TikTokVideoDTO[];
+  universeSize: number;
+  /** Set when the shelf holds none of this creator's posts yet — the page
+   * still renders (a real handle with an honest empty grid + outbound). */
+  note: string | null;
+}

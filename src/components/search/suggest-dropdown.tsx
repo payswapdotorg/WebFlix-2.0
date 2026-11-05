@@ -19,6 +19,7 @@
  * keydown and renders `<SuggestDropdown control={…} />`.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
 import { Clock, Search, Trash2 } from "lucide-react";
 import type { NetflixCatalogSuggestion } from "@/lib/netflix/types";
 
@@ -161,6 +162,18 @@ export function useSuggestDropdown(opts: UseSuggestDropdownOptions): SuggestCont
     setOpenState(false);
     setNav(null);
   }, []);
+
+  // P94-c5 (the gap report's G13): ANY navigation closes the dropdown —
+  // the submit path (Enter fall-through) and the Back navigation both
+  // change the route, and a listbox that survives either intercepts
+  // clicks on the destination page (the production walk's stuck-overlay
+  // finding). Route change IS the close signal.
+  const pathname = usePathname();
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the route-change close (a no-op on mount when already closed) — the URL-param hydration idiom
+    setOpenState(false);
+    setNav(null);
+  }, [pathname]);
 
   // Suggestions: debounced fetch, cancelled on new input / close. The abort
   // + stale guard together give the cancel semantics: only the newest

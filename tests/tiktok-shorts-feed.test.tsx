@@ -331,12 +331,10 @@ describe("TikTokShortsFeed — the M3 ⋯ More menu (source capabilities)", () =
     }
     // the gate fired BEFORE the network: no POST rode
     expect(importPosts).toHaveLength(0);
-    // and the viewer was routed to sign in with the deep-link back
-    expect(assigned).toHaveLength(1);
-    expect(assigned[0]).toContain("/signin?redirect=");
-    expect(assigned[0]).toContain(
-      encodeURIComponent(`/shorts?source=tiktok&post=${ID_A}`),
-    );
+    // P94-c — the guest gate is INLINE now (the gap report's G4): the feed
+    // keeps its position — NO navigation fires; the Sign-in navigation
+    // happens only when the viewer chooses it from the toast's action.
+    expect(assigned).toHaveLength(0);
   });
 
   test("Save (signed-in) rides the import lane and stamps the row owned", async () => {

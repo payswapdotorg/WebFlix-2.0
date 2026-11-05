@@ -327,6 +327,11 @@ export function TikTokFeedPlayer({
             key={mountKey}
             src={src}
             title={item.title ? `${item.title} — TikTok` : "TikTok player"}
+            // P94-c1 (gap report G3): the sandbox pins the embed out of the
+            // top-level-navigation business — TikTok's wall pages must never
+            // steer the whole app. Scripts + same-origin keep the official
+            // player (and its postMessage protocol) fully working.
+            sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-presentation"
             // The allow list mirrors the official oEmbed html sample.
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share"
             allowFullScreen

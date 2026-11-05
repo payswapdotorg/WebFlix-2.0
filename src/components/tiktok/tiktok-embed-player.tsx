@@ -202,6 +202,10 @@ export function TikTokEmbedPlayer({
           ref={iframeRef}
           src={src}
           title={title ? `${title} — TikTok` : "TikTok player"}
+          // P94-c1 (gap report G3): the sandbox pins the embed out of
+          // top-level navigation (the wall-page hijack vector); scripts +
+          // same-origin keep the official player + postMessage working.
+          sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-presentation"
           // The allow list mirrors the official oEmbed html sample.
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share"
           allowFullScreen

@@ -167,6 +167,7 @@ const OPERATOR_USER = {
 const SECTION_IDS = [
   "account",
   "youtube-connection",
+  "tiktok-connection",
   "notifications",
   "playback",
   "appearance",
@@ -304,13 +305,13 @@ describe("P5-SS settings: the guest gate (settings is a personal surface)", () =
 });
 
 describe("P5-SS settings: every section renders with its visible scope label", () => {
-  test("all seven youtube.com sections render, LOCAL × 4 and MANAGED × 3", async () => {
+  test("all eight settings sections render, LOCAL × 4 and MANAGED × 4", async () => {
     await renderSignedInSettings();
     for (const id of SECTION_IDS) {
       expect(q(`[data-settings-section="${id}"]`)).not.toBeNull();
     }
     expect(all('[data-scope="local"]')).toHaveLength(4); // playback, appearance, privacy, advanced
-    expect(all('[data-scope="managed"]')).toHaveLength(3); // account, youtube-connection, notifications
+    expect(all('[data-scope="managed"]')).toHaveLength(4); // account, youtube-connection, tiktok-connection, notifications
     expect(host!.textContent).toContain(SCOPE_LOCAL_LABEL);
     expect(host!.textContent).toContain(SCOPE_MANAGED_LABEL);
   });
