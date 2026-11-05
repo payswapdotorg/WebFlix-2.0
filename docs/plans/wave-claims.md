@@ -1224,6 +1224,21 @@ re-runs gates → merges.
 
 | P93 | production delivery on the tepa scope: fair-use-blocked default team bypassed via the account's second team; DATABASE_URL recovered from Neon (restless-breeze-74749954, pooled, reveal_password law), env provisioned, v13 deploy READY sha 65354e4, SSO protection nulled; live URL webflix-2-0-tepa.vercel.app verified: chevrons, hydration ladder, R5 no-referrer in the served chunk, hover-play 1 official iframe mount/unmount, mute flip with the one-iframe law through reloads, 0 errors | Z.ai Code (TL, issue #2) | 2026-11-04 20:20 UTC | 65354e4 | SHIPPED (tepa scope — tay-nurs URL still stale, operator-side) |
 
+## Wave P96 — the fresh walk's closures (the profile-playback gap + the dialog eject)
+
+| Wave | Lane | Lead | Claimed (UTC) | Base | Status |
+|---|---|---|---|---|---|
+| P96 | profile-playback (G17: /shorts?source=tiktok&creator=@handle — the URL contract, the matcher-paged scoped feed API, the scope chip rail, the channel CTA + scoped card deep links) + the dialog eject (G18: the inline guest gate) — report-first | Z.ai Code (TL, issue #2) | 2026-11-05 | b5944bd | SHIPPED b632e77 (LIVE-VERIFIED dpl_9j2VnTYNh6i1AScNGSJapu6dWwuA) |
+
+### P96 drill record
+
+- THE METHOD: the P94/P95 matrix was fully resolved, so the wave ran a NEW open-ended guest walk of the P95 production build (search / You / history / hub / unknown-handle degrade / the guest import flow) — two implementable gaps found (G17 profile-playback, G18 dialog eject), the report landed FIRST (docs/research/2026-11-05-p96-profile-playback-and-the-dialog-eject-report.md), then both closed in the same wave. The walk's already-working set (hub grid, search shelf, unknown-handle honesty, inline save gate, one-iframe/mute/source laws) is documented in the report §1.
+- G17: /shorts?source=tiktok&creator=@handle end-to-end — shortsTikTokHref (the URL law), server-side creator parse, getTikTokChannelFeedPage (the channel matcher paged over the {items,nextCursor} law; in-scope splice only; foreign cursor honest end), /api/tiktok/feed?creator= (the same viewer composition; 400 invalid), the scope chip rail (@handle · channel · Clear), the scoped honest empty, the scope-respecting client-import splice, the channel page's scoped CTA + card deep links. Hub/search/home keep the shared canonical law.
+- G18: the import dialog's guest gate went INLINE (the P94 rail law) — the toast + Sign-in action, backHref carrying the scoped/deep-linked feed URL, the 401 path included. The hard /signin eject is dead everywhere.
+- NON-CLOSURES (documented): suggest-row TikTok absence (curated scope), TikTok-history (history is empty BY LAW — P36; deferred as a new feature), You-page link (cosmetic), the API-impossible family (unchanged).
+- GATES: tsc 0; eslint 0/0; tiktok lane 159/0 (24 new pins incl. the end-to-end scoped-import filter through the real dialog lane); FULL battery 2986/0 exit 0. Browser-verified locally AND on production (dpl_9j2VnTYNh6i1AScNGSJapu6dWwuA sha b632e77: bundle markers ×2, the scoped API trio, two-regions-one-iframe, the scoped click-through landing, the inline guest toast with the URL unchanged, fresh-load console clean). Evidence: evidence/p96/.
+- Money gate stays CLOSED (nothing money-shaped touched).
+
 ## Wave P95 — the remaining-gaps closure (the P94 report's open set, resolved against live evidence)
 
 | Wave | Lane | Lead | Claimed (UTC) | Base | Status |
