@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getChannelPageResilient } from "@/lib/youtube/channels";
 import { rateLimit } from "@/lib/youtube/cache";
+import { localChannelPage } from "@/lib/watch/local-channel";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,12 @@ export const dynamic = "force-dynamic";
  *    the last-good page serves (never cached as the walled shape);
  *  - cold + walled → HTTP 200 with the structured honest degrade
  *    `{channel: null, videos: [], shorts: [], tabs: [], walled: true,
- *    note}` — NEVER a naked 502.
+ *    note}` — NEVER a naked 502;
+ *  - P95 (G14): a handle that a LOCAL universe row owns (the seeded `-wf`
+ *    demo channels) answers LOCALLY FIRST — the live ladder's search-compose
+ *    rung would mis-attribute the demo handle to a real-but-unrelated
+ *    channel. The local page carries the channel's own rows, never invented
+ *    data (src/lib/watch/local-channel.ts).
  *
  * `handle` accepts "@name" or "UC…".
  */
@@ -27,6 +33,18 @@ export async function GET(
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
     const { handle } = await params;
+    // P95 (G14): a LOCAL universe handle answers locally FIRST. The demo
+    // universe's channels are WebFlix-local entities — and the P95 re-walk
+    // proved the live ladder's search-compose rung resolves almost any
+    // handle-ish string to a real-but-unrelated channel (@pixel-studios-wf
+    // once composed the unrelated "Pixel Studio" @pixel-studio-app), which
+    // is precisely the mis-attribution the rename law exists to kill. A
+    // local row owns the handle → its own rows serve; no local row → the
+    // live ladder runs exactly as before.
+    const local = await localChannelPage(handle).catch(() => null);
+    if (local) {
+      return NextResponse.json({ ...local, walled: false });
+    }
     const { page, walled } = await getChannelPageResilient(handle);
     if (!page) {
       // honest degrade: structured empty + walled context, HTTP 200

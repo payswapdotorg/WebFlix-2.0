@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getChannelTab, getChannelMembershipTab } from "@/lib/youtube/channel-tabs";
 import { getCommunityTab } from "@/lib/youtube/community";
 import { rateLimit } from "@/lib/youtube/cache";
+import { localChannelTab } from "@/lib/watch/local-channel";
 import type { ChannelTabDTO, ChannelTabId } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -70,6 +71,14 @@ export async function GET(
     // WFX2-P6-CH: the sort-chip continuation token (honored on the Videos
     // tab only; absent/empty on every other tab — the default fetch)
     const chip = url.searchParams.get("chip");
+    // P95 (G14): a LOCAL universe handle answers its own tab first — the
+    // page DTO's tabs send the client here for `about` on the demo channels,
+    // and the live read would wall. Other tabs (or a local miss) fall
+    // through to the live ladder untouched (localChannelTab answers null).
+    const localTab = await localChannelTab(handle, tab as ChannelTabId).catch(() => null);
+    if (localTab) {
+      return NextResponse.json(localTab);
+    }
     // WFX2-P7-CH: the membership tab branches to the shared join walk (the
     // per-tab switch — the same shape the Community tab's branch takes)
     const payload: ChannelTabDTO =

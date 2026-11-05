@@ -11,7 +11,9 @@
  * against chapter/cue timestamps — a fabricated one renders as plain text).
  * Honest degradation: {status:"disabled"} → the honest "not available" note
  * (the user opened the panel deliberately — hiding would be a dead button);
- * failures → the honest error + per-question Retry.
+ * P95 (G8): the note names the enable path (the ZAI_API_KEY env — an
+ * operator setting), mirroring the connection cards' not-configured
+ * envelopes; failures → the honest error + per-question Retry.
  */
 import { useState } from "react";
 import { SendHorizontal, Sparkles, X } from "lucide-react";
@@ -194,7 +196,9 @@ function AskTurnView({
       )}
       {turn.status === "disabled" && (
         <p className="text-sm text-muted-foreground" data-testid="ask-disabled">
-          AI answers aren&apos;t available on this deployment.
+          AI answers aren&apos;t available on this deployment — they turn on when
+          the operator sets the <code className="rounded bg-secondary px-1 py-0.5 text-xs">ZAI_API_KEY</code>{" "}
+          environment variable (see <code className="rounded bg-secondary px-1 py-0.5 text-xs">.env.example</code>).
         </p>
       )}
       {turn.status === "error" && (

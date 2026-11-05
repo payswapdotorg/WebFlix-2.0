@@ -1022,7 +1022,7 @@ describe("GET /api/me — the per-user truth (P37: the operator seam retired)", 
     expect(res.status).toBe(200);
     const data = (await res.json()) as any;
     // the demo identity's DB channel (the honest anonymous lane)
-    expect(data.ownedChannel).toEqual({ handle: "codecraft", name: "CodeCraft" });
+    expect(data.ownedChannel).toEqual({ handle: "codecraft-wf", name: "CodeCraft" });
     // the operator's subscriptions are NEVER served — even with the lookup
     // resolved and cookies present, the guest gets the honest empty list
     expect(data.subscriptions).toEqual([]);
@@ -1042,7 +1042,7 @@ describe("GET /api/me — the per-user truth (P37: the operator seam retired)", 
     const data = (await res.json()) as any;
     // the pre-P37 pin here was "@opchan / Operator Channel wins" — the P37
     // retirement pin: the operator's channel NEVER answers for anyone else
-    expect(data.ownedChannel).toEqual({ handle: "codecraft", name: "CodeCraft" });
+    expect(data.ownedChannel).toEqual({ handle: "codecraft-wf", name: "CodeCraft" });
     expect(data.subscriptions).toEqual([]);
   });
 

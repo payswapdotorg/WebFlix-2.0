@@ -104,7 +104,16 @@ export function DescriptionBox({
       )}
 
       {/* body: collapsed 2-line clamp / expanded animated full text */}
-      {!expanded && <p className="mt-1.5 line-clamp-2 whitespace-pre-line text-foreground/90">{description}</p>}
+      {!expanded &&
+        (description.trim() ? (
+          <p className="mt-1.5 line-clamp-2 whitespace-pre-line text-foreground/90">{description}</p>
+        ) : (
+          // P95 (G10): mirrored-catalog rows can carry a blank description —
+          // an empty box looks broken; the honest absence is named instead
+          <p className="mt-1.5 text-muted-foreground" data-testid="description-empty">
+            No description
+          </p>
+      ))}
 
       <div
         className={cn(
@@ -115,8 +124,9 @@ export function DescriptionBox({
         <div className="overflow-hidden">
           {expanded && (
             <>
-              <div className="mt-2 whitespace-pre-line text-foreground/90">
-                {lines.map((line, i) => (
+              {description.trim() ? (
+                <div className="mt-2 whitespace-pre-line text-foreground/90">
+                  {lines.map((line, i) => (
                   <span key={i} className="block min-h-[1em]">
                     {tokenizeDescriptionLine(line).map((tok, j) => {
                       if (tok.kind === "hashtag") {
@@ -151,7 +161,13 @@ export function DescriptionBox({
                     })}
                   </span>
                 ))}
-              </div>
+                </div>
+              ) : (
+                // P95 (G10): the expanded state names the honest absence too
+                <p className="mt-2 text-muted-foreground" data-testid="description-empty-expanded">
+                  No description
+                </p>
+              )}
 
               {chapters.length > 0 && (
                 <section aria-label="Chapters" className="mt-3">

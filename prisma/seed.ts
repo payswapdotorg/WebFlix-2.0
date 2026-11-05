@@ -111,7 +111,7 @@ async function main() {
   // ---- channels (CodeCraft is owned by the demo user → Creator Studio) ------
   const pixel = await db.channel.create({
     data: {
-      handle: "pixel-studios",
+      handle: "pixel-studios-wf",
       name: "Pixel Studios",
       avatarUrl: pic("pixel-studios-avatar", 88, 88),
       bannerUrl: pic("pixel-studios-banner", 1707, 283),
@@ -124,7 +124,7 @@ async function main() {
   });
   const gamevault = await db.channel.create({
     data: {
-      handle: "gamevault",
+      handle: "gamevault-wf",
       name: "GameVault",
       avatarUrl: pic("gamevault-avatar", 88, 88),
       bannerUrl: pic("gamevault-banner", 1707, 283),
@@ -136,7 +136,7 @@ async function main() {
   });
   const wanderlust = await db.channel.create({
     data: {
-      handle: "wanderlust-travel",
+      handle: "wanderlust-travel-wf",
       name: "Wanderlust Travel",
       avatarUrl: pic("wanderlust-avatar", 88, 88),
       bannerUrl: pic("wanderlust-banner", 1707, 283),
@@ -148,7 +148,7 @@ async function main() {
   });
   const soundforge = await db.channel.create({
     data: {
-      handle: "sound-forge",
+      handle: "sound-forge-wf",
       name: "Sound Forge",
       avatarUrl: pic("soundforge-avatar", 88, 88),
       bannerUrl: pic("soundforge-banner", 1707, 283),
@@ -160,7 +160,7 @@ async function main() {
   });
   const codecraft = await db.channel.create({
     data: {
-      handle: "codecraft",
+      handle: "codecraft-wf",
       name: "CodeCraft",
       avatarUrl: pic("codecraft-avatar", 88, 88),
       bannerUrl: pic("codecraft-banner", 1707, 283),

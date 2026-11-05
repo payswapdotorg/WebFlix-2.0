@@ -1224,6 +1224,22 @@ re-runs gates → merges.
 
 | P93 | production delivery on the tepa scope: fair-use-blocked default team bypassed via the account's second team; DATABASE_URL recovered from Neon (restless-breeze-74749954, pooled, reveal_password law), env provisioned, v13 deploy READY sha 65354e4, SSO protection nulled; live URL webflix-2-0-tepa.vercel.app verified: chevrons, hydration ladder, R5 no-referrer in the served chunk, hover-play 1 official iframe mount/unmount, mute flip with the one-iframe law through reloads, 0 errors | Z.ai Code (TL, issue #2) | 2026-11-04 20:20 UTC | 65354e4 | SHIPPED (tepa scope — tay-nurs URL still stale, operator-side) |
 
+## Wave P95 — the remaining-gaps closure (the P94 report's open set, resolved against live evidence)
+
+| Wave | Lane | Lead | Claimed (UTC) | Base | Status |
+|---|---|---|---|---|---|
+| P95 | gap-report resolution (the re-walk verdicts: G9/G16 verified closed, G15 parity-decision, G8 re-scoped to the LLM-key rung, G10 narrowed) | Z.ai Code (TL, issue #2) | 2026-11-05 | 62e92c2 | SHIPPED (this wave) |
+| P95 | ask-note + empty-description (G8's actionable disabled state; G10's honest "No description" line) | Z.ai Code (TL, issue #2) | 2026-11-05 | 62e92c2 | SHIPPED (this wave) |
+| P95 | local-universe channels (G14: -wf handle rename ×5 + local-first /api/channel + the local About tab + the 8-pin law file) | Z.ai Code (TL, issue #2) | 2026-11-05 | 62e92c2 | SHIPPED (this wave) |
+
+### P95 drill record
+
+- THE METHOD (the mandate's law kept): the P94 report's open set was first resolved against a fresh guest re-walk of the LIVE P94 production build — G9 and G16 proved already working (the walk's Remix finding was a click-target artifact: the visible label text sits outside the button), G15 closed by parity decision (youtube.com's home has no hero; screenshot evidence), G8 re-scoped to its true root cause (the deployment lacks ZAI_API_KEY — the panel/ask/degradation all work), G10 narrowed to the empty-description row. The report landed BEFORE the implementation: docs/research/2026-11-05-p95-remaining-gaps-closure-report.md.
+- G8/G10 CODE: the Ask panel's disabled note names the enable path (ZAI_API_KEY + .env.example — the connection-card doctrine); DescriptionBox renders the honest "No description" line for blank descriptions in both states.
+- G14 THE LAW: the demo handles carry -wf (structural pin: every seeded channel handle ends -wf, forever); a handle a LOCAL row owns answers LOCAL-FIRST through the same ChannelPageDTO (localChannelPage — decodeURIComponent first, the client's double-encoded "%40" form arrives; the re-walk MEASURED the live compose rung mis-attributing @pixel-studios AND @pixel-studios-wf to unrelated real channels — the mis-attribution class is what local-first kills); the lazy About tab rides localChannelTab (the row's own description/subscribers/real view-sum/joined). The local watch-page boundary (the mp4 lane dormant since the cutover) is documented, not faked.
+- PRODUCTION POSTURE: the prod seed stays minimal by the honesty law — the local-channel law is dormant on prod; every live handle rides the live ladder untouched.
+- GATES: tsc 0; eslint 0/0; boot lane 883/0; FULL battery 2962/0 exit 0; browser-verified locally (the local channel page's full grammar, desktop + 375px 0px overflow, About row-fed; the ask note; the double-encoded handle law). Evidence under evidence/p95/.
+
 ## Wave P94 — the TikTok main-interface wave (channels + connect + the gap report)
 
 | Wave | Lane | Lead | Claimed (UTC) | Base | Status |

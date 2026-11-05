@@ -168,6 +168,13 @@ export type ChannelPageDTO = {
      * always false (never the broker's subscription state).
      */
     brokered?: boolean;
+    /**
+     * P95 (G14, additive, mirrors composed?): the page was served from the
+     * LOCAL universe — the live channel read failed and a seeded Channel row
+     * owns this handle (the `-wf` demo handles). Every field is the row's
+     * own; nothing is invented (src/lib/watch/local-channel.ts).
+     */
+    local?: boolean;
   };
   videos: VideoDTO[];
   shorts: VideoDTO[];
@@ -185,6 +192,8 @@ export type ChannelPageDTO = {
   walled?: boolean;
   /** WFX2-B-S (additive): the honest-degrade explanation (walled state) */
   note?: string;
+  /** P95 (G14, additive): the page came from the local universe (see channel.local) */
+  local?: boolean;
 };
 
 /** The channel page tabs (YouTube's own tab family). */
@@ -394,6 +403,8 @@ export type ChannelTabDTO = {
   source?: CommunityTabSource;
   /** WFX2-P2-SO (additive): the operator session owns this channel (the composer affordance) */
   compose?: boolean;
+  /** P95 (G14, additive): the tab came from the local universe (localChannelTab) */
+  local?: boolean;
 };
 
 export type WatchPageDTO = {
