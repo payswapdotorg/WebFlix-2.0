@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -22,28 +22,47 @@ import type { TikTokVideoDTO } from "@/lib/tiktok/types";
  * affordance (ADR 0013 §7): a signed-in viewer pastes a canonical
  * tiktok.com URL (or a bare post id) and the post joins their feed as a
  * PRIVATE save; the owner's "Make public" flip (the curator rule) admits
- * it to every viewer's feed. Guests route to /signin (the AU gate
- * pattern). NO TikTok write is implied — this is a WebFlix-local shelf
- * (ADR 0004); the copy says so.
+ * it to every viewer's feed. Guests get the P94 inline gate (P96-b: the
+ * gap report's G18 — the old hard `/signin` eject broke the feed position
+ * the inline law exists to keep; the navigation now happens only when the
+ * viewer chooses Sign in, and the redirect param still carries the feed
+ * URL, scoped or deep-linked). NO TikTok write is implied — this is a
+ * WebFlix-local shelf (ADR 0004); the copy says so.
  */
 export function TikTokImportDialog({
   authenticated,
   onImported,
+  backHref,
 }: {
   /** The WebFlix account session state (the AU gate source of truth):
-   * true → the dialog opens; false → the click routes to /signin (and
-   * straight back); null → the session is still resolving (no open). */
+   * true → the dialog opens; false → the INLINE prompt (no navigation);
+   * null → the session is still resolving (no open). */
   authenticated: boolean | null;
   onImported: (post: TikTokVideoDTO, alreadyImported: boolean, curated: boolean) => void;
+  /** The feed URL the Sign-in action's redirect param carries — the
+   * position the viewer returns to (P96-b: the scoped/deep-linked form). */
+  backHref?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
+  const back = backHref ?? "/shorts?source=tiktok";
+
+  const inlineSignIn = useCallback(() => {
+    // The P94 inline gate law (the rail's save gate, G4): the toast keeps
+    // the feed's position; the navigation rides the viewer's own choice.
+    toast.error("Sign in to add TikTok posts to your shelf", {
+      action: {
+        label: "Sign in",
+        onClick: () => window.location.assign(signInHref(back)),
+      },
+    });
+  }, [back]);
 
   function handleOpenChange(next: boolean) {
     if (next && authenticated === false) {
-      // The AU gate: guests route to /signin and come straight back.
-      window.location.assign(signInHref("/shorts?source=tiktok"));
+      // P96-b (G18): INLINE, position-preserving — the hard eject is dead.
+      inlineSignIn();
       return;
     }
     if (next && authenticated === null) return;
@@ -61,8 +80,9 @@ export function TikTokImportDialog({
         body: JSON.stringify({ url: value }),
       });
       if (res.status === 401) {
-        // The AU gate: guests route to /signin and come straight back.
-        window.location.assign(signInHref("/shorts?source=tiktok"));
+        // The session died mid-dialog — the same INLINE treatment (no
+        // navigation until the viewer chooses Sign in).
+        inlineSignIn();
         return;
       }
       const body = (await res.json()) as {

@@ -29,8 +29,12 @@ for (const key of [
   "document",
   "HTMLElement",
   "HTMLIFrameElement",
+  "HTMLInputElement",
+  "HTMLAnchorElement",
   "Element",
   "Node",
+  "NodeFilter",
+  "NodeListOf",
   "navigator",
   "CustomEvent",
   "MessageEvent",
@@ -395,5 +399,112 @@ describe("TikTokShortsFeed — the M3 ⋯ More menu (source capabilities)", () =
       (win.document.querySelector("[data-testid='tiktok-shorts-report']") as HTMLElement).click();
     });
     expect(opened).toEqual([feedItem(ID_A).deepLinkUrl]);
+  });
+});
+
+describe("TikTokShortsFeed — the P96-a creator scope + the P96-b inline dialog gate", () => {
+  test("the creator scope rides the seed URL and renders the scope chip with its Clear action", async () => {
+    useApiData = page([feedItem(ID_A)]);
+    await render(createElement(TikTokShortsFeed, { post: null, creator: "scout2015" }));
+    // the scope law at the data layer: the seed fetch carries the creator
+    expect(useApiUrls.some((u) => u === "/api/tiktok/feed?creator=%40scout2015")).toBe(true);
+    // the honest scope chip: the handle, the channel escape hatch, the Clear
+    const chip = q('[data-testid="tiktok-scope-chip"]');
+    expect(chip?.textContent).toContain("@scout2015");
+    const clear = q('[data-testid="tiktok-scope-clear"]') as HTMLAnchorElement | null;
+    expect(clear?.getAttribute("href")).toBe("/shorts?source=tiktok");
+    const chipLink = chip?.querySelector("a") as HTMLAnchorElement | null;
+    expect(chipLink?.getAttribute("href")).toContain("/tiktok/");
+  });
+
+  test("an UNSCOPED feed renders no chip and the plain seed URL", async () => {
+    useApiData = page([feedItem(ID_A)]);
+    await render(createElement(TikTokShortsFeed, { post: null }));
+    expect(useApiUrls).toContain("/api/tiktok/feed");
+    expect(q('[data-testid="tiktok-scope-chip"]')).toBeNull();
+  });
+
+  test("a fresh client import of a DIFFERENT creator never leaks into a scoped feed", async () => {
+    // Signed-in (the session hook rides the same useApi mock — the
+    // pageSignedIn payload's user field authenticates it), scoped feed.
+    useApiData = pageSignedIn([feedItem(ID_A)]);
+    const importCalls: string[] = [];
+    (globalThis as Record<string, unknown>).fetch = async (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      if (String(input) === "/api/tiktok/import" && init?.method === "POST") {
+        importCalls.push(String(init.body));
+        // the import lane answers the FOREIGN creator's post
+        const foreign = feedItem(ID_B, {
+          author: "othercreator",
+          authorUrl: "https://www.tiktok.com/@othercreator",
+          deepLinkUrl: "https://www.tiktok.com/@othercreator/video/7206561191609716014",
+        });
+        return new Response(
+          JSON.stringify({ post: foreign, alreadyImported: false, curated: false }),
+          { status: 201 },
+        );
+      }
+      return new Response("{}", { status: 200 });
+    };
+    await render(createElement(TikTokShortsFeed, { post: null, creator: "scout2015" }));
+    // open the dialog, paste the foreign URL, submit (the REAL dialog lane)
+    await act(async () => {
+      (
+        win.document.querySelector("[data-testid='tiktok-import-open']") as HTMLElement
+      ).click();
+    });
+    const input = win.document.querySelector(
+      "[data-testid='tiktok-import-input']",
+    ) as HTMLInputElement | null;
+    expect(input).not.toBeNull();
+    // React-safe value set (the live-ui-phase5 house idiom): focusin, the
+    // prototype descriptor's set, then the keyup bubble.
+    await act(async () => {
+      input!.dispatchEvent(new win.Event("focusin", { bubbles: true }));
+    });
+    const desc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+    desc?.set?.call(input!, "https://www.tiktok.com/@othercreator/video/7206561191609716014");
+    await act(async () => {
+      input!.dispatchEvent(new win.Event("keyup", { bubbles: true }));
+    });
+    await act(async () => {
+      (
+        win.document.querySelector("[data-testid='tiktok-import-submit']") as HTMLElement
+      ).click();
+    });
+    // the import lane WAS called with the pasted URL
+    expect(importCalls).toEqual([
+      JSON.stringify({ url: "https://www.tiktok.com/@othercreator/video/7206561191609716014" }),
+    ]);
+    // the scope law: the foreign post NEVER renders in the scoped feed —
+    // only the scout row the server scope composed.
+    const slides = all('[data-testid="tiktok-shorts-attribution"]');
+    expect(slides).toHaveLength(1);
+    expect(slides[0]?.textContent).toContain("@scout2015");
+  });
+
+  test("P96-b — the import dialog's guest gate goes INLINE (no hard /signin eject)", async () => {
+    const assigned: string[] = [];
+    const loc = win.location as unknown as { assign: (s: string) => void };
+    const realAssign = loc.assign;
+    loc.assign = (s: string) => {
+      assigned.push(s);
+    };
+    try {
+      useApiData = page([feedItem(ID_A)]);
+      await render(createElement(TikTokShortsFeed, { post: null }));
+      await act(async () => {
+        (
+          win.document.querySelector("[data-testid='tiktok-import-open']") as HTMLElement
+        ).click();
+      });
+    } finally {
+      loc.assign = realAssign;
+    }
+    // the G18 law: NO navigation on the guest tap — the toast offers the
+    // Sign-in action and the feed keeps its position (the P94 gate law).
+    expect(assigned).toHaveLength(0);
   });
 });

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
-import { shortsSourceHref } from "@/lib/shorts/feed-contracts";
+import { shortsSourceHref, shortsTikTokHref } from "@/lib/shorts/feed-contracts";
 import { creatorHandleFromVideo } from "@/lib/tiktok/channels";
 import { isTikTokHandle, tiktokChannelHref } from "@/lib/tiktok/urls";
 import {
@@ -37,8 +37,21 @@ import type { TikTokVideoDTO } from "@/lib/tiktok/types";
  * hover-play-research.md): the thumbnail rides TikTokThumbnailImage —
  * `referrerPolicy="no-referrer"` (R5) and an expired-signed-URL `onError`
  * that restores the honest fallback tile (R6).
+ *
+ * P96-a (the gap report's G17, the profile-playback gap): `scopedCreator`
+ * re-scopes the deep link to that creator's feed
+ * (`/shorts?source=tiktok&creator=@handle&post=<id>`) — the channel page's
+ * grid rides it (TikTok profile parity: a profile tap plays within that
+ * creator's sequence). Hub/search/home keep the shared canonical law
+ * (the prop stays unset there).
  */
-export function TikTokCard({ video }: { video: TikTokVideoDTO }) {
+export function TikTokCard({
+  video,
+  scopedCreator,
+}: {
+  video: TikTokVideoDTO;
+  scopedCreator?: string | null;
+}) {
   const [inViewRef, inView] = useInViewOnce<HTMLDivElement>();
   const meta = useTikTokOEmbed({
     postId: video.postId,
@@ -62,7 +75,11 @@ export function TikTokCard({ video }: { video: TikTokVideoDTO }) {
       {...hoverProps}
     >
       <Link
-        href={shortsSourceHref("tiktok", video.postId)}
+        href={
+          scopedCreator
+            ? shortsTikTokHref({ postId: video.postId, creator: scopedCreator })
+            : shortsSourceHref("tiktok", video.postId)
+        }
         className="block overflow-hidden rounded-lg bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         aria-label={label}
       >

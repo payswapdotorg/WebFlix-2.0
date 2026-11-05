@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { ShortsFeed } from "@/components/shorts/shorts-feed";
 import { TikTokShortsFeed } from "@/components/shorts/tiktok/tiktok-shorts-feed";
 import { parseShortsSource } from "@/lib/shorts/feed-contracts";
-import { isTikTokPostId } from "@/lib/tiktok/urls";
+import { isTikTokPostId, isTikTokHandle, normalizeTikTokHandle } from "@/lib/tiktok/urls";
 
 /**
  * WFX2-A-S (agent WFX2-A-S-FRONTEND-B) — Shorts page (thin server page).
@@ -13,7 +13,12 @@ import { isTikTokPostId } from "@/lib/tiktok/urls";
  *   /shorts                       → YouTube (the default)
  *   /shorts?source=tiktok         → the TikTok feed
  *   /shorts?source=tiktok&post=ID → the TikTok feed opened at that post
- * An invalid `post` id is honestly ignored (the feed renders normally).
+ * P96-a (the gap report's G17, the profile-playback gap) extends the
+ * TikTok contract with the creator scope:
+ *   /shorts?source=tiktok&creator=@handle          → that creator's feed
+ *   /shorts?source=tiktok&creator=@handle&post=ID  → opened at their post
+ * An invalid `post` id or creator handle is honestly ignored (the feed
+ * renders normally).
  *
  * The page itself does NOT scroll — it fills the shell's main area height
  * (`h-full`) and the shared feed shell owns the snap scrolling internally.
@@ -29,7 +34,7 @@ export const metadata: Metadata = {
 export default async function ShortsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ source?: string; post?: string }>;
+  searchParams: Promise<{ source?: string; post?: string; creator?: string }>;
 }) {
   const params = await searchParams;
   const source = parseShortsSource(params.source);
@@ -37,10 +42,18 @@ export default async function ShortsPage({
     source === "tiktok" && params.post && isTikTokPostId(params.post)
       ? params.post
       : null;
+  const creatorRaw = source === "tiktok" ? (params.creator ?? null) : null;
+  const creatorClean = creatorRaw ? normalizeTikTokHandle(creatorRaw) : null;
+  const creator =
+    creatorClean && isTikTokHandle(creatorClean) ? creatorClean : null;
 
   return (
     <div className="h-full">
-      {source === "tiktok" ? <TikTokShortsFeed post={post} /> : <ShortsFeed />}
+      {source === "tiktok" ? (
+        <TikTokShortsFeed post={post} creator={creator} />
+      ) : (
+        <ShortsFeed />
+      )}
     </div>
   );
 }

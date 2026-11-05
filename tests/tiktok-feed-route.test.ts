@@ -136,3 +136,52 @@ describe("GET /api/tiktok/feed — the shape law", () => {
     expect(body.nextCursor).toBeNull();
   });
 });
+
+describe("GET /api/tiktok/feed?creator= — the P96-a scope contract (G17)", () => {
+  // The static fixture answers ONLY the docs post through oEmbed; every
+  // other row rides the P59-R2 cited-fallback DTO — so the scope sees the
+  // universe's FACTUAL curated handles: brittanypeachhh owns exactly two
+  // cited posts (7322301313134415134 + 7323004085043612959).
+  const BRITTANY = ["7322301313134415134", "7323004085043612959"];
+
+  test("a format-valid handle scopes the pages (@ and bare normalize the same)", async () => {
+    const { GET } = await import("@/app/api/tiktok/feed/route");
+    const scoped = await (await GET(feedReq("?creator=%40brittanypeachhh&limit=40"))).json();
+    expect(scoped.items.map((v: { postId: string }) => v.postId)).toEqual(BRITTANY);
+    expect(scoped.nextCursor).toBeNull();
+    const bare = await (await GET(feedReq("?creator=brittanypeachhh&limit=40"))).json();
+    expect(bare.items.map((v: { postId: string }) => v.postId)).toEqual(BRITTANY);
+  });
+
+  test("a valid handle with zero shelf posts answers the honest empty page", async () => {
+    const { GET } = await import("@/app/api/tiktok/feed/route");
+    const res = await GET(feedReq("?creator=nobodyhere"));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ items: [], nextCursor: null });
+  });
+
+  test("a format-invalid handle answers 400 (the URL law's own verdict)", async () => {
+    const { GET } = await import("@/app/api/tiktok/feed/route");
+    const res = await GET(feedReq("?creator=bad%20handle!"));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("Invalid TikTok handle");
+  });
+
+  test("a deep-linked post OUTSIDE the scope is never smuggled in", async () => {
+    const { GET } = await import("@/app/api/tiktok/feed/route");
+    // the docs post is scout2015's — it must NOT lead brittanypeachhh's scope
+    const res = await GET(feedReq(`?creator=@brittanypeachhh&post=${DOCS_ID}&limit=5`));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const ids = body.items.map((v: { postId: string }) => v.postId);
+    expect(ids).not.toContain(DOCS_ID);
+    expect(ids).toEqual(BRITTANY);
+  });
+
+  test("a cursor outside the scope honestly ends the feed (no restart loop)", async () => {
+    const { GET } = await import("@/app/api/tiktok/feed/route");
+    const res = await GET(feedReq(`?creator=@brittanypeachhh&cursor=${DOCS_ID}`));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ items: [], nextCursor: null });
+  });
+});

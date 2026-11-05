@@ -36,6 +36,28 @@ export function shortsSourceHref(source: ShortsSource, postId?: string | null): 
 }
 
 /**
+ * P96-a (the gap report's G17, the profile-playback gap) — the
+ * creator-scoped TikTok feed href (`/shorts?source=tiktok&creator=@handle`,
+ * composing with `post`). The URL law lives here: every shorts URL string
+ * is born from this module. An invalid post id or a handle that is not a
+ * plain TikTok handle shape is honestly DROPPED (the URL never lies); a
+ * caller with neither param gets the plain feed.
+ */
+export function shortsTikTokHref(
+  opts: { postId?: string | null; creator?: string | null } = {},
+): string {
+  const params: string[] = ["source=tiktok"];
+  if (opts.postId && looksLikePostId(opts.postId)) {
+    params.push(`post=${encodeURIComponent(opts.postId)}`);
+  }
+  const creator = (opts.creator ?? "").replace(/^@/, "");
+  if (creator && /^[\w.\-]{1,30}$/.test(creator)) {
+    params.push(`creator=${encodeURIComponent(`@${creator}`)}`);
+  }
+  return `/shorts?${params.join("&")}`;
+}
+
+/**
  * The per-source action capability map (ADR 0013 §5): the UI renders
  * actions FROM this map and never hard-codes a cross-source claim.
  *

@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatCount } from "@/lib/format";
 import { TikTokCard } from "@/components/tiktok/tiktok-card";
 import { TikTokThumbnailImage } from "@/components/tiktok/tiktok-thumbnail-image";
+import { shortsTikTokHref } from "@/lib/shorts/feed-contracts";
 import type { TikTokChannelPageDTO } from "@/lib/tiktok/types";
 
 /**
@@ -179,7 +180,15 @@ export function TikTokChannelView({ handle }: { handle: string }) {
             Follow on TikTok
           </a>
           <Button asChild variant="secondary" className="rounded-full">
-            <Link href="/shorts?source=tiktok">Watch in Shorts</Link>
+            {/* P96-a (G17): the scoped feed — TikTok profile parity: the
+                profile CTA plays THAT creator's sequence, not the shared
+                firehose. */}
+            <Link
+              href={shortsTikTokHref({ creator: channel.handle })}
+              data-testid="tiktok-channel-watch-scoped"
+            >
+              Watch in Shorts
+            </Link>
           </Button>
         </div>
       </div>
@@ -235,7 +244,10 @@ export function TikTokChannelView({ handle }: { handle: string }) {
           ) : (
             <div className="flex flex-wrap gap-x-4 gap-y-6" data-testid="tiktok-channel-grid">
               {videos.map((video) => (
-                <TikTokCard key={video.postId} video={video} />
+                // P96-a (G17): the scoped deep link — a profile tap plays
+                // within this creator's sequence (TikTok's own profile
+                // behavior); hub/search/home keep the shared canonical law.
+                <TikTokCard key={video.postId} video={video} scopedCreator={channel.handle} />
               ))}
             </div>
           )}

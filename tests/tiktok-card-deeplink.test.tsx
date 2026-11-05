@@ -267,3 +267,19 @@ describe("TikTokCard — the P88 client preview lane", () => {
     winObj.matchMedia = realMM;
   });
 });
+
+describe("TikTokCard — the P96-a scoped deep link (G17, the profile-playback gap)", () => {
+  test("scopedCreator re-scopes the deep link to that creator's feed", async () => {
+    await render(createElement(TikTokCard, { video: cardItem(ID_A), scopedCreator: "scout2015" }));
+    const link = q('[data-testid="tiktok-card"] a');
+    expect(link?.getAttribute("href")).toBe(
+      `/shorts?source=tiktok&post=${ID_A}&creator=%40scout2015`,
+    );
+  });
+
+  test("hub/search/home keep the shared canonical law (no scopedCreator → no scope)", async () => {
+    await render(createElement(TikTokCard, { video: cardItem(ID_A), scopedCreator: null }));
+    const link = q('[data-testid="tiktok-card"] a');
+    expect(link?.getAttribute("href")).toBe(`/shorts?source=tiktok&post=${ID_A}`);
+  });
+});

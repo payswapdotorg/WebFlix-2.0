@@ -12,6 +12,7 @@ import { readFileSync } from "node:fs";
 import {
   parseShortsSource,
   shortsSourceHref,
+  shortsTikTokHref,
   SHORTS_SOURCE_CAPABILITIES,
 } from "@/lib/shorts/feed-contracts";
 
@@ -116,5 +117,47 @@ describe("the /shorts adapter switch + the /tiktok/v/[id] redirect (source-scan)
     expect(source).toContain("ShortsFeedShell");
     expect(source).not.toContain("TikTok");
     expect(source).not.toContain("tiktok");
+  });
+});
+
+describe("shortsTikTokHref — the P96-a creator-scope shapes (G17)", () => {
+  test("no params → the plain TikTok feed", () => {
+    expect(shortsTikTokHref({})).toBe("/shorts?source=tiktok");
+    expect(shortsTikTokHref({ postId: null, creator: null })).toBe("/shorts?source=tiktok");
+  });
+
+  test("creator-only: the @-stripped handle rides as creator=@handle", () => {
+    expect(shortsTikTokHref({ creator: "scout2015" })).toBe(
+      "/shorts?source=tiktok&creator=%40scout2015",
+    );
+    // the caller may pass the @ form — it normalizes to the same URL
+    expect(shortsTikTokHref({ creator: "@scout2015" })).toBe(
+      "/shorts?source=tiktok&creator=%40scout2015",
+    );
+  });
+
+  test("post + creator compose (the channel page's scoped deep link)", () => {
+    expect(shortsTikTokHref({ postId: "6718335390845095173", creator: "scout2015" })).toBe(
+      "/shorts?source=tiktok&post=6718335390845095173&creator=%40scout2015",
+    );
+  });
+
+  test("an invalid post id and an invalid handle are honestly DROPPED (the URL never lies)", () => {
+    expect(shortsTikTokHref({ postId: "bogus", creator: "scout2015" })).toBe(
+      "/shorts?source=tiktok&creator=%40scout2015",
+    );
+    expect(shortsTikTokHref({ postId: "6718335390845095173", creator: "bad handle!" })).toBe(
+      "/shorts?source=tiktok&post=6718335390845095173",
+    );
+    expect(shortsTikTokHref({ postId: "bogus", creator: "" })).toBe("/shorts?source=tiktok");
+  });
+
+  test("handle shapes the TikTok handle law allows ride through (dot/dash/underscore)", () => {
+    expect(shortsTikTokHref({ creator: "later_cam" })).toBe(
+      "/shorts?source=tiktok&creator=%40later_cam",
+    );
+    expect(shortsTikTokHref({ creator: "now-this-politics" })).toBe(
+      "/shorts?source=tiktok&creator=%40now-this-politics",
+    );
   });
 });

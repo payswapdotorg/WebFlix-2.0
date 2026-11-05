@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 
 import { clearCache } from "@/lib/youtube/cache";
 import { curatedPostIds, getTikTokVideo, getTikTokRail, searchTikTokLibrary, TIKTOK_SEED } from "@/lib/tiktok/library";
+import { getTikTokChannelFeedPage } from "@/lib/tiktok/channels";
 import { setTikTokUpstream, type TikTokUpstreamFetch } from "@/lib/tiktok/upstream";
 
 const FIXTURE = JSON.parse(readFileSync("tests/fixtures/tiktok/oembed.json", "utf8")) as Record<string, unknown>;
@@ -184,5 +185,156 @@ describe("the rail + the search lane", () => {
     expect(byHandle.videos.length).toBe(1);
     expect(byHandle.source).toBe("tiktok-curated");
     expect(byHandle.videos[0].author).toBe("scout2015");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P96-a — getTikTokChannelFeedPage (the gap report's G17, the
+// profile-playback gap): the channel matcher's { items, nextCursor } feed.
+// A routing upstream varies the author BY post id so the scope law is
+// pinned against a genuinely two-creator universe (no network — the lane
+// law holds; every response still carries the matching embed_product_id).
+// ---------------------------------------------------------------------------
+const ROUTE_IDS = { scout1: "6718335390845095173", scout2: "7206561191609716014", scout3: "7157587293451062574", other: "7322301313134415134" };
+
+function authorUpstream(): TikTokUpstreamFetch {
+  const authorByPost: Record<string, string> = {
+    [ROUTE_IDS.scout1]: "scout2015",
+    [ROUTE_IDS.scout2]: "scout2015",
+    [ROUTE_IDS.scout3]: "scout2015",
+    [ROUTE_IDS.other]: "othercreator",
+  };
+  return (url: string) => {
+    // the oEmbed request carries the target percent-encoded inside
+    // `?url=` — decode before extracting the id (either URL shape)
+    let target = url;
+    try {
+      const q = url.split("url=")[1];
+      if (q) target = decodeURIComponent(q);
+    } catch {
+      /* keep the raw url */
+    }
+    const m = target.match(/\/(?:video|player\/v1)\/(\d+)/);
+    const id = m?.[1] ?? "";
+    const author = authorByPost[id];
+    if (!author) return Promise.resolve(new Response("nope", { status: 404 }));
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          version: "1.0",
+          type: "video",
+          title: `Post ${id}`,
+          author_url: `https://www.tiktok.com/@${author}`,
+          author_name: author,
+          embed_product_id: id,
+        }),
+        { status: 200 },
+      ),
+    );
+  };
+}
+
+async function scopedPage(handle: string, opts: Parameters<typeof getTikTokChannelFeedPage>[0] = {}) {
+  return getTikTokChannelFeedPage({ handle, ...opts });
+}
+
+describe("getTikTokChannelFeedPage — the P96-a scoped-feed law", () => {
+  test("the scope pages over the creator's verifiable posts only", async () => {
+    clearCache();
+    process.env.TIKTOK_CURATED_IDS = Object.values(ROUTE_IDS).join(",");
+    setTikTokUpstream(authorUpstream());
+    const page = await scopedPage("scout2015");
+    expect(page).not.toBeNull();
+    expect(page!.items.map((v) => v.postId)).toEqual([
+      ROUTE_IDS.scout1,
+      ROUTE_IDS.scout2,
+      ROUTE_IDS.scout3,
+    ]);
+    // the scope's own universe is exhausted → the honest end
+    expect(page!.nextCursor).toBeNull();
+  });
+
+  test("the handle match is case-insensitive (the channel page's own law)", async () => {
+    clearCache();
+    process.env.TIKTOK_CURATED_IDS = Object.values(ROUTE_IDS).join(",");
+    setTikTokUpstream(authorUpstream());
+    const page = await scopedPage("Scout2015");
+    expect(page!.items).toHaveLength(3);
+  });
+
+  test("a DIFFERENT creator's scope answers only their rows", async () => {
+    clearCache();
+    process.env.TIKTOK_CURATED_IDS = Object.values(ROUTE_IDS).join(",");
+    setTikTokUpstream(authorUpstream());
+    const page = await scopedPage("othercreator");
+    expect(page!.items.map((v) => v.postId)).toEqual([ROUTE_IDS.other]);
+    expect(page!.nextCursor).toBeNull();
+  });
+
+  test("a valid handle with zero shelf posts answers the honest empty page", async () => {
+    clearCache();
+    process.env.TIKTOK_CURATED_IDS = Object.values(ROUTE_IDS).join(",");
+    setTikTokUpstream(authorUpstream());
+    const page = await scopedPage("nobodyhere");
+    expect(page).toEqual({ items: [], nextCursor: null });
+  });
+
+  test("an in-scope deep-link post splices FIRST; a FOREIGN post is never smuggled in", async () => {
+    clearCache();
+    process.env.TIKTOK_CURATED_IDS = Object.values(ROUTE_IDS).join(",");
+    setTikTokUpstream(authorUpstream());
+    const inScope = await scopedPage("scout2015", { post: ROUTE_IDS.scout2 });
+    expect(inScope!.items[0].postId).toBe(ROUTE_IDS.scout2);
+    expect(inScope!.items.map((v) => v.postId)).toEqual([
+      ROUTE_IDS.scout2,
+      ROUTE_IDS.scout1,
+      ROUTE_IDS.scout3,
+    ]);
+    // the foreign post (othercreator's) does NOT lead scout2015's scope
+    const foreign = await scopedPage("scout2015", { post: ROUTE_IDS.other });
+    expect(foreign!.items.map((v) => v.postId)).toEqual([
+      ROUTE_IDS.scout1,
+      ROUTE_IDS.scout2,
+      ROUTE_IDS.scout3,
+    ]);
+  });
+
+  test("cursor paging continues AFTER the cursor with no overlap; a foreign cursor honestly ends", async () => {
+    clearCache();
+    process.env.TIKTOK_CURATED_IDS = Object.values(ROUTE_IDS).join(",");
+    setTikTokUpstream(authorUpstream());
+    const page1 = await scopedPage("scout2015", { limit: 2 });
+    expect(page1!.items.map((v) => v.postId)).toEqual([ROUTE_IDS.scout1, ROUTE_IDS.scout2]);
+    expect(page1!.nextCursor).toBe(ROUTE_IDS.scout2);
+    const page2 = await scopedPage("scout2015", { cursor: page1!.nextCursor });
+    expect(page2!.items.map((v) => v.postId)).toEqual([ROUTE_IDS.scout3]);
+    expect(page2!.nextCursor).toBeNull();
+    // a cursor the scope does not own → the honest end (never a restart loop)
+    const foreignCursor = await scopedPage("scout2015", { cursor: ROUTE_IDS.other });
+    expect(foreignCursor).toEqual({ items: [], nextCursor: null });
+  });
+
+  test("an empty handle answers null (the route's isTikTokHandle gate owns the 400)", async () => {
+    clearCache();
+    setTikTokUpstream(authorUpstream());
+    // the library nulls only on the un-parseable form; a format-weird but
+    // non-empty string rides the honest-empty page and the ROUTE's own
+    // isTikTokHandle gate answers 400 before the library is reached
+    expect(await scopedPage("")).toBeNull();
+    expect(await scopedPage("@")).toBeNull();
+  });
+
+  test("the import hint admits a walled post the URL law cannot verify otherwise", async () => {
+    clearCache();
+    const walledId = "7371838707747278122";
+    process.env.TIKTOK_CURATED_IDS = `${ROUTE_IDS.scout1},${walledId}`;
+    // the routing upstream 404s the walled id (the honest unavailable DTO)
+    setTikTokUpstream(authorUpstream());
+    const page = await scopedPage("scout2015", {
+      hintByPostId: new Map([[walledId, "scout2015"]]),
+    });
+    expect(page!.items.map((v) => v.postId)).toEqual([ROUTE_IDS.scout1, walledId]);
+    // the hinted row rides the factual importedFallback DTO, not a fake one
+    expect(page!.items[1].author).toBe("scout2015");
   });
 });

@@ -31,9 +31,14 @@ import { TikTokFeedPlayer } from "@/components/tiktok/tiktok-feed-player";
 import { ShortsMuteButton } from "@/components/shorts/shorts-mute";
 import { creatorHandleFromVideo } from "@/lib/tiktok/channels";
 import { tiktokChannelHref } from "@/lib/tiktok/urls";
-import { SHORTS_SOURCE_CAPABILITIES } from "@/lib/shorts/feed-contracts";
+import {
+  SHORTS_SOURCE_CAPABILITIES,
+  shortsSourceHref,
+  shortsTikTokHref,
+} from "@/lib/shorts/feed-contracts";
 import type { TikTokFeedPageDTO } from "@/lib/tiktok/library";
 import type { TikTokImportVisibility, TikTokVideoDTO } from "@/lib/tiktok/types";
+import { X } from "lucide-react";
 
 /**
  * ADR 0013 / WFX2-TIKTOK-SHORTS-EXPERIENCE-1 — the TikTok adapter of the
@@ -387,7 +392,17 @@ function TikTokFeedRail({
   );
 }
 
-export function TikTokShortsFeed({ post }: { post?: string | null }) {
+export function TikTokShortsFeed({
+  post,
+  creator,
+}: {
+  post?: string | null;
+  /** P96-a (G17, the profile-playback gap): the creator scope
+   * (`/shorts?source=tiktok&creator=@handle`) — the feed pages over that
+   * creator's verifiable posts only; the scope chip renders and a fresh
+   * client-side import of a DIFFERENT creator's post never leaks in. */
+  creator?: string | null;
+}) {
   const wfSession = useWebFlixSession();
   const authenticated =
     wfSession.status === "authenticated"
@@ -397,13 +412,13 @@ export function TikTokShortsFeed({ post }: { post?: string | null }) {
         : null;
 
   // ---- seed page (deep-link splice + M2 composition happen server-side) ---
-  const seedUrl = useMemo(
-    () =>
-      post
-        ? `/api/tiktok/feed?post=${encodeURIComponent(post)}`
-        : "/api/tiktok/feed",
-    [post],
-  );
+  const seedUrl = useMemo(() => {
+    const params = new URLSearchParams();
+    if (post) params.set("post", post);
+    if (creator) params.set("creator", `@${creator}`);
+    const qs = params.toString();
+    return qs ? `/api/tiktok/feed?${qs}` : "/api/tiktok/feed";
+  }, [post, creator]);
   const {
     data: seedPage,
     loading: seedLoading,
@@ -436,8 +451,17 @@ export function TikTokShortsFeed({ post }: { post?: string | null }) {
   const items = useMemo(() => {
     const seen = new Set<string>();
     const out: TikTokVideoDTO[] = [];
+    // The scope law (P96-a): a scoped feed never leaks a fresh import of a
+    // DIFFERENT creator's post — the client splice respects the scope the
+    // server composition already respects (matched on the verifiable
+    // handle; a handle-less row stays out of a scope it cannot verify).
+    const scopedImports = creator
+      ? clientImports.filter(
+          (v) => creatorHandleFromVideo(v)?.toLowerCase() === creator.toLowerCase(),
+        )
+      : clientImports;
     for (const video of [
-      ...clientImports,
+      ...scopedImports,
       ...seedItems,
       ...loadedPages.flatMap((page) => page.items),
     ]) {
@@ -460,7 +484,9 @@ export function TikTokShortsFeed({ post }: { post?: string | null }) {
     if (!nextCursor || items.length >= MAX_ITEMS) return;
     loadingMoreRef.current = true;
     setLoadingMore(true);
-    fetch(`/api/tiktok/feed?cursor=${encodeURIComponent(nextCursor)}`)
+    const params = new URLSearchParams({ cursor: nextCursor });
+    if (creator) params.set("creator", `@${creator}`);
+    fetch(`/api/tiktok/feed?${params.toString()}`)
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return (await res.json()) as TikTokFeedPageDTO;
@@ -482,7 +508,7 @@ export function TikTokShortsFeed({ post }: { post?: string | null }) {
         loadingMoreRef.current = false;
         setLoadingMore(false);
       });
-  }, [nextCursor, items.length]);
+  }, [nextCursor, items.length, creator]);
 
   const onEnterLastTwo = useCallback(() => {
     loadMore();
@@ -552,21 +578,52 @@ export function TikTokShortsFeed({ post }: { post?: string | null }) {
       : items.length === 0
         ? ({
             kind: "empty",
-            message:
-              "No TikTok posts in the shelf yet. Add one with the Add TikTok button — the official player already rides.",
+            // P96-a: the scoped feed's honest empty (a valid handle with
+            // zero shelf posts) names the scope and the way out; the
+            // unscoped empty keeps the M2 copy.
+            message: creator
+              ? `No posts from @${creator} in the WebFlix TikTok shelf yet. Add one of their posts with the Add TikTok button — it lands in this scoped feed.`
+              : "No TikTok posts in the shelf yet. Add one with the Add TikTok button — the official player already rides.",
           } as const)
         : ({ kind: "ready" } as const);
 
   return (
     <ShortsFeedShell<TikTokVideoDTO>
       state={state}
-      ariaLabel="TikTok feed"
+      ariaLabel={creator ? `TikTok feed by @${creator}` : "TikTok feed"}
       chrome={
         <div className="flex w-full items-center gap-2">
           <ShortsSourceSelector source="tiktok" />
+          {creator ? (
+            <div
+              className="flex items-center gap-1 rounded-full border border-border bg-secondary/60 py-1 pl-3 pr-1 text-xs text-foreground"
+              data-testid="tiktok-scope-chip"
+            >
+              <span className="max-w-[10rem] truncate font-medium">@{creator}</span>
+              <Link
+                href={tiktokChannelHref(creator)}
+                className="rounded-full px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+                aria-label={`Open @${creator}'s TikTok channel page on WebFlix`}
+              >
+                channel
+              </Link>
+              <Link
+                href={shortsSourceHref("tiktok")}
+                data-testid="tiktok-scope-clear"
+                className="flex size-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                aria-label="Clear the creator scope — back to the full TikTok feed"
+              >
+                <X className="size-3.5" aria-hidden="true" />
+              </Link>
+            </div>
+          ) : null}
           {CAPS.canImport ? (
             <div className="ml-auto pr-4 sm:pr-6">
-              <TikTokImportDialog authenticated={authenticated} onImported={onImported} />
+              <TikTokImportDialog
+                authenticated={authenticated}
+                onImported={onImported}
+                backHref={shortsTikTokHref({ postId: post, creator })}
+              />
             </div>
           ) : null}
         </div>
