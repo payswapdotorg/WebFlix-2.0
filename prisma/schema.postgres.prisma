@@ -46,6 +46,7 @@ model User {
   liveRoomsOwned LiveRoom[] @relation("LiveRoomHost")
   liveFanClubOwned LiveFanClub[] @relation("LiveFanClubHost")
   tiktokImports TikTokImport[]
+  tiktokLiveChat TikTokLiveChatMessage[]
 }
 
 model Channel {
@@ -1262,4 +1263,26 @@ model YouTubeConnectionRecord {
   userId    String   @id
   data      String
   updatedAt DateTime @updatedAt
+}
+
+// P100-TIKTOK-LIVE — the watch-party chat (docs/research/2026-11-07-p100-
+// tiktok-live-in-app-report.md §5): durable, WebFlix-native chat keyed by
+// the normalized creator handle (roomKey). The idempotency law mirrors the
+// native live chat: (roomKey, userId, clientMessageId) is unique — a retried
+// send returns the ORIGINAL row. Tombstones, never deletions (the audit
+// trail is append-only): deleted rows render "message removed" and stay.
+// SQLite has no enums — deletedAt IS the tombstone state.
+model TikTokLiveChatMessage {
+  id              String    @id @default(cuid())
+  roomKey         String
+  userId          String
+  clientMessageId String
+  body            String
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomKey, userId, clientMessageId])
+  @@index([roomKey, id])
 }

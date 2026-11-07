@@ -1,0 +1,346 @@
+/// <reference types="bun-types" />
+/**
+ * P100 — the live-surface UI battery: the in-app live page's honest states
+ * (probing → live → offline → degraded), the playback ladder (hls rung →
+ * fallback rung), the watch-party chat panel (guest inline gate, optimistic
+ * send), the outbound TikTok write links, and the channel-page badge. No
+ * network anywhere (lane law).
+ */
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { act } from "react";
+import { readFileSync } from "node:fs";
+
+// ---- the fetch stub (the lane law: NO network from tests) ------------------
+type Route = { match: (url: string) => boolean; respond: (url: string, init?: RequestInit) => Response };
+let routes: Route[] = [];
+const postedChats: Array<{ url: string; body: unknown }> = [];
+const statusCalls: string[] = [];
+const realFetch = globalThis.fetch;
+
+beforeEach(() => {
+  routes = [];
+  postedChats.length = 0;
+  statusCalls.length = 0;
+  // the default session is a guest; the authed tests prepend their own route
+  routes.push({
+    match: (u) => u.includes("/api/auth/session"),
+    respond: () => new Response(JSON.stringify({ user: null }), { status: 200 }),
+  });
+  (globalThis as Record<string, unknown>).fetch = async (url: unknown, init?: RequestInit) => {
+    const u = String(url);
+    if (u.includes("/api/tiktok/live/chat") && init?.method === "POST") {
+      postedChats.push({ url: u, body: JSON.parse(String(init.body ?? "{}")) });
+      return new Response(
+        JSON.stringify({
+          message: {
+            id: "m-new",
+            body: JSON.parse(String(init.body ?? "{}")).body ?? "posted",
+            deleted: false,
+            createdAt: new Date().toISOString(),
+            sender: { handle: "pip", name: "Pip" },
+          },
+        }),
+        { status: 200 }
+      );
+    }
+    const hit = routes.find((r) => r.match(u));
+    if (!hit) return new Response("{}", { status: 200 });
+    return hit.respond(u, init);
+  };
+});
+afterEach(() => {
+  (globalThis as Record<string, unknown>).fetch = realFetch;
+});
+
+// ---- happy-dom as the global DOM (the house idiom) --------------------------
+const dom = await import("happy-dom");
+const win = new dom.Window({ url: "http://localhost:3000" }) as unknown as typeof globalThis;
+(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
+for (const key of [
+  "window", "document", "HTMLElement", "HTMLIFrameElement", "HTMLVideoElement", "Element", "Node",
+  "navigator", "CustomEvent", "MessageEvent", "Event", "getComputedStyle", "requestAnimationFrame",
+  "localStorage", "MutationObserver", "IntersectionObserver",
+]) {
+  (globalThis as Record<string, unknown>)[key] = (win as unknown as Record<string, unknown>)[key];
+}
+
+// the hls.js seam is mocked at the module boundary (the player codes against
+// exactly this contract: Events + isSupported + loadSource/attachMedia/destroy)
+mock.module("hls.js", () => ({
+  default: class FakeHls {
+    static Events = { ERROR: "hlsError" };
+    static isSupported(): boolean {
+      return true;
+    }
+    on() {}
+    loadSource() {}
+    attachMedia() {}
+    destroy() {}
+  },
+}));
+
+const LIVE_STATUS = {
+  handle: "lofigirl",
+  live: true,
+  probing: false,
+  room: {
+    title: "christmas lofi radio 🎄",
+    viewers: 278,
+    startedAt: "2026-11-07T00:12:00.000Z",
+    coverUrl: null,
+    liveUrl: "https://www.tiktok.com/@lofigirl/live",
+  },
+  stream: null,
+  source: "apify",
+  fetchedAt: "2026-11-07T07:45:00.000Z",
+};
+
+const LIVE_WITH_HLS = {
+  ...LIVE_STATUS,
+  stream: {
+    hlsUrl: "https://pull-f5-va01.ttlivecdn.com/live/lofi.m3u8",
+    flvUrl: null,
+  },
+};
+
+const OFFLINE_STATUS = { ...LIVE_STATUS, live: false, room: null };
+
+const PROBING_STATUS = {
+  handle: "lofigirl",
+  live: null,
+  probing: true,
+  room: null,
+  stream: null,
+  source: "",
+  fetchedAt: "2026-11-07T07:45:00.000Z",
+};
+
+const CHAT_PAGE = {
+  items: [
+    { id: "m1", body: "welcome to the party", deleted: false, createdAt: "2026-11-07T08:00:00.000Z", sender: { handle: "pip", name: "Pip" } },
+  ],
+  nextCursor: "m1",
+};
+
+function routeStatusOnce(bodies: unknown[]): void {
+  let i = 0;
+  routes.push({
+    match: (u) => {
+      if (u.includes("/api/tiktok/live?") || u.endsWith("/api/tiktok/live")) {
+        statusCalls.push(u);
+        return true;
+      }
+      return false;
+    },
+    respond: () => {
+      const body = bodies[Math.min(i, bodies.length - 1)];
+      i += 1;
+      return new Response(JSON.stringify({ status: body }), { status: 200 });
+    },
+  });
+}
+function routeStatusError(status: number, body: unknown): void {
+  routes.push({
+    match: (u) => u.includes("/api/tiktok/live?") || u.endsWith("/api/tiktok/live"),
+    respond: () => new Response(JSON.stringify(body), { status }),
+  });
+}
+function routeChat(): void {
+  routes.push({
+    match: (u) => u.includes("/api/tiktok/live/chat/"),
+    respond: () => new Response(JSON.stringify(CHAT_PAGE), { status: 200 }),
+  });
+}
+function routeSessionAuthed(): void {
+  routes.unshift({
+    match: (u) => u.includes("/api/auth/session"),
+    respond: () =>
+      new Response(
+        JSON.stringify({ user: { id: "u_pip", name: "Pip", email: "pip@webflix.test", avatarSeed: 3 } }),
+        { status: 200 }
+      ),
+  });
+}
+
+let root: Root | null = null;
+let host: HTMLElement | null = null;
+
+async function mountLive(rawHandle: string, extra: Record<string, unknown> = {}): Promise<HTMLElement> {
+  const { TikTokLiveView } = await import("@/app/tiktok/[handle]/live/view");
+  host = document.createElement("div");
+  document.body.appendChild(host);
+  root = createRoot(host);
+  await act(async () => {
+    root!.render(createElement(TikTokLiveView, { rawHandle, pollIntervalMs: 5, chatPollMs: 5, ...extra }));
+  });
+  return host!;
+}
+
+/** Flush pending effects (status poll / session fetch / chat poll) into renders. */
+async function flushLive(ms = 8): Promise<void> {
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, ms));
+  });
+}
+
+function q(el: HTMLElement, sel: string): Element | null {
+  return el.querySelector(sel);
+}
+
+afterEach(() => {
+  if (root) {
+    act(() => root!.unmount());
+    root = null;
+  }
+  host?.remove();
+  host = null;
+});
+
+describe("TikTokLiveView — the honest states", () => {
+  test("LIVE renders the panel: badge, title, viewers, outbound links, chat, marker", async () => {
+    routeStatusOnce([LIVE_STATUS]);
+    routeChat();
+    const el = await mountLive("@lofigirl");
+    await flushLive();
+    expect(q(el, '[data-testid="tiktok-live-in-app"]')).not.toBeNull();
+    expect(q(el, '[data-testid="tiktok-live-badge"]')).not.toBeNull();
+    expect(el.textContent).toContain("christmas lofi radio");
+    expect(el.textContent).toContain("278");
+    // the outbound deep link is real and labeled as leaving
+    const out = el.querySelector<HTMLAnchorElement>('a[href="https://www.tiktok.com/@lofigirl/live"]');
+    expect(out).not.toBeNull();
+    expect(el.textContent).toMatch(/TikTok/i);
+    // the watch-party chat is mounted with its composer
+    expect(q(el, '[data-testid="tiktok-live-chat-panel"]')).not.toBeNull();
+    expect(el.textContent).toContain("welcome to the party");
+  });
+
+  test("probing renders the honest checking state, then flips to LIVE on the next poll", async () => {
+    routeStatusOnce([PROBING_STATUS, LIVE_STATUS]);
+    routeChat();
+    const el = await mountLive("@lofigirl");
+    expect(q(el, '[data-testid="tiktok-live-probing"]')).not.toBeNull();
+    await flushLive(30);
+    expect(q(el, '[data-testid="tiktok-live-badge"]')).not.toBeNull();
+    expect(statusCalls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  test("offline renders the honest not-live panel (no fake room data)", async () => {
+    routeStatusOnce([OFFLINE_STATUS]);
+    const el = await mountLive("lofigirl");
+    expect(q(el, '[data-testid="tiktok-live-offline"]')).not.toBeNull();
+    expect(el.textContent).toMatch(/not live right now/i);
+    // the outbound deep link remains the honest affordance
+    expect(el.querySelector('a[href="https://www.tiktok.com/@lofigirl/live"]')).not.toBeNull();
+  });
+
+  test("a 502/503 surfaces its real reason, never a fake offline", async () => {
+    routeStatusError(503, { error: "The live probe lane is not configured — set APIFY_API_KEY." });
+    const el = await mountLive("lofigirl");
+    expect(q(el, '[data-testid="tiktok-live-degraded"]')).not.toBeNull();
+    expect(el.textContent).toContain("APIFY_API_KEY");
+  });
+
+  test("the playback ladder: an hls URL mounts the native video rung", async () => {
+    routeStatusOnce([LIVE_WITH_HLS]);
+    routeChat();
+    const el = await mountLive("lofigirl");
+    await flushLive();
+    expect(q(el, '[data-testid="tiktok-live-video"]')).not.toBeNull();
+    expect(q(el, '[data-testid="tiktok-live-fallback"]')).toBeNull();
+  });
+
+  test("the playback ladder: no stream URL keeps the honest fallback rung", async () => {
+    routeStatusOnce([LIVE_STATUS]);
+    routeChat();
+    const el = await mountLive("lofigirl");
+    await flushLive();
+    expect(q(el, '[data-testid="tiktok-live-fallback"]')).not.toBeNull();
+    expect(q(el, '[data-testid="tiktok-live-video"]')).toBeNull();
+  });
+});
+
+describe("TikTokLiveView — the watch-party chat", () => {
+  test("a guest sees the inline sign-in gate, never a hard eject", async () => {
+    routeStatusOnce([LIVE_STATUS]);
+    routeChat();
+    const el = await mountLive("lofigirl");
+    await flushLive();
+    const gate = q(el, '[data-testid="tiktok-live-chat-signin"]');
+    expect(gate).not.toBeNull();
+    expect(el.textContent).toMatch(/sign in/i);
+    // no posted chats while gated
+    expect(postedChats).toHaveLength(0);
+  });
+
+  test("the composer posts to the room endpoint and appends optimistically", async () => {
+    routeSessionAuthed();
+    routeStatusOnce([LIVE_STATUS]);
+    routeChat();
+    const el = await mountLive("lofigirl");
+    await flushLive();
+    const input = el.querySelector<HTMLInputElement>('[data-testid="tiktok-live-chat-input"]');
+    expect(input).not.toBeNull();
+    // the controlled-input value-tracker sequence: write through the node's
+    // own property (React's tracker intercepts it), then fire the input event
+    await act(async () => {
+      input!.value = "hi from pip";
+      input!.dispatchEvent(new win.Event("input", { bubbles: true }));
+      input!.dispatchEvent(new win.Event("keyup", { bubbles: true }));
+    });
+    const form = el.querySelector<HTMLFormElement>('[data-testid="tiktok-live-chat-form"]');
+    expect(form).not.toBeNull();
+    await act(async () => {
+      form!.dispatchEvent(new win.Event("submit", { bubbles: true, cancelable: true }));
+      await new Promise((r) => setTimeout(r, 10));
+    });
+    expect(postedChats).toHaveLength(1);
+    expect(postedChats[0].url).toContain("/api/tiktok/live/chat/lofigirl");
+    expect(postedChats[0].body).toMatchObject({ body: "hi from pip" });
+    expect(el.textContent).toContain("hi from pip");
+  });
+
+  test("the TikTok-side write affordances are outbound links, honestly labeled", async () => {
+    routeStatusOnce([LIVE_STATUS]);
+    routeChat();
+    const el = await mountLive("lofigirl");
+    await flushLive();
+    expect(el.textContent).toMatch(/comment on tiktok/i);
+  });
+});
+
+describe("TikTokLiveBadge — the channel-page badge", () => {
+  test("renders the badge + watch CTA only for a LIVE status", async () => {
+    const { TikTokLiveBadge } = await import("@/components/tiktok/tiktok-live-badge");
+    const live = document.createElement("div");
+    document.body.appendChild(live);
+    root = createRoot(live);
+    await act(async () => {
+      root!.render(createElement(TikTokLiveBadge, { status: LIVE_STATUS as never }));
+    });
+    expect(q(live, '[data-testid="tiktok-live-badge"]')).not.toBeNull();
+    const cta = live.querySelector<HTMLAnchorElement>('a[data-testid="tiktok-live-watch-cta"]');
+    expect(cta).not.toBeNull();
+    expect(cta!.getAttribute("href")).toBe("/tiktok/lofigirl/live");
+    act(() => root!.unmount());
+
+    const off = document.createElement("div");
+    document.body.appendChild(off);
+    root = createRoot(off);
+    await act(async () => {
+      root!.render(createElement(TikTokLiveBadge, { status: OFFLINE_STATUS as never }));
+    });
+    expect(q(off, '[data-testid="tiktok-live-badge"]')).toBeNull();
+    host = off;
+  });
+});
+
+describe("the channel view wires the badge (the source-scan law)", () => {
+  test("the channel view imports the badge and the live status hook", () => {
+    const src = readFileSync("src/app/tiktok/[handle]/view.tsx", "utf8");
+    expect(src).toContain("TikTokLiveBadge");
+    expect(src).toContain("useTikTokLiveStatus");
+  });
+});

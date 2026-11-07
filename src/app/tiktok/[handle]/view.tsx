@@ -9,6 +9,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatCount } from "@/lib/format";
 import { TikTokCard } from "@/components/tiktok/tiktok-card";
 import { TikTokThumbnailImage } from "@/components/tiktok/tiktok-thumbnail-image";
+import { TikTokLiveBadge } from "@/components/tiktok/tiktok-live-badge";
+import { useTikTokLiveStatus } from "@/hooks/use-tiktok-live-status";
 import { shortsTikTokHref } from "@/lib/shorts/feed-contracts";
 import type { TikTokChannelPageDTO } from "@/lib/tiktok/types";
 
@@ -86,6 +88,9 @@ export function TikTokChannelView({ handle }: { handle: string }) {
   const { data, loading, error, reload } = useApi<TikTokChannelPageDTO>(
     `/api/tiktok/channel/${encodeURIComponent(handle)}`,
   );
+  // P100 — the LIVE badge rides the same status lane the live page polls;
+  // probing/offline/error render honest absence (no badge lies about liveness)
+  const { status: liveStatus } = useTikTokLiveStatus(data?.channel?.handle ?? null, 45_000);
   const [tab, setTab] = useState<ChannelTab>("videos");
   // The last-open tab, remembered per channel (the YouTube page's idiom).
   useEffect(() => {
@@ -167,6 +172,7 @@ export function TikTokChannelView({ handle }: { handle: string }) {
           ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {liveStatus ? <TikTokLiveBadge status={liveStatus} /> : null}
           {/* canFollow=false (no TikTok write API) — the honest follow is the
               outbound profile link, where the real Follow button lives */}
           <a

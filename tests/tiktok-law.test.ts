@@ -55,6 +55,12 @@ describe("the tiktok module's import law", () => {
       "dead.ts",
       "imports.ts",
       "library.ts",
+      // P100 added the LIVE lane trio (docs/research/2026-11-07-p100-tiktok-
+      // live-in-app-report.md): live.ts (status service), live-chat.ts (the
+      // watch-party chat, DB-backed), live-upstream.ts (the Apify probe seam)
+      "live-chat.ts",
+      "live-upstream.ts",
+      "live.ts",
       "oauth.ts",
       "types.ts",
       "upstream.ts",

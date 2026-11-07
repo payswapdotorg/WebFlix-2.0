@@ -256,3 +256,102 @@ export function tiktokAuthorizeUrl(opts: {
   // Login Kit v2 (developers.tiktok.com — the web authorization endpoint).
   return `https://www.tiktok.com/v2/auth/authorize/?${params.toString()}`;
 }
+
+// ---------------------------------------------------------------------------
+// P100 — the LIVE lane (docs/research/2026-11-07-p100-tiktok-live-in-app-
+// report.md): the live URL law joins the post/profile laws. Every live URL
+// WebFlix builds or parses flows through here, and every handle still enters
+// through the G20 normalize law.
+// ---------------------------------------------------------------------------
+
+const ROOM_ID_RE = /^\d{6,32}$/;
+
+/** True when `s` is a plausible webcast room id (numeric string — the same
+ * shape family as post ids). */
+export function isTikTokRoomId(s: string): boolean {
+  return ROOM_ID_RE.test(s);
+}
+
+/**
+ * Parse a TikTok LIVE reference into its handle. Accepts:
+ * - `https://www.tiktok.com/@handle/live` (+ query strings, trailing slash)
+ * - `https://www.tiktok.com/live/@handle` (the /live-first share form)
+ * - `https://live.tiktok.com/@handle/live` (defensive accept)
+ * - encoded sigils (`%40`, `%40%40`) decode BEFORE the G20 normalize law —
+ *   sigil soup collapses to one identity exactly like every other rung.
+ * Bare handles null (parseTikTokProfileUrl owns those), video/player paths
+ * null, short links null, invalid handles null. No network hops, ever.
+ */
+export function parseTikTokLiveUrl(input: string): { handle: string } | null {
+  const raw = (input ?? "").trim();
+  if (!raw || !raw.includes("/")) return null;
+  // the short-link family: unresolvable without a network hop — honest null.
+  if (/^https?:\/\/(vm|vt)\.tiktok\.com\//i.test(raw)) return null;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return null;
+  }
+  const host = url.hostname.toLowerCase();
+  if (
+    host !== "www.tiktok.com" &&
+    host !== "m.tiktok.com" &&
+    host !== "tiktok.com" &&
+    host !== "live.tiktok.com"
+  ) {
+    return null;
+  }
+  const segs = url.pathname
+    .split("/")
+    .filter(Boolean)
+    .map((s) => {
+      try {
+        return decodeURIComponent(s);
+      } catch {
+        return s;
+      }
+    });
+  // The @seg with "live" as its NEIGHBOR — both share forms:
+  //   /@handle/live  (canonical: next seg is "live")
+  //   /live/@handle  (browse-first: prev seg is "live")
+  const atIdx = segs.findIndex((s) => s.startsWith("@"));
+  if (atIdx !== -1) {
+    const isLiveForm = segs[atIdx + 1] === "live" || segs[atIdx - 1] === "live";
+    if (!isLiveForm) return null;
+    const handle = normalizeTikTokHandle(segs[atIdx]);
+    return TIKTOK_HANDLE_RE.test(handle) ? { handle } : null;
+  }
+  return null;
+}
+
+/** The outbound TikTok live room URL (the honest "opens TikTok" deep link). */
+export function tiktokLiveRoomUrl(handle: string): string {
+  const clean = normalizeTikTokHandle(handle);
+  if (!TIKTOK_HANDLE_RE.test(clean)) {
+    throw new Error(`invalid TikTok author handle: ${handle}`);
+  }
+  return `https://www.tiktok.com/@${clean}/live`;
+}
+
+/** The in-app href for a creator's live surface (`/tiktok/<handle>/live`). */
+export function tiktokLiveHref(handle: string): string {
+  const clean = normalizeTikTokHandle(handle);
+  if (!TIKTOK_HANDLE_RE.test(clean)) {
+    throw new Error(`invalid TikTok author handle: ${handle}`);
+  }
+  return `/tiktok/${encodeURIComponent(clean)}/live`;
+}
+
+/**
+ * The documented webcast room/info contract (webcast.tiktok.com — reachable
+ * where www is geo-gated; P100 report §1 probe E2). Contract-ready for the
+ * moment a provider yields a room_id; activation conditions are documented
+ * in the report §6.
+ */
+export function tiktokWebcastRoomInfoUrl(roomId: string): string {
+  if (!ROOM_ID_RE.test(roomId)) {
+    throw new Error(`invalid TikTok live room id: ${roomId}`);
+  }
+  return `https://webcast.tiktok.com/webcast/room/info/?aid=1988&room_id=${roomId}`;
+}
