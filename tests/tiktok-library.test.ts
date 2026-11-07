@@ -234,7 +234,10 @@ function authorUpstream(): TikTokUpstreamFetch {
   };
 }
 
-async function scopedPage(handle: string, opts: Parameters<typeof getTikTokChannelFeedPage>[0] = {}) {
+async function scopedPage(
+  handle: string,
+  opts: Omit<Parameters<typeof getTikTokChannelFeedPage>[0], "handle"> = {}
+) {
   return getTikTokChannelFeedPage({ handle, ...opts });
 }
 

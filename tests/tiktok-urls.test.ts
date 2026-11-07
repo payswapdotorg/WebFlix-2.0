@@ -118,3 +118,28 @@ describe("the other two constructors", () => {
     expect(() => tiktokAuthorUrl("")).toThrow();
   });
 });
+
+describe("normalizeTikTokHandle / isTikTokHandle — the P97 multi-sigil law (G20)", () => {
+  test("all leading sigils collapse to the core handle", async () => {
+    const { isTikTokHandle, normalizeTikTokHandle } = await import("@/lib/tiktok/urls");
+    expect(normalizeTikTokHandle("scout2015")).toBe("scout2015");
+    expect(normalizeTikTokHandle("@scout2015")).toBe("scout2015");
+    expect(normalizeTikTokHandle("@@scout2015")).toBe("scout2015");
+    expect(normalizeTikTokHandle("@@@scout2015")).toBe("scout2015");
+    expect(normalizeTikTokHandle("  @scout2015 ")).toBe("scout2015");
+    // sigil-messy spellings are LENIENT-valid (they mean the core handle)
+    expect(isTikTokHandle("@@bad")).toBeTrue();
+    expect(isTikTokHandle("@@@bad")).toBeTrue();
+    // genuinely-invalid strings stay invalid at every rung
+    expect(isTikTokHandle("bad handle!")).toBeFalse();
+    expect(isTikTokHandle("b@d")).toBeFalse();
+    expect(isTikTokHandle("")).toBeFalse();
+  });
+
+  test("idempotence: normalizing twice equals normalizing once", async () => {
+    const { normalizeTikTokHandle } = await import("@/lib/tiktok/urls");
+    for (const raw of ["scout2015", "@scout2015", "@@scout2015", "@@@scout2015", "  @scout2015 "]) {
+      expect(normalizeTikTokHandle(normalizeTikTokHandle(raw))).toBe(normalizeTikTokHandle(raw));
+    }
+  });
+});

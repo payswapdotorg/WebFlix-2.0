@@ -167,6 +167,16 @@ describe("GET /api/tiktok/feed?creator= — the P96-a scope contract (G17)", () 
     expect((await res.json()).error).toBe("Invalid TikTok handle");
   });
 
+  test("a sigil-messy spelling scopes the SAME core handle (the P97 G20 law)", async () => {
+    const { GET } = await import("@/app/api/tiktok/feed/route");
+    // `@@brittanypeachhh` means @brittanypeachhh — the SAME pages the clean
+    // spellings answer, never a separate "invalid" verdict, never a
+    // sigiled-scope leak into the DTO.
+    const messy = await (await GET(feedReq("?creator=%40%40brittanypeachhh&limit=40"))).json();
+    expect(messy.items.map((v: { postId: string }) => v.postId)).toEqual(BRITTANY);
+    expect(messy.nextCursor).toBeNull();
+  });
+
   test("a deep-linked post OUTSIDE the scope is never smuggled in", async () => {
     const { GET } = await import("@/app/api/tiktok/feed/route");
     // the docs post is scout2015's — it must NOT lead brittanypeachhh's scope

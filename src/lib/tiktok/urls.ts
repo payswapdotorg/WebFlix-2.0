@@ -160,9 +160,17 @@ export function tiktokAuthorUrl(author: string): string {
  * tiktokAuthorUrl has always enforced, now shared). */
 export const TIKTOK_HANDLE_RE = /^[\w.\-]{1,30}$/;
 
-/** Strip the leading `@` (and trim) — the canonical in-corpus handle form. */
+/** Strip ALL leading `@` sigils (and trim) — the canonical in-corpus handle
+ * form. P97 (docs/research/2026-11-05-p97-fresh-walk-report.md G20): a
+ * single-sigil strip let sigil-messy spellings (`@@handle`) normalize to a
+ * still-sigiled value that each rung then interpreted a different number of
+ * times — the channel API called it invalid while the feed scoped `@bad` and
+ * the shorts UI displayed the raw `@@bad`. One strip-to-the-core law: the
+ * same raw input answers the same identity at every rung (the lenient-input
+ * posture the corpus already rides: trim, decodeURIComponent-first,
+ * sigil-optional checks). */
 export function normalizeTikTokHandle(raw: string): string {
-  return raw.replace(/^@/, "").trim();
+  return raw.trim().replace(/^@+/, "");
 }
 
 /** True when `raw` is a format-valid TikTok handle. */

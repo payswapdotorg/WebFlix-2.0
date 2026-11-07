@@ -90,6 +90,10 @@ describe("the /shorts adapter switch + the /tiktok/v/[id] redirect (source-scan)
     expect(source).not.toContain("revalidate");
     // an invalid post id never reaches the feed prop
     expect(source).toContain("isTikTokPostId");
+    // the P97 G20 law: the creator rides normalizeTikTokHandle BEFORE the
+    // format guard, so a sigil-messy spelling (@@handle) reaches the feed
+    // prop sigil-free — the chip displays @handle, never the raw spelling
+    expect(source).toContain("normalizeTikTokHandle(creatorRaw)");
   });
 
   test("the old one-post page redirects INTO the shared experience", () => {
