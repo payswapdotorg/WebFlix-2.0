@@ -208,7 +208,7 @@ export async function listTikTokLiveChatMessages(
 
 /**
  * Tombstone the caller's OWN message (owner-only; strangers get false —
- * the route maps that to 403). The row stays; the body leaves.
+ * the route maps that to 404, no existence leak). The row stays; the body leaves.
  */
 export async function deleteOwnTikTokLiveChatMessage(
   sessionUser: WebFlixSessionUser,

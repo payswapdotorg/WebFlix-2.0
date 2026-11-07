@@ -16,12 +16,16 @@ import { readFileSync } from "node:fs";
 type Route = { match: (url: string) => boolean; respond: (url: string, init?: RequestInit) => Response };
 let routes: Route[] = [];
 const postedChats: Array<{ url: string; body: unknown }> = [];
+const deletedChats: Array<{ url: string }> = [];
+let deleteAnswer: { status: number; body: unknown } = { status: 200, body: { deleted: true } };
 const statusCalls: string[] = [];
 const realFetch = globalThis.fetch;
 
 beforeEach(() => {
   routes = [];
   postedChats.length = 0;
+  deletedChats.length = 0;
+  deleteAnswer = { status: 200, body: { deleted: true } };
   statusCalls.length = 0;
   // the default session is a guest; the authed tests prepend their own route
   routes.push({
@@ -45,6 +49,10 @@ beforeEach(() => {
         { status: 200 }
       );
     }
+    if (u.includes("/api/tiktok/live/chat") && init?.method === "DELETE") {
+      deletedChats.push({ url: u });
+      return new Response(JSON.stringify(deleteAnswer.body), { status: deleteAnswer.status });
+    }
     const hit = routes.find((r) => r.match(u));
     if (!hit) return new Response("{}", { status: 200 });
     return hit.respond(u, init);
@@ -60,7 +68,7 @@ const win = new dom.Window({ url: "http://localhost:3000" }) as unknown as typeo
 (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 for (const key of [
   "window", "document", "HTMLElement", "HTMLIFrameElement", "HTMLVideoElement", "Element", "Node",
-  "navigator", "CustomEvent", "MessageEvent", "Event", "getComputedStyle", "requestAnimationFrame",
+  "navigator", "CustomEvent", "MessageEvent", "Event", "MouseEvent", "getComputedStyle", "requestAnimationFrame",
   "localStorage", "MutationObserver", "IntersectionObserver",
 ]) {
   (globalThis as Record<string, unknown>)[key] = (win as unknown as Record<string, unknown>)[key];
@@ -308,6 +316,102 @@ describe("TikTokLiveView — the watch-party chat", () => {
     const el = await mountLive("lofigirl");
     await flushLive();
     expect(el.textContent).toMatch(/comment on tiktok/i);
+  });
+
+  test("P101/G25 — an own row carries the delete affordance; a stranger's row carries none", async () => {
+    routeSessionAuthed();
+    routeStatusOnce([LIVE_STATUS]);
+    routes.push({
+      match: (u) => u.includes("/api/tiktok/live/chat/"),
+      respond: () =>
+        new Response(
+          JSON.stringify({
+            items: [
+              { id: "m-own", body: "my own words", deleted: false, createdAt: "2026-11-07T08:00:00.000Z", sender: { id: "wf-u_pip", handle: "pip", name: "Pip" } },
+              { id: "m-stranger", body: "not mine", deleted: false, createdAt: "2026-11-07T08:01:00.000Z", sender: { id: "u_other", handle: "other", name: "Other" } },
+            ],
+            nextCursor: "m-stranger",
+          }),
+          { status: 200 },
+        ),
+    });
+    const el = await mountLive("lofigirl");
+    await flushLive();
+    const dels = Array.from(el.querySelectorAll<HTMLButtonElement>('[data-testid="tiktok-live-chat-delete"]'));
+    expect(dels.length).toBe(1);
+    expect(dels[0].getAttribute("data-message-id")).toBe("m-own");
+    expect(dels[0].getAttribute("aria-label")).toBe("Delete message");
+    // both rows still render; nothing is tombstoned yet
+    expect(el.textContent).toContain("my own words");
+    expect(el.textContent).toContain("not mine");
+    expect(el.textContent).not.toContain("message removed");
+  });
+
+  test("P101/G25 — clicking delete rides the route contract and renders the tombstone, not a hole", async () => {
+    routeSessionAuthed();
+    routeStatusOnce([LIVE_STATUS]);
+    // the stateful server fixture: after the DELETE lands, the room's truth is
+    // the tombstone — exactly what the durable row answers on prod
+    routes.push({
+      match: (u) => u.includes("/api/tiktok/live/chat/"),
+      respond: () =>
+        new Response(
+          JSON.stringify({
+            items: [
+              { id: "m-own", body: "my own words", deleted: deletedChats.length > 0, createdAt: "2026-11-07T08:00:00.000Z", sender: { id: "wf-u_pip", handle: "pip", name: "Pip" } },
+            ],
+            nextCursor: "m-own",
+          }),
+          { status: 200 },
+        ),
+    });
+    const el = await mountLive("lofigirl");
+    await flushLive();
+    const del = el.querySelector<HTMLButtonElement>('[data-testid="tiktok-live-chat-delete"]');
+    expect(del).not.toBeNull();
+    await act(async () => {
+      del!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      await new Promise((r) => setTimeout(r, 10));
+    });
+    expect(deletedChats).toHaveLength(1);
+    expect(deletedChats[0].url).toContain("/api/tiktok/live/chat/lofigirl?messageId=m-own");
+    // the tombstone law: the row stays as "message removed", the body leaves
+    expect(el.textContent).toContain("message removed");
+    expect(el.textContent).not.toContain("my own words");
+  });
+
+  test("P101/G25 — a failed delete keeps the row and surfaces the honest error", async () => {
+    routeSessionAuthed();
+    routeStatusOnce([LIVE_STATUS]);
+    routes.push({
+      match: (u) => u.includes("/api/tiktok/live/chat/"),
+      respond: () =>
+        new Response(
+          JSON.stringify({
+            items: [
+              { id: "m-own", body: "my own words", deleted: false, createdAt: "2026-11-07T08:00:00.000Z", sender: { id: "wf-u_pip", handle: "pip", name: "Pip" } },
+            ],
+            nextCursor: "m-own",
+          }),
+          { status: 200 },
+        ),
+    });
+    deleteAnswer = { status: 500, body: { error: "boom" } };
+    const el = await mountLive("lofigirl");
+    await flushLive();
+    const del = el.querySelector<HTMLButtonElement>('[data-testid="tiktok-live-chat-delete"]');
+    expect(del).not.toBeNull();
+    await act(async () => {
+      del!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      await new Promise((r) => setTimeout(r, 10));
+    });
+    expect(deletedChats).toHaveLength(1);
+    // the row survives and the alert copy is the panel's own honest voice
+    expect(el.textContent).toContain("my own words");
+    expect(el.textContent).not.toContain("message removed");
+    const alert = el.querySelector('[role="alert"]');
+    expect(alert).not.toBeNull();
+    expect(alert!.textContent).toMatch(/could not be removed/i);
   });
 });
 

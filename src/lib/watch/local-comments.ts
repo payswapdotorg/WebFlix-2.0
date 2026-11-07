@@ -38,9 +38,8 @@ import type {
 import type { WebFlixSessionUser } from "@/lib/auth/types";
 
 /** The shadow author id for a WebFlix account (stable, upsertable). */
-export function shadowUserId(sessionUserId: string): string {
-  return `wf-${sessionUserId}`;
-}
+export { shadowUserId } from "./identity";
+import { shadowUserId } from "./identity";
 
 function escapeXml(s: string): string {
   return s.replace(/[<>&"']/g, (c) =>

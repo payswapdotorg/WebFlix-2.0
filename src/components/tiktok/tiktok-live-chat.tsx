@@ -14,10 +14,11 @@
  */
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { SendHorizonal } from "lucide-react";
+import { SendHorizonal, Trash2 } from "lucide-react";
 
 import { useWebFlixSession } from "@/hooks/use-webflix-session";
 import { tiktokLiveHref } from "@/lib/tiktok/urls";
+import { shadowUserId } from "@/lib/watch/identity";
 import type { TikTokLiveChatMessageDto } from "@/lib/tiktok/live-chat";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -112,7 +113,7 @@ export function TikTokLiveChatPanel({
         deleted: false,
         createdAt: new Date().toISOString(),
         sender: session.user
-          ? { id: session.user.id, handle: "you", name: session.user.displayName || "You", avatarUrl: "" }
+          ? { id: shadowUserId(session.user.id), handle: "you", name: session.user.displayName || "You", avatarUrl: "" }
           : null,
       },
     ]);
@@ -143,6 +144,24 @@ export function TikTokLiveChatPanel({
     }
   };
 
+  const removeMessage = async (id: string) => {
+    setSendError(null);
+    try {
+      const res = await fetch(
+        `/api/tiktok/live/chat/${encodeURIComponent(roomKey)}?messageId=${encodeURIComponent(id)}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) {
+        setSendError("The message could not be removed.");
+        return;
+      }
+      // the tombstone law: the row stays, the body leaves — the next poll reconciles
+      setItems((prev) => (prev ?? []).map((m) => (m.id === id ? { ...m, deleted: true } : m)));
+    } catch {
+      setSendError("The message could not be removed.");
+    }
+  };
+
   return (
     <section
       data-testid="tiktok-live-chat-panel"
@@ -168,19 +187,38 @@ export function TikTokLiveChatPanel({
             No messages yet — say something to start the watch party.
           </p>
         ) : (
-          items.map((m) =>
-            m.deleted ? (
+          items.map((m) => {
+            const own =
+              session.status === "authenticated" &&
+              m.sender?.id != null &&
+              m.sender.id === shadowUserId(session.user?.id ?? "");
+            return m.deleted ? (
               <p key={m.id} className="text-sm italic text-muted-foreground/70">
                 message removed
               </p>
             ) : (
-              <p key={m.id} className="text-sm leading-snug break-words">
-                <span className="font-medium">{m.sender?.name ?? "Viewer"}</span>
-                <span className="text-muted-foreground">: </span>
-                {m.body}
-              </p>
-            )
-          )
+              <div key={m.id} className="flex items-start gap-1.5">
+                <p className="min-w-0 flex-1 text-sm leading-snug break-words">
+                  <span className="font-medium">{m.sender?.name ?? "Viewer"}</span>
+                  <span className="text-muted-foreground">: </span>
+                  {m.body}
+                </p>
+                {own ? (
+                  <button
+                    type="button"
+                    data-testid="tiktok-live-chat-delete"
+                    data-message-id={m.id}
+                    aria-label="Delete message"
+                    title="Delete message"
+                    onClick={() => void removeMessage(m.id)}
+                    className="mt-0.5 shrink-0 rounded p-1 text-muted-foreground/50 transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <Trash2 className="size-3.5" aria-hidden="true" />
+                  </button>
+                ) : null}
+              </div>
+            );
+          })
         )}
       </div>
 
