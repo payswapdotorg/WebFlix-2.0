@@ -29,7 +29,7 @@
  *   handle the pasted URL carried) keeps the fallback card factual.
  */
 import { db } from "@/lib/db";
-import { ensureShadowUser } from "@/lib/watch/local-comments";
+import { ensureShadowUser, shadowUserId } from "@/lib/watch/local-comments";
 import type { WebFlixSessionUser } from "@/lib/auth/types";
 import { curatedPostIds, getTikTokVideo, importedFallbackDTO } from "./library";
 import { isTikTokPostId, parseTikTokVideoUrl } from "./urls";
@@ -40,9 +40,23 @@ import type { TikTokImportVisibility, TikTokVideoDTO } from "./types";
  * WebFlix SHADOW row — the same lazy identity every write lane resolves.
  * A fresh signup's raw session sub has NO User row (the FK would refuse);
  * ensureShadowUser upserts the stable `wf-<sub>` identity first.
+ *
+ * P98 (docs/research/2026-11-05-p98-signed-in-walk-report.md G22): the
+ * upsert was the ONE unguarded DB touch in the authed feed lane — a
+ * transient Neon hiccup threw through the route's single try/catch and
+ * 502'd the whole signed-in feed while every sibling lane degraded
+ * honestly. The shadow id is DETERMINISTIC (`wf-<sub>` — the exact id the
+ * upsert ensures), so a failed upsert falls back to it: reads lose nothing
+ * (composition/decoration key off the same id), writes fail at the FK with
+ * a clear error instead of an opaque 502. The same resilient-read shape
+ * the import-id and meta lanes already ride.
  */
 export async function importUserId(sessionUser: WebFlixSessionUser): Promise<string> {
-  return (await ensureShadowUser(sessionUser)).id;
+  try {
+    return (await ensureShadowUser(sessionUser)).id;
+  } catch {
+    return shadowUserId(sessionUser.id);
+  }
 }
 
 /** The import universe's hard cap (the curated cap's sibling — the composed

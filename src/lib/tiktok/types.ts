@@ -130,4 +130,11 @@ export interface TikTokChannelPageDTO {
   /** Set when the shelf holds none of this creator's posts yet — the page
    * still renders (a real handle with an honest empty grid + outbound). */
   note: string | null;
+  /** P98 (docs/research/2026-11-05-p98-signed-in-walk-report.md G21): the
+   * acting viewer's LINKED TikTok identity IS this channel's handle — the
+   * page may acknowledge the link instead of showing the stranger-facing
+   * "Is this you?" prompt. Additive (the P95 local:true pattern): false
+   * for guests and for every non-owner viewer. Never a capability claim —
+   * an unverified profile link names the identity; it authorizes nothing. */
+  viewerLinked: boolean;
 }

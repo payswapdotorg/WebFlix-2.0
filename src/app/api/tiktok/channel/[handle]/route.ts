@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTikTokChannelPage } from "@/lib/tiktok/channels";
 import { composedFeedExtraIds, importUserId } from "@/lib/tiktok/imports";
-import { isTikTokHandle } from "@/lib/tiktok/urls";
+import { isTikTokHandle, normalizeTikTokHandle } from "@/lib/tiktok/urls";
 import { getSessionUser } from "@/lib/auth/session";
+import { getTikTokConnection } from "@/lib/auth/tiktok-connection-store";
 import { rateLimit } from "@/lib/youtube/cache";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +37,23 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ handle: str
     if (!page) {
       return NextResponse.json({ error: "Invalid TikTok handle" }, { status: 400 });
     }
-    return NextResponse.json(page, {
+    // P98 (docs/research/2026-11-05-p98-signed-in-walk-report.md G21): the
+    // linked acknowledgment — the acting viewer's LINKED TikTok identity
+    // IS this channel's handle. The connection store is keyed by the raw
+    // session id (the link route's own law) and never throws (its read
+    // law); the compare is normalize+lowercase on both sides (both are
+    // already @-less). Additive DTO field — guests and every non-owner
+    // viewer ride false. The store read sits AFTER the page build so a
+    // slow mirror never delays the live compose.
+    let viewerLinked = false;
+    if (sessionUser) {
+      const conn = await getTikTokConnection(sessionUser.id);
+      viewerLinked =
+        !!conn?.handle &&
+        normalizeTikTokHandle(conn.handle).toLowerCase() ===
+          normalizeTikTokHandle(handle).toLowerCase();
+    }
+    return NextResponse.json({ ...page, viewerLinked }, {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (err) {

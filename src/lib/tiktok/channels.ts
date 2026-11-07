@@ -153,6 +153,9 @@ export async function getTikTokChannelPage(
       videos.length === 0
         ? `No posts from @${clean} in WebFlix's TikTok shelf yet — paste one from this creator to add it.`
         : null,
+    // The library is session-free — the honest default. The ROUTE (the only
+    // place with the acting session) overrides with the real stamp (P98 G21).
+    viewerLinked: false,
   };
 }
 

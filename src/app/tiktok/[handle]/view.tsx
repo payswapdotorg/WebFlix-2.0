@@ -285,16 +285,31 @@ export function TikTokChannelView({ handle }: { handle: string }) {
             </dl>
             <p className="flex items-start gap-2 rounded-xl border bg-secondary/40 px-4 py-3">
               <PlugZap className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-              <span>
-                Is this you? Connect your TikTok account in{" "}
-                <Link
-                  href="/settings#tiktok-connection"
-                  className="font-medium text-foreground underline underline-offset-2"
-                >
-                  Settings
-                </Link>{" "}
-                to manage your posts from here.
-              </span>
+              {data.viewerLinked ? (
+                <span data-testid="tiktok-about-linked">
+                  This is you — linked as @{channel.handle} in{" "}
+                  <Link
+                    href="/settings#tiktok-connection"
+                    className="font-medium text-foreground underline underline-offset-2"
+                  >
+                    Settings
+                  </Link>
+                  . The link names your creator identity locally; it is not a
+                  TikTok authorization, and no TikTok write is claimed or
+                  performed.
+                </span>
+              ) : (
+                <span>
+                  Is this you? Connect your TikTok account in{" "}
+                  <Link
+                    href="/settings#tiktok-connection"
+                    className="font-medium text-foreground underline underline-offset-2"
+                  >
+                    Settings
+                  </Link>{" "}
+                  to manage your posts from here.
+                </span>
+              )}
             </p>
           </div>
         </section>
