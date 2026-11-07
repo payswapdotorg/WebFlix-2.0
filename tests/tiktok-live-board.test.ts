@@ -385,3 +385,64 @@ describe("the merge law: the board never under-reports a checked creator", () =>
     expect(body.board.missing).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// P102-R4 — the pinned live universe: the feed curates POSTS (the rail) but
+// the live lane tracks CREATORS. Measured on prod this window: the board's
+// universe (rail authors only) never requested lofigirl — the operator's
+// canonical live creator was uncheckable by construction. The pin list
+// rides the SAME batch run (zero extra spend); the env override replaces
+// the default (the curatedPostIds precedent); invalid entries drop.
+// ---------------------------------------------------------------------------
+describe("the pinned live universe", () => {
+  test("tiktokLivePinnedHandles defaults to lofigirl; the env override replaces; garbage drops", async () => {
+    const { tiktokLivePinnedHandles } = await import("@/lib/tiktok/live");
+    expect(tiktokLivePinnedHandles({})).toEqual(["lofigirl"]);
+    expect(
+      tiktokLivePinnedHandles({ TIKTOK_LIVE_PINNED_HANDLES: "@@scout2015, b@d, ,, nowthispolitics" })
+    ).toEqual(["scout2015", "nowthispolitics"]);
+    expect(tiktokLivePinnedHandles({ TIKTOK_LIVE_PINNED_HANDLES: "b@d, ," })).toEqual([]);
+  });
+
+  test("the board route requests the pinned handle even when the rail is empty", async () => {
+    const realLibrary = await import("@/lib/tiktok/library");
+    mock.module("@/lib/tiktok/library", () => ({
+      ...realLibrary,
+      getTikTokRail: async () => ({
+        videos: [],
+        universeSize: 0,
+        source: "curated",
+        unavailable: false,
+        unavailableReason: null,
+        fetchedAt: new Date().toISOString(),
+      }),
+    }));
+    const bodies: unknown[] = [];
+    setTikTokLiveProbeUpstream(
+      ((url: string, init?: RequestInit) => {
+        if (init?.body) bodies.push(JSON.parse(String(init.body)));
+        if (url.includes("/acts/") && url.includes("/runs")) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ data: { id: "r", status: "SUCCEEDED", defaultDatasetId: "d" } }), {
+              status: 200,
+            })
+          );
+        }
+        if (url.includes("/actor-runs/")) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ data: { id: "r", status: "SUCCEEDED", defaultDatasetId: "d" } }), {
+              status: 200,
+            })
+          );
+        }
+        return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }));
+      }) as TikTokProbeFetch
+    );
+    const { GET } = await import("@/app/api/tiktok/live/board/route");
+    const res = await GET();
+    expect(res.status).toBe(200);
+    // the batch body IS the universe: the pin rides even with no rail videos
+    const runBodies = bodies.filter((b) => (b as { handles?: unknown }).handles !== undefined);
+    expect(runBodies[0]).toEqual({ handles: ["lofigirl"] });
+  });
+});

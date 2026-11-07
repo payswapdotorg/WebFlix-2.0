@@ -23,6 +23,7 @@ import {
   mergeTikTokLiveBoard,
   probeTikTokLiveBoard,
   readTikTokLiveBoardEntry,
+  tiktokLivePinnedHandles,
   type TikTokLiveBoardDTO,
 } from "@/lib/tiktok/live";
 import { creatorHandleFromVideo } from "@/lib/tiktok/channels";
@@ -30,10 +31,13 @@ import { getTikTokRail } from "@/lib/tiktok/library";
 
 export const dynamic = "force-dynamic";
 
-/** The universe composition (the feed's own law, reused): curated + imports. */
+/** The universe composition (P102-R4): the pinned live creators ride FIRST
+ * (the product's canonical live creators — answered within the batch even
+ * when the actor caps rows), then the feed's rail authors. The batch
+ * normalizer dedupes and caps downstream. */
 async function universeHandles(): Promise<string[]> {
+  const handles = tiktokLivePinnedHandles();
   const rail = await getTikTokRail();
-  const handles: string[] = [];
   for (const video of rail.videos ?? []) {
     const handle = creatorHandleFromVideo(video);
     if (handle) handles.push(handle);

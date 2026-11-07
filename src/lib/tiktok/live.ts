@@ -126,6 +126,34 @@ export const TIKTOK_LIVE_PLAYBACK_TTL_MS = 120_000;
  * unbounded; extra handles are dropped deterministically. */
 export const TIKTOK_LIVE_BOARD_CAP = 60;
 
+/**
+ * P102-R4 — the pinned live universe: the feed curates POSTS (the rail) but
+ * the live lane tracks CREATORS. Measured on prod: a rail-only universe
+ * never requested lofigirl — the operator's canonical live creator was
+ * uncheckable by construction. The pin list rides the SAME batched board
+ * run (zero extra spend). `TIKTOK_LIVE_PINNED_HANDLES` (comma-separated
+ * handles) REPLACES the default when set (the curatedPostIds precedent);
+ * every entry rides the URL law's normalize+validate, garbage drops.
+ */
+export const TIKTOK_LIVE_PINNED_DEFAULT: readonly string[] = ["lofigirl"];
+
+export function tiktokLivePinnedHandles(
+  env: Record<string, string | undefined> = process.env
+): string[] {
+  const raw = (env.TIKTOK_LIVE_PINNED_HANDLES ?? "").trim();
+  const list = raw ? raw.split(",") : [...TIKTOK_LIVE_PINNED_DEFAULT];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of list) {
+    const key = normalizeTikTokHandle(part ?? "");
+    if (!key || !isTikTokHandle(key)) continue;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(key);
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Provider mappers (defensive: malformed input answers honest nulls, never
 // throws — the channels.ts honesty law applied to live rows)
