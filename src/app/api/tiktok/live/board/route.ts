@@ -4,8 +4,11 @@
  * authors + the public import authors — the SAME composition the feed
  * follows). Answers, honestly:
  *  - 200 { board } — the cached board (rooms + missing, liveness TTL);
- *  - 200 { board: probing } — the batch run is in flight (the client keeps
- *    polling; probing is NEVER rendered as an empty board);
+ *  - 200 { board: stale } — P102-R2 (the SWR law): an expired-but-present
+ *    board is SERVED while the refresh rides after() — a warm hub never
+ *    flashes back to probing;
+ *  - 200 { board: probing } — a COLD universe's batch run is in flight (the
+ *    client keeps polling; probing is NEVER rendered as an empty board);
  *  - 503 { error } — the probe lane is unconfigured (names the enable path);
  *  - 502 { error } — the batch run failed upstream (the real reason).
  * No client-supplied handle list: the universe composition is server law,
@@ -17,9 +20,8 @@ import { after } from "next/server";
 import {
   isTikTokLiveBoardInFlight,
   isTikTokLiveProbeLaneConfigured,
-  peekTikTokLiveBoard,
   probeTikTokLiveBoard,
-  TikTokLiveUnavailableError,
+  readTikTokLiveBoardEntry,
   type TikTokLiveBoardDTO,
 } from "@/lib/tiktok/live";
 import { creatorHandleFromVideo } from "@/lib/tiktok/channels";
@@ -63,16 +65,18 @@ export async function GET(): Promise<NextResponse> {
       { headers: { "Cache-Control": "no-store" } }
     );
   }
-  try {
-    const cached = await peekTikTokLiveBoard(handles);
-    if (cached) {
-      return NextResponse.json({ board: cached }, { headers: { "Cache-Control": "no-store" } });
+  // P102-R2 — the SWR read: fresh AND stale boards are served (a warm hub
+  // never flashes back to probing); only a COLD universe reaches the probe
+  // path below.
+  const entry = readTikTokLiveBoardEntry(handles);
+  if (entry) {
+    if (!entry.fresh && !isTikTokLiveBoardInFlight(handles)) {
+      scheduleBoardProbe(handles);
     }
-  } catch (err) {
-    const status = err instanceof TikTokLiveUnavailableError ? err.status : 502;
-    const message =
-      err instanceof Error ? err.message : "The TikTok live board is unavailable right now.";
-    return NextResponse.json({ error: message }, { status });
+    return NextResponse.json(
+      { board: entry.fresh ? entry.board : { ...entry.board, stale: true } },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   }
   if (!isTikTokLiveProbeLaneConfigured()) {
     return NextResponse.json(

@@ -11,8 +11,13 @@ import { NextRequest } from "next/server";
 import { clearCache, clearRateLimits } from "@/lib/youtube/cache";
 import {
   clearTikTokLiveCache,
+  isTikTokLivePlaybackInFlight,
+  isTikTokLiveProbeBackedOff,
+  isTikTokLiveProbeInFlight,
   peekTikTokLiveStatus,
+  probeTikTokLivePlayback,
   probeTikTokLiveStatus,
+  setTikTokLiveClock,
   TikTokLiveUnavailableError,
 } from "@/lib/tiktok/live";
 import { setTikTokLiveProbeUpstream } from "@/lib/tiktok/live-upstream";
@@ -63,8 +68,10 @@ afterEach(() => {
   setTikTokLiveProbeUpstream(null);
   setTikTokLiveProbePolling(null);
   clearTikTokLiveCache();
+  setTikTokLiveClock(null); // restore the real clock (the SWR pins step it)
   delete process.env.APIFY_API_KEY;
   delete process.env.APIFY_LIVE_ACTOR_ID;
+  delete process.env.APIFY_LIVE_STREAM_ACTOR_ID;
 });
 
 function liveReq(query: string): NextRequest {
@@ -147,5 +154,131 @@ describe("GET /api/tiktok/live — the status contracts", () => {
     // a distinct handle probes independently
     const other = await GET(liveReq("?handle=nowthispolitics"));
     expect(other.status).toBe(200);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P102-R2 — the SWR law: a warm room NEVER goes dark. The P100 TTL law made
+// every 30s-expiry answer `probing` for the whole refresh window, so a live
+// room (and its playing video) unmounted and remounted every cycle — the
+// operator's "I can't view tiktok lives" flapping, measured live on prod.
+// The honest fix: a stale-but-present answer is SERVED (fetchedAt carries
+// the age; `stale: true` marks it) while the refresh probe rides after();
+// only a COLD handle (no entry at all) ever sees the probing DTO.
+// ---------------------------------------------------------------------------
+
+const PLAYBACK_ROW = {
+  username: "lofigirl",
+  isLive: true,
+  roomId: "7704607314401184534",
+  streamUrls: [
+    { format: "hls", url: "https://pull-hls-f16-tt04.tiktokcdn.com/lofi/index.m3u8?signed=1" },
+    { format: "flv", url: "https://pull-flv-f16-tt04.tiktokcdn.com/lofi.flv?signed=1" },
+  ],
+};
+
+function playbackHappyTransport(): Parameters<typeof setTikTokLiveProbeUpstream>[0] {
+  // the dataset answer is keyed PER ACTOR: the status actor's dataset carries
+  // the `unique_id` rows; the playback actor's carries `username`/streamUrls.
+  return ((url: string) => {
+    if (url.includes("/acts/") && url.includes("/runs")) {
+      const playbackRun = url.includes(encodeURIComponent("automation-lab~tiktok-live-room-stream-urls")) || url.includes("automation-lab~tiktok-live-room-stream-urls");
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: {
+              id: "r",
+              status: "SUCCEEDED",
+              defaultDatasetId: playbackRun ? "d-playback" : "d-status",
+            },
+          }),
+          { status: 200 }
+        )
+      );
+    }
+    if (url.includes("/actor-runs/")) {
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: { id: "r", status: "SUCCEEDED", defaultDatasetId: "d-status" } }), {
+          status: 200,
+        })
+      );
+    }
+    if (url.includes("/datasets/d-playback")) {
+      return Promise.resolve(new Response(JSON.stringify([PLAYBACK_ROW]), { status: 200 }));
+    }
+    return Promise.resolve(new Response(JSON.stringify([LIVE_ROW]), { status: 200 }));
+  }) as Parameters<typeof setTikTokLiveProbeUpstream>[0];
+}
+
+describe("GET /api/tiktok/live — the SWR law (a warm room never goes dark)", () => {
+  test("an expired-but-present LIVE status answers stale (live stays true) while the refresh rides", async () => {
+    setTikTokLiveProbeUpstream(happyTransport());
+    const seeded = (await probeTikTokLiveStatus("lofigirl"))!;
+    expect(seeded.live).toBe(true);
+    // the refresh lane never settles in this test — the stale window is
+    // deterministic (the refresh is in flight for the whole assertion)
+    setTikTokLiveProbeUpstream(() => new Promise<Response>(() => {}));
+    setTikTokLiveClock(() => Date.now() + 40_000); // past the 30s LIVE TTL
+    const { GET } = await importRoute();
+    const res = await GET(liveReq("?handle=lofigirl"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status.live).toBe(true); // the room stays mounted
+    expect(body.status.stale).toBe(true); // the honest age marker
+    expect(body.status.probing).toBeUndefined(); // NEVER the cold answer
+    expect(isTikTokLiveProbeInFlight("lofigirl")).toBe(true); // the refresh rides
+    const again = await GET(liveReq("?handle=lofigirl"));
+    expect((await again.json()).status.stale).toBe(true); // no dark window
+  });
+
+  test("a stale-but-present stream keeps the video mounted (streamProbing stays false)", async () => {
+    setTikTokLiveProbeUpstream(playbackHappyTransport());
+    process.env.APIFY_LIVE_STREAM_ACTOR_ID = "automation-lab~tiktok-live-room-stream-urls";
+    const seededStatus = (await probeTikTokLiveStatus("lofigirl"))!;
+    expect(seededStatus.live).toBe(true);
+    const seededStream = (await probeTikTokLivePlayback("lofigirl"))!;
+    expect(seededStream.hlsUrl).toBeTruthy();
+    setTikTokLiveProbeUpstream(() => new Promise<Response>(() => {}));
+    setTikTokLiveClock(() => Date.now() + 140_000); // past the 30s status + 120s playback TTLs
+    const { GET } = await importRoute();
+    const res = await GET(liveReq("?handle=lofigirl"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status.live).toBe(true);
+    expect(body.status.stream.hlsUrl).toBe(seededStream.hlsUrl); // the video stays
+    expect(body.status.streamProbing).toBeFalsy(); // never "Resolving…" mid-watch
+    expect(body.status.stale).toBe(true);
+    expect(isTikTokLivePlaybackInFlight("lofigirl")).toBe(true); // the stream refresh rides
+  });
+
+  test("a warm handle survives a lane failure: last-known data over a mid-watch error", async () => {
+    setTikTokLiveProbeUpstream(happyTransport());
+    const seeded = (await probeTikTokLiveStatus("lofigirl"))!;
+    expect(seeded.live).toBe(true);
+    // the lane fails and earns its 60s backoff
+    setTikTokLiveProbeUpstream(() => Promise.resolve(new Response("down", { status: 500 })));
+    await expect(probeTikTokLiveStatus("lofigirl")).rejects.toBeInstanceOf(
+      TikTokLiveUnavailableError
+    );
+    setTikTokLiveClock(() => Date.now() + 40_000); // the entry goes stale under the backoff
+    const { GET } = await importRoute();
+    const res = await GET(liveReq("?handle=lofigirl"));
+    expect(res.status).toBe(200); // NOT 502 — the room stays
+    const body = await res.json();
+    expect(body.status.live).toBe(true);
+    expect(body.status.stale).toBe(true);
+    // and the resting lane does not hammer: no refresh is scheduled mid-backoff
+    expect(isTikTokLiveProbeInFlight("lofigirl")).toBe(false);
+    expect(isTikTokLiveProbeBackedOff("lofigirl")).toBe(true);
+  });
+
+  test("a cold handle still answers the honest probing DTO (SWR never fakes a first answer)", async () => {
+    setTikTokLiveProbeUpstream(() => new Promise<Response>(() => {}));
+    const { GET } = await importRoute();
+    const res = await GET(liveReq("?handle=lofigirl"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status.probing).toBe(true);
+    expect(body.status.live).toBeNull();
   });
 });

@@ -8,7 +8,7 @@
  * with the liveness-dependent TTL, and concurrent boards coalesce. No
  * network anywhere (lane law).
  */
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 
 import {
   clearTikTokLiveCache,
@@ -17,6 +17,8 @@ import {
   peekTikTokLiveBoard,
   peekTikTokLiveStatus,
   probeTikTokLiveBoard,
+  readTikTokLiveBoardEntry,
+  setTikTokLiveClock,
   setTikTokLiveProbePolling,
   TikTokLiveUnavailableError,
 } from "@/lib/tiktok/live";
@@ -70,6 +72,7 @@ afterEach(() => {
   setTikTokLiveProbeUpstream(null);
   setTikTokLiveProbePolling(null);
   clearTikTokLiveCache();
+  setTikTokLiveClock(null); // restore the real clock (the SWR pins step it)
 });
 
 describe("normalizeBoardHandles", () => {
@@ -210,5 +213,87 @@ describe("the board probe", () => {
     release();
     await pending;
     expect(isTikTokLiveBoardInFlight(["lofigirl"])).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P102-R2 — the SWR law: a warm board never goes dark. An expired-but-present
+// board is SERVED (stale: true, fetchedAt carries the age) while the refresh
+// rides after(); only a COLD universe ever sees the probing board. The P100
+// probing-flip made the hub flash "Checking who is live…" every 30s.
+// ---------------------------------------------------------------------------
+describe("the SWR law: a warm board never goes dark", () => {
+  test("readTikTokLiveBoardEntry answers fresh AND stale entries (the SWR seam)", async () => {
+    setTikTokLiveProbeUpstream(boardTransport([LOFI_LIVE_ROW, SCOUT_OFFLINE_ROW]));
+    await probeTikTokLiveBoard(["lofigirl", "scout2015"]);
+    const fresh = readTikTokLiveBoardEntry(["lofigirl", "scout2015"]);
+    expect(fresh?.fresh).toBe(true);
+    expect(fresh?.board.rooms.length).toBe(2);
+    setTikTokLiveClock(() => Date.now() + 40_000); // past the 30s liveness TTL
+    const stale = readTikTokLiveBoardEntry(["lofigirl", "scout2015"]);
+    expect(stale?.fresh).toBe(false);
+    expect(stale?.board.rooms.length).toBe(2); // the entry is NOT dropped
+  });
+
+  test("the board route serves the stale board while the refresh rides", async () => {
+    setTikTokLiveProbeUpstream(boardTransport([LOFI_LIVE_ROW, SCOUT_OFFLINE_ROW]));
+    const seeded = await probeTikTokLiveBoard(["lofigirl", "scout2015"]);
+    expect(seeded.rooms.length).toBe(2);
+    // the rail seam is mocked so the route derives the SAME handle universe
+    // (the REAL library module rides beneath — its other exports, like the
+    // feed-page constants channels.ts imports, stay intact)
+    const realLibrary = await import("@/lib/tiktok/library");
+    mock.module("@/lib/tiktok/library", () => ({
+      ...realLibrary,
+      getTikTokRail: async () => ({
+        videos: [
+          { id: "v1", author: "lofigirl" },
+          { id: "v2", author: "scout2015" },
+        ],
+        universeSize: 2,
+        source: "curated",
+        unavailable: false,
+        unavailableReason: null,
+        fetchedAt: new Date().toISOString(),
+      }),
+    }));
+    const { GET } = await import("@/app/api/tiktok/live/board/route");
+    const freshRes = await GET();
+    expect(freshRes.status).toBe(200);
+    const freshBody = await freshRes.json();
+    expect(freshBody.board.rooms.length).toBe(2);
+    // now the entry goes stale and the refresh lane never settles — the stale
+    // board is still served (the hub never flashes back to probing)
+    setTikTokLiveProbeUpstream(() => new Promise<Response>(() => {}));
+    setTikTokLiveClock(() => Date.now() + 40_000);
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.board.rooms.length).toBe(2);
+    expect(body.board.rooms[0].live).toBe(true);
+    expect(body.board.stale).toBe(true);
+    expect(body.board.probing).toBeUndefined();
+    expect(isTikTokLiveBoardInFlight(["lofigirl", "scout2015"])).toBe(true);
+  });
+
+  test("a cold universe still answers the honest probing board", async () => {
+    const realLibrary = await import("@/lib/tiktok/library");
+    mock.module("@/lib/tiktok/library", () => ({
+      ...realLibrary,
+      getTikTokRail: async () => ({
+        videos: [{ id: "v1", author: "lofigirl" }],
+        universeSize: 1,
+        source: "curated",
+        unavailable: false,
+        unavailableReason: null,
+        fetchedAt: new Date().toISOString(),
+      }),
+    }));
+    setTikTokLiveProbeUpstream(() => new Promise<Response>(() => {}));
+    const { GET } = await import("@/app/api/tiktok/live/board/route");
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.board.probing).toBe(true);
   });
 });

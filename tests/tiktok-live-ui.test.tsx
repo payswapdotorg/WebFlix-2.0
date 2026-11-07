@@ -329,6 +329,24 @@ describe("TikTokLiveView — the honest states", () => {
     expect(q(el, '[data-testid="tiktok-live-fallback"]')).not.toBeNull();
     expect(q(el, '[data-testid="tiktok-live-video"]')).toBeNull();
   });
+
+  test("the SWR UX law: a stale live answer keeps the room (and the video) mounted", async () => {
+    // P102-R2 — the backend serves stale:true while the refresh probe rides;
+    // the view's law is that a stale answer is NOT a probing flip and NOT an
+    // unmount: the video keeps playing, the badge stays, nothing flashes.
+    routeStatusOnce([
+      LIVE_WITH_HLS,
+      { ...LIVE_WITH_HLS, stale: true, fetchedAt: "2026-11-07T07:45:30.000Z" },
+    ]);
+    routeChat();
+    const el = await mountLive("lofigirl");
+    await flushLive();
+    expect(q(el, '[data-testid="tiktok-live-video"]')).not.toBeNull();
+    await flushLive(30); // the next poll answers stale — the room must not flip
+    expect(q(el, '[data-testid="tiktok-live-probing"]')).toBeNull();
+    expect(q(el, '[data-testid="tiktok-live-video"]')).not.toBeNull();
+    expect(q(el, '[data-testid="tiktok-live-badge"]')).not.toBeNull();
+  });
 });
 
 describe("TikTokLiveView — the watch-party chat", () => {

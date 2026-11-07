@@ -22,6 +22,18 @@ import { isTikTokHandle, normalizeTikTokHandle, tiktokLiveRoomUrl } from "./urls
 import { tiktokLiveProbeFetch } from "./live-upstream";
 
 // ---------------------------------------------------------------------------
+// The clock seam (P102-R2): every TTL/cache decision rides this function so
+// tests can step the clock deterministically (prod rides Date.now). The
+// fetchedAt timestamps keep new Date() — they are REAL timestamps.
+// ---------------------------------------------------------------------------
+let nowMs: () => number = () => Date.now();
+
+/** Test hook: null restores the real clock. */
+export function setTikTokLiveClock(fn: (() => number) | null): void {
+  nowMs = fn ?? (() => Date.now());
+}
+
+// ---------------------------------------------------------------------------
 // Contracts
 // ---------------------------------------------------------------------------
 
@@ -54,6 +66,10 @@ export interface TikTokLiveStatusDTO {
   /** P102: true while the playback resolution is in flight for a live room
    * (the view shows "resolving the stream…", never the fallback rung). */
   streamProbing?: boolean;
+  /** P102-R2 (the SWR law): true when the answer served is the LAST KNOWN
+   * one while a refresh probe rides after() — fetchedAt carries the age. A
+   * stale answer never flips a mounted room to probing. */
+  stale?: boolean;
   source: "apify" | "webcast" | "";
   fetchedAt: string;
 }
@@ -64,6 +80,8 @@ export interface TikTokLiveBoardDTO {
   /** Requested handles the provider returned no row for — answered, not faked. */
   missing: string[];
   probing?: boolean;
+  /** P102-R2 (the SWR law): the LAST KNOWN board while a refresh rides. */
+  stale?: boolean;
   fetchedAt: string;
 }
 
@@ -263,23 +281,52 @@ export function isTikTokLiveProbeInFlight(handle: string): boolean {
   return inFlight.has(normalizeTikTokHandle(handle));
 }
 
+/** True while the handle's lane rests in its 60s failure backoff. */
+export function isTikTokLiveProbeBackedOff(handle: string): boolean {
+  const marker = backoff.get(normalizeTikTokHandle(handle));
+  return Boolean(marker && marker.until > nowMs());
+}
+
 /** Cache-only read. Throws the REAL error while a handle is in backoff. */
 export async function peekTikTokLiveStatus(handle: string): Promise<TikTokLiveStatusDTO | null> {
   const key = normalizeTikTokHandle(handle);
   if (!key || !isTikTokHandle(key)) return null;
   const marker = backoff.get(key);
-  if (marker && marker.until > Date.now()) {
+  if (marker && marker.until > nowMs()) {
     throw new TikTokLiveUnavailableError(marker.message, marker.status);
   }
   if (marker) backoff.delete(key);
   const hit = cache.get(key);
-  if (hit && hit.expiresAt > Date.now()) return hit.dto;
+  if (hit && hit.expiresAt > nowMs()) return hit.dto;
   if (hit) cache.delete(key);
   return null;
 }
 
 function cacheStatus(dto: TikTokLiveStatusDTO): void {
-  cache.set(dto.handle, { dto, expiresAt: Date.now() + liveStatusTtlMs(dto) });
+  cache.set(dto.handle, { dto, expiresAt: nowMs() + liveStatusTtlMs(dto) });
+}
+
+/**
+ * P102-R2 — the SWR read: fresh AND stale entries. A warm room NEVER goes
+ * dark: an expired-but-present entry is returned with `fresh: false` so the
+ * route serves it (marked `stale: true` — fetchedAt carries the age) while
+ * the refresh probe rides after(). Only a COLD handle answers probing. The
+ * backoff error fires only when NO entry exists — last-known data beats a
+ * mid-watch error, and the backoff still gates the refresh cadence.
+ */
+export function readTikTokLiveStatusEntry(
+  handle: string
+): { dto: TikTokLiveStatusDTO; fresh: boolean } | null {
+  const key = normalizeTikTokHandle(handle);
+  if (!key || !isTikTokHandle(key)) return null;
+  const hit = cache.get(key);
+  if (hit) return { dto: hit.dto, fresh: hit.expiresAt > nowMs() };
+  const marker = backoff.get(key);
+  if (marker && marker.until > nowMs()) {
+    throw new TikTokLiveUnavailableError(marker.message, marker.status);
+  }
+  if (marker) backoff.delete(key);
+  return null;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -400,7 +447,7 @@ async function runProbe(key: string): Promise<TikTokLiveStatusDTO> {
     // surfaces the REAL error during that window
     const status = err instanceof TikTokLiveUnavailableError ? err.status : 502;
     const message = err instanceof Error ? err.message : "TikTok live probe failed.";
-    backoff.set(key, { status, message, until: Date.now() + 60_000 });
+    backoff.set(key, { status, message, until: nowMs() + 60_000 });
     throw err;
   }
 }
@@ -475,18 +522,45 @@ export function isTikTokLivePlaybackInFlight(handle: string): boolean {
   return playbackInFlight.has(normalizeTikTokHandle(handle));
 }
 
+/** True while the playback lane rests in its 60s failure backoff. */
+export function isTikTokLivePlaybackBackedOff(handle: string): boolean {
+  const marker = playbackBackoff.get(normalizeTikTokHandle(handle));
+  return Boolean(marker && marker.until > nowMs());
+}
+
 /** Cache-only playback read. Throws the REAL error while in backoff. */
 export async function peekTikTokLivePlayback(handle: string): Promise<TikTokLiveStreamInfo | null> {
   const key = normalizeTikTokHandle(handle);
   if (!key || !isTikTokHandle(key)) return null;
   const marker = playbackBackoff.get(key);
-  if (marker && marker.until > Date.now()) {
+  if (marker && marker.until > nowMs()) {
     throw new TikTokLiveUnavailableError(marker.message, marker.status);
   }
   if (marker) playbackBackoff.delete(key);
   const hit = playbackCache.get(key);
-  if (hit && hit.expiresAt > Date.now()) return hit.stream;
+  if (hit && hit.expiresAt > nowMs()) return hit.stream;
   if (hit) playbackCache.delete(key);
+  return null;
+}
+
+/**
+ * P102-R2 — the SWR read for the playback lane: a stale-but-present stream
+ * answer keeps the video mounted while the refresh rides after(); the
+ * player's own error → fallback rung covers a genuinely dead URL. The
+ * backoff error fires only when NO answer exists.
+ */
+export function readTikTokLivePlaybackEntry(
+  handle: string
+): { stream: TikTokLiveStreamInfo; fresh: boolean } | null {
+  const key = normalizeTikTokHandle(handle);
+  if (!key || !isTikTokHandle(key)) return null;
+  const hit = playbackCache.get(key);
+  if (hit) return { stream: hit.stream, fresh: hit.expiresAt > nowMs() };
+  const marker = playbackBackoff.get(key);
+  if (marker && marker.until > nowMs()) {
+    throw new TikTokLiveUnavailableError(marker.message, marker.status);
+  }
+  if (marker) playbackBackoff.delete(key);
   return null;
 }
 
@@ -520,7 +594,7 @@ async function runPlaybackProbe(key: string): Promise<TikTokLiveStreamInfo> {
     for (const row of items) {
       const stream = mapApifyPlaybackRow(row, key);
       if (stream) {
-        playbackCache.set(key, { stream, expiresAt: Date.now() + TIKTOK_LIVE_PLAYBACK_TTL_MS });
+        playbackCache.set(key, { stream, expiresAt: nowMs() + TIKTOK_LIVE_PLAYBACK_TTL_MS });
         return stream;
       }
     }
@@ -531,7 +605,7 @@ async function runPlaybackProbe(key: string): Promise<TikTokLiveStreamInfo> {
   } catch (err) {
     const status = err instanceof TikTokLiveUnavailableError ? err.status : 502;
     const message = err instanceof Error ? err.message : "TikTok live playback failed.";
-    playbackBackoff.set(key, { status, message, until: Date.now() + 60_000 });
+    playbackBackoff.set(key, { status, message, until: nowMs() + 60_000 });
     throw err;
   }
 }
@@ -593,8 +667,22 @@ export async function peekTikTokLiveBoard(handles: string[]): Promise<TikTokLive
   const keys = normalizeBoardHandles(handles);
   if (keys.length === 0) return null;
   const hit = boardCache.get(boardKey(keys));
-  if (hit && hit.expiresAt > Date.now()) return hit.board;
+  if (hit && hit.expiresAt > nowMs()) return hit.board;
   if (hit) boardCache.delete(boardKey(keys));
+  return null;
+}
+
+/**
+ * P102-R2 — the SWR read for the board: a stale-but-present board keeps the
+ * hub mounted while the refresh rides after(). (The board lane has no
+ * backoff map: a failed batch run clears its in-flight marker and the next
+ * request re-probes — one run per universe, TTL-gated.)
+ */
+export function readTikTokLiveBoardEntry(handles: string[]): { board: TikTokLiveBoardDTO; fresh: boolean } | null {
+  const keys = normalizeBoardHandles(handles);
+  if (keys.length === 0) return null;
+  const hit = boardCache.get(boardKey(keys));
+  if (hit) return { board: hit.board, fresh: hit.expiresAt > nowMs() };
   return null;
 }
 
@@ -646,6 +734,6 @@ async function runBoardProbe(keys: string[], key: string): Promise<TikTokLiveBoa
     missing: [...remaining],
     fetchedAt: new Date().toISOString(),
   };
-  boardCache.set(key, { board, expiresAt: Date.now() + boardTtlMs(board) });
+  boardCache.set(key, { board, expiresAt: nowMs() + boardTtlMs(board) });
   return board;
 }
