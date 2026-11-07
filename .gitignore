@@ -45,3 +45,4 @@ yarn-error.log*
 
 # lane work records (per-agent scratch, never part of the vault)
 /agent-ctx/
+.env*
