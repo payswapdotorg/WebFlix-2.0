@@ -141,7 +141,7 @@ beforeAll(async () => {
   COOKIE_B = await mintSessionCookie({ sub: USER_B });
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   for (const k of ENV_KEYS) {
     savedEnv[k] = process.env[k];
     delete process.env[k];
@@ -149,7 +149,7 @@ beforeEach(() => {
   officialCalls.length = 0;
   fetchLog.length = 0;
   respond = () => new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
-  resetYoutubeConnectionStore();
+  await resetYoutubeConnectionStore();
   globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
     const u = String(url);
     const i = init ?? {};
@@ -158,18 +158,18 @@ beforeEach(() => {
   }) as unknown as typeof fetch;
 });
 
-afterEach(() => {
+afterEach(async () => {
   globalThis.fetch = realFetch;
   for (const k of ENV_KEYS) {
     if (savedEnv[k] !== undefined) process.env[k] = savedEnv[k];
     else delete process.env[k];
   }
-  resetYoutubeConnectionStore();
+  await resetYoutubeConnectionStore();
 });
 
-afterAll(() => {
+afterAll(async () => {
   mock.module("@/lib/youtube/official-actions", () => realOfficial);
-  resetYoutubeConnectionStore();
+  await resetYoutubeConnectionStore();
 });
 
 /** A connected record for one user — real encryptSecret token blobs. */

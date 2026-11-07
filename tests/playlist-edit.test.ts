@@ -125,7 +125,7 @@ beforeEach(async () => {
       description: null,
     },
   };
-  resetYoutubeConnectionStore();
+  await resetYoutubeConnectionStore();
   await putYouTubeConnection({
     userId: USER_ID,
     channelId: "UC_own_a",
@@ -141,9 +141,9 @@ beforeEach(async () => {
   });
 });
 
-afterAll(() => {
+afterAll(async () => {
   mock.module("@/lib/youtube/official-actions", () => realOfficial);
-  resetYoutubeConnectionStore();
+  await resetYoutubeConnectionStore();
   // WFX2-P38 — the Google OAuth env back to its process-original state
   if (savedGoogleClientId !== undefined) process.env.GOOGLE_CLIENT_ID = savedGoogleClientId;
   else delete process.env.GOOGLE_CLIENT_ID;
@@ -227,7 +227,7 @@ describe("PATCH /api/playlists/[id] — the official playlist-update drive (offi
 
   test("no connected YouTube account → 403 youtube-not-connected (the tier gate precedes the official call)", async () => {
     setGoogleEnv(); // WFX2-P38: a CONFIGURED deployment — the connect errand is the honest ask
-    resetYoutubeConnectionStore(); // drop the connection
+    await resetYoutubeConnectionStore(); // drop the connection
     const res = await patchPlaylist(patchReq("PLx", { title: "X" }), ctx("PLx"));
     expect(res.status).toBe(403);
     const body = (await res.json()) as { error: string; kind?: string };
@@ -238,7 +238,7 @@ describe("PATCH /api/playlists/[id] — the official playlist-update drive (offi
 
   test("WFX2-P38: deployment without Google OAuth env → 503 youtube-not-configured (the deployment-truth law — never the connect errand)", async () => {
     deleteGoogleEnv(); // this deployment can NEVER offer the connect flow
-    resetYoutubeConnectionStore(); // drop the connection
+    await resetYoutubeConnectionStore(); // drop the connection
     const res = await patchPlaylist(patchReq("PLx", { title: "X" }), ctx("PLx"));
     expect(res.status).toBe(503);
     const body = (await res.json()) as { error: string; kind?: string };

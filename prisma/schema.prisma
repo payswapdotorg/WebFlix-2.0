@@ -1255,3 +1255,25 @@ model TikTokImport {
   @@index([visibility, createdAt])
   @@index([importedBy, createdAt])
 }
+
+// P99 / G23 — the DURABLE per-user connection stores (both twins). The
+// TikTok + YouTube connection records moved off the operator-gated Upstash
+// REST lane (the operator-supplied host is DNS-dead — see
+// docs/research/2026-11-07-p99-connection-store-durability-g23-report.md)
+// onto the stack's own durable layer. ONE row per WebFlix user; the `data`
+// column carries the EXACT serialized record the Upstash adapter carried —
+// the isConnectionShape law parses it verbatim (zero field-mapping risk;
+// JSON text sidesteps the epoch-ms Int ceiling). No TTL — a connection is
+// durable until the user disconnects or the provider revokes consent
+// (status → needs_reauth).
+model TikTokConnectionRecord {
+  userId    String   @id
+  data      String
+  updatedAt DateTime @updatedAt
+}
+
+model YouTubeConnectionRecord {
+  userId    String   @id
+  data      String
+  updatedAt DateTime @updatedAt
+}

@@ -665,19 +665,19 @@ describe("P4B /api/connection/youtube: the gated, per-user OAuth status route", 
     "UPSTASH_REDIS_REST_TOKEN",
   ] as const;
   const savedEnv: Record<string, string | undefined> = {};
-  beforeEach(() => {
+  beforeEach(async () => {
     for (const k of ENV_KEYS) {
       savedEnv[k] = process.env[k];
       delete process.env[k];
     }
-    resetYoutubeConnectionStore();
+    await resetYoutubeConnectionStore();
   });
-  afterEach(() => {
+  afterEach(async () => {
     for (const k of ENV_KEYS) {
       if (savedEnv[k] !== undefined) process.env[k] = savedEnv[k];
       else delete process.env[k];
     }
-    resetYoutubeConnectionStore();
+    await resetYoutubeConnectionStore();
   });
 
   /** A connected record for the ACTING user (or another user): real

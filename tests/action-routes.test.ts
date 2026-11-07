@@ -174,15 +174,15 @@ beforeEach(async () => {
   subStatus = { ok: true, data: { subscribed: false, subscriptionId: null } };
   subscribeResult = { ok: true, data: { subscriptionId: "sub_new", channelId: "UC1" } };
   unsubscribeResult = { ok: true };
-  resetYoutubeConnectionStore();
+  await resetYoutubeConnectionStore();
   await connectUser(USER_A, TOKEN_A);
 });
 
 /* bun's mock.module is process-wide — restore the real module so any
  * later-loaded contract tests exercise the real adapter again. */
-afterAll(() => {
+afterAll(async () => {
   mock.module("@/lib/youtube/official-actions", () => realOfficial);
-  resetYoutubeConnectionStore();
+  await resetYoutubeConnectionStore();
   // WFX2-P38 — the Google OAuth env back to its process-original state
   if (savedGoogleClientId !== undefined) process.env.GOOGLE_CLIENT_ID = savedGoogleClientId;
   else delete process.env.GOOGLE_CLIENT_ID;
@@ -324,7 +324,7 @@ describe("POST /api/videos/[id]/like (the per-user OFFICIAL lane — videos.rate
 
   test("no connected account → 403 youtube-not-connected; ZERO official calls (isolation by construction)", async () => {
     setGoogleEnv(); // WFX2-P38: a CONFIGURED deployment — the connect errand is the honest ask
-    resetYoutubeConnectionStore(); // drop the connection
+    await resetYoutubeConnectionStore(); // drop the connection
     const res = await postLike(req({ value: "like" }), ctx);
     expect(res.status).toBe(403);
     const body = (await res.json()) as { error: string; kind?: string };
@@ -335,7 +335,7 @@ describe("POST /api/videos/[id]/like (the per-user OFFICIAL lane — videos.rate
 
   test("WFX2-P38: deployment without Google OAuth env → 503 youtube-not-configured; ZERO official calls (the deployment-truth law — never the connect errand)", async () => {
     deleteGoogleEnv(); // this deployment can NEVER offer the connect flow
-    resetYoutubeConnectionStore(); // drop the connection
+    await resetYoutubeConnectionStore(); // drop the connection
     const res = await postLike(req({ value: "like" }), ctx);
     expect(res.status).toBe(503);
     const body = (await res.json()) as { error: string; kind?: string };
@@ -349,7 +349,7 @@ describe("POST /api/videos/[id]/like (the per-user OFFICIAL lane — videos.rate
 
   test("a revoked/expired grant (status needs_reauth) → 403 youtube-needs-reauth", async () => {
     setGoogleEnv(); // WFX2-P38: a CONFIGURED deployment for the tier-failure family
-    resetYoutubeConnectionStore();
+    await resetYoutubeConnectionStore();
     await putYouTubeConnection({
       userId: USER_A,
       channelId: null,
@@ -404,7 +404,7 @@ describe("POST /api/videos/[id]/like (the per-user OFFICIAL lane — videos.rate
   });
 
   test("the transparent refresh: an expired access token is refreshed server-side and the FRESH token serves the rate", async () => {
-    resetYoutubeConnectionStore();
+    await resetYoutubeConnectionStore();
     await putYouTubeConnection({
       userId: USER_A,
       channelId: "UC_own_a",

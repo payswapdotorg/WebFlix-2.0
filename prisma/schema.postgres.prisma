@@ -1248,3 +1248,18 @@ model TikTokImport {
   @@index([visibility, createdAt])
   @@index([importedBy, createdAt])
 }
+
+// P99 / G23 — the DURABLE per-user connection stores (both twins). Mirrors
+// the dev (SQLite) schema law — see prisma/schema.prisma and
+// docs/research/2026-11-07-p99-connection-store-durability-g23-report.md.
+model TikTokConnectionRecord {
+  userId    String   @id
+  data      String
+  updatedAt DateTime @updatedAt
+}
+
+model YouTubeConnectionRecord {
+  userId    String   @id
+  data      String
+  updatedAt DateTime @updatedAt
+}

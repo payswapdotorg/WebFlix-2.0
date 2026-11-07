@@ -238,18 +238,18 @@ function fixtureUpstream() {
 
 let upstream: ReturnType<typeof fixtureUpstream>;
 
-beforeEach(() => {
+beforeEach(async () => {
   clearCache();
   upstream = fixtureUpstream();
-  resetYoutubeConnectionStore(); // the per-user connection store is per-test
+  await resetYoutubeConnectionStore(); // the per-user connection store is per-test
   officialCalls.length = 0;
   officialChannelsResult = { ok: true, data: [] };
   officialPlaylistsResult = { ok: true, data: [] };
 });
 
-afterEach(() => {
+afterEach(async () => {
   setUpstream(null);
-  resetYoutubeConnectionStore();
+  await resetYoutubeConnectionStore();
   delete process.env.YT_COOKIES;
   delete process.env.BROKER_URL;
   delete process.env.BROKER_SECRET;
@@ -1002,9 +1002,9 @@ describe("POST /api/notifications/read — the honest unsupported lane (WFX2-P36
 // route now answers the ACTING user's own identity + their own connected
 // subscriptions — the operator's data can never wear another user's name.
 describe("GET /api/me — the per-user truth (P37: the operator seam retired)", () => {
-  afterEach(() => {
+  afterEach(async () => {
     meLookup = null;
-    resetYoutubeConnectionStore();
+    await resetYoutubeConnectionStore();
     officialCalls.length = 0;
     officialChannelsResult = { ok: true, data: [] };
     delete process.env.YT_COOKIES;

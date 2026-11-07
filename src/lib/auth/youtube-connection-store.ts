@@ -1,5 +1,5 @@
 /**
- * WFX2-P36-ACTION-PERSISTENCE — the per-user YouTube account connection store.
+ * P99 / G23 — the per-user YouTube account connection store.
  *
  * THE P36 LAW (docs/work-items/P36-ACTION-PERSISTENCE.md): app sign-in is a
  * WebFlix IDENTITY, not YouTube authorization. Every end-user write must act
@@ -8,17 +8,20 @@
  * WebFlix user (userId = the NextAuth token sub), holding the user's own
  * channel identity + the encrypted OAuth tokens.
  *
- * The Upstash adapter pattern (the established durable-store law from
- * src/lib/auth/user-store.ts):
- *  - env-configured (UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN) →
- *    REST command pipelines against the real Upstash — the production path;
- *  - env absent → an in-memory Map fallback, so dev + tests run env-clean;
- *  - an injectable seam (setYoutubeConnectionStoreRest) lets tests exercise
- *    the REST path against a fake — never the network.
- *
- * Key schema (BY LAW a SEPARATE wf:yt: namespace, never mixed with yt:*
- * cache entries or wf:auth:user: account rows):
- *   wf:yt:conn:<userId>
+ * THE DURABILITY LAW (docs/research/2026-11-07-p99-connection-store-durability-g23-report.md):
+ * a connection must never live on one lambda instance only. The record's
+ * durable layer is the stack's OWN database (Prisma — YouTubeConnectionRecord),
+ * replacing the operator-gated Upstash REST lane whose supplied host is
+ * DNS-dead on production. The public contract is byte-identical to the
+ * P36 store:
+ *   - get: durable read first; the in-memory mirror is ONLY the read-
+ *     degradation fallback (a DB outage never breaks a request — the G22
+ *     doctrine). An unknown user is the honest null.
+ *   - put: durable upsert + mirror; a durable failure throws
+ *     YoutubeConnectionStoreUnavailableError (the routes' honest 503).
+ *   - delete: durable delete + mirror; true when a record was removed.
+ *   - no TTL — durable until the user disconnects or Google revokes consent
+ *     (status → needs_reauth).
  *
  * Token security (the work order's contract):
  *  - accessTokenEnc / refreshTokenEnc are AES-256-GCM blobs produced by
@@ -26,92 +29,25 @@
  *    touch this store, the logs, or the browser;
  *  - records carry no TTL — a connection is durable until the user
  *    disconnects or Google revokes consent (status → needs_reauth).
+ *
+ * Record shape: the `data` column carries the EXACT serialized record the
+ * Upstash adapter carried — parseRecord/isConnectionShape unchanged; a
+ * corrupt row is an honest miss, never a crash.
  */
+import { db } from "@/lib/db";
 import type { WebFlixYouTubeConnection } from "./types";
 
 // ---------------------------------------------------------------------------
-// Key schema
-// ---------------------------------------------------------------------------
-
-export const YT_CONNECTION_KEY_PREFIX = "wf:yt:conn:";
-
-/** The canonical connection-store key for a WebFlix user id. */
-export function youtubeConnectionKey(userId: string): string {
-  return `${YT_CONNECTION_KEY_PREFIX}${userId}`;
-}
-
-// ---------------------------------------------------------------------------
-// REST client — the Upstash adapter pattern (pipeline POST, bearer auth)
-// ---------------------------------------------------------------------------
-
-/** Executes a command pipeline; resolves to one result per command. */
-export type YoutubeConnectionStoreRest = (commands: string[][]) => Promise<unknown[]>;
-
-let injectedRest: YoutubeConnectionStoreRest | null = null;
-
-/** Test-only: serve REST command pipelines from a fake. */
-export function setYoutubeConnectionStoreRest(impl: YoutubeConnectionStoreRest | null): void {
-  injectedRest = impl;
-}
-
-/** A durable-store outage surfaced to the caller (fail honest, never fake). */
-export class YoutubeConnectionStoreUnavailableError extends Error {
-  constructor(cause: string) {
-    super(`WebFlix YouTube connection store unavailable: ${cause}`);
-    this.name = "YoutubeConnectionStoreUnavailableError";
-  }
-}
-
-/** REST round-trip budget — a slow store must not hang a user action forever. */
-const REST_TIMEOUT_MS = 4_000;
-
-/** The env-configured REST client, or null when Upstash is not wired. */
-function envRest(): YoutubeConnectionStoreRest | null {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!url || !token) return null;
-  return async (commands) => {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), REST_TIMEOUT_MS);
-    try {
-      const pipelineUrl = url.replace(/\/+$/, "") + "/pipeline";
-      const res = await fetch(pipelineUrl, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(commands),
-        signal: ctrl.signal,
-      });
-      if (!res.ok) throw new Error(`upstash rest ${res.status}`);
-      const body = (await res.json()) as unknown;
-      const rows = Array.isArray(body) ? body : [body];
-      return rows.map((row) =>
-        row && typeof row === "object" && "result" in row
-          ? (row as { result: unknown }).result
-          : null,
-      );
-    } finally {
-      clearTimeout(timer);
-    }
-  };
-}
-
-function activeRest(): YoutubeConnectionStoreRest | null {
-  return injectedRest ?? envRest();
-}
-
-// ---------------------------------------------------------------------------
-// The local mirror — dev/tests without Upstash env + the outage fallback
+// The local mirror — the read-degradation fallback (DB-outage lane only)
 // ---------------------------------------------------------------------------
 
 const g = globalThis as typeof globalThis & { __webflixYouTubeConnections?: Map<string, string> };
 const local: Map<string, string> = (g.__webflixYouTubeConnections ??= new Map());
 
-/** Test hook: wipe the local mirror (NOT the durable Upstash layer). */
-export function resetYoutubeConnectionStore(): void {
+/** Test hook: wipe the mirror AND the durable table (await it — the wipe is deterministic). */
+export async function resetYoutubeConnectionStore(): Promise<void> {
   local.clear();
+  await db.youTubeConnectionRecord.deleteMany();
 }
 
 function isConnectionShape(v: unknown): v is WebFlixYouTubeConnection {
@@ -132,59 +68,58 @@ function parseRecord(raw: string | null | undefined): WebFlixYouTubeConnection |
 }
 
 /**
- * Read the user's YouTube connection. Order: local mirror → Upstash (when
- * wired). A REST outage falls back to the local mirror; an unknown user
+ * Read the user's YouTube connection. Durable read first (the freshness law
+ * — the record must survive instance churn); the local mirror answers only
+ * when the durable read itself fails (the outage lane). An unknown user
  * simply misses (not connected — the honest null).
  */
 export async function getYouTubeConnection(userId: string): Promise<WebFlixYouTubeConnection | null> {
-  const key = youtubeConnectionKey(userId);
-  const localHit = parseRecord(local.get(key));
-  if (localHit) return localHit;
-  const rest = activeRest();
-  if (!rest) return null;
+  let row: { data: string } | null = null;
   try {
-    const rows = await rest([["GET", key]]);
-    const record = parseRecord(typeof rows[0] === "string" ? rows[0] : null);
-    if (record) local.set(key, JSON.stringify(record)); // mirror the durable read
-    return record;
+    row = await db.youTubeConnectionRecord.findUnique({
+      where: { userId },
+      select: { data: true },
+    });
   } catch {
-    return null; // read path must never break the request
+    // the durable read failed — degrade to the mirror, never break the request
+    return parseRecord(local.get(userId));
   }
+  const record = parseRecord(row?.data ?? null);
+  if (record) local.set(userId, JSON.stringify(record)); // mirror the durable read
+  return record;
 }
 
 /**
- * Write a connection durably: local mirror ALWAYS, Upstash awaited when
- * wired — a connection must never live on one lambda instance only. SET
- * carries no expiry (durable by contract; revocation flips the status).
+ * Write a connection durably: the DB upsert is AUTHORITATIVE (awaited — a
+ * connection must never live on one lambda instance only), the mirror rides
+ * along for the outage lane. A durable failure surfaces the honest
+ * Unavailable error (the routes' 503 contract — fail honest, never fake).
  */
 export async function putYouTubeConnection(record: WebFlixYouTubeConnection): Promise<void> {
-  const key = youtubeConnectionKey(record.userId);
   const raw = JSON.stringify(record);
-  local.set(key, raw);
-  const rest = activeRest();
-  if (!rest) return;
+  local.set(record.userId, raw);
   try {
-    await rest([["SET", key, raw]]);
+    await db.youTubeConnectionRecord.upsert({
+      where: { userId: record.userId },
+      update: { data: raw },
+      create: { userId: record.userId, data: raw },
+    });
   } catch (err) {
     throw new YoutubeConnectionStoreUnavailableError(
-      err instanceof Error ? err.message : "rest write failed",
+      err instanceof Error ? err.message : "durable write failed",
     );
   }
 }
 
 /** Delete the user's connection (disconnect). Returns true when a record was removed. */
 export async function deleteYouTubeConnection(userId: string): Promise<boolean> {
-  const key = youtubeConnectionKey(userId);
-  const existed = local.delete(key);
-  const rest = activeRest();
-  if (!rest) return existed;
+  const existed = local.delete(userId);
   try {
-    const rows = await rest([["DEL", key]]);
-    const removedRemote = rows[0] === 1;
-    return existed || removedRemote;
+    const removed = await db.youTubeConnectionRecord.deleteMany({ where: { userId } });
+    return existed || removed.count > 0;
   } catch (err) {
     throw new YoutubeConnectionStoreUnavailableError(
-      err instanceof Error ? err.message : "rest delete failed",
+      err instanceof Error ? err.message : "durable delete failed",
     );
   }
 }
@@ -198,4 +133,12 @@ export async function markYouTubeConnectionNeedsReauth(userId: string): Promise<
     status: "needs_reauth",
     updatedAt: new Date().toISOString(),
   });
+}
+
+/** A durable-store outage surfaced to the caller (fail honest, never fake). */
+export class YoutubeConnectionStoreUnavailableError extends Error {
+  constructor(cause: string) {
+    super(`WebFlix YouTube connection store unavailable: ${cause}`);
+    this.name = "YoutubeConnectionStoreUnavailableError";
+  }
 }
