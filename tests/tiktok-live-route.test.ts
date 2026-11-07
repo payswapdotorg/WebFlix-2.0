@@ -76,7 +76,7 @@ async function importRoute() {
 }
 
 describe("GET /api/tiktok/live — the status contracts", () => {
-  test("a cached status answers 200 with the DTO and no-store", async () => {
+  test("a cached status answers 200 with the composed DTO and no-store", async () => {
     setTikTokLiveProbeUpstream(happyTransport());
     const cached = (await probeTikTokLiveStatus("lofigirl"))!;
     expect(cached.live).toBe(true);
@@ -84,7 +84,11 @@ describe("GET /api/tiktok/live — the status contracts", () => {
     const res = await GET(liveReq("?handle=lofigirl"));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.status).toEqual(cached);
+    // P102 — the composition law: a cached LIVE room with no cached stream
+    // answers `streamProbing: true` (the playback probe rides after(); the
+    // view shows "resolving the stream…", never a fake answer, never the
+    // fallback rung while the resolution is in flight).
+    expect(body.status).toEqual({ ...cached, streamProbing: true });
     expect(res.headers.get("Cache-Control")).toContain("no-store");
   });
 

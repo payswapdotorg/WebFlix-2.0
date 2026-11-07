@@ -12,10 +12,12 @@
  *  - degraded → the API's real error copy (502/503), poller stopped.
  */
 import Link from "next/link";
-import { useState } from "react";
-import { ExternalLink, Gift, MessageSquare, Radio, TriangleAlert } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, ExternalLink, Gift, MessageSquare, Radio, TriangleAlert } from "lucide-react";
 
 import { useTikTokLiveStatus } from "@/hooks/use-tiktok-live-status";
+import { useTikTokLiveBoard } from "@/hooks/use-tiktok-live-board";
 import { TikTokLivePlayer } from "@/components/tiktok/tiktok-live-player";
 import { TikTokLiveChatPanel } from "@/components/tiktok/tiktok-live-chat";
 import { TikTokThumbnailImage } from "@/components/tiktok/tiktok-thumbnail-image";
@@ -51,10 +53,12 @@ export function TikTokLiveView({
   rawHandle,
   pollIntervalMs = 6_000,
   chatPollMs = 4_000,
+  boardPollMs = 15_000,
 }: {
   rawHandle: string;
   pollIntervalMs?: number;
   chatPollMs?: number;
+  boardPollMs?: number;
 }) {
   let decoded = rawHandle ?? "";
   try {
@@ -65,7 +69,41 @@ export function TikTokLiveView({
   const handle = normalizeTikTokHandle(decoded);
   const valid = Boolean(handle) && isTikTokHandle(handle);
   const { status, error } = useTikTokLiveStatus(valid ? handle : null, pollIntervalMs);
+  const { board } = useTikTokLiveBoard(boardPollMs);
   const [playbackFailed, setPlaybackFailed] = useState(false);
+  const router = useRouter();
+
+  // P102 — the room-to-room navigation: the currently-live rooms of the
+  // universe, handle-ascending (deterministic), with wrap-around. The
+  // desktop adaptation of tiktok.com's live swipe: buttons + ←/→ keys.
+  const liveHandles = useMemo(() => {
+    const handles = (board?.rooms ?? [])
+      .filter((r) => r.live === true && typeof r.handle === "string")
+      .map((r) => r.handle)
+      .sort();
+    return handles;
+  }, [board]);
+  const navIndex = liveHandles.indexOf(handle);
+  const navActive = liveHandles.length >= 2 && navIndex >= 0;
+  const prevHandle = navActive ? liveHandles[(navIndex - 1 + liveHandles.length) % liveHandles.length] : null;
+  const nextHandle = navActive ? liveHandles[(navIndex + 1) % liveHandles.length] : null;
+
+  useEffect(() => {
+    if (!nextHandle && !prevHandle) return;
+    const onKey = (e: KeyboardEvent) => {
+      // the watch-party composer owns its arrow keys — never hijack them
+      const target = e.target as HTMLElement | null;
+      const tag = typeof target?.tagName === "string" ? target.tagName.toLowerCase() : "";
+      if (tag === "input" || tag === "textarea" || target?.isContentEditable) return;
+      if (e.key === "ArrowRight" && nextHandle) {
+        router.push(`/tiktok/${nextHandle}/live`);
+      } else if (e.key === "ArrowLeft" && prevHandle) {
+        router.push(`/tiktok/${prevHandle}/live`);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [prevHandle, nextHandle, router]);
 
   const outboundUrl = (() => {
     try {
@@ -155,6 +193,15 @@ export function TikTokLiveView({
             <div className="mt-4">
               {status.stream?.hlsUrl && !playbackFailed ? (
                 <TikTokLivePlayer src={status.stream.hlsUrl} onUnavailable={() => setPlaybackFailed(true)} />
+              ) : status.streamProbing === true ? (
+                <div
+                  data-testid="tiktok-live-stream-probing"
+                  className="flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-lg border bg-secondary/40 px-6 text-center"
+                  aria-live="polite"
+                >
+                  <Radio className="size-8 animate-pulse text-muted-foreground" aria-hidden="true" />
+                  <p className="text-sm text-muted-foreground">Resolving the stream…</p>
+                </div>
               ) : (
                 <div
                   data-testid="tiktok-live-fallback"
@@ -172,6 +219,42 @@ export function TikTokLiveView({
                 </div>
               )}
             </div>
+
+            {navActive && prevHandle && nextHandle ? (
+              <nav
+                data-testid="tiktok-live-nav"
+                className="mt-4 flex items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2"
+                aria-label="Live room navigation"
+              >
+                <a
+                  href={`/tiktok/${prevHandle}/live`}
+                  data-testid="tiktok-live-nav-prev"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    router.push(`/tiktok/${prevHandle}/live`);
+                  }}
+                  className="inline-flex items-center gap-1 text-sm font-medium text-primary underline-offset-4 hover:underline"
+                >
+                  <ChevronLeft className="size-4" aria-hidden="true" />
+                  @{prevHandle}
+                </a>
+                <span className="text-xs text-muted-foreground">
+                  {navIndex + 1} / {liveHandles.length} live
+                </span>
+                <a
+                  href={`/tiktok/${nextHandle}/live`}
+                  data-testid="tiktok-live-nav-next"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    router.push(`/tiktok/${nextHandle}/live`);
+                  }}
+                  className="inline-flex items-center gap-1 text-sm font-medium text-primary underline-offset-4 hover:underline"
+                >
+                  @{nextHandle}
+                  <ChevronRight className="size-4" aria-hidden="true" />
+                </a>
+              </nav>
+            ) : null}
 
             {status.room?.coverUrl ? (
               <div className="mt-4 overflow-hidden rounded-lg border">

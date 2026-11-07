@@ -27,6 +27,7 @@ beforeEach(() => {
   deletedChats.length = 0;
   deleteAnswer = { status: 200, body: { deleted: true } };
   statusCalls.length = 0;
+  navigationPushes.length = 0;
   // the default session is a guest; the authed tests prepend their own route
   routes.push({
     match: (u) => u.includes("/api/auth/session"),
@@ -87,6 +88,26 @@ mock.module("hls.js", () => ({
     attachMedia() {}
     destroy() {}
   },
+}));
+
+// P102 — the room-to-room navigation law: the live view's keyboard arrows
+// push the next/prev live room through the router (the desktop adaptation of
+// tiktok.com's swipe). The router is mocked here so the pushes are
+// observable; nothing else in this file's tree consumes navigation hooks.
+const navigationPushes: string[] = [];
+mock.module("next/navigation", () => ({
+  useRouter: () => ({
+    push: (href: string) => {
+      navigationPushes.push(href);
+    },
+    replace: () => {},
+    back: () => {},
+    refresh: () => {},
+    prefetch: () => {},
+  }),
+  usePathname: () => "/tiktok/lofigirl/live",
+  useSearchParams: () => new URLSearchParams(),
+  redirect: () => {},
 }));
 
 const LIVE_STATUS = {
@@ -161,6 +182,47 @@ function routeChat(): void {
     respond: () => new Response(JSON.stringify(CHAT_PAGE), { status: 200 }),
   });
 }
+
+/** P102 — the board stub: the currently-live list the nav + hub consume. */
+function boardRoom(handle: string, viewers = 10): Record<string, unknown> {
+  return {
+    handle,
+    live: true,
+    probing: false,
+    room: {
+      title: `${handle} is live`,
+      viewers,
+      startedAt: "2026-11-07T00:12:00.000Z",
+      coverUrl: null,
+      liveUrl: `https://www.tiktok.com/@${handle}/live`,
+    },
+    stream: null,
+    source: "apify",
+    fetchedAt: "2026-11-07T07:45:00.000Z",
+  };
+}
+function routeBoard(sequences: Array<{ status: number; body: unknown }>): void {
+  let i = 0;
+  routes.push({
+    match: (u) => u.includes("/api/tiktok/live/board"),
+    respond: () => {
+      const s = sequences[Math.min(i, sequences.length - 1)];
+      i += 1;
+      return new Response(JSON.stringify(s.body), { status: s.status });
+    },
+  });
+}
+
+async function mountHub(boardPollMs = 5): Promise<HTMLElement> {
+  const { TikTokLivesBoardView } = await import("@/app/tiktok/lives/view");
+  host = document.createElement("div");
+  document.body.appendChild(host);
+  root = createRoot(host);
+  await act(async () => {
+    root!.render(createElement(TikTokLivesBoardView, { boardPollMs }));
+  });
+  return host!;
+}
 function routeSessionAuthed(): void {
   routes.unshift({
     match: (u) => u.includes("/api/auth/session"),
@@ -174,7 +236,6 @@ function routeSessionAuthed(): void {
 
 let root: Root | null = null;
 let host: HTMLElement | null = null;
-
 async function mountLive(rawHandle: string, extra: Record<string, unknown> = {}): Promise<HTMLElement> {
   const { TikTokLiveView } = await import("@/app/tiktok/[handle]/live/view");
   host = document.createElement("div");
@@ -446,5 +507,116 @@ describe("the channel view wires the badge (the source-scan law)", () => {
     const src = readFileSync("src/app/tiktok/[handle]/view.tsx", "utf8");
     expect(src).toContain("TikTokLiveBadge");
     expect(src).toContain("useTikTokLiveStatus");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P102 — the room-to-room navigation (the honest swipe adaptation)
+// ---------------------------------------------------------------------------
+
+describe("TikTokLiveView — the live-room navigation (P102)", () => {
+  test("with >= 2 live rooms the nav bar renders: position, prev, next — the deterministic handle-asc order, wrap-around", async () => {
+    routeStatusOnce([LIVE_STATUS]);
+    routeBoard([{ status: 200, body: { board: { rooms: [boardRoom("lofigirl"), boardRoom("aaa"), boardRoom("zzz")], missing: [], fetchedAt: "2026-11-07T07:45:00.000Z" } } }]);
+    routeChat();
+    const el = await mountLive("lofigirl");
+    await flushLive();
+    const nav = q(el, '[data-testid="tiktok-live-nav"]');
+    expect(nav).not.toBeNull();
+    // handle-asc: aaa < lofigirl < zzz — current is 2 of 3
+    expect(el.textContent).toContain("2 / 3");
+    const prev = el.querySelector<HTMLAnchorElement>('[data-testid="tiktok-live-nav-prev"]');
+    const next = el.querySelector<HTMLAnchorElement>('[data-testid="tiktok-live-nav-next"]');
+    expect(prev?.getAttribute("href")).toBe("/tiktok/aaa/live");
+    expect(next?.getAttribute("href")).toBe("/tiktok/zzz/live");
+  });
+
+  test("the wrap-around: the FIRST room's prev is the LAST room", async () => {
+    routeStatusOnce([{ ...LIVE_STATUS, handle: "aaa" }]);
+    routeBoard([{ status: 200, body: { board: { rooms: [boardRoom("aaa"), boardRoom("zzz")], missing: [], fetchedAt: "2026-11-07T07:45:00.000Z" } } }]);
+    routeChat();
+    const el = await mountLive("aaa");
+    await flushLive();
+    const prev = el.querySelector<HTMLAnchorElement>('[data-testid="tiktok-live-nav-prev"]');
+    const next = el.querySelector<HTMLAnchorElement>('[data-testid="tiktok-live-nav-next"]');
+    expect(prev?.getAttribute("href")).toBe("/tiktok/zzz/live");
+    expect(next?.getAttribute("href")).toBe("/tiktok/zzz/live");
+  });
+
+  test("a single live room renders NO nav bar (honest absence)", async () => {
+    routeStatusOnce([LIVE_STATUS]);
+    routeBoard([{ status: 200, body: { board: { rooms: [boardRoom("lofigirl")], missing: [], fetchedAt: "2026-11-07T07:45:00.000Z" } } }]);
+    routeChat();
+    const el = await mountLive("lofigirl");
+    await flushLive();
+    expect(q(el, '[data-testid="tiktok-live-nav"]')).toBeNull();
+  });
+
+  test("the keyboard arrows ride the router: ArrowRight → next, ArrowLeft → prev", async () => {
+    routeStatusOnce([LIVE_STATUS]);
+    routeBoard([{ status: 200, body: { board: { rooms: [boardRoom("lofigirl"), boardRoom("aaa"), boardRoom("zzz")], missing: [], fetchedAt: "2026-11-07T07:45:00.000Z" } } }]);
+    routeChat();
+    await mountLive("lofigirl");
+    await flushLive();
+    await act(async () => {
+      window.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+      window.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+    });
+    expect(navigationPushes).toEqual(["/tiktok/zzz/live", "/tiktok/aaa/live"]);
+  });
+
+  test("streamProbing renders the resolving note, never the fallback rung", async () => {
+    routeStatusOnce([{ ...LIVE_STATUS, stream: null, streamProbing: true }]);
+    routeChat();
+    const el = await mountLive("lofigirl");
+    await flushLive();
+    expect(q(el, '[data-testid="tiktok-live-stream-probing"]')).not.toBeNull();
+    expect(q(el, '[data-testid="tiktok-live-fallback"]')).toBeNull();
+    expect(el.textContent).toMatch(/resolving the stream/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P102 — the /tiktok/lives board (the honest navigation hub)
+// ---------------------------------------------------------------------------
+
+describe("TikTokLivesBoardView — the honest live board (P102)", () => {
+  test("live rooms render as cards linking the room pages; the scope statement is visible", async () => {
+    routeBoard([{ status: 200, body: { board: { rooms: [boardRoom("lofigirl", 193), boardRoom("scout2015", 12)], missing: [], fetchedAt: "2026-11-07T07:45:00.000Z" } } }]);
+    const el = await mountHub();
+    await flushLive();
+    expect(q(el, '[data-testid="tiktok-lives-board"]')).not.toBeNull();
+    const links = Array.from(el.querySelectorAll<HTMLAnchorElement>('[data-testid="tiktok-lives-room"]'));
+    expect(links.length).toBe(2);
+    expect(links[0].getAttribute("href")).toBe("/tiktok/lofigirl/live");
+    expect(el.textContent).toContain("193");
+    expect(el.textContent).toMatch(/creators in the WebFlix universe/i);
+  });
+
+  test("an all-offline universe answers the honest empty, never a fake room", async () => {
+    routeBoard([{ status: 200, body: { board: { rooms: [], missing: [], fetchedAt: "2026-11-07T07:45:00.000Z" } } }]);
+    const el = await mountHub();
+    await flushLive();
+    expect(q(el, '[data-testid="tiktok-lives-empty"]')).not.toBeNull();
+    expect(q(el, '[data-testid="tiktok-lives-room"]')).toBeNull();
+  });
+
+  test("the probing board renders the checking state, then the rooms", async () => {
+    routeBoard([
+      { status: 200, body: { board: { rooms: [], missing: [], probing: true, fetchedAt: "2026-11-07T07:45:00.000Z" } } },
+      { status: 200, body: { board: { rooms: [boardRoom("lofigirl")], missing: [], fetchedAt: "2026-11-07T07:45:00.000Z" } } },
+    ]);
+    const el = await mountHub();
+    expect(q(el, '[data-testid="tiktok-lives-probing"]')).not.toBeNull();
+    await flushLive(30);
+    expect(q(el, '[data-testid="tiktok-lives-room"]')).not.toBeNull();
+  });
+
+  test("a 503 renders the real enable-path copy, never a fake empty", async () => {
+    routeBoard([{ status: 503, body: { error: "The TikTok live probe lane is not configured — set APIFY_API_KEY (see .env.example)." } }]);
+    const el = await mountHub();
+    await flushLive();
+    expect(q(el, '[data-testid="tiktok-lives-degraded"]')).not.toBeNull();
+    expect(el.textContent).toContain("APIFY_API_KEY");
   });
 });

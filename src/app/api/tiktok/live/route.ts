@@ -18,12 +18,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { after } from "next/server";
 
 import {
+  isTikTokLivePlaybackInFlight,
   isTikTokLiveProbeInFlight,
   isTikTokLiveProbeLaneConfigured,
+  peekTikTokLivePlayback,
   peekTikTokLiveStatus,
   probingTikTokLiveStatus,
+  probeTikTokLivePlayback,
   probeTikTokLiveStatus,
   TikTokLiveUnavailableError,
+  type TikTokLiveStatusDTO,
 } from "@/lib/tiktok/live";
 import { isTikTokHandle, normalizeTikTokHandle } from "@/lib/tiktok/urls";
 
@@ -43,6 +47,42 @@ function scheduleProbe(handle: string): void {
   }
 }
 
+/** P102 — the playback resolution rides after() exactly like the status probe. */
+function schedulePlaybackProbe(handle: string): void {
+  const run = () =>
+    probeTikTokLivePlayback(handle).catch((err) => {
+      console.error(`tiktok live playback probe failed for @${handle}`, err);
+    });
+  try {
+    after(run);
+  } catch {
+    void run();
+  }
+}
+
+/**
+ * P102 — the playback composition (the cost law): ONLY a live room spends a
+ * playback probe. A cached stream rides; an in-flight resolution answers
+ * `streamProbing: true` (the view shows "resolving the stream…", never the
+ * fallback rung); a backoff/compose failure answers the status as-is and the
+ * ladder drops to the honest fallback rung. Never blocks the response on the
+ * 20–35s actor run.
+ */
+async function composePlayback(handle: string, status: TikTokLiveStatusDTO): Promise<TikTokLiveStatusDTO> {
+  if (status.live !== true || status.stream) return status;
+  try {
+    const stream = await peekTikTokLivePlayback(handle);
+    if (stream) return { ...status, stream, streamProbing: false };
+  } catch {
+    // the playback lane is in backoff — the fallback rung answers honestly
+    return status;
+  }
+  if (!isTikTokLivePlaybackInFlight(handle)) {
+    schedulePlaybackProbe(handle);
+  }
+  return { ...status, streamProbing: true };
+}
+
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const raw = req.nextUrl.searchParams.get("handle") ?? "";
   const handle = normalizeTikTokHandle(raw);
@@ -52,7 +92,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
     const cached = await peekTikTokLiveStatus(handle);
     if (cached) {
-      return NextResponse.json({ status: cached }, { headers: { "Cache-Control": "no-store" } });
+      const composed = await composePlayback(handle, cached);
+      return NextResponse.json({ status: composed }, { headers: { "Cache-Control": "no-store" } });
     }
   } catch (err) {
     const status = err instanceof TikTokLiveUnavailableError ? err.status : 502;

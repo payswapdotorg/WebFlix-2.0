@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useApi } from "@/hooks/use-api";
 import { TikTokCard } from "@/components/tiktok/tiktok-card";
-import { Clapperboard, ExternalLink, Info, SquarePlay } from "lucide-react";
+import { Clapperboard, ExternalLink, Info, SquarePlay , Radio } from "lucide-react";
 import type { TikTokRailDTO } from "@/lib/tiktok/types";
 
 /**
@@ -53,6 +53,14 @@ export function TikTokHubView() {
           </span>
           <div>
             <h1 className="text-xl font-semibold text-foreground">TikTok</h1>
+            <Link
+              href="/tiktok/lives"
+              data-testid="tiktok-hub-lives-link"
+              className="ml-auto inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium text-primary underline-offset-4 hover:bg-secondary"
+            >
+              <Radio className="size-3.5" aria-hidden="true" />
+              Lives
+            </Link>
             <p className="text-xs text-muted-foreground">
               Curated shelf · played through TikTok&apos;s official embed player
             </p>
