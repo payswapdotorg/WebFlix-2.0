@@ -17,6 +17,7 @@ import {
   peekTikTokLiveBoard,
   peekTikTokLiveStatus,
   probeTikTokLiveBoard,
+  probeTikTokLiveStatus,
   readTikTokLiveBoardEntry,
   setTikTokLiveClock,
   setTikTokLiveProbePolling,
@@ -295,5 +296,92 @@ describe("the SWR law: a warm board never goes dark", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.board.probing).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P102-R3 — the merge law: the batch actor EMPIRICALLY DROPS rows (measured
+// on prod this window: 5 of 16 handles answered in one run — lofigirl, live
+// at 193 viewers, landed in `missing` while the single-handle lane proved
+// her live). The SERVED board therefore folds in FRESH live answers the
+// per-handle status cache already holds — every merged row is a real probe's
+// answer, the cost law adds zero spend. A stale or offline cache answer
+// never claims liveness on the hub.
+// ---------------------------------------------------------------------------
+describe("the merge law: the board never under-reports a checked creator", () => {
+  test("mergeTikTokLiveBoard folds a fresh live cache answer over a batch miss", async () => {
+    const { mergeTikTokLiveBoard } = await import("@/lib/tiktok/live");
+    setTikTokLiveProbeUpstream(boardTransport([LOFI_LIVE_ROW]));
+    await probeTikTokLiveStatus("lofigirl"); // the single lane proved her live
+    const board: import("@/lib/tiktok/live").TikTokLiveBoardDTO = {
+      rooms: [{ handle: "scout2015", live: false, room: null, stream: null, source: "apify", fetchedAt: new Date().toISOString() }],
+      missing: ["lofigirl"],
+      fetchedAt: new Date().toISOString(),
+    };
+    const merged = mergeTikTokLiveBoard(board);
+    expect(merged.rooms.find((r) => r.handle === "lofigirl")?.live).toBe(true);
+    expect(merged.missing).toEqual([]); // she was answered — by a real probe
+    expect(merged.rooms.find((r) => r.handle === "scout2015")?.live).toBe(false);
+  });
+
+  test("a stale cache answer never claims liveness on the board", async () => {
+    const { mergeTikTokLiveBoard, setTikTokLiveClock } = await import("@/lib/tiktok/live");
+    setTikTokLiveProbeUpstream(boardTransport([LOFI_LIVE_ROW]));
+    await probeTikTokLiveStatus("lofigirl");
+    setTikTokLiveClock(() => Date.now() + 40_000); // past the 30s LIVE TTL
+    const board: import("@/lib/tiktok/live").TikTokLiveBoardDTO = {
+      rooms: [],
+      missing: ["lofigirl"],
+      fetchedAt: new Date().toISOString(),
+    };
+    const merged = mergeTikTokLiveBoard(board);
+    expect(merged.rooms).toEqual([]);
+    expect(merged.missing).toEqual(["lofigirl"]); // honest: this sweep didn't check her
+  });
+
+  test("an OFFLINE cache answer never claims the hub (and stays missing)", async () => {
+    const { mergeTikTokLiveBoard } = await import("@/lib/tiktok/live");
+    setTikTokLiveProbeUpstream(boardTransport([SCOUT_OFFLINE_ROW]));
+    await probeTikTokLiveStatus("scout2015");
+    const board: import("@/lib/tiktok/live").TikTokLiveBoardDTO = {
+      rooms: [],
+      missing: ["scout2015"],
+      fetchedAt: new Date().toISOString(),
+    };
+    const merged = mergeTikTokLiveBoard(board);
+    expect(merged.rooms).toEqual([]); // offline rows never render as rooms
+    expect(merged.missing).toEqual(["scout2015"]);
+  });
+
+  test("the board route serves the merged board (the hub sees a room-visited creator)", async () => {
+    // the batch ran and dropped lofigirl's row; her cache is cold
+    setTikTokLiveProbeUpstream(boardTransport([SCOUT_OFFLINE_ROW]));
+    const seeded = await probeTikTokLiveBoard(["lofigirl", "scout2015"]);
+    expect(seeded.missing).toEqual(["lofigirl"]);
+    const realLibrary = await import("@/lib/tiktok/library");
+    mock.module("@/lib/tiktok/library", () => ({
+      ...realLibrary,
+      getTikTokRail: async () => ({
+        videos: [
+          { id: "v1", author: "lofigirl" },
+          { id: "v2", author: "scout2015" },
+        ],
+        universeSize: 2,
+        source: "curated",
+        unavailable: false,
+        unavailableReason: null,
+        fetchedAt: new Date().toISOString(),
+      }),
+    }));
+    const { GET } = await import("@/app/api/tiktok/live/board/route");
+    // a visitor opens lofigirl's room — the single lane proves her live
+    setTikTokLiveProbeUpstream(boardTransport([LOFI_LIVE_ROW]));
+    await probeTikTokLiveStatus("lofigirl");
+    // the hub reads the board: the merge law folds her in (no new spend)
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { board: import("@/lib/tiktok/live").TikTokLiveBoardDTO };
+    expect(body.board.rooms.find((r) => r.handle === "lofigirl")?.live).toBe(true);
+    expect(body.board.missing).toEqual([]);
   });
 });

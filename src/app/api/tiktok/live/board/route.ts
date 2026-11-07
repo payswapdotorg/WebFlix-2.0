@@ -20,6 +20,7 @@ import { after } from "next/server";
 import {
   isTikTokLiveBoardInFlight,
   isTikTokLiveProbeLaneConfigured,
+  mergeTikTokLiveBoard,
   probeTikTokLiveBoard,
   readTikTokLiveBoardEntry,
   type TikTokLiveBoardDTO,
@@ -73,8 +74,12 @@ export async function GET(): Promise<NextResponse> {
     if (!entry.fresh && !isTikTokLiveBoardInFlight(handles)) {
       scheduleBoardProbe(handles);
     }
+    // P102-R3 — the merge law: fresh live answers the per-handle cache holds
+    // fold into the served board (the batch actor empirically drops rows;
+    // zero extra spend — every merged row is a real probe's answer).
+    const served = mergeTikTokLiveBoard(entry.board);
     return NextResponse.json(
-      { board: entry.fresh ? entry.board : { ...entry.board, stale: true } },
+      { board: entry.fresh ? served : { ...served, stale: true } },
       { headers: { "Cache-Control": "no-store" } }
     );
   }

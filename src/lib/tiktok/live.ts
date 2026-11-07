@@ -687,6 +687,36 @@ export function readTikTokLiveBoardEntry(handles: string[]): { board: TikTokLive
 }
 
 /**
+ * P102-R3 — the merge law: the batch actor EMPIRICALLY DROPS rows (measured
+ * on prod this window: one batched run answered 5 of 16 handles — a creator
+ * live at 193 viewers landed in `missing` while the single-handle lane
+ * proved her live). The SERVED board folds in FRESH live answers the
+ * per-handle status cache already holds: every merged row is a real probe's
+ * answer and the cost law adds zero spend. A STALE answer never claims
+ * liveness on the hub (fresh-only); an OFFLINE answer never renders as a
+ * room; handles with nothing to fold stay honestly in `missing`.
+ */
+export function mergeTikTokLiveBoard(board: TikTokLiveBoardDTO): TikTokLiveBoardDTO {
+  const present = new Set(board.rooms.map((r) => r.handle));
+  const merged: TikTokLiveStatusDTO[] = [...board.rooms];
+  const missing: string[] = [];
+  for (const handle of board.missing) {
+    let folded = false;
+    try {
+      const entry = readTikTokLiveStatusEntry(handle);
+      if (entry?.fresh && entry.dto.live === true && !present.has(handle)) {
+        merged.push(entry.dto);
+        folded = true;
+      }
+    } catch {
+      // the lane rests in backoff for this handle — it stays missing
+    }
+    if (!folded) missing.push(handle);
+  }
+  return { ...board, rooms: merged, missing };
+}
+
+/**
  * Probe the whole handle set with ONE actor run. Invalid handles are
  * dropped before the run (no cents spent on garbage); rows are matched by
  * identity (the mapper's guard); requested handles with no row land in
