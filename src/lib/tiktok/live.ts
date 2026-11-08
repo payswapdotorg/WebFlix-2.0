@@ -109,9 +109,30 @@ export function probingTikTokLiveStatus(handle: string): TikTokLiveStatusDTO {
   };
 }
 
-/** The cache TTL law: LIVE 30s, OFFLINE 300s (cost law), probing 60s. */
+/**
+ * P103-mini — the quota-survival knob: TIKTOK_LIVE_STATUS_TTL_MS stretches
+ * how long a LIVE answer is served fresh. The measured economics (2026-11-08,
+ * the operator's credit died mid-cycle): the status actor is a MONETIZED
+ * actor charging per answered handle (~$0.0042/handle, ~$0.021 per 5-item
+ * run) — on the FREE plan's $5 credit a 30s TTL buys ~10 viewing-hours a
+ * month, a 300s TTL buys ~100. Absent/garbage → null (the 30s law stands).
+ * The clamp is [30s, 1h]: never costlier than the law, never staler than an
+ * hour. The OFFLINE (300s) and probing (60s) windows never move.
+ */
+export function tiktokLiveStatusTtlOverrideMs(
+  env: Record<string, string | undefined> = process.env
+): number | null {
+  const raw = (env.TIKTOK_LIVE_STATUS_TTL_MS ?? "").trim();
+  if (!raw) return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.min(3_600_000, Math.max(30_000, Math.round(n)));
+}
+
+/** The cache TTL law: LIVE 30s (or the P103-mini quota-survival knob),
+ * OFFLINE 300s (cost law), probing 60s. */
 export function liveStatusTtlMs(status: Pick<TikTokLiveStatusDTO, "live">): number {
-  if (status.live === true) return 30_000;
+  if (status.live === true) return tiktokLiveStatusTtlOverrideMs() ?? 30_000;
   if (status.live === false) return 300_000;
   return 60_000;
 }
@@ -678,10 +699,11 @@ function boardKey(handles: string[]): string {
   return [...handles].sort().join(",");
 }
 
-/** The board TTL rides the liveness law: any live room → 30s, else 300s. */
+/** The board TTL rides the liveness law: any live room → 30s (or the
+ * P103-mini quota-survival knob), else 300s. */
 function boardTtlMs(board: TikTokLiveBoardDTO): number {
   const anyLive = board.rooms.some((r) => r.live === true);
-  return anyLive ? 30_000 : 300_000;
+  return anyLive ? (tiktokLiveStatusTtlOverrideMs() ?? 30_000) : 300_000;
 }
 
 /** True while a board probe for this exact handle set is in flight. */

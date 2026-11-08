@@ -16,6 +16,7 @@ import {
   probeTikTokLiveStatus,
   setTikTokLiveProbePolling,
   TikTokLiveUnavailableError,
+  tiktokLiveStatusTtlOverrideMs,
 } from "@/lib/tiktok/live";
 import { setTikTokLiveProbeUpstream, type TikTokProbeFetch } from "@/lib/tiktok/live-upstream";
 
@@ -218,6 +219,38 @@ describe("the disabled lane and the cache laws", () => {
     expect(liveStatusTtlMs({ live: true } as never)).toBe(30_000);
     expect(liveStatusTtlMs({ live: false } as never)).toBe(300_000);
     expect(liveStatusTtlMs({ live: null } as never)).toBe(60_000);
+  });
+
+  test("P103-mini the quota-survival knob: TIKTOK_LIVE_STATUS_TTL_MS stretches the LIVE freshness (clamped, garbage → the 30s law)", () => {
+    const prev = process.env.TIKTOK_LIVE_STATUS_TTL_MS;
+    try {
+      // absent → the 30s law (the P102 freshness default, unchanged)
+      delete process.env.TIKTOK_LIVE_STATUS_TTL_MS;
+      expect(tiktokLiveStatusTtlOverrideMs()).toBeNull();
+      expect(liveStatusTtlMs({ live: true } as never)).toBe(30_000);
+      // 300s → the FREE-plan survival cadence (the measured economics:
+      // the status actor charges per answered handle; 30s buys ~10
+      // viewing-hours a month on the $5 credit, 300s buys ~100)
+      process.env.TIKTOK_LIVE_STATUS_TTL_MS = "300000";
+      expect(tiktokLiveStatusTtlOverrideMs()).toBe(300_000);
+      expect(liveStatusTtlMs({ live: true } as never)).toBe(300_000);
+      // the OFFLINE cost law and the probing window never move
+      expect(liveStatusTtlMs({ live: false } as never)).toBe(300_000);
+      expect(liveStatusTtlMs({ live: null } as never)).toBe(60_000);
+      // floor: the 30s law is the cheapest a LIVE answer may be served
+      process.env.TIKTOK_LIVE_STATUS_TTL_MS = "1000";
+      expect(tiktokLiveStatusTtlOverrideMs()).toBe(30_000);
+      // cap: nonsense stretches clamp to one hour
+      process.env.TIKTOK_LIVE_STATUS_TTL_MS = "999999999";
+      expect(tiktokLiveStatusTtlOverrideMs()).toBe(3_600_000);
+      // garbage → the 30s law
+      process.env.TIKTOK_LIVE_STATUS_TTL_MS = "thirty seconds";
+      expect(tiktokLiveStatusTtlOverrideMs()).toBeNull();
+      expect(liveStatusTtlMs({ live: true } as never)).toBe(30_000);
+    } finally {
+      if (prev === undefined) delete process.env.TIKTOK_LIVE_STATUS_TTL_MS;
+      else process.env.TIKTOK_LIVE_STATUS_TTL_MS = prev;
+    }
   });
 
   test("in-flight is observable and clears when the probe settles", async () => {

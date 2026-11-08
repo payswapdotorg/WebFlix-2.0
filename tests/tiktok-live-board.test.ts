@@ -146,6 +146,31 @@ describe("the board probe", () => {
     expect(offlineBoard?.rooms[0]?.live).toBe(false);
   });
 
+  test("P103-mini the quota-survival knob stretches the board's LIVE TTL too (300s stays fresh at +40s where the 30s law expires)", async () => {
+    const prev = process.env.TIKTOK_LIVE_STATUS_TTL_MS;
+    try {
+      // the baseline law first: a LIVE board at +40s is EXPIRED (peek null)
+      delete process.env.TIKTOK_LIVE_STATUS_TTL_MS;
+      setTikTokLiveProbeUpstream(boardTransport([LOFI_LIVE_ROW, SCOUT_OFFLINE_ROW]));
+      await probeTikTokLiveBoard(["lofigirl", "scout2015"]);
+      setTikTokLiveClock(() => Date.now() + 40_000); // past the 30s liveness TTL
+      expect(await peekTikTokLiveBoard(["lofigirl", "scout2015"])).toBeNull();
+      clearTikTokLiveCache();
+      setTikTokLiveClock(() => Date.now());
+      // now the knob: the same +40s peek HOLDS inside the stretched TTL
+      process.env.TIKTOK_LIVE_STATUS_TTL_MS = "300000";
+      setTikTokLiveProbeUpstream(boardTransport([LOFI_LIVE_ROW, SCOUT_OFFLINE_ROW]));
+      await probeTikTokLiveBoard(["lofigirl", "scout2015"]);
+      setTikTokLiveClock(() => Date.now() + 40_000);
+      const stretched = await peekTikTokLiveBoard(["lofigirl", "scout2015"]);
+      expect(stretched?.rooms.length).toBe(2); // NOT expired — the knob holds
+    } finally {
+      setTikTokLiveClock(() => Date.now());
+      if (prev === undefined) delete process.env.TIKTOK_LIVE_STATUS_TTL_MS;
+      else process.env.TIKTOK_LIVE_STATUS_TTL_MS = prev;
+    }
+  });
+
   test("concurrent boards for the same universe coalesce onto one run", async () => {
     const calls: string[] = [];
     setTikTokLiveProbeUpstream(boardTransport([LOFI_LIVE_ROW], calls));
