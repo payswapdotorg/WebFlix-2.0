@@ -347,6 +347,23 @@ describe("TikTokLiveView — the honest states", () => {
     expect(q(el, '[data-testid="tiktok-live-video"]')).not.toBeNull();
     expect(q(el, '[data-testid="tiktok-live-badge"]')).not.toBeNull();
   });
+
+  test("the stale-stamp law: a stale answer labels its age, never reads as current", async () => {
+    // WFX2-M2 (f) — the data layer serves stale:true + fetchedAt (P102-R2);
+    // the VIEW must carry the stamp: a LIVE badge that reads as current
+    // without the stale label is the lie the work order forbids.
+    routeStatusOnce([LIVE_WITH_HLS, { ...LIVE_WITH_HLS, stale: true, fetchedAt: "2026-11-07T07:45:30.000Z" }]);
+    routeChat();
+    const el = await mountLive("lofigirl");
+    await flushLive();
+    await flushLive(30); // the stale answer arrives (the fresh answer carries no stamp — pinned at the badge level)
+    const note = q(el, '[data-testid="tiktok-live-stale-note"]');
+    expect(note).not.toBeNull();
+    expect(note!.textContent).toMatch(/stale/i);
+    expect(q(el, '[data-testid="tiktok-live-badge"]')!.getAttribute("data-stale")).toBe("true");
+    // the room stays mounted (the SWR law above) — the stamp rides along
+    expect(q(el, '[data-testid="tiktok-live-video"]')).not.toBeNull();
+  });
 });
 
 describe("TikTokLiveView — the watch-party chat", () => {
@@ -517,6 +534,44 @@ describe("TikTokLiveBadge — the channel-page badge", () => {
     });
     expect(q(off, '[data-testid="tiktok-live-badge"]')).toBeNull();
     host = off;
+  });
+
+  test("the stale-stamp law: stale:true stamps the pill and labels the age", async () => {
+    const { TikTokLiveBadge } = await import("@/components/tiktok/tiktok-live-badge");
+    const el = document.createElement("div");
+    document.body.appendChild(el);
+    root = createRoot(el);
+    await act(async () => {
+      root!.render(
+        createElement(TikTokLiveBadge, {
+          status: { ...LIVE_STATUS, stale: true, fetchedAt: "2026-11-07T07:45:30.000Z" } as never,
+        }),
+      );
+    });
+    const badge = q(el, '[data-testid="tiktok-live-badge"]');
+    expect(badge).not.toBeNull();
+    expect(badge!.getAttribute("data-stale")).toBe("true");
+    const note = q(el, '[data-testid="tiktok-live-badge-stale"]');
+    expect(note).not.toBeNull();
+    expect(note!.textContent).toMatch(/stale/i);
+    act(() => root!.unmount());
+    host = el;
+  });
+
+  test("a fresh answer carries no stale stamp (the current law stands)", async () => {
+    const { TikTokLiveBadge } = await import("@/components/tiktok/tiktok-live-badge");
+    const el = document.createElement("div");
+    document.body.appendChild(el);
+    root = createRoot(el);
+    await act(async () => {
+      root!.render(createElement(TikTokLiveBadge, { status: LIVE_STATUS as never }));
+    });
+    const badge = q(el, '[data-testid="tiktok-live-badge"]');
+    expect(badge).not.toBeNull();
+    expect(badge!.getAttribute("data-stale")).toBe("false");
+    expect(q(el, '[data-testid="tiktok-live-badge-stale"]')).toBeNull();
+    act(() => root!.unmount());
+    host = el;
   });
 });
 

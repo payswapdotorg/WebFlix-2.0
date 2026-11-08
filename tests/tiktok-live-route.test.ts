@@ -281,4 +281,87 @@ describe("GET /api/tiktok/live — the SWR law (a warm room never goes dark)", (
     expect(body.status.probing).toBe(true);
     expect(body.status.live).toBeNull();
   });
+
+  // ---------------------------------------------------------------------------
+  // M2 (work order §4 item 4b/4d, ADR 0014 D2) — the quota-death class at the
+  // HTTP surface: the measured outage (403 platform-feature-disabled) must
+  // reach the client as the honest 503 + HUMAN sentence through the ROUTE —
+  // the probing DTO is the first hit's answer (the probe lands in after();
+  // the measured prod rhythm), the second hit inside the 60s backoff window
+  // serves the real reason, and it is NEVER an offline result.
+  // ---------------------------------------------------------------------------
+  test("M2 — the quota-death 503 + human sentence surfaces through the route (probe → backoff → honest error)", async () => {
+    setTikTokLiveProbeUpstream(
+      ((url: string) => {
+        if (url.includes("/acts/") && url.includes("/runs")) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                error: {
+                  type: "platform-feature-disabled",
+                  message:
+                    "You've used the $5.00 of monthly usage included in the Free plan, so Actor runs and other Apify services are blocked until your monthly usage cycle resets.",
+                },
+              }),
+              { status: 403 }
+            )
+          );
+        }
+        return Promise.resolve(new Response("{}", { status: 200 }));
+      }) as Parameters<typeof setTikTokLiveProbeUpstream>[0]
+    );
+    const { GET } = await importRoute();
+    // hit 1 — starts the probe (after() / inline), answers the probing DTO
+    const first = await GET(liveReq("?handle=lofigirl"));
+    expect(first.status).toBe(200);
+    expect((await first.json()).status.probing).toBe(true);
+    // the failure lands moments later (the measured ~T+seconds cadence)
+    for (let waited = 0; isTikTokLiveProbeInFlight("lofigirl") && waited < 500; waited += 5) {
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    // hit 2 — the cold handle is now in failure backoff: the REAL quota
+    // sentence with its 503, never `live:false`, never a probing loop
+    const second = await GET(liveReq("?handle=lofigirl"));
+    expect(second.status).toBe(503);
+    const body = await second.json();
+    expect(body.error).toContain("monthly free quota");
+    expect(isTikTokLiveProbeBackedOff("lofigirl")).toBe(true);
+  });
+
+  // ---------------------------------------------------------------------------
+  // M2.6 (work order §4 item 6, fixture class "provider recovery" +
+  // "circuit break/re-open", single-handle lane) — the board lane pins this
+  // law (P103-mini-3); this pin closes the single lane's window-expiry
+  // re-open: after the 60s backoff the marker is CONSUMED on read (no
+  // throw), the retry law probes again, and a recovered run answers fresh.
+  // ---------------------------------------------------------------------------
+  test("M2.6 — provider recovery: the expired backoff re-opens the lane and a recovered run answers fresh", async () => {
+    // the circuit breaks
+    setTikTokLiveProbeUpstream(() => Promise.resolve(new Response("down", { status: 500 })));
+    await expect(probeTikTokLiveStatus("lofigirl")).rejects.toBeInstanceOf(
+      TikTokLiveUnavailableError
+    );
+    expect(isTikTokLiveProbeBackedOff("lofigirl")).toBe(true);
+    // inside the window: the cold route serves the real error, no re-probe
+    setTikTokLiveClock(() => Date.now() + 30_000);
+    const { GET } = await importRoute();
+    const during = await GET(liveReq("?handle=lofigirl"));
+    expect(during.status).toBe(502);
+    expect(isTikTokLiveProbeBackedOff("lofigirl")).toBe(true);
+    // the window expires: the marker is consumed on read (the retry law)
+    setTikTokLiveClock(() => Date.now() + 61_000);
+    const { readTikTokLiveStatusEntry } = await import("@/lib/tiktok/live");
+    expect(readTikTokLiveStatusEntry("lofigirl")).toBeNull(); // no throw
+    expect(isTikTokLiveProbeBackedOff("lofigirl")).toBe(false);
+    // the lane returns: the next run succeeds and the route serves it fresh
+    setTikTokLiveProbeUpstream(happyTransport());
+    const recovered = (await probeTikTokLiveStatus("lofigirl"))!;
+    expect(recovered.live).toBe(true);
+    const res = await GET(liveReq("?handle=lofigirl"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status.live).toBe(true);
+    expect(body.status.stale).toBeUndefined();
+    expect(body.status.probing).toBeUndefined();
+  });
 });

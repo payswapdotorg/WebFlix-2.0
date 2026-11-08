@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import {
   clearTikTokLiveCache,
+  isTikTokLiveProbeBackedOff,
   isTikTokLiveProbeInFlight,
   isTikTokLiveProbeLaneConfigured,
   liveStatusTtlMs,
@@ -342,5 +343,45 @@ describe("P103-mini-4 — the quota-death mapping", () => {
     }
     expect(thrown?.status).toBe(502);
     expect(thrown?.message).toContain("could not start");
+  });
+
+  // -------------------------------------------------------------------------
+  // M2.6 (work order fixture class "401/403/quota-exhausted mapping") — the
+  // 401 auth-failure class: the operator key is invalid/revoked. The law: a
+  // TYPED unavailable error (never a fake offline row), the generic
+  // could-not-start sentence (the human quota sentence is for the MEASURED
+  // 403 platform-feature-disabled class ONLY — no fabrication for 401), and
+  // the failure-backoff marker so the route's circuit stays open (no actor
+  // launches during the window).
+  // -------------------------------------------------------------------------
+  test("a 401 run start maps to the typed 502 could-not-start law and earns the backoff (no quota-sentence fabrication)", async () => {
+    const calls: string[] = [];
+    setTikTokLiveProbeUpstream(
+      ((url: string) => {
+        calls.push(String(url));
+        if (url.includes("/acts/") && url.includes("/runs")) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ error: { type: "invalid-token" } }), { status: 401 })
+          );
+        }
+        return Promise.resolve(new Response("{}", { status: 200 }));
+      }) as TikTokProbeFetch
+    );
+    let thrown: TikTokLiveUnavailableError | null = null;
+    try {
+      await probeTikTokLiveStatus("lofigirl");
+    } catch (err) {
+      thrown = err as TikTokLiveUnavailableError;
+    }
+    expect(thrown).toBeInstanceOf(TikTokLiveUnavailableError);
+    expect(thrown?.status).toBe(502);
+    expect(thrown?.message).toContain("could not start");
+    // the human quota sentence stays exclusive to the measured 403 class
+    expect(thrown?.message).not.toContain("monthly free quota");
+    // the circuit marker: the route gates re-probes on this (zero launches)
+    expect(isTikTokLiveProbeBackedOff("lofigirl")).toBe(true);
+    await expect(peekTikTokLiveStatus("lofigirl")).rejects.toMatchObject({ status: 502 });
+    // exactly ONE actor attempt was made — no internal retry, no second run
+    expect(calls.filter((u) => u.includes("/runs"))).toHaveLength(1);
   });
 });

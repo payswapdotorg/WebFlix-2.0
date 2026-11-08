@@ -20,6 +20,7 @@ import { useTikTokLiveStatus } from "@/hooks/use-tiktok-live-status";
 import { useTikTokLiveBoard } from "@/hooks/use-tiktok-live-board";
 import { TikTokLivePlayer } from "@/components/tiktok/tiktok-live-player";
 import { TikTokLiveChatPanel } from "@/components/tiktok/tiktok-live-chat";
+import { TikTokLiveStaleNote } from "@/components/tiktok/tiktok-live-badge";
 import { TikTokThumbnailImage } from "@/components/tiktok/tiktok-thumbnail-image";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -170,13 +171,24 @@ export function TikTokLiveView({
           {/* the stage: room identity + the playback ladder */}
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-3">
+              {/* WFX2-M2 (f): a stale answer (P102-R2 SWR) never reads as
+                  current — amber pill, no pulse, and the age rides beside it. */}
               <span
-                className="inline-flex items-center gap-1.5 rounded-full bg-red-600 px-2.5 py-0.5 text-xs font-semibold text-white"
+                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold text-white ${
+                  status.stale === true ? "bg-amber-600" : "bg-red-600"
+                }`}
                 data-testid="tiktok-live-badge"
+                data-stale={status.stale === true ? "true" : "false"}
               >
-                <Radio className="size-3 animate-pulse" aria-hidden="true" />
+                <Radio
+                  className={`size-3 ${status.stale === true ? "" : "animate-pulse"}`}
+                  aria-hidden="true"
+                />
                 LIVE
               </span>
+              {status.stale === true ? (
+                <TikTokLiveStaleNote fetchedAt={status.fetchedAt} testid="tiktok-live-stale-note" />
+              ) : null}
               <h1 className="min-w-0 flex-1 truncate text-lg font-bold sm:text-xl">
                 {status.room?.title ?? `@${handle} is live`}
               </h1>
