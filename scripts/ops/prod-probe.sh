@@ -36,6 +36,27 @@ echo "$STATUS" | grep -q '"status"\|"error"' || FAILED=1
 # ── the deployed sha marker (provenance) ─────────────────────────────────
 log "deployment check: the html must carry a build id and the page must 200 (sha lives in the Vercel API, not the DOM)"
 
+# ── the optional browser lane (P103-mini-6): --browser runs the walk ─────
+# Best-effort by design: the venv Playwright is station tooling — when it
+# is absent the probe records SKIP, not FAIL. WALK_VIEWPORT passes through
+# (e.g. WALK_VIEWPORT=1440x900 for the desktop lane).
+if [ "${1:-}" = "--browser" ]; then
+  PY=/home/z/.venv/bin/python
+  WALK="$(dirname "$0")/mobile-375-walk.py"
+  if [ -x "$PY" ] && [ -f "$WALK" ]; then
+    log "browser lane: the walk against $BASE (WALK_VIEWPORT=${WALK_VIEWPORT:-375x812 default})"
+    if WEBFLIX_BASE_URL="$BASE" WALK_HONEST_TIMEOUT_S="${WALK_HONEST_TIMEOUT_S:-90}" \
+       "$PY" "$WALK"; then
+      log "browser lane: PASS"
+    else
+      log "browser lane: FAILED (the walk's own output above names the law broken)"
+      FAILED=1
+    fi
+  else
+    log "browser lane: SKIP (venv python or the walk script absent — station tooling, not prod truth)"
+  fi
+fi
+
 if [ "$FAILED" = "0" ]; then
   log "ALL PROBES GREEN"
 else

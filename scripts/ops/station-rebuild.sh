@@ -78,10 +78,14 @@ else
   cd "$DIR" || fail "cannot cd $DIR"
   log "bun install"
   bun install 2>&1 | tail -1
-  # local .env: the dev/tests sqlite (the prod Neon url NEVER lives here)
-  if ! grep -q "^DATABASE_URL=" .env 2>/dev/null; then
+  # local .env: the dev/tests sqlite (the prod Neon url NEVER lives here).
+  # P103-mini-6 seam law: rewrite when the KEY is missing OR the VALUE
+  # drifted (an incident rewrote .env to custom.db while the dev script
+  # pins webflix2.db — the mismatch split the CLI and the server onto two
+  # files; one canonical url, always rewritten to match).
+  if ! grep -q "^DATABASE_URL=$DB_URL$\|^DATABASE_URL=$DB_URL " .env 2>/dev/null; then
     printf 'DATABASE_URL=%s\n' "$DB_URL" > .env
-    log ".env written (local sqlite only)"
+    log ".env written/realigned to $DB_URL (local sqlite only)"
   fi
   mkdir -p db
   log "prisma db push + generate"

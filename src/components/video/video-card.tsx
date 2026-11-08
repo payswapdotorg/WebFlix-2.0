@@ -32,6 +32,7 @@ import { formatDuration, displayViews, displayPublished, watchProgress, isUpcomi
 import { cn } from "@/lib/utils";
 import { postJson } from "@/hooks/use-api";
 import { VerifiedBadge } from "@/components/app/verified-badge";
+import { channelHref } from "@/lib/channel-href";
 import type { ContinueVideoDTO, VideoDTO } from "@/lib/types";
 
 type VideoCardProps = {
@@ -67,6 +68,10 @@ export function VideoCard({ video, progress, variant = "grid", className, watche
   // future) carries YouTube's PREMIERE badge + the scheduled date text in
   // the meta line (no views/age — none exist before the premiere starts).
   const upcomingPremiere = isUpcomingPremiere(video);
+  // P103-mini-6 — the channelHref law: null when the channel has no handle
+  // (the measured bare-/channel 404 class) — both channel links then render
+  // as honest non-links.
+  const channelLink = channelHref(video.channel.handle);
 
   async function copyLink() {
     const link = `${window.location.origin}/watch/${video.id}`;
@@ -230,19 +235,33 @@ export function VideoCard({ video, progress, variant = "grid", className, watche
       </Link>
 
       <div className="mt-3 flex gap-3">
-        <Link
-          href={`/channel/${video.channel.handle}`}
-          aria-label={`Go to ${video.channel.name}`}
-          className="hidden shrink-0 sm:block"
-          tabIndex={-1}
-        >
-          <Avatar className="size-9">
-            {video.channel.avatarUrl ? (
-              <AvatarImage src={video.channel.avatarUrl} alt="" />
-            ) : null}
-            <AvatarFallback>{video.channel.name.slice(0, 1).toUpperCase()}</AvatarFallback>
-          </Avatar>
-        </Link>
+        {/* P103-mini-6 — the channelHref law: a handle-less channel (YouTube
+            topic rows carry none) has NO page — the honest render is a
+            non-link avatar, never a dead /channel/ href (measured 404). */}
+        {channelLink ? (
+          <Link
+            href={channelLink}
+            aria-label={`Go to ${video.channel.name}`}
+            className="hidden shrink-0 sm:block"
+            tabIndex={-1}
+          >
+            <Avatar className="size-9">
+              {video.channel.avatarUrl ? (
+                <AvatarImage src={video.channel.avatarUrl} alt="" />
+              ) : null}
+              <AvatarFallback>{video.channel.name.slice(0, 1).toUpperCase()}</AvatarFallback>
+            </Avatar>
+          </Link>
+        ) : (
+          <div className="hidden shrink-0 sm:block" aria-hidden="true">
+            <Avatar className="size-9">
+              {video.channel.avatarUrl ? (
+                <AvatarImage src={video.channel.avatarUrl} alt="" />
+              ) : null}
+              <AvatarFallback>{video.channel.name.slice(0, 1).toUpperCase()}</AvatarFallback>
+            </Avatar>
+          </div>
+        )}
         <div className="min-w-0 flex-1">
           <Link href={`/watch/${video.id}`} className="block">
             <h3
@@ -252,13 +271,20 @@ export function VideoCard({ video, progress, variant = "grid", className, watche
               {video.title}
             </h3>
           </Link>
-          <Link
-            href={`/channel/${video.channel.handle}`}
-            className="mt-1 flex w-fit items-center gap-1 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <span className="truncate">{video.channel.name}</span>
-            {video.channel.verified && <VerifiedBadge />}
-          </Link>
+          {channelLink ? (
+            <Link
+              href={channelLink}
+              className="mt-1 flex w-fit items-center gap-1 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <span className="truncate">{video.channel.name}</span>
+              {video.channel.verified && <VerifiedBadge />}
+            </Link>
+          ) : (
+            <span className="mt-1 flex w-fit items-center gap-1 text-[13px] text-muted-foreground">
+              <span className="truncate">{video.channel.name}</span>
+              {video.channel.verified && <VerifiedBadge />}
+            </span>
+          )}
           <p className="text-[13px] text-muted-foreground">
             {upcomingPremiere && video.premieredAt ? (
               formatPremiereDate(video.premieredAt)

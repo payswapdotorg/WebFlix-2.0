@@ -131,6 +131,8 @@ const { default: HashtagView } = await import("@/app/hashtag/[tag]/view");
 const { default: PlaylistPage } = await import("@/app/playlist/[id]/page");
 const { PlaylistResultCard } = await import("@/components/search/playlist-result-card");
 const { DescriptionBox } = await import("@/components/watch/description-box");
+const { channelHref } = await import("@/lib/channel-href");
+const { VideoCard } = await import("@/components/video/video-card");
 
 const video = (id: string, title: string) => ({
   id,
@@ -145,14 +147,14 @@ const video = (id: string, title: string) => ({
   likeCountText: null,
   likes: 0,
   dislikes: 0,
-  visibility: "public",
+  visibility: "public" as const,
   category: "All",
   isMembersOnly: false,
   membersTier: null,
   isShort: false,
   premieredAt: null,
   createdAt: "2026-10-01T00:00:00.000Z",
-  channel: { id: "UCx", handle: "@lofi", name: "Lofi Girl", avatarUrl: "", verified: false },
+  channel: { id: "UCx", handle: "@lofi", name: "Lofi Girl", avatarUrl: "", verified: false, subscriberCount: 0 },
   isLive: false,
 });
 
@@ -638,3 +640,53 @@ describe("the feed card's ⋯ menu — Don't recommend channel + the undo family
     expect(host?.textContent ?? "").not.toContain("90's Chill Lofi");
   });
 });
+
+// ---------------------------------------------------------------------------
+// P103-mini-6 — the empty-handle dead-link law (channelHref)
+// MEASURED on production: the home feed's handle-less "KiDi and Lasmid"
+// topic row rendered two bare-/channel links (404 on click + prefetch — the
+// walk's HTTP failure law caught it). A channel without a handle has NO
+// page: the honest render is a non-link, never /channel/ + 404.
+// ---------------------------------------------------------------------------
+
+describe("channelHref — the empty-handle law (P103-mini-6)", () => {
+  test("absent / empty / whitespace handles answer null (no page exists)", () => {
+    expect(channelHref(undefined)).toBe(null);
+    expect(channelHref(null)).toBe(null);
+    expect(channelHref("")).toBe(null);
+    expect(channelHref("   ")).toBe(null);
+  });
+
+  test("a real handle or a raw UC id builds the page href verbatim", () => {
+    expect(channelHref("@MrBeast2")).toBe("/channel/@MrBeast2");
+    expect(channelHref("UCT0LQjFFUr8yq1wI-EeGJSg")).toBe(
+      "/channel/UCT0LQjFFUr8yq1wI-EeGJSg",
+    );
+  });
+
+  test("VideoCard with a handle-less channel renders NO /channel link — the name stays, unlinked", async () => {
+    const noHandle = {
+      ...video("kidix", "KiDi and Lasmid — Me No Worry"),
+      channel: { id: "UCnohandle", handle: "", name: "KiDi and Lasmid", avatarUrl: "", verified: false, subscriberCount: 0 },
+    };
+    await render(createElement(VideoCard, { video: noHandle }));
+    const badLinks = all("a").filter((a) => {
+      const href = a.getAttribute("href") ?? "";
+      return href === "/channel" || href === "/channel/" || href.startsWith("/channel/?");
+    });
+    expect(badLinks.length).toBe(0);
+    // the honest degrade: the channel name still renders (as plain text, not a link)
+    expect(host?.textContent ?? "").toContain("KiDi and Lasmid");
+    const nameEl = all("a").find((a) => (a.textContent ?? "").trim() === "KiDi and Lasmid");
+    expect(nameEl).toBeUndefined();
+  });
+
+  test("VideoCard with a real handle keeps both channel links (the unchanged law)", async () => {
+    await render(createElement(VideoCard, { video: video("abc", "A normal card") }));
+    const channelLinks = all("a").filter(
+      (a) => (a.getAttribute("href") ?? "") === "/channel/@lofi",
+    );
+    expect(channelLinks.length).toBeGreaterThanOrEqual(2); // avatar + name line
+  });
+});
+

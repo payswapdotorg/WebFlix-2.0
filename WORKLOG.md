@@ -18,6 +18,23 @@ Stage Summary:
 - The station's mobile contract is no longer a memory claim: it is a committed, re-runnable instrument that measures overflow and WAITS for honest states — and its first catch (the userless-db /api/me 500) is fixed at the discipline level so the nineteenth reset cannot reproduce it.
 
 ---
+Task ID: P103-MINI-6
+Agent: Z.ai Code (resident TL station — operator standing mandate "go")
+Task: the walk grew its failure law (the /api/me catch made mechanical) — and the law's first hours caught the incident rerun AND a real production bug class. Honest recording throughout: the vault loss blocks deploys and that is stated, not papered over.
+
+Work Log:
+- THE INCIDENT RERUN (second occurrence, outside this station's actions, ~16:01): the upload lane (the same 10 paths as P103-mini-3) deleted from the worktree; the vault directory GONE; ~/.git-credentials, the broker .env, the bashrc vault source gone; .env rewritten to custom.db; the whole db/ dir wiped (webflix2.db recreated schema-less). RESTORED: upload lane byte-identical from HEAD (0 diff); canonical .env → db push → db:seed → /api/me 200. The vault is UNRECOVERABLE in-sandbox (no surviving process env carries any key) — the operator re-seed is the open rung. Survivability measured: git push works (the token rides origin's URL), probes/walks/tests are token-free, DEPLOYS ARE BLOCKED (no VERCEL_TOKEN).
+- THE FAILURE LAW: the walk now CLASSIFIES every response — origin 404/5xx = FAIL (the broken classes), designed live-lane 5xx = noise (the quota-death human sentence is asserted by the honest-state law, never double-punished), external CDN gaps = noise, designed 400/401 = noise. --selftest pins 11 classifier cases + 5 viewport parses (16/16). WALK_VIEWPORT=1440x900 adds the FIRST instrument-measured desktop lane (the mobile law stays default). prod-probe grew --browser (the walk against prod; SKIP-not-FAIL when the venv is absent).
+- CATCH #1 (the law's first live run): local 375 walk FAILED on 500 /api/me — the db/ wipe had hit webflix2.db again. Healed; and the SEAM LAW hardened in station-rebuild.sh: .env is rewritten when the VALUE drifts, not only when the key is missing (the incident's custom.db rewrite had split the CLI and the dev server onto two files — the exact mismatch that made my first seed land in a file the server never reads).
+- CATCH #2 (a real production bug, measured by the law's first desktop run): 404 /channel?_rsc — the home feed's handle-less "KiDi and Lasmid" YouTube topic row rendered TWO bare-/channel links (avatar hidden on mobile — the desktop lane is why it was found at all). THE FIX: src/lib/channel-href.ts (channelHref: empty/whitespace handle → null — no page exists) + VideoCard renders honest non-links (avatar div + name span, visual parity, zero dead hrefs). RED-first: the handle-less render pin failed against the unfixed card, then held; the unchanged-law pin (real handle → both links) guards against over-correction. The guarded siblings (shorts-feed, account-menu) verified safe; the unguarded ones (search-video-card, channel-result-card, comment-row, watch-page, notifications-bell, create-menu, sidebar subscriptions) are the SAME CLASS — recorded for law-adoption at each next measured instance, no blind churn.
+- CATCH #3 (the law proving the deploy gap): the prod desktop walk still FAILS on the same 404 — CORRECT, prod serves the pre-fix build; origin/main carries the fix; the deploy waits on the operator's VERCEL_TOKEN re-seed. No prod-verified claim is made for the fix: the local DOM re-walk (0 bare-/channel anchors, 0 non-CDN 404s) + the render pins are the evidence.
+- GATES: tsc 0 · eslint 0/0 · FULL battery 3129/0 exit 0 (+4 pins) · walk selftest 16/16 · ship-audit CLEAN.
+
+Stage Summary:
+- The station's browser instrument now has TEETH: it fails on the broken classes mechanically, and its first three catches were the incident's db wipe, a hardening seam, and a real user-facing dead-link class on production.
+- The wave's honest boundary: the fix is on origin, provably working locally; production still shows the bug until two operator-shaped rungs land — the vault re-seed (VERCEL_TOKEN) and the deploy that follows it. The ledger says exactly that.
+
+---
 ---
 Task ID: P54-UPSTASH-LIVE-AND-HISTORY-PURGE
 Agent: Z.ai Code (resident TL station — operator: "go" on the remaining doable rungs)
