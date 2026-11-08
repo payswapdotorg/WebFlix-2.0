@@ -12,12 +12,14 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 
 import {
   clearTikTokLiveCache,
+  isTikTokLiveBoardBackedOff,
   isTikTokLiveBoardInFlight,
   normalizeBoardHandles,
   peekTikTokLiveBoard,
   peekTikTokLiveStatus,
   probeTikTokLiveBoard,
   probeTikTokLiveStatus,
+  readTikTokLiveBoardBackoff,
   readTikTokLiveBoardEntry,
   setTikTokLiveClock,
   setTikTokLiveProbePolling,
@@ -469,5 +471,139 @@ describe("the pinned live universe", () => {
     // the batch body IS the universe: the pin rides even with no rail videos
     const runBodies = bodies.filter((b) => (b as { handles?: unknown }).handles !== undefined);
     expect(runBodies[0]).toEqual({ handles: ["lofigirl"] });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P103-mini-3 — the board failure-surfacing law. Measured on prod during the
+// operator's Apify quota death (2026-11-08): the board route's cold path
+// schedules the probe in after(), the failure clears the in-flight marker,
+// and every GET re-probes → the hub spins "Checking who is live…" FOREVER
+// while the single-handle room page honestly degrades (its 60s backoff law).
+// The law: a failed batch run earns the SAME 60s backoff the single-handle
+// lane rides; the cold path surfaces the REAL error (502) during backoff;
+// a warm (stale) board is still served (last-known beats a mid-watch error,
+// and a backed-off lane never re-probes — no hammering); after the window
+// the lane retries.
+// ---------------------------------------------------------------------------
+describe("P103-mini-3 — the board failure-surfacing law", () => {
+  test("a failed batch run earns a 60s backoff marker the route can read; the window expires honestly", async () => {
+    setTikTokLiveProbeUpstream(
+      ((url: string) => {
+        if (url.includes("/acts/") && url.includes("/runs")) {
+          return Promise.resolve(new Response("boom", { status: 500 }));
+        }
+        return Promise.resolve(new Response("{}", { status: 200 }));
+      }) as TikTokProbeFetch
+    );
+    let thrown: unknown = null;
+    try {
+      await probeTikTokLiveBoard(["lofigirl"]);
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(TikTokLiveUnavailableError);
+    // the route-facing law: backed off NOW, with the real status + message
+    expect(isTikTokLiveBoardBackedOff(["lofigirl"])).toBe(true);
+    const marker = readTikTokLiveBoardBackoff(["lofigirl"]);
+    expect(marker?.status).toBe(502);
+    expect(typeof marker?.message).toBe("string");
+    expect((marker?.message ?? "").length).toBeGreaterThan(0);
+    // after the window the lane retries (the read consumes the expired marker)
+    setTikTokLiveClock(() => Date.now() + 61_000);
+    expect(isTikTokLiveBoardBackedOff(["lofigirl"])).toBe(false);
+    expect(readTikTokLiveBoardBackoff(["lofigirl"])).toBeNull();
+  });
+
+  test("a recovered run clears the backoff (the lane returning is immediately visible)", async () => {
+    setTikTokLiveProbeUpstream(
+      ((url: string) => {
+        if (url.includes("/acts/") && url.includes("/runs")) {
+          return Promise.resolve(new Response("boom", { status: 500 }));
+        }
+        return Promise.resolve(new Response("{}", { status: 200 }));
+      }) as TikTokProbeFetch
+    );
+    await probeTikTokLiveBoard(["lofigirl"]).catch(() => null);
+    expect(isTikTokLiveBoardBackedOff(["lofigirl"])).toBe(true);
+    // the lane returns: the next run succeeds and the marker is gone
+    setTikTokLiveProbeUpstream(boardTransport([LOFI_LIVE_ROW]));
+    const board = await probeTikTokLiveBoard(["lofigirl"]);
+    expect(board.rooms.length).toBe(1);
+    expect(isTikTokLiveBoardBackedOff(["lofigirl"])).toBe(false);
+  });
+
+  test("the hub never probes forever: a backed-off COLD universe answers the honest 502, then retries after the window", async () => {
+    // seed the failure directly (the route only ever probes in after())
+    setTikTokLiveProbeUpstream(
+      ((url: string) => {
+        if (url.includes("/acts/") && url.includes("/runs")) {
+          return Promise.resolve(new Response("quota dead", { status: 403 }));
+        }
+        return Promise.resolve(new Response("{}", { status: 200 }));
+      }) as TikTokProbeFetch
+    );
+    await probeTikTokLiveBoard(["lofigirl"]).catch(() => null);
+    const realLibrary = await import("@/lib/tiktok/library");
+    mock.module("@/lib/tiktok/library", () => ({
+      ...realLibrary,
+      getTikTokRail: async () => ({
+        videos: [{ id: "v1", author: "lofigirl" }],
+        universeSize: 1,
+        source: "curated",
+        unavailable: false,
+        unavailableReason: null,
+        fetchedAt: new Date().toISOString(),
+      }),
+    }));
+    const { GET } = await import("@/app/api/tiktok/live/board/route");
+    const res = await GET();
+    expect(res.status).toBe(502); // the honest degraded answer — NOT probing
+    const body = (await res.json()) as { error?: string };
+    expect(typeof body.error).toBe("string");
+    expect((body.error ?? "").length).toBeGreaterThan(0);
+    // after the window: the retry law answers probing again (200)
+    setTikTokLiveClock(() => Date.now() + 61_000);
+    const res2 = await GET();
+    expect(res2.status).toBe(200);
+    const body2 = (await res2.json()) as { board?: { probing?: boolean } };
+    expect(body2.board?.probing).toBe(true);
+  });
+
+  test("a warm hub never goes dark during a backoff: the stale board serves (stale:true) and the backed-off lane never re-probes", async () => {
+    // the board went live-and-cached, then the lane died and the TTL expired
+    setTikTokLiveProbeUpstream(boardTransport([LOFI_LIVE_ROW]));
+    await probeTikTokLiveBoard(["lofigirl"]);
+    setTikTokLiveProbeUpstream(
+      ((url: string) => {
+        if (url.includes("/acts/") && url.includes("/runs")) {
+          return Promise.resolve(new Response("boom", { status: 500 }));
+        }
+        return Promise.resolve(new Response("{}", { status: 200 }));
+      }) as TikTokProbeFetch
+    );
+    setTikTokLiveClock(() => Date.now() + 40_000); // past the 30s LIVE TTL
+    await probeTikTokLiveBoard(["lofigirl"]).catch(() => null); // the failed refresh earns the backoff
+    const realLibrary = await import("@/lib/tiktok/library");
+    mock.module("@/lib/tiktok/library", () => ({
+      ...realLibrary,
+      getTikTokRail: async () => ({
+        videos: [{ id: "v1", author: "lofigirl" }],
+        universeSize: 1,
+        source: "curated",
+        unavailable: false,
+        unavailableReason: null,
+        fetchedAt: new Date().toISOString(),
+      }),
+    }));
+    const { GET } = await import("@/app/api/tiktok/live/board/route");
+    const res = await GET();
+    expect(res.status).toBe(200); // last-known beats a mid-watch error
+    const body = (await res.json()) as {
+      board?: { stale?: boolean; probing?: boolean; rooms?: { handle: string; live: boolean | null }[] };
+    };
+    expect(body.board?.stale).toBe(true);
+    expect(body.board?.probing).toBeFalsy();
+    expect(body.board?.rooms?.find((r) => r.handle === "lofigirl")?.live).toBe(true);
   });
 });

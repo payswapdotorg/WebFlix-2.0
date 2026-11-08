@@ -46,3 +46,7 @@ yarn-error.log*
 # lane work records (per-agent scratch, never part of the vault)
 /agent-ctx/
 .env*
+
+# sandbox environment artifacts (skill infra + tool dumps)
+skills/
+tool-results/

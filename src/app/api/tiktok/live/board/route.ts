@@ -18,10 +18,12 @@ import { NextResponse } from "next/server";
 import { after } from "next/server";
 
 import {
+  isTikTokLiveBoardBackedOff,
   isTikTokLiveBoardInFlight,
   isTikTokLiveProbeLaneConfigured,
   mergeTikTokLiveBoard,
   probeTikTokLiveBoard,
+  readTikTokLiveBoardBackoff,
   readTikTokLiveBoardEntry,
   tiktokLivePinnedHandles,
   type TikTokLiveBoardDTO,
@@ -75,7 +77,13 @@ export async function GET(): Promise<NextResponse> {
   // path below.
   const entry = readTikTokLiveBoardEntry(handles);
   if (entry) {
-    if (!entry.fresh && !isTikTokLiveBoardInFlight(handles)) {
+    if (
+      !entry.fresh &&
+      !isTikTokLiveBoardInFlight(handles) &&
+      !isTikTokLiveBoardBackedOff(handles)
+    ) {
+      // P103-mini-3 — a backed-off lane never re-probes (no hammering);
+      // the stale board keeps serving (a warm hub never goes dark).
       scheduleBoardProbe(handles);
     }
     // P102-R3 — the merge law: fresh live answers the per-handle cache holds
@@ -95,6 +103,14 @@ export async function GET(): Promise<NextResponse> {
       },
       { status: 503 }
     );
+  }
+  // P103-mini-3 — the failure-surfacing law: a COLD universe whose batch
+  // run recently FAILED serves the REAL error (the room page's 60s-backoff
+  // law, board edition) instead of probing forever. After the window the
+  // marker is consumed and the retry law takes over (probing again).
+  const failure = readTikTokLiveBoardBackoff(handles);
+  if (failure) {
+    return NextResponse.json({ error: failure.message }, { status: failure.status });
   }
   if (!isTikTokLiveBoardInFlight(handles)) {
     scheduleBoardProbe(handles);

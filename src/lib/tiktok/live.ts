@@ -323,6 +323,7 @@ export function clearTikTokLiveCache(): void {
   playbackInFlight.clear();
   boardCache.clear();
   boardInFlight.clear();
+  boardBackoff.clear();
 }
 
 /** True while a probe for `handle` is in flight (route coalescing). */
@@ -685,6 +686,7 @@ export function normalizeBoardHandles(handles: string[]): string[] {
 const globalForBoard = globalThis as unknown as {
   __wfx2TikTokBoardCache?: Map<string, { board: TikTokLiveBoardDTO; expiresAt: number }>;
   __wfx2TikTokBoardInFlight?: Map<string, Promise<TikTokLiveBoardDTO>>;
+  __wfx2TikTokBoardBackoff?: Map<string, { status: number; message: string; until: number }>;
 };
 
 const boardCache: Map<string, { board: TikTokLiveBoardDTO; expiresAt: number }> =
@@ -694,6 +696,14 @@ globalForBoard.__wfx2TikTokBoardCache = boardCache;
 const boardInFlight: Map<string, Promise<TikTokLiveBoardDTO>> =
   globalForBoard.__wfx2TikTokBoardInFlight ?? new Map();
 globalForBoard.__wfx2TikTokBoardInFlight = boardInFlight;
+
+/** P103-mini-3 — the board's failure backoff (the single-handle law's
+ * sibling): a failed batch run is RECORDED so the route can surface the
+ * real error instead of re-probing forever (measured on prod: the hub spun
+ * "Checking who is live…" through the whole quota outage). */
+const boardBackoff: Map<string, { status: number; message: string; until: number }> =
+  globalForBoard.__wfx2TikTokBoardBackoff ?? new Map();
+globalForBoard.__wfx2TikTokBoardBackoff = boardBackoff;
 
 function boardKey(handles: string[]): string {
   return [...handles].sort().join(",");
@@ -710,6 +720,35 @@ function boardTtlMs(board: TikTokLiveBoardDTO): number {
 export function isTikTokLiveBoardInFlight(handles: string[]): boolean {
   const keys = normalizeBoardHandles(handles);
   return boardInFlight.has(boardKey(keys));
+}
+
+/** The board's failure-backoff cadence (the single-handle lane's 60s law). */
+const BOARD_BACKOFF_MS = 60_000;
+
+/** P103-mini-3 — true while the universe's lane rests in its 60s failure
+ * backoff (the route gates re-probes and surfaces the real error). */
+export function isTikTokLiveBoardBackedOff(handles: string[]): boolean {
+  const keys = normalizeBoardHandles(handles);
+  if (keys.length === 0) return false;
+  const marker = boardBackoff.get(boardKey(keys));
+  return Boolean(marker && marker.until > nowMs());
+}
+
+/** P103-mini-3 — the REAL failure the route serves during backoff; an
+ * expired marker is consumed on read (the retry law — mirrors peek). */
+export function readTikTokLiveBoardBackoff(
+  handles: string[]
+): { status: number; message: string } | null {
+  const keys = normalizeBoardHandles(handles);
+  if (keys.length === 0) return null;
+  const key = boardKey(keys);
+  const marker = boardBackoff.get(key);
+  if (!marker) return null;
+  if (marker.until <= nowMs()) {
+    boardBackoff.delete(key);
+    return null;
+  }
+  return { status: marker.status, message: marker.message };
 }
 
 /** Cache-only board read. */
@@ -780,7 +819,16 @@ export async function probeTikTokLiveBoard(handles: string[]): Promise<TikTokLiv
   const key = boardKey(keys);
   const existing = boardInFlight.get(key);
   if (existing) return existing;
-  const pending = runBoardProbe(keys, key).finally(() => boardInFlight.delete(key));
+  const pending = runBoardProbe(keys, key)
+    .catch((err: unknown) => {
+      // P103-mini-3 — record the failure so the route surfaces the REAL
+      // error during backoff (the hub never probes forever again).
+      const status = err instanceof TikTokLiveUnavailableError ? err.status : 502;
+      const message = err instanceof Error ? err.message : "TikTok live board probe failed.";
+      boardBackoff.set(key, { status, message, until: nowMs() + BOARD_BACKOFF_MS });
+      throw err;
+    })
+    .finally(() => boardInFlight.delete(key));
   boardInFlight.set(key, pending);
   return pending;
 }
@@ -814,6 +862,7 @@ async function runBoardProbe(keys: string[], key: string): Promise<TikTokLiveBoa
     missing: [...remaining],
     fetchedAt: new Date().toISOString(),
   };
+  boardBackoff.delete(key); // a recovered run clears the marker immediately
   boardCache.set(key, { board, expiresAt: nowMs() + boardTtlMs(board) });
   return board;
 }
