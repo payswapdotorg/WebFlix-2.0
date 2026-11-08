@@ -1570,7 +1570,7 @@ Base `6e4d3b2` both sides. Detected at the next window's opening lineage check.
 | Side | Tip | Tree vs the other | Meaning |
 |---|---|---|---|
 | origin/main | `f143689` | strict SUPERSET (+10 files, +2086 lines, 0 deletions local→origin) | the gated + ledger-recorded M1/M2 wave — the truth |
-| local main (pre-fix) | `7650282` | strict SUBSET — the ENTIRE upload lane absent (`src/app/api/upload/*`, `src/app/upload/*`, `src/lib/upload/*`, `tests/fixtures/upload/*`) | same commit message, different tree: a local commit built from the stripped worktree |
+| local main (pre-fix) | `7650282` — dead-sha: documented dead, never for ancestry (discarded by the reset law; origin `f143689` is the same wave, complete) | strict SUBSET — the ENTIRE upload lane absent (`src/app/api/upload/*`, `src/app/upload/*`, `src/lib/upload/*`, `tests/fixtures/upload/*`) | same commit message, different tree: a local commit built from the stripped worktree |
 
 - **THE INCIDENT, THIRD OF ITS NAME**: the upload-lane wipe class (P103-mini-3 incident, P103-mini-6 rerun) struck again outside our actions — and this time a local commit was CREATED from the stripped tree before detection. The identical commit message made SHA divergence the only tell; the routine `rev-parse main origin/main` + `merge-base` check caught it immediately (merge-base `6e4d3b2`, one commit each side, same subject).
 - **CONTAINMENT**: the bad local commit never pushed, never deployed, never entered the ledger — origin was never at risk. Resolution: `git reset --hard origin/main` (the twice-proven restore law: origin is the recovery source), tree verified (upload lane restored, 0 diff from origin).
