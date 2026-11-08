@@ -1468,3 +1468,78 @@ re-runs gates → merges.
 - CATCH #3 (proof the law never sleeps): prod desktop re-walk AFTER the fix still FAILS on the same 404 — correct: PROD still serves the PRE-FIX build. This is the honest statement of the deploy gap: origin/main carries the fix; prod cannot receive it until the operator re-seeds VERCEL_TOKEN (the vault loss). The moment the deploy lands, the same law that caught the bug proves its death. No "verified on prod" claim is made for the fix — only the local DOM re-walk (0 bare anchors, 0 non-CDN 404s) and the render pins stand.
 - THE VIEWPORT LAW: WALK_VIEWPORT=1440x900 ran the FIRST instrument-measured desktop lane (P52/P95's 375px baseline now has a desktop sibling); both lanes PASS locally post-fix.
 - GATES: tsc 0 · eslint 0/0 · FULL battery 3129/0 exit 0 (3125 + 4: two channelHref unit pins + the handle-less render pin + the unchanged-law pin) · walk selftest 16/16 · ship-audit assumed-clean (run below). Money gate stays CLOSED (zero Apify spend — the quota is dead; the walk and probes are free).
+
+## WFX2-TIKTOK-MAIN-INTERFACE-RELIABILITY-1 — M0 (fresh audit, policy decisions, ownership freeze)
+
+Work order: `docs/plans/work-orders/WFX2-TIKTOK-MAIN-INTERFACE-RELIABILITY-1.md` (landed on main this window from the architect branch `23bf38d`, docs-only merge `dbfc44a`; issue #5, draft PR #6). Pinned base `81a853c` verified: local HEAD == origin/main == pinned SHA, worktree clean. TL: Z.ai Code (issue #2 lineage).
+
+### M0 fresh audit — the clean-clone baseline (measured, not inherited)
+
+Clone of the pinned base to a fresh directory; every gate re-run from zero. Log: `/tmp/wfx2-clean-baseline.log` (station-ephemeral; the numbers below are the record).
+
+| Gate | Command (exact) | Result |
+|---|---|---|
+| install | `bun install` | exit 0 (915 installs across 981 packages checked) |
+| prisma client | `bun run db:generate` | exit 0 — **the install-protocol fact**: a fresh clone's `@prisma/client` is the stub; typecheck fails with 3 implicit-any/property errors in `tests/related-share.test.ts` + `tests/tiktok-imports.test.ts` until `prisma generate` runs. Install protocol = install + generate. |
+| typecheck | `bun run typecheck` | exit 0, 0 errors (after generate) |
+| lint | `bun run lint` | exit 0, 0 warnings 0 errors |
+| TikTok-focused | `bun run test:tiktok` | exit 0, **304 pass / 0 fail** (290 across 21 files + 14 across 1) |
+| FULL battery (official segmented chain) | `bun run test` | exit 0, **3129 pass / 0 fail** — the reported baseline reproduced exactly |
+| walk selftest | `python scripts/ops/mobile-375-walk.py --selftest` (venv) | exit 0, 16/16 pins |
+| ship audit | `bash scripts/ops/ship-audit.sh` | exit 0, CLEAN |
+| production probe | `bash scripts/ops/prod-probe.sh` | ALL GREEN (routes ×6 200, G20 400, honest probing DTOs) |
+
+**Recorded negative result (attribution, not a regression):** bare `bun test` (no `--isolate`) in the clean clone = 2156 pass / **362 fail / 9 errors, exit 1** — every failure `(unnamed)`, the ledger's 2026-09-29 law verbatim: `mock.module` in `action-routes.test.ts` is process-global on bun ≥ 1.3 and poisons sibling files without `--isolate`. The repo's battery is the segmented `bun run test` chain; the bare invocation is not the battery and its failure is not a code regression.
+
+### M0 production reconciliation (authorized read-only surfaces only)
+
+- Canonical domain `https://webflix-2-0-tepa.vercel.app`: 200 on all probed routes — the serving production.
+- Legacy lineage measured live: `webflix-2-0-one.vercel.app` → **402** (provider-side suspended/payment answer); `webflix-2-0.vercel.app` → **404** (unassigned). No domain reassignment performed or proposed without operator action.
+- **Deployed SHA unverifiable in-sandbox**: no commit/build endpoint exists in the app (source-checked), the sha lives in the Vercel API, and the credential vault is GONE (re-checked this window: `/home/z/.secrets/webflix.env` absent). Ledger truth: last READY deploy = `f46a181` (P103-mini-4). App-bearing commits after it (`81a853c` — the channelHref fix) are **on origin/main, NOT in production**. The walk's failure law already proved this honestly (P103-mini-6 catch #3: prod still 404s the pre-fix bare `/channel`).
+- **Deploy rung: BLOCKED on operator** — exact missing action: re-seed `VERCEL_TOKEN` (plus the station's other vault keys) into `/home/z/.secrets/webflix.env`. Git push survives via origin's embedded token; probes/walks/tests are token-free.
+- M0.5 compliance held: zero Apify actor runs, zero spend, no new scopes, no deployment, no domain changes this window.
+
+### M0 decision record (full text in ADR 0014)
+
+| Gate | Decision | State |
+|---|---|---|
+| D1 product/legal (TikTok Developer Terms "compete with or replicate" clause vs a primary-interface ambition) | Display-API-derived feed stays DISABLED until the operator records a written interpretation/approval; scope approval does NOT clear this gate | OPERATOR-GATED, closed |
+| D2 LIVE provider (Apify actors unofficial/ToS-gray per P100; provider account quota-dead 403) | No actor runs/spend/new providers without the operator's explicit provider+terms+budget approval; circuit-open law + honest unavailable states stand | OPERATOR-GATED, closed |
+| D3 standing lanes | Official Embed Player + oEmbed + URL imports + manual link (unverifed label) + native watch-party chat continue as the protected baseline | PERMITTED |
+| D4 identity semantics | `profile_link` = unverified; only a real OAuth grant sets verified `mode: "oauth"` | FROZEN |
+| D5 content consent/provenance/retention | Three-way provenance; authorized sync private-by-default; API-derived records deletable on disconnect; expiring covers refreshed, never stored as assets | FROZEN |
+| D6 cost policy | Money gate CLOSED; future spend requires D2's budget controls (caps, counters, kill switch, default-off) | CLOSED |
+
+### M0 ownership freeze (TL + 3 workers; disjoint file families, no overlaps)
+
+| Owner | Lane | Exclusive ownership |
+|---|---|---|
+| TL (Z.ai Code) | M0 contract/policy + integration/release | `docs/adr/*`, `docs/plans/wave-claims.md`, `WORKLOG.md`, integration points, deployment decision, final evidence review |
+| Worker A | M1 deploy truth + VOD playback proof | `scripts/ops/*`, deployment runbook/evidence; TikTok player instrumentation/tests ONLY if separately assigned by TL |
+| Worker B | M3 OAuth + Display API (gated, flag-off) | `src/lib/tiktok/oauth.ts`, TikTok OAuth route family, connection store/types/hooks/settings, Display API service/routes/tests, related Prisma changes |
+| Worker C | M2 LIVE provider policy/resilience | `src/lib/tiktok/live*.ts`, LIVE API routes/hooks/views/tests, LIVE-specific ops evidence and provider documentation |
+
+Shared integration files are edited by the TL alone after workers deliver. No silent cherry-picks from unverified branches.
+
+### M0 frozen contracts (workers code against these, not around them)
+
+1. **Player event telemetry** (M1 evidence law): evidence must distinguish `iframe-mounted` → `onPlayerReady` → `onStateChange=1` (playing) → `onCurrentTime` advancement → visible playing frame; exactly ONE active TikTok iframe across navigation (pause/unmount of the previous player); iframe count or HTTP 200 is never playback proof.
+2. **LIVE provider DTOs**: `probing` / live status / honest unavailable (the P103 human sentences) with the measured cadence laws (60s failure backoff, `TIKTOK_LIVE_STATUS_TTL_MS` knob, 30s live TTL, 120s playback TTL — all source-verified in `src/lib/tiktok/live.ts` this window); exhausted/disabled errors open the circuit; unavailable ≠ offline; stale boards labeled `stale`.
+3. **OAuth identity state**: `profile_link` (unverified) vs `oauth` (provider-authorized); partial consent is a supported state (connected identity without `video.list` must not render as having synced videos).
+4. **Scopes**: minimum `user.info.basic` + `video.list`; `user.info.profile` only for fields actually needed/approved; never `user.info.stats`, `video.publish`, `video.manage`.
+5. **Display API DTO + provenance**: three-way separation (curated | user-imported | authorized-sync bound to the granting user); never overload `TikTokImport.postId` across provenance classes; SQLite/Postgres parity.
+6. **Disconnect/revoke/delete**: immediate token disable + scheduled-sync stop; API-derived records deleted/suppressed per the recorded retention decision; manual-link rows are NOT implied deleted/verified by OAuth flows.
+7. **Feed composition**: ADR 0013 source-boundary + URL-state selection stand; the M2 private/public curator rules are unchanged; no global For You representation.
+
+### M0 gap register (source-verified this window)
+
+| # | Gap | Evidence (source-verified) | Gate owner |
+|---|---|---|---|
+| G1 | Deployment provenance + release path | vault absent (re-checked); no in-app sha endpoint; prod serves pre-`81a853c` build; legacy domains 402/404 | OPERATOR (re-seed VERCEL_TOKEN) |
+| G2 | VOD playback proof at player-protocol depth | M1/M5 evidence = iframe-mounted + switching ONLY; the sandbox IP is geo-walled (302 → `tiktok.com/hk/about`, ADR 0004-measured); player protocol code EXISTS (`src/components/tiktok/tiktok-embed-player.tsx`, `tiktok-feed-player.tsx`) | Worker A + external network |
+| G3 | LIVE provider outage + policy | 403 platform-feature-disabled measured (P103); circuit/backoff law source-verified; provider/budget unapproved | OPERATOR (D2) + Worker C |
+| G4 | OAuth/Display API incomplete | `TIKTOK_OAUTH_SCOPE = "user.info.basic,user.info.profile"` (`src/lib/tiktok/oauth.ts:23`); NO `video.list`, no `/v2/video/list/`, no pagination, no verified refresh/revoke; D1 unresolved | OPERATOR (D1 + TikTok approval) + Worker B |
+| G5 | Install protocol | fresh clone needs `bun run db:generate` post-install (stub client = 3 typecheck errors) — ops README to note | TL (docs) |
+| G6 | YouTube bare-`/channel` class siblings | search-video-card, channel-result-card, comment-row, watch-page, notifications-bell, create-menu, sidebar subscriptions (P103-mini-6 record) — adopt `channelHref()` at each next MEASURED instance, no blind churn | TL (per-instance) |
+
+**M0 exit: MET** — source-verified gap register above; explicit decision record per operator/legal gate (ADR 0014 + table); fresh test baseline (3129/0 clean-clone, exact commands + exits in the audit table); worker claims and exact file ownership committed.

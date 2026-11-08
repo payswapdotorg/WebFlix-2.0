@@ -33,3 +33,21 @@ After all: record the reset in `docs/plans/wave-claims.md` + `WORKLOG.md`
 (the reset number, what was rebuilt, the gate numbers). The vault itself
 (`/home/z/.secrets/webflix.env`, 0600) is seeded BY HAND from the
 operator's message — this script verifies, it never stores.
+
+## The clean-clone install protocol (M0, WFX2-TIKTOK-MAIN-INTERFACE-RELIABILITY-1)
+
+A fresh clone needs TWO steps before the gates mean anything:
+
+```bash
+bun install          # lockfile-exact deps
+bun run db:generate  # prisma generate — a fresh @prisma/client is a STUB;
+                     # typecheck fails with implicit-any errors in test files
+                     # until the client is generated (measured 2026-11-08: 3
+                     # errors in related-share + tiktok-imports tests)
+```
+
+And the battery is the SEGMENTED chain: `bun run test` (each lane pushes its
+own test DB and runs `--isolate`). A bare `bun test` without `--isolate` is
+NOT the battery: `mock.module` in action-routes.test.ts is process-global on
+bun ≥ 1.3 and poisons sibling files (measured 2026-11-08: 362 `(unnamed)`
+fails in a clean clone while the segmented chain runs 3129/0).
