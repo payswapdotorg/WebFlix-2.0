@@ -282,3 +282,65 @@ describe("the disabled lane and the cache laws", () => {
     expect(await peekTikTokLiveStatus("lofigirl")).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// P103-mini-4 — the quota-death mapping: when the probe provider answers
+// 403 platform-feature-disabled (the MEASURED 2026-11-08 outage — the
+// operator's Apify free credit exhausted mid-cycle), the error the UI
+// renders must be a HUMAN sentence, not dev-speak. Any other non-ok run
+// start keeps the generic could-not-start law (no fabrication).
+// ---------------------------------------------------------------------------
+describe("P103-mini-4 — the quota-death mapping", () => {
+  test("a 403 platform-feature-disabled run start answers the human quota sentence with status 503", async () => {
+    setTikTokLiveProbeUpstream(
+      ((url: string) => {
+        if (url.includes("/acts/") && url.includes("/runs")) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                error: {
+                  type: "platform-feature-disabled",
+                  message:
+                    "You've used the $5.00 of monthly usage included in the Free plan, so Actor runs and other Apify services are blocked until your monthly usage cycle resets.",
+                },
+              }),
+              { status: 403 }
+            )
+          );
+        }
+        return Promise.resolve(new Response("{}", { status: 200 }));
+      }) as TikTokProbeFetch
+    );
+    let thrown: TikTokLiveUnavailableError | null = null;
+    try {
+      await probeTikTokLiveStatus("lofigirl");
+    } catch (err) {
+      thrown = err as TikTokLiveUnavailableError;
+    }
+    expect(thrown).toBeInstanceOf(TikTokLiveUnavailableError);
+    expect(thrown?.status).toBe(503);
+    expect(thrown?.message).toContain("monthly free quota");
+    expect(thrown?.message).not.toContain("actor"); // no dev-speak identifier leak
+    // the backoff still records the failure (the lane laws hold)
+    await expect(peekTikTokLiveStatus("lofigirl")).rejects.toMatchObject({ status: 503 });
+  });
+
+  test("any other non-ok run start keeps the generic could-not-start law", async () => {
+    setTikTokLiveProbeUpstream(
+      ((url: string) => {
+        if (url.includes("/acts/") && url.includes("/runs")) {
+          return Promise.resolve(new Response("boom", { status: 500 }));
+        }
+        return Promise.resolve(new Response("{}", { status: 200 }));
+      }) as TikTokProbeFetch
+    );
+    let thrown: TikTokLiveUnavailableError | null = null;
+    try {
+      await probeTikTokLiveStatus("lofigirl");
+    } catch (err) {
+      thrown = err as TikTokLiveUnavailableError;
+    }
+    expect(thrown?.status).toBe(502);
+    expect(thrown?.message).toContain("could not start");
+  });
+});

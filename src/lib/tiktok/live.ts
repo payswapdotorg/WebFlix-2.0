@@ -428,6 +428,22 @@ async function runActorDataset(actorId: string, body: Record<string, unknown>): 
     body: JSON.stringify(body),
   });
   if (!runRes.ok) {
+    // P103-mini-4 — the quota-death mapping: the MEASURED 2026-11-08 outage
+    // (the provider's monthly free credit exhausted mid-cycle) answers 403
+    // platform-feature-disabled. The UI renders `error.message` verbatim, so
+    // this class gets a HUMAN sentence; every other failure keeps the
+    // generic could-not-start law (no fabrication, no dev-speak leak).
+    if (runRes.status === 403) {
+      const body = (await readJson(runRes).catch(() => null)) as {
+        error?: { type?: string };
+      } | null;
+      if (body?.error?.type === "platform-feature-disabled") {
+        throw new TikTokLiveUnavailableError(
+          "WebFlix's live provider has used up its monthly free quota — live status pauses until the provider's monthly cycle resets.",
+          503
+        );
+      }
+    }
     throw new TikTokLiveUnavailableError(`TikTok live probe could not start (actor ${actorId}).`, 502);
   }
   const runBody = (await readJson(runRes)) as { data?: { id?: string; defaultDatasetId?: string } } | null;
