@@ -1,6 +1,23 @@
 # Worklog
 
 ---
+Task ID: P103-MINI-5
+Agent: Z.ai Code (resident TL station — operator standing mandate "go")
+Task: close the honest residual "mobile 375px not re-run" (the reset's agent-browser rejects viewport grammar) with a direct-drive instrument, and fix whatever the walk finds — the honesty law: an instrument that catches nothing is not proof.
+
+Work Log:
+- THE INSTRUMENT: scripts/ops/mobile-375-walk.py — the venv Python Playwright 1.57.0 (already installed, Chromium 1200 already cached; nothing added to the app's package.json) walks /, /tiktok/lives, /tiktok/lofigirl/live at 375×812 is_mobile, MEASURES scrollWidth − clientWidth on <html> (the 0px law), and captures console/page errors + failed requests. Target override WEBFLIX_BASE_URL — the SAME instrument walked local :3000 and production this window.
+- THE POLL LAW (the first prod run taught it): a fixed 12s settle false-MISSed the hub's honest error — the P103-mini-3 cadence (first hit STARTS the probe, the failure lands seconds later, measured ~T+38s on prod) means the degrade lands past any fixed settle. The walk now POLLS body text up to WALK_HONEST_TIMEOUT_S (75s default) for the expected state — the caught bug class is the endless spinner that NEVER degrades, not a healthy degrade that takes 40 honest seconds. The false-MISS itself was recorded: a fixed-settle walk would have called the HEALTHY honest-degrade a failure.
+- VERDICTS: LOCAL — / 0px, /tiktok/lives 0px + honest HIT, /tiktok/lofigirl/live 0px + honest HIT. PROD — / 0px, /tiktok/lives 0px + honest HIT (degraded ~T+16s: the prior run's 60s backoff marker still fresh, the cold path served the real error immediately — the P103-mini-3 law OBSERVED working), room 0px + honest HIT + the designed 503s (the P103-mini-4 human sentence). The P102/P95 mobile baseline is re-proven on the current build both lanes; the residual is CLOSED.
+- THE CATCH (before the walk even committed): local / logged /api/me → 500 "Demo user @you missing — run: bun run db:seed". The eighteenth reset's rebuild ran prisma db push but never the seed; and the dev script pins DATABASE_URL=file:../db/webflix2.db while .env says custom.db — the first seed went to a file the server NEVER reads (the seam is now written down: dev script, db:seed, and the rebuild's DB_URL all pin webflix2.db). PROD was never affected (its own DB carries @you; /api/me answered the 200 demo viewer — verified). Healed: bun run db:seed → /api/me 200, browser-re-verified, the console 500 gone.
+- THE FIX (discipline, not app code): station-rebuild.sh grew the seed-if-missing rung — an env-explicit @you existence check, bun run db:seed ONLY when absent (the seed is wipe-and-reseed; a populated station is never wiped — idempotency kept); bash -n clean. scripts/ops/README.md documents the walk (instrument #4) + the seed law.
+- HONEST NOISE (not bugs): i.ytimg.com oardefault.jpg 404s (upstream variant gaps, two videos); ERR_ABORTED RSC/playback prefetches (navigation-canceled in-flight fetches — the walk's own navigation causes them); the live lane's 503s are the DESIGNED quota-death answer. Money gate stays CLOSED (zero Apify spend).
+- GATES: tsc 0 · eslint 0/0 · FULL battery 3125/0 exit 0 · ship-audit CLEAN. Scripts/docs-only → NO deploy (prod still serves f46a181, READY, probe-green); the prod walk IS this wave's live verification.
+
+Stage Summary:
+- The station's mobile contract is no longer a memory claim: it is a committed, re-runnable instrument that measures overflow and WAITS for honest states — and its first catch (the userless-db /api/me 500) is fixed at the discipline level so the nineteenth reset cannot reproduce it.
+
+---
 ---
 Task ID: P54-UPSTASH-LIVE-AND-HISTORY-PURGE
 Agent: Z.ai Code (resident TL station — operator: "go" on the remaining doable rungs)

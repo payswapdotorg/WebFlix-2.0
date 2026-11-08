@@ -87,6 +87,17 @@ else
   log "prisma db push + generate"
   bunx prisma db push --skip-generate 2>&1 | tail -1
   bunx prisma generate 2>&1 | tail -1
+  # P103-mini-5: db push alone leaves a USERLESS db — every page's /api/me
+  # then 500s ("Demo user @you missing") and the failure is silent unless a
+  # browser walk looks. Seed ONLY when @you is absent: a populated station
+  # is never wiped (the seed is wipe-and-reseed), a fresh push is healed.
+  if DATABASE_URL="$DB_URL" bun -e "const {PrismaClient}=require('@prisma/client');const db=new PrismaClient();db.user.findUnique({where:{handle:'you'}}).then(u=>process.exit(u?0:1)).catch(()=>process.exit(1))"; then
+    log "demo identity @you present — seed skipped"
+  else
+    log "seeding the demo identity (bun run db:seed)"
+    bun run db:seed >/dev/null 2>&1 || fail "db:seed failed"
+    log "seeded (webflix2.db — the file the dev script and db:seed both pin)"
+  fi
 
   # ── 4. the dev server (setsid, NO pipe — a pipe dies with the shell) ───
   if curl -s -o /dev/null --max-time 2 http://localhost:3000/; then
