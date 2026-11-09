@@ -133,6 +133,7 @@ const { PlaylistResultCard } = await import("@/components/search/playlist-result
 const { DescriptionBox } = await import("@/components/watch/description-box");
 const { channelHref } = await import("@/lib/channel-href");
 const { VideoCard } = await import("@/components/video/video-card");
+const { SearchVideoCard } = await import("@/components/search/search-video-card");
 
 const video = (id: string, title: string) => ({
   id,
@@ -690,3 +691,53 @@ describe("channelHref — the empty-handle law (P103-mini-6)", () => {
   });
 });
 
+
+// ---------------------------------------------------------------------------
+// G6 — the bare-/channel class's MEASURED sibling instances (WFX2-M0 gap
+// register, TL per-instance law: adopt channelHref ONLY where the data path
+// is source-measured to carry the class).
+//
+// MEASURED AT SOURCE this window:
+//  - search-video-card: search results ride mapVideoRenderer, whose
+//    baseVideo() seeds channel = emptyChannel() (handle "") when a
+//    videoRenderer carries NO owner block — the same mapper family as the
+//    measured home-grid "KiDi and Lasmid" row (P103-mini-6). IN CLASS.
+//  - watch / music / subscriptions(video) / channel-result: the mappers fall
+//    back to the UC id (`handle || channelId` — non-empty, and the channel
+//    compose path resolves UC ids). NOT the class.
+//  - shorts-feed: the card already guards `channel.handle ?`. NOT the class.
+//  - comment-row: the shadow-channel handle falls back to the row id. NOT.
+//  - the own-identity links (create/account/sidebar-your-channel/you): the
+//    signed-in identity always has a handle. NOT.
+//  - notifications-bell: the YouTube notification mapper's terminal `|| ""`
+//    can emit a handle-less channel actor — pinned at the unit level in the
+//    notifications battery (notificationHref), the radix-menu row is not
+//    re-pinned in DOM (the source-level pin idiom, the llm-seam precedent).
+// ---------------------------------------------------------------------------
+
+describe("SearchVideoCard joins the channelHref law (G6 measured instance)", () => {
+  test("a handle-less channel renders NO /channel link — the name stays, unlinked", async () => {
+    const noHandle = {
+      ...video("topic1", "Topic row on the search surface"),
+      channel: { id: "UCtopic", handle: "", name: "KiDi and Lasmid", avatarUrl: "", verified: false, subscriberCount: 0 },
+    };
+    await render(createElement(SearchVideoCard, { video: noHandle }));
+    const badLinks = all("a").filter((a) => {
+      const href = a.getAttribute("href") ?? "";
+      return href === "/channel" || href === "/channel/" || href.startsWith("/channel/?");
+    });
+    expect(badLinks.length).toBe(0);
+    // the honest degrade: the channel name still renders (as plain text)
+    expect(host?.textContent ?? "").toContain("KiDi and Lasmid");
+    const nameEl = all("a").find((a) => (a.textContent ?? "").trim() === "KiDi and Lasmid");
+    expect(nameEl).toBeUndefined();
+  });
+
+  test("a real handle keeps the channel link (the unchanged law)", async () => {
+    await render(createElement(SearchVideoCard, { video: video("srch1", "A search row") }));
+    const channelLinks = all("a").filter(
+      (a) => (a.getAttribute("href") ?? "") === "/channel/@lofi",
+    );
+    expect(channelLinks.length).toBeGreaterThanOrEqual(1);
+  });
+});

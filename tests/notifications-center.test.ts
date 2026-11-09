@@ -348,3 +348,43 @@ describe("the local read overlay (the per-item view state)", () => {
     expect(useLocalRead.getState().readIds).toEqual(["still-unread"]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// G6 — the notifications-bell joins the channelHref law (measured at source):
+// the YouTube notification mapper's handle derivation ends in a terminal
+// `|| ""` (channelId || @name-fallback || "") — a handle-less channel actor
+// reached the row ladder as a bare `/channel/` 404 anchor. The law: the row's
+// href ladder never emits a bare /channel — a handle-less channel degrades to
+// the ladder's "#" no-op, never a dead anchor. (The radix-menu row itself is
+// not re-pinned in DOM — the source-level pin idiom, the llm-seam precedent.)
+// ---------------------------------------------------------------------------
+describe("notificationHref — the bell row's bare-/channel law (G6)", () => {
+  const row = (over: Partial<Record<string, unknown>>) =>
+    ({
+      id: "n1",
+      kind: "video",
+      title: "A video went up",
+      body: "",
+      read: false,
+      createdAt: "2026-11-09T00:00:00.000Z",
+      videoId: null,
+      videoThumbnailUrl: null,
+      channel: { id: "UCx", handle: "@lofi", name: "Lofi Girl", avatarUrl: "", verified: false, subscriberCount: 0 },
+      ...over,
+    }) as never;
+
+  test("a handle-less channel actor degrades to the # no-op — never a bare /channel", async () => {
+    const { notificationHref } = await import("@/components/app/notifications-bell");
+    expect(notificationHref(row({ channel: { id: "UCy", handle: "", name: "Topic Actor", avatarUrl: "", verified: false, subscriberCount: 0 } }))).toBe("#");
+    expect(notificationHref(row({ channel: { id: "UCy", handle: "   ", name: "Topic Actor", avatarUrl: "", verified: false, subscriberCount: 0 } }))).toBe("#");
+    expect(notificationHref(row({ channel: null }))).toBe("#");
+  });
+
+  test("the unchanged ladder: liveRoomId > videoId > real-handle channel", async () => {
+    const { notificationHref } = await import("@/components/app/notifications-bell");
+    expect(notificationHref(row({ liveRoomId: "room9" }))).toBe("/live/room9");
+    expect(notificationHref(row({ videoId: "vid3" }))).toBe("/watch/vid3");
+    expect(notificationHref(row({}))).toBe("/channel/@lofi");
+    expect(notificationHref(row({ channel: { id: "UCr", handle: "@MrBeast2", name: "MrBeast", avatarUrl: "", verified: false, subscriberCount: 0 } }))).toBe("/channel/@MrBeast2");
+  });
+});

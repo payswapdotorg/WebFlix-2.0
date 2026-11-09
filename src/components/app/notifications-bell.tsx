@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useApi, postJson } from "@/hooks/use-api";
 import { formatRelativeDate } from "@/lib/format";
+import { channelHref } from "@/lib/channel-href";
 import type { NotificationDTO } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useWebFlixSession } from "@/hooks/use-webflix-session";
@@ -169,16 +170,29 @@ export function NotificationsBell() {
   );
 }
 
+/**
+ * G6 — the bell row's href ladder, extracted (the law pinned at the unit
+ * level in the notifications battery). A channel actor WITHOUT a handle has
+ * no in-app page: the row degrades to the ladder's "#" no-op — never the
+ * bare `/channel/` 404 anchor the YouTube notification mapper's terminal
+ * `|| ""` can otherwise emit.
+ */
+export function notificationHref(n: {
+  liveRoomId?: string | null;
+  videoId?: string | null;
+  channel?: { handle?: string | null } | null;
+}): string {
+  if (n.liveRoomId) return `/live/${n.liveRoomId}`;
+  if (n.videoId) return `/watch/${n.videoId}`;
+  return (n.channel ? channelHref(n.channel.handle) : null) ?? "#";
+}
+
 function NotificationRow({ notification: n, read }: { notification: NotificationDTO; read: boolean }) {
   // Parity P73: the go-live deep link lands IN THE ROOM (the local "live"
   // rows carry liveRoomId; the broker rows keep their video/channel hrefs).
-  const href = n.liveRoomId
-    ? `/live/${n.liveRoomId}`
-    : n.videoId
-      ? `/watch/${n.videoId}`
-      : n.channel
-        ? `/channel/${n.channel.handle}`
-        : "#";
+  // G6: the channel branch rides channelHref — handle-less actors never
+  // render a bare /channel anchor.
+  const href = notificationHref(n);
   return (
     <Link
       href={href}

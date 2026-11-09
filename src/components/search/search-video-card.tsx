@@ -20,6 +20,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatDuration, displayViews, displayPublished } from "@/lib/format";
 import { postJson } from "@/hooks/use-api";
 import { VerifiedBadge } from "@/components/app/verified-badge";
+import { channelHref } from "@/lib/channel-href";
 import { cn } from "@/lib/utils";
 import type { VideoDTO } from "@/lib/types";
 
@@ -38,6 +39,11 @@ import type { VideoDTO } from "@/lib/types";
  * mini player → storyboard fallback), tracked on this card's thumbnail rect.
  */
 export function SearchVideoCard({ video, className }: { video: VideoDTO; className?: string }) {
+  // G6 — the channelHref law joins this card: search rows ride the SAME
+  // mapper family as the measured home-grid topic row (mapVideoRenderer's
+  // owner-less renderer emits channel.handle ""), so a handle-less channel
+  // renders the honest non-link, never a bare /channel 404 anchor.
+  const channelLink = channelHref(video.channel.handle);
   const hover = useHoverPreview(video);
   const wfSession = useWebFlixSession();
   const [hidden, setHidden] = useState(false);
@@ -149,19 +155,32 @@ export function SearchVideoCard({ video, className }: { video: VideoDTO; classNa
             return age ? ` · ${age}` : "";
           })()}
         </p>
-        <Link
-          href={`/channel/${video.channel.handle}`}
-          className="mt-2 flex w-fit items-center gap-2 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <Avatar className="size-6">
-            {video.channel.avatarUrl ? <AvatarImage src={video.channel.avatarUrl} alt="" /> : null}
-            <AvatarFallback className="text-[10px]">
-              {video.channel.name.slice(0, 1).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-          <span className="font-medium text-foreground/90">{video.channel.name}</span>
-          {video.channel.verified && <VerifiedBadge />}
-        </Link>
+        {channelLink ? (
+          <Link
+            href={channelLink}
+            className="mt-2 flex w-fit items-center gap-2 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <Avatar className="size-6">
+              {video.channel.avatarUrl ? <AvatarImage src={video.channel.avatarUrl} alt="" /> : null}
+              <AvatarFallback className="text-[10px]">
+                {video.channel.name.slice(0, 1).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <span className="font-medium text-foreground/90">{video.channel.name}</span>
+            {video.channel.verified && <VerifiedBadge />}
+          </Link>
+        ) : (
+          <div className="mt-2 flex w-fit items-center gap-2 text-[13px] text-muted-foreground">
+            <Avatar className="size-6">
+              {video.channel.avatarUrl ? <AvatarImage src={video.channel.avatarUrl} alt="" /> : null}
+              <AvatarFallback className="text-[10px]">
+                {video.channel.name.slice(0, 1).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <span className="font-medium text-foreground/90">{video.channel.name}</span>
+            {video.channel.verified && <VerifiedBadge />}
+          </div>
+        )}
         {video.description && (
           <p className="mt-2 line-clamp-2 hidden text-[13px] leading-snug text-muted-foreground sm:block">
             {video.description}
