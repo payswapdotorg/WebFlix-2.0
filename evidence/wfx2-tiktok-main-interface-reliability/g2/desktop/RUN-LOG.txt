@@ -1,0 +1,130 @@
+
+--- surface shorts-feed (/shorts?source=tiktok) ---
+  landed: https://webflix-2-0-tepa.vercel.app/shorts?source=tiktok
+  verdict: GEO-WALLED
+  reason: the tiktok.com player request left the player path -> https://www.tiktok.com/hk/about (final status 200) — the ADR 0004 wall signature
+  ready=False playing_state_seen=False progression=False (time samples=0, first/last=None)
+  onStateChange states: []
+  protocol msgs (all/trusted): {} / {}
+  iframes at rest: ['/player/v1/6718335390845095173']  samples: [(9.0, 1), (10.0, 1), (11.0, 1), (12.0, 1), (13.0, 1), (14.1, 1), (15.1, 1), (16.1, 1), (17.1, 1), (18.1, 1), (19.1, 1), (20.1, 1), (21.2, 1), (22.2, 1), (23.2, 1), (24.2, 1), (25.2, 1)]
+  app banners: error=None timeout="The TikTok player didn't load from this network. This happens when TikTok blocks your region or network, or the post is unavailable. Open on TikTok" starting=False autoplayBlocked=False
+  tap-to-play pressed by instrument: False
+  overflow: 0px (sw=1280 cw=1280)
+  player lane signature: redirect-wall
+    player chain: 302 https://www.tiktok.com/player/v1/6718335390845095173 -> 200 https://www.tiktok.com/hk/about  [final 200 text/html] sig=redirect-wall
+    player chain: 302 https://www.tiktok.com/player/v1/7206561191609716014 -> 200 https://www.tiktok.com/hk/about  [final 200 text/html] sig=redirect-wall
+    player chain: 302 https://www.tiktok.com/player/v1/6718335390845095173 -> 200 https://www.tiktok.com/hk/about  [final 200 text/html] sig=redirect-wall
+    tiktok.com response: 302 https://www.tiktok.com/oembed (text/html) sig=redirect-wall
+    tiktok.com response: 302 https://www.tiktok.com/oembed (text/html) sig=redirect-wall
+    tiktok.com response: 200 https://www.tiktok.com/api/v1/web-cookie-privacy/config (text/html) sig=redirect-wall
+    tiktok.com response: 302 https://www.tiktok.com/oembed (text/html) sig=redirect-wall
+    tiktok.com response: 200 https://www.tiktok.com/api/v1/web-cookie-privacy/config (text/html) sig=redirect-wall
+    tiktok.com response: 200 https://www.tiktok.com/api/v1/web-cookie-privacy/config (text/html) sig=redirect-wall
+  app telemetry: POST /api/tiktok/player-events {"postId":"6718335390845095173","code":null,"type":"READINESS_TIMEOUT"}
+  console.error: Access to fetch at 'https://www.tiktok.com/hk/about' (redirected from 'https://www.tiktok.com/oembed?url=https%3A%2F%2Fwww.tiktok.com%2F%40scout2015%2Fvideo%2F6718335390845095173')
+  console.error: Failed to load resource: net::ERR_FAILED
+  console.error: Access to fetch at 'https://www.tiktok.com/hk/about' (redirected from 'https://www.tiktok.com/oembed?url=https%3A%2F%2Fwww.tiktok.com%2F%40melodizeai%2Fvideo%2F7206561191609716014'
+  console.error: Failed to load resource: net::ERR_FAILED
+  console.error: @tiktok-fe/web-cookie-banner init failed: @tiktok-fe/web-cookie-banner fetch https://www.tiktok.com/api/v1/web-cookie-privacy/config failed: undefined
+  console.error: @tiktok-fe/web-cookie-banner init failed: load cookie banner multiple times.
+  console.error: Access to XMLHttpRequest at 'https://mon.tiktokv.com/monitor_browser/collect/batch/?biz_id=tiktok_web_article' from origin 'https://www.tiktok.com' has been blocked by CORS policy:
+  console.error: Failed to load resource: net::ERR_FAILED
+  console.error: Access to fetch at 'https://mon.tiktokv.com/monitor_browser/collect/batch/?bid=tiktok_pns_web_runtime' from origin 'https://www.tiktok.com' has been blocked by CORS policy: Respons
+  console.error: Failed to load resource: net::ERR_FAILED
+  requestfailed(noise): https://webflix-2-0-tepa.vercel.app/playlist/WL :: net::ERR_ABORTED
+  requestfailed(noise): https://www.tiktok.com/hk/about :: net::ERR_FAILED
+  requestfailed(noise): https://www.tiktok.com/hk/about :: net::ERR_FAILED
+  requestfailed(noise): https://webflix-2-0-tepa.vercel.app/shorts :: net::ERR_ABORTED
+  requestfailed(noise): https://mon.tiktokv.com/monitor_browser/collect/batch/ :: net::ERR_FAILED
+  nav 'Next short': beat samples=[(0.12, 1), (0.3, 2), (0.6, 1), (1.2, 1), (2.0, 1)] pre=[['/player/v1/6718335390845095173']] -> at-rest after=[['/player/v1/7206561191609716014']]
+  nav 'Previous short': beat samples=[(0.12, 1), (0.3, 2), (0.6, 1), (1.2, 1), (2.0, 1)] pre=[['/player/v1/7206561191609716014']] -> at-rest after=[['/player/v1/6718335390845095173']]
+  elapsed: 37.4s
+
+--- surface deep-scout2015 (/tiktok/v/6718335390845095173) ---
+  landed: https://webflix-2-0-tepa.vercel.app/shorts?source=tiktok&post=6718335390845095173
+  verdict: GEO-WALLED
+  reason: the tiktok.com player request left the player path -> https://www.tiktok.com/hk/about (final status 200) — the ADR 0004 wall signature
+  ready=False playing_state_seen=False progression=False (time samples=0, first/last=None)
+  onStateChange states: []
+  protocol msgs (all/trusted): {} / {}
+  iframes at rest: ['/player/v1/6718335390845095173']  samples: [(8.9, 1), (9.9, 1), (10.9, 1), (11.9, 1), (13.0, 1), (14.0, 1), (15.0, 1), (16.0, 1), (17.0, 1), (18.0, 1), (19.1, 1), (20.1, 1), (21.1, 1), (22.1, 1), (23.1, 1), (24.2, 1), (25.2, 1)]
+  app banners: error=None timeout="The TikTok player didn't load from this network. This happens when TikTok blocks your region or network, or the post is unavailable. Open on TikTok" starting=False autoplayBlocked=False
+  tap-to-play pressed by instrument: False
+  overflow: 0px (sw=1280 cw=1280)
+  player lane signature: redirect-wall
+    player chain: 302 https://www.tiktok.com/player/v1/6718335390845095173 -> 200 https://www.tiktok.com/hk/about  [final 200 text/html] sig=redirect-wall
+    player chain: 302 https://www.tiktok.com/player/v1/7206561191609716014 -> 200 https://www.tiktok.com/hk/about  [final 200 text/html] sig=redirect-wall
+    player chain: 302 https://www.tiktok.com/player/v1/6718335390845095173 -> 200 https://www.tiktok.com/hk/about  [final 200 text/html] sig=redirect-wall
+    tiktok.com response: 302 https://www.tiktok.com/oembed (text/html) sig=redirect-wall
+    tiktok.com response: 302 https://www.tiktok.com/oembed (text/html) sig=redirect-wall
+    tiktok.com response: 200 https://www.tiktok.com/api/v1/web-cookie-privacy/config (text/html) sig=redirect-wall
+    tiktok.com response: 200 https://www.tiktok.com/api/v1/web-cookie-privacy/config (text/html) sig=redirect-wall
+    tiktok.com response: 302 https://www.tiktok.com/oembed (text/html) sig=redirect-wall
+    tiktok.com response: 200 https://www.tiktok.com/api/v1/web-cookie-privacy/config (text/html) sig=redirect-wall
+  app telemetry: POST /api/tiktok/player-events {"postId":"6718335390845095173","code":null,"type":"READINESS_TIMEOUT"}
+  console.error: The script resource is behind a redirect, which is disallowed.
+  console.error: Access to fetch at 'https://www.tiktok.com/hk/about' (redirected from 'https://www.tiktok.com/oembed?url=https%3A%2F%2Fwww.tiktok.com%2F%40scout2015%2Fvideo%2F6718335390845095173')
+  console.error: Failed to load resource: net::ERR_FAILED
+  console.error: Access to fetch at 'https://www.tiktok.com/hk/about' (redirected from 'https://www.tiktok.com/oembed?url=https%3A%2F%2Fwww.tiktok.com%2F%40melodizeai%2Fvideo%2F7206561191609716014'
+  console.error: Failed to load resource: net::ERR_FAILED
+  console.error: @tiktok-fe/web-cookie-banner init failed: @tiktok-fe/web-cookie-banner fetch https://www.tiktok.com/api/v1/web-cookie-privacy/config failed: undefined
+  console.error: @tiktok-fe/web-cookie-banner init failed: load cookie banner multiple times.
+  console.error: Access to XMLHttpRequest at 'https://mon.tiktokv.com/monitor_browser/collect/batch/?biz_id=tiktok_web_article' from origin 'https://www.tiktok.com' has been blocked by CORS policy:
+  console.error: Failed to load resource: net::ERR_FAILED
+  console.error: Access to fetch at 'https://mon.tiktokv.com/monitor_browser/collect/batch/?bid=tiktok_pns_web_runtime' from origin 'https://www.tiktok.com' has been blocked by CORS policy: Respons
+  requestfailed(noise): https://webflix-2-0-tepa.vercel.app/tiktok/scout2015 :: net::ERR_ABORTED
+  requestfailed(noise): https://www.tiktok.com/hk/about :: net::ERR_FAILED
+  requestfailed(noise): https://www.tiktok.com/hk/about :: net::ERR_FAILED
+  requestfailed(noise): https://mon.tiktokv.com/monitor_browser/collect/batch/ :: net::ERR_FAILED
+  requestfailed(noise): https://mon.tiktokv.com/monitor_browser/collect/batch/ :: net::ERR_FAILED
+  nav 'Next short': beat samples=[(0.12, 1), (0.3, 2), (0.6, 1), (1.2, 1), (2.0, 1)] pre=[['/player/v1/6718335390845095173']] -> at-rest after=[['/player/v1/7206561191609716014']]
+  nav 'Previous short': beat samples=[(0.12, 1), (0.3, 2), (0.6, 1), (1.2, 1), (2.0, 1)] pre=[['/player/v1/7206561191609716014']] -> at-rest after=[['/player/v1/6718335390845095173']]
+  elapsed: 37.4s
+
+--- surface deep-melodizeai (/tiktok/v/7206561191609716014) ---
+  landed: https://webflix-2-0-tepa.vercel.app/shorts?source=tiktok&post=7206561191609716014
+  verdict: GEO-WALLED
+  reason: the tiktok.com player request left the player path -> https://www.tiktok.com/hk/about (final status 200) — the ADR 0004 wall signature
+  ready=False playing_state_seen=False progression=False (time samples=0, first/last=None)
+  onStateChange states: []
+  protocol msgs (all/trusted): {} / {}
+  iframes at rest: ['/player/v1/7206561191609716014']  samples: [(8.7, 1), (9.7, 1), (10.7, 1), (11.7, 1), (12.8, 1), (13.8, 1), (14.8, 1), (15.8, 1), (16.8, 1), (17.8, 1), (18.9, 1), (19.9, 1), (20.9, 1), (21.9, 1), (22.9, 1), (23.9, 1), (24.9, 1), (26.0, 1)]
+  app banners: error=None timeout="The TikTok player didn't load from this network. This happens when TikTok blocks your region or network, or the post is unavailable. Open on TikTok" starting=False autoplayBlocked=False
+  tap-to-play pressed by instrument: False
+  overflow: 0px (sw=1280 cw=1280)
+  player lane signature: redirect-wall
+    player chain: 302 https://www.tiktok.com/player/v1/7206561191609716014 -> 200 https://www.tiktok.com/hk/about  [final 200 text/html] sig=redirect-wall
+    player chain: 302 https://www.tiktok.com/player/v1/6718335390845095173 -> 200 https://www.tiktok.com/hk/about  [final 200 text/html] sig=redirect-wall
+    player chain: 302 https://www.tiktok.com/player/v1/7206561191609716014 -> 200 https://www.tiktok.com/hk/about  [final 200 text/html] sig=redirect-wall
+    tiktok.com response: 302 https://www.tiktok.com/oembed (text/html) sig=redirect-wall
+    tiktok.com response: 302 https://www.tiktok.com/oembed (text/html) sig=redirect-wall
+    tiktok.com response: 200 https://www.tiktok.com/api/v1/web-cookie-privacy/config (text/html) sig=redirect-wall
+    tiktok.com response: 200 https://www.tiktok.com/api/v1/web-cookie-privacy/config (text/html) sig=redirect-wall
+    tiktok.com response: 302 https://www.tiktok.com/oembed (text/html) sig=redirect-wall
+    tiktok.com response: 200 https://www.tiktok.com/api/v1/web-cookie-privacy/config (text/html) sig=redirect-wall
+  app telemetry: POST /api/tiktok/player-events {"postId":"7206561191609716014","code":null,"type":"READINESS_TIMEOUT"}
+  console.error: Access to fetch at 'https://www.tiktok.com/hk/about' (redirected from 'https://www.tiktok.com/oembed?url=https%3A%2F%2Fwww.tiktok.com%2F%40melodizeai%2Fvideo%2F7206561191609716014'
+  console.error: Failed to load resource: net::ERR_FAILED
+  console.error: Access to fetch at 'https://www.tiktok.com/hk/about' (redirected from 'https://www.tiktok.com/oembed?url=https%3A%2F%2Fwww.tiktok.com%2F%40scout2015%2Fvideo%2F6718335390845095173')
+  console.error: Failed to load resource: net::ERR_FAILED
+  console.error: The script resource is behind a redirect, which is disallowed.
+  console.error: @tiktok-fe/web-cookie-banner init failed: @tiktok-fe/web-cookie-banner fetch https://www.tiktok.com/api/v1/web-cookie-privacy/config failed: undefined
+  console.error: @tiktok-fe/web-cookie-banner init failed: load cookie banner multiple times.
+  console.error: Access to XMLHttpRequest at 'https://mon.tiktokv.com/monitor_browser/collect/batch/?biz_id=tiktok_web_article' from origin 'https://www.tiktok.com' has been blocked by CORS policy:
+  console.error: Failed to load resource: net::ERR_FAILED
+  console.error: Access to XMLHttpRequest at 'https://mon.tiktokv.com/monitor_browser/collect/batch/?biz_id=tiktok_web_article' from origin 'https://www.tiktok.com' has been blocked by CORS policy:
+  requestfailed(noise): https://www.tiktok.com/hk/about :: net::ERR_FAILED
+  requestfailed(noise): https://www.tiktok.com/hk/about :: net::ERR_FAILED
+  requestfailed(noise): https://mon.tiktokv.com/monitor_browser/collect/batch/ :: net::ERR_FAILED
+  requestfailed(noise): https://mon.tiktokv.com/monitor_browser/collect/batch/ :: net::ERR_FAILED
+  requestfailed(noise): https://mon.tiktokv.com/monitor_browser/collect/batch/ :: net::ERR_FAILED
+  nav 'Next short': beat samples=[(0.12, 1), (0.3, 2), (0.6, 1), (1.2, 1), (2.0, 1)] pre=[['/player/v1/7206561191609716014']] -> at-rest after=[['/player/v1/6718335390845095173']]
+  nav 'Previous short': beat samples=[(0.12, 1), (0.3, 2), (0.6, 1), (1.2, 1), (2.0, 1)] pre=[['/player/v1/6718335390845095173']] -> at-rest after=[['/player/v1/7206561191609716014']]
+  elapsed: 38.2s
+
+==== M1 PLAYBACK-PROOF VERDICTS ====
+  [GEO-WALLED] shorts-feed  — the tiktok.com player request left the player path -> https://www.tiktok.com/hk/about (final status 200) — the ADR 0004 wall signature
+  [GEO-WALLED] deep-scout2015  — the tiktok.com player request left the player path -> https://www.tiktok.com/hk/about (final status 200) — the ADR 0004 wall signature
+  [GEO-WALLED] deep-melodizeai  — the tiktok.com player request left the player path -> https://www.tiktok.com/hk/about (final status 200) — the ADR 0004 wall signature
+
+PASS — all 3 surfaces reached a verdict at 1280x800; 0px overflow everywhere; the failure law and the exactly-one mount law found nothing. Verdicts above are the measured truth (GEO-WALLED / NO-PLAYER are valid outcomes, not instrument failures).
