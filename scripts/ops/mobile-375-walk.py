@@ -71,6 +71,9 @@ SURFACES = [
                         # critical path) was probe-200-only before
     ("/signin", None),  # the WFX2-COVERAGE-2 surface: the auth gate every guest-gated
                         # flow lands on (its redirect-traffic was seen in live-lane walks)
+    ("/upload", None),  # the WFX2-COVERAGE-3 surface: the creator upload lane (the
+                        # most-wiped surface's UI). Any guest gate is FINE: the walk
+                        # records final_url, so a redirect to /signin is data, not mud
     ("/tiktok/lives", "unavailable"),
     ("/tiktok/lofigirl/live", "unavailable"),
 ]
@@ -187,6 +190,8 @@ def walk(page, path, expect_substring):
     t0 = time.time()
     page.goto(url, wait_until="load", timeout=45_000)
     page.wait_for_timeout(SETTLE_MS)
+    final_url = page.url  # the WFX2-COVERAGE-3 law: a redirect (e.g. /upload ->
+    # /signin?redirect=...) is RECORDED, never silently measured as its target
 
     # the honest-state wait: poll body text up to HONEST_TIMEOUT_S (the prod
     # probing→error cadence means the degraded state can land well past the
@@ -211,6 +216,7 @@ def walk(page, path, expect_substring):
 
     return {
         "path": path,
+        "final_url": final_url,
         "overflow_px": overflow["px"],
         "scroll_width": overflow["sw"],
         "client_width": overflow["cw"],
@@ -248,6 +254,8 @@ def main():
                 f"[{verdict}] {r['path']}  overflow={r['overflow_px']}px "
                 f"(sw={r['scroll_width']} cw={r['client_width']})  {r['elapsed_s']}s"
             )
+            if r["final_url"] != BASE + r["path"]:
+                print(f"       redirected-to: {r['final_url']}")
             if expect is not None:
                 hv = "HIT" if r["honest_hit"] else "MISS"
                 print(f"       honest-state ({expect!r}): {hv}")

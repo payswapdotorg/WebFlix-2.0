@@ -1709,3 +1709,14 @@ Base `8f30626` both sides. Window-open: the **7th upload-lane wipe** (the same 1
 - **TOOLING LESSON (apply, not relearn)**: `.env` re-pin alone suffices on this dev server — Next dev hot-reloads env files; a restart attempt is unnecessary and fails harmlessly on the held port. dev.log was truncated by the failed-start redirect (cosmetic; the ledger/tmp logs carry the history).
 - **STATION GATES**: seam re-pinned `webflix2.db` · seed 3/5/27 · `/api/me` 200 · battery arithmetic EMPTY (zero product-code since the 3139/0 tree) · tsc 0 (no product code touched).
 - **OPERATOR GATES, ALL UNCHANGED**: G2 open (operator replay owed) · D2 CLOSED · G4/D1 closed · feature expansion frozen · deploy lane CLOSED on the missing vault. Money gate: TikTok lanes ZERO this window.
+
+### WFX2-COVERAGE-3 — the matrix reaches 8 surfaces (/upload joins) AND the desktop viewport law lands: both lanes PASS vs prod; the final_url redirect-recording improvement; 5th quiet window (zero incidents, seam held)
+
+Base `6a594b7` both sides (merge-base == tip; status scan EMPTY — no wipe; the seam HELD at `webflix2.db`, drift #22 did not recur). No operator response yet (vault still absent, no new issues/branches): both operator actions (G2 supported-network replay; vault re-provision) remain owed.
+
+- **THE INSTRUMENT IMPROVEMENT (scripts-only)**: the walk now RECORDS `final_url` per surface and prints `redirected-to:` whenever a navigation leaves the requested path — the COVERAGE-2 deferral reason for /upload (redirect semantics would muddle the measurement) is dissolved: a redirect is DATA now, never silently measured as its target. `/upload` joined as the 8th surface (the creator upload lane — the most-wiped surface's UI, un-walked since its own battery era).
+- **THE MOBILE LAW (375×812) — 8 surfaces vs prod PASS**: 0px ×8, honest-state HIT ×2, law clean; `/upload` renders clean AND records NO redirect (guests see the form directly — the measured answer to the deferral question).
+- **THE DESKTOP LAW (1440×900) — first standing desktop-lane pass, 8 surfaces vs prod PASS**: 0px ×8, honest HIT ×2, law clean — the desktop overflow class (never covered by the standing matrix, only spot-checked by the G2 instrument's 1280×800 shorts runs) is now a standing measurement. The geo-wall signature re-observed on the hub (external-failure noise class, law-clean).
+- **LOCAL spot-check PASS** (375, 8 surfaces) on the pinned seam — the script change validated locally.
+- **STATION GATES**: seam pinned · seed 3/5/27 (last verified) · tsc 0 · battery arithmetic EMPTY · ship-audit CLEAN (last full run).
+- **OPERATOR GATES, ALL UNCHANGED**: G2 open (operator replay owed) · D2 CLOSED · G4/D1 closed · feature expansion frozen · deploy lane CLOSED on the missing vault. Money gate: TikTok lanes ZERO this window.
