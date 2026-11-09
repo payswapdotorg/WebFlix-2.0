@@ -95,6 +95,19 @@ def classify_status(status, url, base=BASE):
     if u_host != b_host:
         return "noise"  # external CDNs (i.ytimg.com variant gaps et al.)
     if status == 404:
+        path = urlparse(url).path
+        # the WFX2-COVERAGE-4 carve-out (the live-lane-5xx precedent): the
+        # DEFAULT transcript lane reads the seeded DB store BY DESIGN
+        # (transcript/route.ts's own doc: "the seeded DB store, unchanged"),
+        # so a remotely-sourced video (live youtube `next` lane) honestly
+        # 404s {"error":"Video not found"} — the watch-page client swallows
+        # it (.catch resets the fetch ref; no crash, no spinner) and renders
+        # without cues. Designed absence, not a broken route. TRADEOFF
+        # (documented): a truly deleted transcript route would 404 the same
+        # shape and ride this carve-out too — accepted, because route-class
+        # breakage stays caught by every other surface's law.
+        if path.startswith("/api/videos/") and path.endswith("/transcript"):
+            return "noise"  # the designed transcript-absence answer class
         return "fail"  # an origin route answered route-not-found
     if status >= 500:
         path = urlparse(url).path
@@ -113,6 +126,10 @@ def selftest():
          "fail", 500, base + "/api/me"),
         ("origin 404 FAILS",
          "fail", 404, base + "/api/does-not-exist"),
+        ("the WFX2-COVERAGE-4 catch: designed transcript-absence 404 is noise",
+         "noise", 404, base + "/api/videos/okH-kaRjuAQ/transcript"),
+        ("a non-transcript video-API 404 still FAILS",
+         "fail", 404, base + "/api/videos/okH-kaRjuAQ/related"),
         ("designed live-lane 503 is noise",
          "noise", 503, base + "/api/tiktok/live?handle=lofigirl"),
         ("designed live-lane board 502 is noise",
@@ -231,6 +248,18 @@ def walk(page, path, expect_substring):
     }
 
 
+def discover_first_watch_href(page):
+    """The WFX2-COVERAGE-4 law: the user click path home -> first video link.
+    Discovered DYNAMICALLY so the surface generalizes across stations (no
+    hardcoded ids: local seed and prod data differ)."""
+    hrefs = page.evaluate(
+        """() => Array.from(document.querySelectorAll('a[href^="/watch/"]'))
+            .map(a => a.getAttribute('href'))
+            .filter(Boolean)"""
+    )
+    return hrefs[0] if hrefs else None
+
+
 def main():
     if "--selftest" in sys.argv:
         return selftest()
@@ -247,8 +276,12 @@ def main():
         )
         page = ctx.new_page()
         print(f"== {label} walk against {BASE} (settle {SETTLE_MS}ms) ==")
+        dynamic_surface = None
         for path, expect in SURFACES:
             r = walk(page, path, expect)
+            if path == "/":
+                # the click-path discovery rides the home walk's own settled page
+                dynamic_surface = discover_first_watch_href(page)
             verdict = "OK" if r["overflow_px"] == 0 else "OVERFLOW"
             print(
                 f"[{verdict}] {r['path']}  overflow={r['overflow_px']}px "
@@ -276,6 +309,32 @@ def main():
                 print(f"       http-noise: {hn[:200]}")
             for fr in r["failed_requests"][:5]:
                 print(f"       requestfailed: {fr[:200]}")
+
+        if dynamic_surface:
+            r = walk(page, dynamic_surface, None)
+            verdict = "OK" if r["overflow_px"] == 0 else "OVERFLOW"
+            print(
+                f"[{verdict}] dynamic:home-first-watch -> {r['path']}  "
+                f"overflow={r['overflow_px']}px "
+                f"(sw={r['scroll_width']} cw={r['client_width']})  {r['elapsed_s']}s"
+            )
+            if r["final_url"] != BASE + r["path"]:
+                print(f"       redirected-to: {r['final_url']}")
+            if r["overflow_px"] != 0:
+                failures.append(f"{r['path']}: horizontal overflow {r['overflow_px']}px")
+            if r["page_errors"]:
+                failures.append(f"{r['path']}: page errors: {r['page_errors'][:3]}")
+            for hf in r["http_failures"][:5]:
+                print(f"       HTTP-LAW-FAIL: {hf[:200]}")
+                failures.append(f"{r['path']}: HTTP failure-law hit: {hf}")
+            for ce in r["console_errors"][:5]:
+                print(f"       console.error: {ce[:200]}")
+            for hn in r["http_noise"][:5]:
+                print(f"       http-noise: {hn[:200]}")
+            for fr in r["failed_requests"][:5]:
+                print(f"       requestfailed: {fr[:200]}")
+        else:
+            print("[SKIP] dynamic:home-first-watch — no /watch/ anchor found on home")
         browser.close()
 
     print()
