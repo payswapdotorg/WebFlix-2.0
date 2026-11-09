@@ -67,6 +67,10 @@ SURFACES = [
     ("/netflix", None),  # the WFX2-COVERAGE-1 surface: the main Netflix-mode browse
                          # surface was probe-200-only before; now walked at DOM level
                          # (overflow + the failure law) like every other standing surface
+    ("/tiktok", None),  # the WFX2-COVERAGE-2 surface: the TikTok tab hub (the TL's
+                        # critical path) was probe-200-only before
+    ("/signin", None),  # the WFX2-COVERAGE-2 surface: the auth gate every guest-gated
+                        # flow lands on (its redirect-traffic was seen in live-lane walks)
     ("/tiktok/lives", "unavailable"),
     ("/tiktok/lofigirl/live", "unavailable"),
 ]
