@@ -64,6 +64,9 @@ SURFACES = [
     ("/", None),
     ("/search?q=lofigirl", None),  # the G6 surface: search rows ride mapVideoRenderer;
                                    # a bare /channel anchor would prefetch -> origin 404 -> FAIL
+    ("/netflix", None),  # the WFX2-COVERAGE-1 surface: the main Netflix-mode browse
+                         # surface was probe-200-only before; now walked at DOM level
+                         # (overflow + the failure law) like every other standing surface
     ("/tiktok/lives", "unavailable"),
     ("/tiktok/lofigirl/live", "unavailable"),
 ]
