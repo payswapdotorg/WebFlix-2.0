@@ -180,6 +180,159 @@ def settle(page, ms=700):
     page.wait_for_timeout(ms)
 
 
+# ---- WFX2-EXPAND-DIAG-1: S3 evidence bundle -------------------------------
+# The HOST-1 catch (S3 expand never navigates on prod; try2/3 hit click
+# TimeoutError) reproduced 2/2 in the interleaved differential while the
+# standalone diag (same cadence, probes installed) passed 4/4. This bundle
+# installs the diag's page-truth probes into THIS instrument's S3 path so a
+# failing run carries its own evidence: history spies (did the click reach
+# Next's nav pipeline?), a 250ms state timeline (URL / push count / mini
+# opacity+pointerEvents / wrapper host), and click-TimeoutError forensics.
+# If probes alone flip the outcome, the mechanism is TIMING-SENSITIVE —
+# that is also a pinned class.
+#
+# PINNED (WFX2-EXPAND-DIAG-1, this bundle's first failing run): NOT timing-
+# sensitive and NOT a product defect. Page truth (pushState spy + 250ms
+# sampler + forensics, three independent page-side sources): the trusted
+# click reaches the Next router pipeline, pushState commits /watch/<vid>
+# at ~800ms and NEVER reverts (zero timeline changes after t=1250ms), the
+# mini fades to inline (host=inline-main). The S3 FAIL was an INSTRUMENT
+# ARTIFACT: Playwright's page.url lagged the same-document pushState nav
+# by >=15s (stale at /) so the poll declared "no nav", and the retry
+# clicks hit a button that had ALREADY expanded (region pe:none -> click
+# TimeoutError). The S2/S4/S6 "first-click-swallow flake" (attempt-2
+# always works) is the same staleness class — attempt 2 just gives CDP
+# time to sync. Correction: click_client_nav judges on page-side truth
+# (location.pathname) first; page.url is only a fallback.
+JS_PROBES_S3 = r"""() => {
+  if (window.__s3probe) return true;
+  const D = window.__s3probe = { t0: performance.now(), push: [], fetches: [], timeline: [] };
+  const now = () => Math.round(performance.now() - D.t0);
+  for (const name of ['pushState', 'replaceState']) {
+    const orig = history[name].bind(history);
+    history[name] = function (s, t, u) {
+      let via = '?';
+      try { via = (new Error().stack || '').split('\n').slice(2, 10).join(' <= ').slice(0, 600); } catch {}
+      D.push.push({ ms: now(), url: String(u), kind: name, via });
+      return orig(s, t, u);
+    };
+  }
+  const of = window.fetch;
+  window.fetch = function (...a) {
+    const url = String((a[0] && a[0].url) || a[0] || '');
+    const rec = { ms: now(), url: url.slice(0, 200), rsc: url.includes('_rsc'), settled: false };
+    if (D.fetches.length < 300) D.fetches.push(rec);
+    return of.apply(this, a).then(
+      (r) => { rec.settled = true; return r; },
+      (e) => { rec.settled = true; rec.err = String(e && e.name); throw e; });
+  };
+  // -- click census: trusted AND synthetic (element.click()) --
+  D.clicks = [];
+  document.addEventListener('click', (e) => {
+    const t = e.target;
+    D.clicks.push({ ms: now(), trusted: e.isTrusted,
+      target: t ? (t.getAttribute && (t.getAttribute('aria-label') || t.tagName)) || t.tagName : '?',
+      href: t && t.closest && t.closest('a') ? t.closest('a').getAttribute('href') : null });
+    if (D.clicks.length > 100) D.clicks.shift();
+  }, true);
+  D.sampler = setInterval(() => {
+    const reg = document.querySelector('[aria-label="Miniplayer"]');
+    const cs = reg ? getComputedStyle(reg) : null;
+    const w = document.querySelector('div[data-wfx-player-host]');
+    let host = 'absent';
+    if (w && w.isConnected) {
+      host = w.closest('main') ? 'inline-main' : 'other-connected';
+      let n = w;
+      while (n) {
+        if (n.getAttribute && n.getAttribute('aria-label') === 'Miniplayer') { host = 'mini'; break; }
+        n = n.parentElement;
+      }
+    } else if (w) host = 'limbo';
+    D.timeline.push({ t: now(), path: location.pathname, pushN: D.push.length,
+      mini: cs ? cs.opacity + '/' + cs.pointerEvents : 'absent', host,
+      doc: performance.timeOrigin % 100000 });
+    if (D.timeline.length > 600) D.timeline.shift();
+  }, 250);
+  return true;
+}"""
+
+JS_FORENSICS_S3 = r"""() => {
+  const D = window.__s3probe;
+  if (!D) return { probes: false };
+  const out = { path: location.pathname, push: D.push.slice(-6), clicks: (D.clicks || []).slice(-10) };
+  const b = document.querySelector('button[aria-label="Expand miniplayer"]');
+  out.buttonPresent = !!b;
+  if (b) {
+    const r = b.getBoundingClientRect();
+    out.bbox = [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)];
+    const cs = getComputedStyle(b);
+    out.btn = { opacity: cs.opacity, pe: cs.pointerEvents, vis: cs.visibility };
+    const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+    out.top = top ? (top.getAttribute && top.getAttribute('aria-label')) || top.tagName : null;
+    out.topInBtn = top ? (top === b || b.contains(top)) : false;
+  }
+  const reg = document.querySelector('[aria-label="Miniplayer"]');
+  if (reg) {
+    const rcs = getComputedStyle(reg);
+    out.region = { opacity: rcs.opacity, pe: rcs.pointerEvents };
+  } else out.region = null;
+  const w = document.querySelector('div[data-wfx-player-host]');
+  out.wrapper = w ? (w.isConnected ? 'connected' : 'limbo') : 'absent';
+  out.pending = D.fetches.filter((f) => !f.settled).slice(-8);
+  return out;
+}"""
+
+
+def install_s3_probes(page):
+    try:
+        page.evaluate(JS_PROBES_S3)
+    except Exception as e:  # noqa: BLE001
+        log(f"  [S3-probes] install failed: {type(e).__name__}")
+
+
+def s3_timeline_lines(page) -> list[str]:
+    try:
+        tl = page.evaluate("() => window.__s3probe ? window.__s3probe.timeline : []")
+    except Exception:  # noqa: BLE001
+        return []
+    lines, prev = [], None
+    for s in tl:
+        cur = (s["path"], s["pushN"], s["mini"], s["host"], s.get("doc"))
+        if cur != prev:
+            lines.append(f"t={s['t']}ms path={s['path']} pushN={s['pushN']} "
+                         f"mini={s['mini']} host={s['host']} doc={s.get('doc')}")
+            prev = cur
+    return lines
+
+
+def dump_s3_evidence(page) -> str:
+    """Print + return a compact evidence signature for the S3 verdict."""
+    try:
+        fore = page.evaluate(JS_FORENSICS_S3)
+    except Exception as e:  # noqa: BLE001
+        log(f"  [S3-evidence] forensics failed: {type(e).__name__}")
+        return "forensics-unavailable"
+    log(f"  [S3-evidence] forensics: {json.dumps(fore)[:1200]}")
+    lines = s3_timeline_lines(page)
+    for line in lines[-12:]:
+        log(f"  [S3-timeline] {line}")
+    pushes = fore.get("push") or []
+    watch_pushes = [p for p in pushes if "/watch/" in p.get("url", "")]
+    if watch_pushes:
+        sig = "PUSH-REACHED-NEXT(" + str(len(watch_pushes)) + ")"
+    elif fore.get("probes") is False:
+        sig = "NO-PROBES"
+    else:
+        sig = "NO-PUSHSTATE"
+    if fore.get("buttonPresent") is False:
+        sig += "+BUTTON-UNMOUNTED"
+    elif fore.get("topInBtn") is False:
+        sig += "+HIT-BLOCKED:" + str(fore.get("top"))
+    if fore.get("region") and fore["region"].get("pe") == "none":
+        sig += "+REGION-PE-NONE"
+    return sig
+
+
 def click_client_nav(page, sel, want, label="nav",
                      attempts=3, poll_s=4.0, hover_first=False):
     """Click and wait for the SPA URL change; up to `attempts` tries.
@@ -194,7 +347,15 @@ def click_client_nav(page, sel, want, label="nav",
     from urllib.parse import urlparse
 
     def url_ok() -> bool:
-        path = urlparse(page.url).path
+        # WFX2-EXPAND-DIAG-1 correction: judge on PAGE-SIDE truth first.
+        # page.url lagged a same-document pushState nav by >=15s on prod
+        # (the S3 evidence bundle caught it): the poll declared "no nav"
+        # while location.pathname had committed and held. Fallback to the
+        # tracked URL only when the page cannot be evaluated.
+        try:
+            path = page.evaluate("() => location.pathname")
+        except Exception:  # noqa: BLE001
+            path = urlparse(page.url).path
         kind, want_path = want
         if kind == "path":
             return path.rstrip("/") == want_path.rstrip("/")
@@ -300,11 +461,25 @@ def main() -> int:
                 record("S3-EXPAND-INLINE", False,
                        f"precondition: mini not visible on {page.url} ({mini})")
             else:
+                install_s3_probes(page)
+                s3_navs: list[tuple[str, str]] = []
+                def _on_nav(f):
+                    try:
+                        if f.parent_frame is None:
+                            s3_navs.append(("main", f.url))
+                    except Exception:
+                        pass
+                page.on("framenavigated", _on_nav)
                 ok, why = click_client_nav(page, EXPAND_BTN, ("path-prefix", "/watch/"),
                                            label="expand-click", hover_first=True,
                                            attempts=3, poll_s=15.0)
+                sig = dump_s3_evidence(page)
+                log(f"  [S3-cdp] main-frame navigations during S3: "
+                    f"{json.dumps(s3_navs[:12])[:600]}")
+                log(f"  [S3-views] playwright-url={page.url} "
+                    f"page-side-href={page.evaluate('() => location.href')}")
                 if not ok:
-                    record("S3-EXPAND-INLINE", False, why)
+                    record("S3-EXPAND-INLINE", False, f"{why} | diag-sig={sig}")
                 else:
                     settle(page)
                     st = page.evaluate(JS_WRAPPER_STATE, tag)
@@ -316,7 +491,14 @@ def main() -> int:
                            f"miniVisible={mini.get('visible')}")
 
             # ---- S4 takeover (watch -> watch, no mini flash) ----------------
-            if not page.url.startswith(f"{BASE}/watch/"):
+            # page-truth precondition (WFX2-EXPAND-DIAG-1: page.url can be
+            # stale behind a same-document nav — judge location.pathname).
+            try:
+                s4_path = page.evaluate("() => location.pathname")
+            except Exception:  # noqa: BLE001
+                from urllib.parse import urlparse as _up3
+                s4_path = _up3(page.url).path
+            if not s4_path.startswith("/watch/"):
                 # sequencing recovery (recorded): a fresh watch load re-creates
                 # the wrapper — re-tag the (new) node; the takeover law is
                 # about watch->watch nav, independent of how we got here.
@@ -495,6 +677,23 @@ def main() -> int:
                     # click in ONE quick pass over live locators.
                     ok2, why2 = False, "no real /watch anchor found"
                     for attempt in range(3):
+                        # WFX2-EXPAND-DIAG-1 presence-wait: the home feed's
+                        # /watch/ anchors materialize 4.5-7s after the
+                        # client-nav home on prod (measured in the post-close
+                        # state probe: 0 anchors at close+1.5s, 48 at +4.5s).
+                        # The old 3-quick-pass scan (~2-5s total) sat entirely
+                        # inside that empty window -> 2/2 "no real anchor
+                        # navigated" FAILs that were NOT host-law breaks (the
+                        # same-node reattach law was never reached). Poll for
+                        # PRESENCE first — same discipline as S4's 15s rail
+                        # budget and S5's engagement polling.
+                        wait_budget = 12000 if attempt == 0 else 3000
+                        try:
+                            page.wait_for_selector('a[href^="/watch/"]',
+                                                   state="attached",
+                                                   timeout=wait_budget)
+                        except Exception:  # noqa: BLE001
+                            pass
                         anchors = page.locator('a[href^="/watch/"]')
                         clicked = False
                         try:
