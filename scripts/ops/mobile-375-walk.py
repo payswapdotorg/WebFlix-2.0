@@ -62,6 +62,8 @@ VIEWPORT = parse_viewport(os.environ.get("WALK_VIEWPORT", ""))
 # (path, optional honest-state substring that must appear within HONEST_TIMEOUT_S)
 SURFACES = [
     ("/", None),
+    ("/search?q=lofigirl", None),  # the G6 surface: search rows ride mapVideoRenderer;
+                                   # a bare /channel anchor would prefetch -> origin 404 -> FAIL
     ("/tiktok/lives", "unavailable"),
     ("/tiktok/lofigirl/live", "unavailable"),
 ]
