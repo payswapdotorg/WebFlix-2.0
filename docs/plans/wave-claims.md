@@ -1645,3 +1645,14 @@ Base `1dda689` both sides. The operator delivered the vault contents this window
 - **Upstash**: the handed REST URL is **DNS-DEAD from the sandbox** (getent: no resolution) — the recorded no-wire constraint re-verified empirically; URL + 2 conflicting tokens vaulted, nothing wired, the app keeps its tested honest local-memory fallback (the cutover battery runs with empty Upstash env by design).
 - **Prod env inventory (names only, values redacted)**: `TIKTOK_LIVE_STATUS_TTL_MS`, `APIFY_LIVE_ACTOR_ID`, `APIFY_API_KEY`, `NEXTAUTH_SECRET`, `DATABASE_URL` — five keys, production+preview targets as recorded.
 - Money gate: the deploy itself is the iron law's own mandate (operator-directed infrastructure); TikTok-lane spend REMAINS zero. No feature expansion (the TL directive honored). Every number in this entry is a measured value, every gate a run command.
+
+### WFX2-PROD-STANDING-1 — the deploy-era standing verification, second window running: ZERO drift everywhere, the prod-state row holds
+
+Base `63388b1` both sides (merge-base == tip; status scan EMPTY). The first window where BOTH stations carry standing verification: local healed-era + prod deploy-era.
+
+- **VAULT SURVIVED the window boundary** (`/home/z/.secrets/webflix.env`, 0600 intact) — the deploy lane stays open; no re-seed owed.
+- **PROD-STATE ROW, drift-checked at the API layer**: the tepa project's latest READY production deployment is **`1dda689`** (ours, url `webflix-2-0-8m3rhrp2k-tepa`), predecessor `f46a181` — nothing deployed over ours; the route discriminator re-confirmed live (`POST /api/tiktok/player-events` → 400 Invalid player event = the M1-route build serving).
+- **PROD BATTERY, ALL GREEN**: `prod-probe.sh` — routes ×6 200, G20 → 400, honest probing DTOs; the 4-surface 375 walk vs prod — 0px ×4 (home / the G6 search surface / both live lanes), honest-state HIT ×2, failure law clean.
+- **LOCAL BATTERY**: seam pinned `webflix2.db` · seed 3/5/27, @you, 0 handle-less · `/api/me` 200 · tsc 0 · ship-audit CLEAN.
+- **THE BATTERY STANDING ARITHMETIC, MECHANICALLY PROVEN**: `git log e97d021..origin/main -- src/ prisma/` is EMPTY — zero product-code changes since the 3139/0 battery tree (only docs + the walk script); the recorded battery result IS the product code's result, on the station and in prod.
+- **OPERATOR GATES, ALL UNCHANGED**: G2 geo-wall (the instrument ready, one command on a supported network) · G3 half-state (new key vault-ONLY; the one-command env swap waits on the operator's written D2 decision) · G4/D1 closed (M3 not dispatched, Worker B frozen) · TL conditions 2 and 3 open (feature expansion stays frozen; condition 1 PROVEN). Money gate: TikTok lanes zero.
