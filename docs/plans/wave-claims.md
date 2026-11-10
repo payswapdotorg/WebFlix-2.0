@@ -1915,3 +1915,18 @@ Base `2ae30d7` both sides (docs-only commit; the no-deploy lane).
 - **OPERATOR RE-HANDOVER STILL OWED (unchanged since window 19)**: 12/13 keys — APIFY_API_KEY · COMPOSIO_API_KEY · COMPOSIO_MCP_API_KEY · E2B_API_KEY · GITHUB_PAT_FALLBACK · NEON_API_KEY_1/2/3_RATELIMIT_FALLBACK/4 · OPENROUTER_API_KEY · VERCEL_TOKEN_FALLBACK/PRIMARY.
 - **WINDOW OPEN (post-heal)**: `[vault] INCOMPLETE missing=12` · `[rate] 5000/5000` · surface #7/#8 zero-new · main `2ae30d7` CI 3/3 · dev / + /api/me 200 · prod P102 battery ALL PROBES GREEN exit=0.
 - **OPERATOR GATES**: unchanged — G2 open (the replay stays the operator's residential-network task) · deployment lane CLOSED (docs-only commit) · money gate ZERO · expansion frozen · product-fix freeze respected · TikTok lanes ZERO.
+
+## WFX2-SIG-17 (window 23, 2026-11-10) — batch #4 (known 5 surfaces, fourth time) + FIRST lineage event: platform's local scaffold commit c4f4c70 reset --mixed, invariant restored
+
+Task ID: WFX2-SIG-17 (the standing "go"; heal + maintenance + docs only, zero product changes, freeze respected).
+
+Base `1b2a355` both sides (docs-only commit; the no-deploy lane).
+
+- **BATCH #4**: erasure #17 exact-10 one-glance IDENTICAL to #14/#15/#16 · vault wipe #6 · home tool copy wipe · de-seed #7 · drift #32. Firing history: **hit-hit-skip-hit-hit** — intermittent, cadence unknown.
+- **FIRST LINEAGE EVENT**: local HEAD `c4f4c70` ≠ origin/main `1b2a355` — a PLATFORM-authored local commit (author `Z User <z@container>`, UUID message, 13:29:32, parent `1b2a355`, never pushed) containing exactly window-22's 24-file scaffold artifact set (+2015 lines, incl. `dev.pid` runtime state and binary evidence pngs).
+- **DISPOSITION (evidence-first)**: not pushed (no operator directive to commit platform state into the canonical repo) · not reset --hard (would delete platform worktree files) · **reset --mixed to `1b2a355`** — local==origin invariant restored, worktree untouched, artifacts back to documented untracked status, SHA `c4f4c70` recorded + reflog-recoverable.
+- **STANDING RULE FOR RECURRENCE**: platform scaffold commits are inspected (parent/author/content), never pushed without operator directive; reset --mixed keeps local==origin while leaving platform files in place.
+- **HEALED AT THE EARLIEST LINK**: git restore ×10 (D-lines=0, diff HEAD=0) · vault rebuilt 1/13 (GITHUB_PAT_PRIMARY re-recovered from origin, value never printed, 40 bytes, token VALID rate 4998/5000, vault-first live) · home copy byte-identical · seed Video=27/User=3 exact · seam re-pinned webflix2.db.
+- **OPERATOR RE-HANDOVER STILL OWED (unchanged since window 19)**: 12/13 keys — APIFY_API_KEY · COMPOSIO_API_KEY · COMPOSIO_MCP_API_KEY · E2B_API_KEY · GITHUB_PAT_FALLBACK · NEON_API_KEY_1/2/3_RATELIMIT_FALLBACK/4 · OPENROUTER_API_KEY · VERCEL_TOKEN_FALLBACK/PRIMARY.
+- **WINDOW OPEN (post-heal)**: `[vault] INCOMPLETE missing=12` · `[rate] 4998/5000` · surface #7/#8 zero-new · main `1b2a355` CI 3/3 · dev / + /api/me 200 · prod P102 battery ALL PROBES GREEN exit=0.
+- **OPERATOR GATES**: unchanged — G2 open (the replay stays the operator's residential-network task) · deployment lane CLOSED (docs-only commit) · money gate ZERO · expansion frozen · product-fix freeze respected · TikTok lanes ZERO.
