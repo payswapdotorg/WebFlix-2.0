@@ -1875,3 +1875,16 @@ Base `a9412d7` both sides (docs-only commit; the no-deploy lane).
 - **SAME-BATCH SURFACES (~07:22 mtime evidence)**: home tool copy wiped (structurally-closed class — healed from repo, byte-identical, live-verified) · de-seed variant #4 (schema intact, Video=0/User=0; gitignored → seed is the heal channel; `bun run db:seed` → Video=27/User=3 exact) · drift #29 (.env → absent custom.db; re-pinned webflix2.db).
 - **WINDOW OPEN (post-heal)**: `[vault] INCOMPLETE missing=12` (by-design honest) · `[tree] clean` · rate 5000/5000 · surface #7/#8 zero-new past baseline · issues/PRs/branches unchanged · main `a9412d7` CI 3/3 · dev / + /api/me 200 · prod P102 battery ALL PROBES GREEN exit=0.
 - **OPERATOR GATES**: unchanged — G2 open (the replay stays the operator's residential-network task) · deployment lane CLOSED (docs-only commit) · money gate ZERO · expansion frozen · product-fix freeze respected · TikTok lanes ZERO.
+
+## WFX2-SIG-15 (window 20, 2026-11-10) — erasure #15 identical to #14 at one glance; boundary batch composition identical to window-19's (the batch is itself a signature); all healed with the proven recipe
+
+Task ID: WFX2-SIG-15 (the standing "go"; heal + docs only, zero product changes, freeze respected).
+
+Base `9df7ab4` both sides (docs-only commit; the no-deploy lane).
+
+- **ONE-GLANCE CONFIRMATION KEPT ITS FIRST PROMISE**: erasure #15 hit at window-20 open — the exact-10 compared against #14's KNOWN set mechanically: **IDENTICAL** (`src/app/api/upload/{route,stage,execute}/route.ts` ×3 + `src/app/upload/{page,upload-result,view}.tsx` ×3 + `src/lib/upload/{flow,stage}.ts` ×2 + `tests/fixtures/upload/{README.md,synthetic-480p-1s-webflix-fixture.mp4}` ×2).
+- **THE BATCH IS ITSELF A SIGNATURE NOW**: window-20 boundary batch composition **IDENTICAL** to window-19's — exact-10 tree deletion + vault dir wipe (#4: window-12-era, window-15, window-19, window-20) + home tool copy wipe (structurally-closed class) + de-seed variant #5 + drift #30 (.env → absent custom.db). Two consecutive batches, same composition — mechanically comparable, stable.
+- **HEALED AT THE EARLIEST LINK** with the window-19 recipe: git restore ×10 (porcelain=0, diff HEAD=0, zero residue) · vault rebuilt 1/13 (GITHUB_PAT_PRIMARY re-recovered from origin's embedded userinfo, value never printed, 40 bytes, token VALID at rate 5000/5000, vault-first live) · home copy byte-identical · seed Video=27/User=3 exact · seam re-pinned webflix2.db.
+- **OPERATOR RE-HANDOVER STILL OWED (unchanged since window 19)**: 12/13 keys unrecoverable from disk — APIFY_API_KEY · COMPOSIO_API_KEY · COMPOSIO_MCP_API_KEY · E2B_API_KEY · GITHUB_PAT_FALLBACK · NEON_API_KEY_1/2/3_RATELIMIT_FALLBACK/4 · OPENROUTER_API_KEY · VERCEL_TOKEN_FALLBACK/PRIMARY. Until then Neon/OpenRouter/Vercel/Composio/E2B consumers stay dark regardless of gate state.
+- **WINDOW OPEN (post-heal)**: `[vault] INCOMPLETE missing=12` (by-design honest) · `[tree] clean` · rate 5000/5000 · surface #7/#8 zero-new · issues/PRs/branches unchanged · main `9df7ab4` CI 3/3 · dev / + /api/me 200 · prod P102 battery ALL PROBES GREEN exit=0.
+- **OPERATOR GATES**: unchanged — G2 open (the replay stays the operator's residential-network task) · deployment lane CLOSED (docs-only commit) · money gate ZERO · expansion frozen · product-fix freeze respected · TikTok lanes ZERO.
