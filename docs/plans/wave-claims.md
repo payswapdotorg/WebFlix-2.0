@@ -1944,3 +1944,15 @@ Base `d5b65b6` both sides (docs-only commit; the no-deploy lane).
 - **OPERATOR RE-HANDOVER STILL OWED (unchanged since window 19)**: 12/13 keys — APIFY_API_KEY · COMPOSIO_API_KEY · COMPOSIO_MCP_API_KEY · E2B_API_KEY · GITHUB_PAT_FALLBACK · NEON_API_KEY_1/2/3_RATELIMIT_FALLBACK/4 · OPENROUTER_API_KEY · VERCEL_TOKEN_FALLBACK/PRIMARY.
 - **WINDOW OPEN (post-heal)**: `[vault] INCOMPLETE missing=12` · `[rate] 5000/5000` · surface #7/#8 zero-new · main `d5b65b6` CI 3/3 · dev / + /api/me 200 · prod P102 battery ALL PROBES GREEN exit=0.
 - **OPERATOR GATES**: unchanged — G2 open (the replay stays the operator's residential-network task) · deployment lane CLOSED (docs-only commit) · money gate ZERO · expansion frozen · product-fix freeze respected · TikTok lanes ZERO.
+
+## WFX2-SIG-19 (window 24, 2026-11-10) — zero batch firing (first all-alive sweep since window 21) + platform scaffold commit #3 (92b3f98) reset per standing rule
+
+Task ID: WFX2-SIG-19 (the standing "go"; heal + docs only, zero product changes, freeze respected).
+
+Base `57a3ce7` both sides (docs-only commit; the no-deploy lane).
+
+- **ZERO BATCH FIRING**: no erasure #19, no vault wipe #8, no home copy wipe, no de-seed #9, no drift #34 — vault/home/seam/seed ALL ALIVE at open. Firing history: hit, hit, skip, hit, hit×2, skip — intermittent in time, cadence unknown, honest boundary stands.
+- **PLATFORM SCAFFOLD COMMIT #3**: `92b3f98` (author `Z User <z@container>`, UUID message, authored 17:56:13, parented correctly on `57a3ce7`, same 24-file set + worklog.md, 2015 insertions) — it ABSORBED the ?? set into its tree (porcelain read 0 because the artifacts were tracked-and-clean, not absent). Recurrence #3 (c4f4c70 → reset, 5e025f2 → reset, 92b3f98 → reset): the platform's scaffold-committer re-commits the same artifact set after every reset --mixed; the standing rule handles each mechanically; zero repo content affected.
+- **DISPOSITION PER THE STANDING RULE**: inspected → **reset --mixed to origin/main `57a3ce7`** (never pushed) → scaffolding back to untracked-in-place (12 ?? verified) → local==origin restored, SHA recorded + reflog-recoverable.
+- **STANDING STATE**: `[vault] INCOMPLETE missing=12` (expected, re-handover owed) · surface #7/#8 zero-new · main `57a3ce7` CI 3/3 · dev / + /api/me 200 · prod P102 battery ALL PROBES GREEN exit=0.
+- **OPERATOR GATES**: unchanged — G2 open (the replay stays the operator's residential-network task) · deployment lane CLOSED (docs-only commit) · money gate ZERO · expansion frozen · product-fix freeze respected · TikTok lanes ZERO.
