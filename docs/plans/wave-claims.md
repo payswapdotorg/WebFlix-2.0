@@ -1956,3 +1956,19 @@ Base `57a3ce7` both sides (docs-only commit; the no-deploy lane).
 - **DISPOSITION PER THE STANDING RULE**: inspected → **reset --mixed to origin/main `57a3ce7`** (never pushed) → scaffolding back to untracked-in-place (12 ?? verified) → local==origin restored, SHA recorded + reflog-recoverable.
 - **STANDING STATE**: `[vault] INCOMPLETE missing=12` (expected, re-handover owed) · surface #7/#8 zero-new · main `57a3ce7` CI 3/3 · dev / + /api/me 200 · prod P102 battery ALL PROBES GREEN exit=0.
 - **OPERATOR GATES**: unchanged — G2 open (the replay stays the operator's residential-network task) · deployment lane CLOSED (docs-only commit) · money gate ZERO · expansion frozen · product-fix freeze respected · TikTok lanes ZERO.
+
+## WFX2-SIG-20 (window 25, 2026-11-10) — the erasure was COMMITTED for the first time: scaffold commit #4 (297565d) swallowed erasure #19 via add-all; reset --mixed removed it before it could ever reach origin — the never-push-scaffold rule is what stood between the erasure and canonical history
+
+Task ID: WFX2-SIG-20 (the standing "go"; heal + docs only, zero product changes, freeze respected).
+
+Base `4638c4b` both sides (docs-only commit; the no-deploy lane).
+
+- **THE MASK**: window-25 open sweep read porcelain=0 with HEAD `297565d` ≠ origin `4638c4b`, vault gone, home copy gone, de-seed, drift — the clean porcelain was NOT a clean bill.
+- **FORENSICS**: `297565d` (Z User, UUID message, authored 20:02:26, parented on `4638c4b`) = the same 24-file scaffolding set **PLUS the deletions of the exact-10 upload-lane files** — ls-tree shows all 10 absent from its tree, stat carries the deletion lines (view.tsx -1194, flow.ts -200, stage/route.ts -158 …). **Erasure #19 (one-glance identical to #14–#18) fired and the scaffold-committer's add-all staged it INTO the commit — FIRST COMMITTED-DELETION INSTANCE** (#10–#18 were all worktree-only, never committed).
+- **WHY THE RULE MATTERS**: reset --mixed to origin/main removed `297565d` from local history (never pushed, reflog-recoverable). **Had the scaffold commit been pushed, the canonical repo would now be missing the upload lane.** The never-push-scaffold standing rule is what prevented it.
+- **THE MASK LIFTED MECHANICALLY**: after reset --mixed, D×10 REAPPEARED (index restored to canonical tree, worktree still lacked the files) → git restore ×10 → porcelain=12 (exactly the ?? set), diff HEAD=0.
+- **ALSO FIRED + HEALED**: vault wipe #8 (8th; GITHUB_PAT_PRIMARY re-recovered from origin, value never printed, token VALID) · de-seed #9 (seed → Video=27/User=3 exact) · drift #34 (seam re-pinned webflix2.db) · home copy (byte-identical from repo).
+- **FIRING HISTORY**: hit, hit, skip, hit, hit×2, skip, hit — composition varies; intermittent in time, cadence unknown.
+- **OPERATOR RE-HANDOVER STILL OWED (unchanged since window 19)**: 12/13 keys — APIFY_API_KEY · COMPOSIO_API_KEY · COMPOSIO_MCP_API_KEY · E2B_API_KEY · GITHUB_PAT_FALLBACK · NEON_API_KEY_1/2/3_RATELIMIT_FALLBACK/4 · OPENROUTER_API_KEY · VERCEL_TOKEN_FALLBACK/PRIMARY.
+- **WINDOW OPEN (post-heal)**: surface #7/#8 zero-new · main `4638c4b` CI 3/3 · dev / + /api/me 200 · prod P102 battery ALL PROBES GREEN exit=0.
+- **OPERATOR GATES**: unchanged — G2 open (the replay stays the operator's residential-network task) · deployment lane CLOSED (docs-only commit) · money gate ZERO · expansion frozen · product-fix freeze respected · TikTok lanes ZERO.
