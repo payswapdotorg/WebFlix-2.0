@@ -1888,3 +1888,15 @@ Base `9df7ab4` both sides (docs-only commit; the no-deploy lane).
 - **OPERATOR RE-HANDOVER STILL OWED (unchanged since window 19)**: 12/13 keys unrecoverable from disk — APIFY_API_KEY · COMPOSIO_API_KEY · COMPOSIO_MCP_API_KEY · E2B_API_KEY · GITHUB_PAT_FALLBACK · NEON_API_KEY_1/2/3_RATELIMIT_FALLBACK/4 · OPENROUTER_API_KEY · VERCEL_TOKEN_FALLBACK/PRIMARY. Until then Neon/OpenRouter/Vercel/Composio/E2B consumers stay dark regardless of gate state.
 - **WINDOW OPEN (post-heal)**: `[vault] INCOMPLETE missing=12` (by-design honest) · `[tree] clean` · rate 5000/5000 · surface #7/#8 zero-new · issues/PRs/branches unchanged · main `9df7ab4` CI 3/3 · dev / + /api/me 200 · prod P102 battery ALL PROBES GREEN exit=0.
 - **OPERATOR GATES**: unchanged — G2 open (the replay stays the operator's residential-network task) · deployment lane CLOSED (docs-only commit) · money gate ZERO · expansion frozen · product-fix freeze respected · TikTok lanes ZERO.
+
+## WFX2-STBY-21 (window 21, 2026-11-10) — zero-event open: the batch is intermittent (hit, hit, skip); standby window, docs-only
+
+Task ID: WFX2-STBY-21 (the standing "go"; standby + docs only, zero product changes, freeze respected).
+
+Base `5e91578` both sides (docs-only commit; the no-deploy lane).
+
+- **THE BOUNDARY BATCH IS INTERMITTENT, NOT DETERMINISTIC**: after two consecutive identical 5-surface batches (window-19, window-20 boundaries), the window-21 boundary produced **ZERO events** — tree clean (no #16), vault alive 0700 (no wipe #5), home copy alive, seed intact (Video=27/User=3), seam pinned (no drift #31).
+- **HONEST BOUNDARY**: firing cadence unknown — "twice then a skip" is the entire observed history; no per-boundary guarantee claimed either way. What stands mechanically: the signature (exact-10 composition when the tree class fires; 5-surface batch composition when the batch fires) + the detection (window-open #0/#0b catch everything at the earliest link, proven at windows 19/20).
+- **NO NEW INSTRUMENTATION WARRANTED**: both prior windows closed with verified-clean trees — the wipes live in the close→open gap; zero evidence of mid-window wipes; adding mid-window checks would be correction without evidence.
+- **STANDING STATE**: `[vault] INCOMPLETE missing=12` (operator re-handover owed since window 19, unchanged) · `[tree] clean` · rate 5000/5000 · surface #7/#8 zero-new · main `5e91578` CI 3/3 · dev / + /api/me 200 · prod P102 battery ALL PROBES GREEN exit=0.
+- **OPERATOR GATES**: unchanged — G2 open (the replay stays the operator's residential-network task) · deployment lane CLOSED (docs-only commit) · money gate ZERO · expansion frozen · product-fix freeze respected · TikTok lanes ZERO.
