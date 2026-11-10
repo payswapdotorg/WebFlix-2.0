@@ -204,6 +204,14 @@ def settle(page, ms=700):
 # always works) is the same staleness class — attempt 2 just gives CDP
 # time to sync. Correction: click_client_nav judges on page-side truth
 # (location.pathname) first; page.url is only a fallback.
+#
+# WFX2-S4-RES (the residual close): S4's hand-rolled post-click poll and
+# final judge were the LAST nav judges still on page.url — the takeover
+# nav (watch -> watch via the rail) is the SAME same-document class as
+# the S3 expand nav, so attempt-1's click committed while the poll
+# watched a stale source (the persistent attempt-2 pattern, 4/4 runs).
+# Both judges now use the click_client_nav discipline: location.pathname
+# first, page.url only when the page cannot be evaluated.
 JS_PROBES_S3 = r"""() => {
   if (window.__s3probe) return true;
   const D = window.__s3probe = { t0: performance.now(), push: [], fetches: [], timeline: [] };
@@ -561,7 +569,13 @@ def main() -> int:
                     if clicked:
                         t0 = time.monotonic()
                         while time.monotonic() - t0 < 8.0:
-                            p_now = _up(page.url).path
+                            # WFX2-S4-RES: page-truth first (same discipline as
+                            # click_client_nav's url_ok — page.url lags the
+                            # same-document takeover nav by >=15s).
+                            try:
+                                p_now = page.evaluate("() => location.pathname")
+                            except Exception:  # noqa: BLE001
+                                p_now = _up(page.url).path
                             if p_now.startswith("/watch/") and p_now != f"/watch/{vid}":
                                 ok = True
                                 why = f"related-click: navigated on attempt {attempt + 1}"
@@ -575,7 +589,12 @@ def main() -> int:
                 st = page.evaluate(JS_WRAPPER_STATE, tag)
                 mini = page.evaluate(JS_MINI_VISIBLE)
                 from urllib.parse import urlparse as _up2
-                final_path = _up2(page.url).path
+                # WFX2-S4-RES: the final judge is page-truth too (the landed
+                # path is what the page committed, not what CDP last synced).
+                try:
+                    final_path = page.evaluate("() => location.pathname")
+                except Exception:  # noqa: BLE001
+                    final_path = _up2(page.url).path
                 # The LAW is watch->watch takeover (any different real id the
                 # rail offered — the rail re-renders between discovery and
                 # click, so the specific id is NOT the contract; the host,
@@ -587,7 +606,7 @@ def main() -> int:
                        ok and took_over and st.get("host") != "mini"
                        and st.get("tagged") and not mini.get("visible")
                        and not flash.get("on"),
-                       f"{why} | landed={final_path} url-ok={took_over} "
+                       f"{why} | landed={final_path} pagepath-ok={took_over} "
                        f"host={st.get('host')} tagged={st.get('tagged')} "
                        f"miniVisible={mini.get('visible')} flash={flash}")
 

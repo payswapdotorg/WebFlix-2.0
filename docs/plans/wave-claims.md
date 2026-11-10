@@ -1792,3 +1792,13 @@ Base `0c60127` both sides (docs-only commit). Window-open: ZERO events (tree cle
 - **APIFY UNTOUCHED**: zero calls this window; money gate ZERO.
 - **STATION GATES**: seam pinned `webflix2.db` · seed verified (Video=27) · `/api/me` 200 · battery arithmetic EMPTY (docs only) · tsc 0.
 - **OPERATOR GATES**: G2 open (residential-network replay STILL owed) · D2 CLOSED · G4/D1 closed · feature expansion frozen · deploy lane CLOSED BY GATE. Money gate: TikTok lanes ZERO.
+
+### WFX2-S4-RES — the attempt-2 residual closes on page-truth: S4 attempt-1 in 9/9 runs across ALL FOUR stations; the instrument was the last page.url nav judge, the product never missed
+
+Base `416dfaf` both sides (instrument+docs commit). Window-open: ZERO events (tree clean, lineage `416dfaf` local==origin, seam pinned, Video=27, `/api/me` 200, surface zero-new-comments, CI 3/3 fresh).
+
+- **THE FIND**: S4's hand-rolled post-click poll (8s) and final judge still read `page.url` — the last remaining nav judges on the stale source after WFX2-EXPAND-DIAG-1. The takeover nav (watch→watch via the related rail) is the SAME same-document pushState class as the S3 expand nav, so attempt-1's click committed while the poll watched a source that lags ≥15s; attempt-2 only gave CDP time to sync. This explains the persistent 4/4 attempt-2 pattern exactly.
+- **THE FIX (instrument-only)**: both judges → page-truth first (location.pathname via page.evaluate, page.url only when the page cannot be evaluated) — the click_client_nav discipline in-source; the verdict label honestly renamed `url-ok` → `pagepath-ok`. Four edits, zero product changes.
+- **THE EVIDENCE**: 9 runs × 7/7 PASS — local desktop ×3, local mobile 375x812 ×2, prod desktop ×2, prod mobile 375x812 ×2 — S4 attempt-1 in ALL 9 (`pagepath-ok=True` everywhere, flash n=0 everywhere, overflow 0px, sameTag=True everywhere). The attempt-2 residual is CLOSED as an instrument artifact — same verdict class as S3.
+- **SCOPED NON-ACTION**: S6-REATTACH's attempt-2 stays as recorded — its nav is the feed fresh-mount class where page.url proved reliable (7/7 evidence) and the presence-wait already covers the materialize delay; no correction without evidence.
+- **OPERATOR GATES**: unchanged — G2 open (residential-network replay owed) · deployment CLOSED BY GATE · money gate ZERO · expansion frozen · TikTok lanes ZERO.
