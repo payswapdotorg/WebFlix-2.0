@@ -1900,3 +1900,18 @@ Base `5e91578` both sides (docs-only commit; the no-deploy lane).
 - **NO NEW INSTRUMENTATION WARRANTED**: both prior windows closed with verified-clean trees — the wipes live in the close→open gap; zero evidence of mid-window wipes; adding mid-window checks would be correction without evidence.
 - **STANDING STATE**: `[vault] INCOMPLETE missing=12` (operator re-handover owed since window 19, unchanged) · `[tree] clean` · rate 5000/5000 · surface #7/#8 zero-new · main `5e91578` CI 3/3 · dev / + /api/me 200 · prod P102 battery ALL PROBES GREEN exit=0.
 - **OPERATOR GATES**: unchanged — G2 open (the replay stays the operator's residential-network task) · deployment lane CLOSED (docs-only commit) · money gate ZERO · expansion frozen · product-fix freeze respected · TikTok lanes ZERO.
+
+## WFX2-SIG-16 (window 22, 2026-11-10) — batch #3: known 5 surfaces identical a third time + NEW 6th element (12 snapshot-restored untracked artifacts, left in place); all known surfaces healed
+
+Task ID: WFX2-SIG-16 (the standing "go"; heal + docs only, zero product changes, freeze respected).
+
+Base `2ae30d7` both sides (docs-only commit; the no-deploy lane).
+
+- **KNOWN COMPOSITION CONFIRMED A THIRD TIME**: erasure #16 exact-10 one-glance IDENTICAL to #14/#15 · vault wipe #5 · home tool copy wipe · de-seed variant #6 · drift #31 (.env → absent custom.db). Firing history: hit, hit, skip, hit — intermittent, cadence unknown.
+- **NEW SIXTH ELEMENT**: 12 untracked entries reappearing that showed ZERO untracked files at window-21 open (with tracked .gitignore unchanged, they cannot have been merely ignored): `.zscripts/` · `Caddyfile` · `download/` · `evidence/p52/` · `examples/` · `mini-services/.gitkeep` · `scripts/station-rebuild.sh` · `src/components/ui/carousel.tsx` · `tests/database-runtime-build.sh` · `tests/python-runtime-build.sh` · `tests/python-runtime-container.sh` · `worklog.md`.
+- **SIXTH-ELEMENT FORENSICS**: mtimes OLD and spread (2026-05-12 → 2026-11-04) with `.zscripts/` fresh at the boundary instant (13:22) — preserved-mtime spread = snapshot/template-restore signature; the artifacts were absent at window-21 open and restored from some platform snapshot with timestamp preservation.
+- **DISPOSITION — LEFT IN PLACE**: environment/sandbox scaffolding (gateway Caddyfile, referenced examples/, platform .zscripts/); untracked = zero effect on repo content; deletion would be blind tampering with platform state; they appear in erasure_check as named noise (≤12 by design); commits use explicit paths only.
+- **HEALED AT THE EARLIEST LINK**: git restore ×10 (porcelain=12 = exactly the ?? set, diff HEAD=0) · vault rebuilt 1/13 (GITHUB_PAT_PRIMARY re-recovered from origin, value never printed, 40 bytes, token VALID rate 5000/5000, vault-first live) · home copy byte-identical · seed Video=27/User=3 exact · seam re-pinned webflix2.db.
+- **OPERATOR RE-HANDOVER STILL OWED (unchanged since window 19)**: 12/13 keys — APIFY_API_KEY · COMPOSIO_API_KEY · COMPOSIO_MCP_API_KEY · E2B_API_KEY · GITHUB_PAT_FALLBACK · NEON_API_KEY_1/2/3_RATELIMIT_FALLBACK/4 · OPENROUTER_API_KEY · VERCEL_TOKEN_FALLBACK/PRIMARY.
+- **WINDOW OPEN (post-heal)**: `[vault] INCOMPLETE missing=12` · `[rate] 5000/5000` · surface #7/#8 zero-new · main `2ae30d7` CI 3/3 · dev / + /api/me 200 · prod P102 battery ALL PROBES GREEN exit=0.
+- **OPERATOR GATES**: unchanged — G2 open (the replay stays the operator's residential-network task) · deployment lane CLOSED (docs-only commit) · money gate ZERO · expansion frozen · product-fix freeze respected · TikTok lanes ZERO.
