@@ -1930,3 +1930,17 @@ Base `1b2a355` both sides (docs-only commit; the no-deploy lane).
 - **OPERATOR RE-HANDOVER STILL OWED (unchanged since window 19)**: 12/13 keys — APIFY_API_KEY · COMPOSIO_API_KEY · COMPOSIO_MCP_API_KEY · E2B_API_KEY · GITHUB_PAT_FALLBACK · NEON_API_KEY_1/2/3_RATELIMIT_FALLBACK/4 · OPENROUTER_API_KEY · VERCEL_TOKEN_FALLBACK/PRIMARY.
 - **WINDOW OPEN (post-heal)**: `[vault] INCOMPLETE missing=12` · `[rate] 4998/5000` · surface #7/#8 zero-new · main `1b2a355` CI 3/3 · dev / + /api/me 200 · prod P102 battery ALL PROBES GREEN exit=0.
 - **OPERATOR GATES**: unchanged — G2 open (the replay stays the operator's residential-network task) · deployment lane CLOSED (docs-only commit) · money gate ZERO · expansion frozen · product-fix freeze respected · TikTok lanes ZERO.
+
+## WFX2-SIG-18 (window 23 second firing, 2026-11-10) — first intra-window double firing (5 surfaces + vault #7) AND second platform scaffold commit (5e025f2) — both handled by the standing rule; local==origin==d5b65b6 restored
+
+Task ID: WFX2-SIG-18 (the standing "go"; heal + docs only, zero product changes, freeze respected).
+
+Base `d5b65b6` both sides (docs-only commit; the no-deploy lane).
+
+- **FIRST INTRA-WINDOW DOUBLE FIRING**: the known 5 surfaces hit again between the first run's completion (~16:14) and this run (~17:45) — erasure #18 (exact-10, one-glance identical to #14/#15/#16/#17) + vault wipe #7 (7th) + home copy wipe + de-seed #8 + drift #33. EVIDENCE-REFINEMENT of WFX2-STBY-21's close→open-gap assumption: firings are intermittent in TIME, not boundary-bound; detection works whenever the standing checks run (this firing was caught at this run's open); no new instrumentation added.
+- **SECOND PLATFORM SCAFFOLD COMMIT**: `5e025f2` (author `Z User <z@container>`, UUID message `d585698d-…`, authored 16:18:37, parented on `d5b65b6`, same 24-file scaffolding set incl. `.zscripts` runtime state + binary evidence; `dev.pid` churn showed as tracked-modified noise while it sat on HEAD).
+- **DISPOSITION PER THE STANDING RULE (d5b65b6)**: inspected (parent/author/content) → **reset --mixed to origin/main `d5b65b6`** (never pushed — no operator directive) → scaffolding left in place, `dev.pid` back to untracked, local==origin restored, SHA recorded + reflog-recoverable.
+- **HEALED AT THE EARLIEST LINK**: git restore ×10 (porcelain=12 = exactly the ?? set, diff HEAD=0) · vault rebuilt 1/13 (GITHUB_PAT_PRIMARY re-recovered from origin, value never printed, 40 bytes, token VALID rate 5000/5000, vault-first live) · home copy byte-identical · seed Video=27/User=3 exact · seam re-pinned webflix2.db.
+- **OPERATOR RE-HANDOVER STILL OWED (unchanged since window 19)**: 12/13 keys — APIFY_API_KEY · COMPOSIO_API_KEY · COMPOSIO_MCP_API_KEY · E2B_API_KEY · GITHUB_PAT_FALLBACK · NEON_API_KEY_1/2/3_RATELIMIT_FALLBACK/4 · OPENROUTER_API_KEY · VERCEL_TOKEN_FALLBACK/PRIMARY.
+- **WINDOW OPEN (post-heal)**: `[vault] INCOMPLETE missing=12` · `[rate] 5000/5000` · surface #7/#8 zero-new · main `d5b65b6` CI 3/3 · dev / + /api/me 200 · prod P102 battery ALL PROBES GREEN exit=0.
+- **OPERATOR GATES**: unchanged — G2 open (the replay stays the operator's residential-network task) · deployment lane CLOSED (docs-only commit) · money gate ZERO · expansion frozen · product-fix freeze respected · TikTok lanes ZERO.
