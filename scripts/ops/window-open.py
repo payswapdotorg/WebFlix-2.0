@@ -15,6 +15,10 @@ Checks (read-only):
   0. vault inventory (names-only — the WFX2-ERASURE-13 standing check made
      structural: the vault was wiped twice at window boundaries; a wipe is
      now visible at every window open, before anything else runs)
+  0b. working-tree erasure signature (WFX2-SIG-1: the same 10-file
+     unstaged-deletion signature has hit three times at window boundaries
+     #10/#12/#13 — each occurrence now self-documents its exact file names
+     at the moment of detection; the heal is 'git restore', earliest link)
   1. rate limit headroom
   2. Issue #7 + Draft PR #8: comments newer than BASELINE_COMMENT_ID
   3. open issues / open PRs / branches
@@ -22,6 +26,7 @@ Checks (read-only):
 """
 import json
 import os
+import subprocess
 import sys
 import urllib.request
 
@@ -80,6 +85,35 @@ def vault_check() -> None:
         print(f"[vault] unexpected entries (names-only): {sorted(extras)}")
 
 
+def erasure_check() -> None:
+    """WFX2-SIG-1: unstaged/staged deletion signature detection. The same
+    10-file upload-lane unstaged deletion has hit three times at window
+    boundaries (#10, #12, #13). Names are printed exactly as git sees them
+    so every occurrence self-documents the signature; the heal is instant
+    (git restore)."""
+    try:
+        out = subprocess.run(
+            ["git", "-C", "/home/z/my-project", "status", "--porcelain"],
+            capture_output=True, text=True, timeout=15).stdout
+    except Exception as e:  # noqa: BLE001
+        print(f"[tree] ERROR {type(e).__name__}: {e}")
+        return
+    lines = [ln for ln in out.splitlines() if ln.strip()]
+    deleted = [ln[3:] for ln in lines if "D" in ln[:2]]
+    others = [ln for ln in lines if "D" not in ln[:2]]
+    if deleted:
+        print(f"[tree] ERASURE-SIGNATURE: {len(deleted)} deletion(s) — "
+              f"heal: git restore; names exactly as git sees them:")
+        for n in deleted:
+            print(f"    D {n}")
+    else:
+        print("[tree] clean (0 deletions)")
+    if others:
+        print(f"[tree] other modifications: {len(others)}")
+        for n in others[:12]:
+            print(f"    {n}")
+
+
 def req(url, token):
     r = urllib.request.Request(url)
     r.add_header("Authorization", f"Bearer {token}")
@@ -100,6 +134,9 @@ def main():
 
     # 0. vault inventory (standing ERASURE-13 check)
     vault_check()
+
+    # 0b. working-tree erasure signature (standing SIG-1 check)
+    erasure_check()
 
     # 1. rate limit
     rl = req("https://api.github.com/rate_limit", token)

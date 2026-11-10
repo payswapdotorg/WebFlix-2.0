@@ -1838,3 +1838,15 @@ Base `c160df9` both sides (instrument+docs commit; scripts-only lane, no deploym
 - **VAULT CHECK MADE STRUCTURAL**: scripts/ops/window-open.py gained names-only vault inventory as check #0 (13 expected value files + env.sh + inventory.md, 0600 mode check, MISSING/INCOMPLETE/MODE-DEVIATION reporting; values never read/logged/printed); home copy synced byte-identical; live-verified `[vault] complete files=13+2 dir_mode=0o700`.
 - **WINDOW OPEN**: zero events (lineage c160df9 local==origin, tree clean, seam pinned, Video=27/User=3, vault alive, surface zero-new, CI 3/3 on c160df9, dev /api/me 200).
 - **OPERATOR GATES**: unchanged — G2 open (the replay stays the operator's residential-network task) · deployment lane CLOSED (scripts+docs commit only) · money gate ZERO · expansion frozen · product-fix freeze respected · TikTok lanes ZERO.
+
+## WFX2-SIG-1 (window 17, 2026-11-10) — the erasure signature made self-documenting
+
+Task ID: WFX2-SIG-1 (the standing "go"; tool+docs only, zero product changes, freeze respected).
+
+Base `1565caa` both sides (tool+docs commit; the no-deploy lane).
+
+- **THE CLAIM**: the next wipe occurrence will document itself — the same 10-file upload-lane unstaged-deletion signature has hit three times (#10, #12, #13) and each "same signature" call was manual; window-open.py check #0b (`erasure_check`) now parses `git status --porcelain` at every window open BEFORE any network call: deletions (staged or unstaged) print as ERASURE-SIGNATURE with the exact file names git sees, other modifications are counted/named (≤12), clean path prints `[tree] clean (0 deletions)` proving the check ran.
+- **BOTH PATHS VERIFIED LIVE**: clean path on the quiet tree; detection path proven end-to-end with a CONTROLLED SYNTHETIC EVENT — `scripts/ops/README.md` deleted → `ERASURE-SIGNATURE: 1 deletion(s) … D scripts/ops/README.md` with the exact name → healed by `git checkout` in the same shell call, tree restored byte-identical, zero residue.
+- **INSTRUMENT-SUITE REGRESSION (post-URLLAG-2)**: tiktok-playback-proof.py --selftest **49/49 PASS** (wall signature, failure law, progression, verdict machine, viewport) · mobile-375-walk.py --selftest **PASS** (failure law holds on every pin) — offline pins intact after the window-16 instrumentation edits.
+- **WINDOW OPEN**: zero events (lineage `1565caa` local==origin, tree clean, seam pinned, Video=27/User=3, vault complete 13+2 at 0700 — structural check #0's first live standing run, token auto-fell to the vault source exactly as designed — surface #7/#8 zero-new, rate 4963/5000, dev 200, dev.log clean).
+- **OPERATOR GATES**: unchanged — G2 open (the replay stays the operator's residential-network task) · deployment lane CLOSED (tool+docs commit only) · money gate ZERO · expansion frozen · product-fix freeze respected · TikTok lanes ZERO.
