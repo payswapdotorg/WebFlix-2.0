@@ -1824,3 +1824,17 @@ Base `94348af` both sides (heal+tooling+docs commit).
 - **STRUCTURAL CLOSURE (the tool-loss class)**: `/home/z/wfx2-window-open.py` rebuilt verbatim (vault-first token order preserved) and committed into the repo for the first time (`scripts/ops/window-open.py`) — git is now the recoverable copy of record; a future wipe of /home/z can no longer take the tool with it.
 - **SURFACE**: #7/#8 zero new past baseline (6744593911); branches 62 (all pre-existing); issues/PRs unchanged.
 - **OPERATOR GATES**: unchanged — G2 open (residential-network replay owed) · deployment CLOSED BY GATE · money gate ZERO · expansion frozen · TikTok lanes ZERO.
+
+## WFX2-URLLAG-2 (window 16, 2026-11-10) — the window-14 audit-gap closed with measurement
+
+Task ID: WFX2-URLLAG-2 (the standing "go"; instrument-only diff, zero product changes, freeze respected).
+
+Base `c160df9` both sides (instrument+docs commit; scripts-only lane, no deployment).
+
+- **THE AUDIT GAP**: the window-14 audit line cleared expand-diag's two page.url PRECONDITION judges but never classified the THREE expand_onwatch()-mediated judge sites (single-arm COMMIT-ROLLED-BACK discriminator; replica-arm post-click poll + final judge) — they judge the EXPAND NAV class, the exact class S3-RES caught lying on page.url for >=15s, with contradictory history (S3-RES saw the lag; expand-diag's own 4/4 COMMIT-HELD saw fresh page.url at the same class).
+- **EVIDENCE-FIRST INSTRUMENTATION** (expand-diag.py +98/-6, judge semantics untouched): URLLAG dual-truth state — every page.url judge instant also samples location.pathname; divergence + persistence recorded (urllag_sample in both precondition loops, dual-truth expand_onwatch for the three judge sites, per-round reset + `[urllag]` summaries in both finallys; doc= added to the subject/control/notes/PRECONDITION-FAIL record lines; evaluate-failure = sample unavailable, never a claimed divergence).
+- **THE MEASUREMENT**: 8 rounds — single ×2 + replica ×2 on local dev, single ×2 + replica ×2 on prod — ALL COMMIT-HELD (8/8), 35 judge-instant dual-truth samples, ZERO divergences, zero convergence events, zero STILL-DIVERGED; pushState commit-to-judge instants ~600-2700ms with url==doc at every one. The artifact did not reproduce under today's conditions on either station.
+- **VERDICT**: residual closes benign-WITH-EVIDENCE (upgraded from benign-by-assumption + the audit gap); NO correction applied (no evidence of harm — the no-correction-without-evidence discipline holds); any future recurrence is now visible as JUDGE-INSTANT DIVERGENCE evidence instead of silence.
+- **VAULT CHECK MADE STRUCTURAL**: scripts/ops/window-open.py gained names-only vault inventory as check #0 (13 expected value files + env.sh + inventory.md, 0600 mode check, MISSING/INCOMPLETE/MODE-DEVIATION reporting; values never read/logged/printed); home copy synced byte-identical; live-verified `[vault] complete files=13+2 dir_mode=0o700`.
+- **WINDOW OPEN**: zero events (lineage c160df9 local==origin, tree clean, seam pinned, Video=27/User=3, vault alive, surface zero-new, CI 3/3 on c160df9, dev /api/me 200).
+- **OPERATOR GATES**: unchanged — G2 open (the replay stays the operator's residential-network task) · deployment lane CLOSED (scripts+docs commit only) · money gate ZERO · expansion frozen · product-fix freeze respected · TikTok lanes ZERO.

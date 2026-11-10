@@ -12,6 +12,9 @@ at scripts/ops/window-open.py — the tool-loss class is structurally closed
 (git remains the recoverable copy of record).
 
 Checks (read-only):
+  0. vault inventory (names-only — the WFX2-ERASURE-13 standing check made
+     structural: the vault was wiped twice at window boundaries; a wipe is
+     now visible at every window open, before anything else runs)
   1. rate limit headroom
   2. Issue #7 + Draft PR #8: comments newer than BASELINE_COMMENT_ID
   3. open issues / open PRs / branches
@@ -25,6 +28,15 @@ import urllib.request
 BASE = "https://api.github.com/repos/payswapdotorg/WebFlix-2.0"
 BASELINE_COMMENT_ID = 6744593911  # issuecomment-6744593911 on Issue #7
 VAULT = "/home/z/.secrets/GITHUB_PAT_PRIMARY"
+VAULT_DIR = "/home/z/.secrets"
+# Names only — values are never read, logged, or printed here.
+EXPECTED_VAULT_FILES = (
+    "APIFY_API_KEY", "COMPOSIO_API_KEY", "COMPOSIO_MCP_API_KEY",
+    "E2B_API_KEY", "GITHUB_PAT_FALLBACK", "GITHUB_PAT_PRIMARY",
+    "NEON_API_KEY_1", "NEON_API_KEY_2", "NEON_API_KEY_3_RATELIMIT_FALLBACK",
+    "NEON_API_KEY_4", "OPENROUTER_API_KEY", "VERCEL_TOKEN_FALLBACK",
+    "VERCEL_TOKEN_PRIMARY",
+)
 
 
 def read_token():
@@ -38,6 +50,34 @@ def read_token():
     if os.path.exists("/tmp/ghtk"):
         return open("/tmp/ghtk").read().strip()
     return None
+
+
+def vault_check() -> None:
+    """WFX2-ERASURE-13 standing check, made structural: the vault was wiped
+    twice at window boundaries (window-12-era and window-15). Names-only
+    inventory + mode check; values are never touched."""
+    if not os.path.isdir(VAULT_DIR):
+        print("[vault] MISSING (entire dir absent) — ERASURE-13 class: "
+              "recovery protocol required (conversation context is the "
+              "recovery channel of record)")
+        return
+    dmode = oct(os.stat(VAULT_DIR).st_mode & 0o777)
+    present = {n for n in os.listdir(VAULT_DIR)
+               if os.path.isfile(os.path.join(VAULT_DIR, n))}
+    missing = [n for n in EXPECTED_VAULT_FILES if n not in present]
+    bad_mode = [n for n in EXPECTED_VAULT_FILES
+                if n in present
+                and (os.stat(os.path.join(VAULT_DIR, n)).st_mode & 0o777) != 0o600]
+    extras = present - set(EXPECTED_VAULT_FILES) - {"env.sh", "inventory.md"}
+    if missing:
+        print(f"[vault] INCOMPLETE dir_mode={dmode} missing={missing} "
+              f"(names-only; ERASURE-13 class)")
+    else:
+        print(f"[vault] complete files=13+2 dir_mode={dmode}")
+    if bad_mode:
+        print(f"[vault] MODE-DEVIATION (expected 0600): {bad_mode}")
+    if extras:
+        print(f"[vault] unexpected entries (names-only): {sorted(extras)}")
 
 
 def req(url, token):
@@ -57,6 +97,9 @@ def main():
     src = ("env" if os.environ.get("GITHUB_PAT")
            else "vault" if os.path.exists(VAULT) else "tmp")
     print(f"[auth] token source: {src}")
+
+    # 0. vault inventory (standing ERASURE-13 check)
+    vault_check()
 
     # 1. rate limit
     rl = req("https://api.github.com/rate_limit", token)

@@ -57,6 +57,21 @@ Method (zero product changes — everything is page-side probing):
   8. final census dump: every fetch still unsettled (age ms) + the pushState
      log + the error log — the operator-readable evidence block.
 
+URLLAG dual-truth evidence (WFX2-URLLAG-2):
+  The window-14 audit cleared expand-diag's two page.url PRECONDITION judges
+  (logo-nav fresh-mount class, 4/4 historical PASS) but did not classify the
+  three expand_onwatch()-mediated judge sites (single-arm COMMIT-ROLLED-BACK
+  discriminator; replica-arm post-click poll + final judge) — and those judge
+  the EXPAND NAV class, the exact class S3-RES caught lying on page.url for
+  >=15s. Historical evidence is contradictory (S3-RES saw the lag; expand-diag
+  itself saw 4/4 fresh COMMIT-HELD). Evidence-first: the judges stay on
+  page.url unchanged; every judge instant ALSO samples the document truth
+  (location.pathname) and records divergence + persistence. A measured
+  divergence at a judge instant = the S3-RES artifact class acting HERE and
+  any correction becomes evidence-backed; zero divergences across arms and
+  stations closes the residual benign-WITH-EVIDENCE instead of benign-by-
+  assumption.
+
 Env: WEBFLIX_BASE_URL (default http://localhost:3000),
      EXPAND_HEADLESS (default 1), EXPAND_VIEWPORT (default 1440x900),
      EXPAND_POLL_S (default 15), EXPAND_ROUNDS (default 2 — the flake class
@@ -255,12 +270,83 @@ JS_CENSUS = r"""() => {
 }"""
 
 
+# ---- WFX2-URLLAG-2: dual-truth evidence at judge instants ------------------
+# page.url judges keep their semantics; the same-instant document truth is
+# sampled alongside and any divergence (with persistence) is recorded as
+# evidence. Values only; the verdict logic is untouched pending that data.
+URLLAG = {"samples": 0, "divergences": 0, "open_since": None, "events": []}
+
+
+def urllag_reset() -> None:
+    URLLAG["samples"] = 0
+    URLLAG["divergences"] = 0
+    URLLAG["open_since"] = None
+    URLLAG["events"] = []
+
+
+def doc_path(page) -> str:
+    try:
+        return page.evaluate("() => location.pathname")
+    except Exception:  # noqa: BLE001
+        return "evaluate-failed"
+
+
+def urllag_sample(page, where: str) -> None:
+    """Dual-truth sample for the page.url poll loops (precondition judges).
+    Records divergence on first sight + convergence time; the loop's own
+    break condition is untouched."""
+    try:
+        pw_path = urlparse(page.url).path
+        dp = page.evaluate("() => location.pathname")
+    except Exception:  # noqa: BLE001
+        return
+    URLLAG["samples"] += 1
+    if dp != pw_path:
+        if URLLAG["open_since"] is None:
+            URLLAG["open_since"] = time.monotonic()
+            URLLAG["divergences"] += 1
+            URLLAG["events"].append({"where": where, "pw": pw_path, "doc": dp})
+            log(f"  [urllag] {where} DIVERGENCE: page.url={pw_path!r} "
+                f"document={dp!r} (stale-source class at a judge)")
+    elif URLLAG["open_since"] is not None:
+        held = round(time.monotonic() - URLLAG["open_since"], 2)
+        log(f"  [urllag] {where} converged after {held}s (page.url caught up)")
+        URLLAG["open_since"] = None
+
+
+def urllag_summary(where: str) -> None:
+    if URLLAG["open_since"] is not None:
+        held = round(time.monotonic() - URLLAG["open_since"], 2)
+        log(f"  [urllag] {where} STILL-DIVERGED at round end (open {held}s)")
+    log(f"  [urllag] {where} round evidence: samples={URLLAG['samples']} "
+        f"divergences={URLLAG['divergences']}")
+
+
 def expand_onwatch(page) -> bool:
-    return urlparse(page.url).path.startswith("/watch/")
+    """Judge on-watch from page.url — dual-truth instrumented (WFX2-URLLAG-2).
+    Judge semantics UNCHANGED (page.url); the same-instant document truth is
+    sampled and any divergence is recorded as evidence."""
+    pw_path = urlparse(page.url).path
+    try:
+        dp = page.evaluate("() => location.pathname")
+    except Exception:  # noqa: BLE001
+        dp = None
+    if dp is not None:
+        URLLAG["samples"] += 1
+        if dp != pw_path:
+            if URLLAG["open_since"] is None:
+                URLLAG["open_since"] = time.monotonic()
+                URLLAG["divergences"] += 1
+            URLLAG["events"].append({"where": "expand_onwatch-judge",
+                                     "pw": pw_path, "doc": dp})
+            log(f"  [urllag] JUDGE-INSTANT DIVERGENCE: page.url={pw_path!r} "
+                f"document={dp!r} (S3-RES artifact class at a judge)")
+    return pw_path.startswith("/watch/")
 
 
 def run_round(pw, round_no: int, vid: str, vid_note: str) -> str:
     """One fresh session round; returns the pinned verdict class."""
+    urllag_reset()
     browser = pw.chromium.launch(headless=HEADLESS)
     ctx = browser.new_context(viewport=VIEWPORT)
     page = ctx.new_page()
@@ -280,9 +366,10 @@ def run_round(pw, round_no: int, vid: str, vid_note: str) -> str:
         page.locator(HOME_LINK).first.click(timeout=8_000)
         t0 = time.monotonic()
         while time.monotonic() - t0 < 10 and urlparse(page.url).path != "/":
+            urllag_sample(page, "precondition-home")
             page.wait_for_timeout(250)
         if urlparse(page.url).path != "/":
-            return f"PRECONDITION-FAIL: logo nav never landed (url={page.url})"
+            return f"PRECONDITION-FAIL: logo nav never landed (url={page.url} doc={doc_path(page)})"
         page.wait_for_timeout(1_500)
         mini = page.evaluate(
             """() => { const r = document.querySelector('[aria-label="Miniplayer"]');
@@ -329,7 +416,7 @@ def run_round(pw, round_no: int, vid: str, vid_note: str) -> str:
             verdict = "PARKED-RSC"
         else:
             verdict = "PUSH-DROPPED-PRECOMMIT-CANDIDATE"
-        log(f"  subject: url={page.url} pushState={census['push']} "
+        log(f"  subject: url={page.url} doc={doc_path(page)} pushState={census['push']} "
             f"docBubble={'Y' if doc_bubble else 'N'} errors={len(errors)} "
             f"rscPending={len(rsc_pending)}")
         # -- 6. control arm: the logo nav (landed in step 2) --
@@ -349,7 +436,7 @@ def run_round(pw, round_no: int, vid: str, vid_note: str) -> str:
                     landed = True
                     break
                 page.wait_for_timeout(250)
-            log(f"  control: landed={landed} url={page.url}")
+            log(f"  control: landed={landed} url={page.url} doc={doc_path(page)}")
             verdict = ("EXPAND-SPECIFIC-DROP" if landed else "PARKED-ROUTER")
         # -- 7. evidence block --
         log(f"  clicks-census: {json.dumps(census['clicks'][-8:])[:400]}")
@@ -361,6 +448,7 @@ def run_round(pw, round_no: int, vid: str, vid_note: str) -> str:
         if noisy:
             log(f"  console: {noisy}")
     finally:
+        urllag_summary("single")
         try:
             ctx.close()
             browser.close()
@@ -372,6 +460,7 @@ def run_round(pw, round_no: int, vid: str, vid_note: str) -> str:
 def run_round_replica(pw, round_no: int, vid: str) -> str:
     """The original HOST-1 S3 cadence, instrumented. Reproduces the failure
     (when it reproduces) WITH the state evidence the original lacks."""
+    urllag_reset()
     browser = pw.chromium.launch(headless=HEADLESS)
     ctx = browser.new_context(viewport=VIEWPORT)
     page = ctx.new_page()
@@ -391,9 +480,10 @@ def run_round_replica(pw, round_no: int, vid: str) -> str:
         t0 = time.monotonic()
         page.locator(HOME_LINK).first.click(timeout=8_000)
         while time.monotonic() - t0 < 10 and urlparse(page.url).path != "/":
+            urllag_sample(page, "precondition-home")
             page.wait_for_timeout(250)
         if urlparse(page.url).path != "/":
-            return f"PRECONDITION-FAIL: logo nav never landed (url={page.url})"
+            return f"PRECONDITION-FAIL: logo nav never landed (url={page.url} doc={doc_path(page)})"
         logo_ms = int((time.monotonic() - t0) * 1000)
         page.wait_for_timeout(700)  # the original's settle(page)
         mini = page.evaluate(
@@ -438,7 +528,8 @@ def run_round_replica(pw, round_no: int, vid: str) -> str:
             if commit:
                 notes.append(f"try{attempt}: nav ok")
                 break
-            notes.append(f"try{attempt}: no nav (at {urlparse(page.url).path})")
+            notes.append(f"try{attempt}: no nav (at {urlparse(page.url).path} "
+                         f"doc={doc_path(page)})")
         # -- evidence --
         push_log = page.evaluate("() => window.__wfxDiag.push")
         log(f"  notes: {notes}")
@@ -469,6 +560,7 @@ def run_round_replica(pw, round_no: int, vid: str) -> str:
             else:
                 verdict = "PUSH-DROPPED-PRECOMMIT-CANDIDATE"
     finally:
+        urllag_summary("replica")
         try:
             ctx.close()
             browser.close()
