@@ -1850,3 +1850,15 @@ Base `1565caa` both sides (tool+docs commit; the no-deploy lane).
 - **INSTRUMENT-SUITE REGRESSION (post-URLLAG-2)**: tiktok-playback-proof.py --selftest **49/49 PASS** (wall signature, failure law, progression, verdict machine, viewport) · mobile-375-walk.py --selftest **PASS** (failure law holds on every pin) — offline pins intact after the window-16 instrumentation edits.
 - **WINDOW OPEN**: zero events (lineage `1565caa` local==origin, tree clean, seam pinned, Video=27/User=3, vault complete 13+2 at 0700 — structural check #0's first live standing run, token auto-fell to the vault source exactly as designed — surface #7/#8 zero-new, rate 4963/5000, dev 200, dev.log clean).
 - **OPERATOR GATES**: unchanged — G2 open (the replay stays the operator's residential-network task) · deployment lane CLOSED (tool+docs commit only) · money gate ZERO · expansion frozen · product-fix freeze respected · TikTok lanes ZERO.
+
+## WFX2-SIG-CANDS (window 18, 2026-11-10) — the erasure signature candidate set pinned by forensics + prod probe ALL GREEN (standby window, docs-only)
+
+Task ID: WFX2-SIG-CANDS (the standing "go"; forensics+docs only, zero product changes, freeze respected).
+
+Base `1eff595` both sides (docs-only commit).
+
+- **SIGNATURE CANDIDATES PINNED**: the repo's tracked upload-lane set is **14 files** — 9 implementation (`mini-services/youtube-broker/kinds/upload.ts`, `src/app/api/upload/{route,stage,execute}/route.ts` ×3, `src/app/upload/{page,upload-result,view}.tsx` ×3, `src/lib/upload/{flow,stage}.ts` ×2) + 5 test/fixture (`youtube-broker/kinds/upload.test.ts`, `tests/upload-flow.test.ts`, `tests/upload-wizard.test.tsx`, `tests/fixtures/upload/README.md`, `tests/fixtures/upload/synthetic-480p-1s-webflix-fixture.mp4`). The historical exact-10 (#10/#12/#13) is unrecoverable from git (all healed by restore, never committed; names lived in windows 11/13/15 transcripts outside this context) — several exactly-10 subsets are plausible (e.g. 9 implementation + youtube-broker upload.test.ts).
+- **HONEST BOUNDARY**: candidate pinning, NOT signature confirmation — SIG-1's exact-name ERASURE-SIGNATURE print at #14 makes the comparison mechanical and final in one glance.
+- **PROD PROBE (P102 battery)**: **ALL PROBES GREEN** exit=0 — routes ×6 (/ , /netflix , /tiktok , /tiktok/lives , /tiktok/lofigirl/live , /tiktok/scout2015/live) all 200 · G20 garbage-handle law holds (400) · live board/status DTOs honest (rooms=[] probing=true, lofigirl live=null probing=true) · deployment check green — zero spend, public read-only GETs.
+- **WINDOW OPEN**: zero events (lineage `1eff595` local==origin, tree clean — erasure check #0b's second standing run printed `[tree] clean (0 deletions)` — seam pinned, Video=27/User=3, vault complete 13+2 at 0700, surface #7/#8 zero-new, rate 4999/5000 fresh reset, dev 200).
+- **OPERATOR GATES**: unchanged — G2 open (the replay stays the operator's residential-network task) · deployment lane CLOSED (docs-only commit) · money gate ZERO · expansion frozen · product-fix freeze respected · TikTok lanes ZERO.
