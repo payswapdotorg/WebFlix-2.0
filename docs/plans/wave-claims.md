@@ -2080,3 +2080,20 @@ Base `9c5dc74` both sides at close (docs-only commit; the no-deploy lane).
 - **HEALTH**: dev / + /api/me 200 · prod P102 battery ALL PROBES GREEN exit=0 · zero spend. Recipe hold: password-field extraction not exercised (2-for-2 stands).
 - **OPERATOR RE-HANDOVER STILL OWED (unchanged since window 19)**: 12/13 keys — APIFY_API_KEY · COMPOSIO_API_KEY · COMPOSIO_MCP_API_KEY · E2B_API_KEY · GITHUB_PAT_FALLBACK · NEON_API_KEY_1/2/3_RATELIMIT_FALLBACK/4 · OPENROUTER_API_KEY · VERCEL_TOKEN_FALLBACK/PRIMARY.
 - **OPERATOR GATES**: unchanged — G2 open (the replay stays the operator's residential-network task) · deployment lane CLOSED (docs-only commit) · money gate ZERO · expansion frozen · product-fix freeze respected · TikTok lanes ZERO.
+
+## WFX2-SIG-28 (window 32, 2026-11-11) — the FULL-COMPOSITION batch fired AGAIN (erasure #23, all five surfaces at once — 6-for-6 all-composition in the ledger) PLUS scaffold commit #12 (88e4385, BENIGN EIGHTH, 8-for-9 since the carrier, NOT a carrier) — the skip-skip run ended at exactly 2; dual-state stacked branch executed in order (scaffold FIRST, then heal); recipe 3-FOR-3
+
+Task ID: WFX2-SIG-28 (the standing "go"; heal + docs only, zero product changes, freeze respected).
+
+Base `2e5ae51` both sides at close (docs-only commit; the no-deploy lane).
+
+- **DUAL-STATE OPENING**: porcelain = 10 D (exact-10 identical) + `M .zscripts/dev.pid` + HEAD `88e4385` (Z User, UUID `0b3664ac`, authored 09:10:21, **parented on `2e5ae51`** — post-push parent FIFTH consecutive: #9 on `ec66e46` · #10 on `f314f91` · #11 on `9c5dc74` · #12 on `2e5ae51`) ≠ origin. The standing order's stacked branch (scaffold forensics FIRST, then heal) fired exactly as designed.
+- **SCAFFOLD #12, BENIGN EIGHTH, NOT A CARRIER**: ls-tree exact-10 **10/10 PRESENT**, diff 24-file +2015/−0 — the batch deletions stayed worktree-only (same composition as #9: scaffold + full batch, independent). Recurrence ledger: #1 `c4f4c70` · #2 `5e025f2` · #3 `92b3f98` · #4 `297565d` (carrier) · #5 `5c70874` · #6 `268fba0` · #7 `66340c7` · #8 `5c7e17e` · #9 `8a63b6f` · #10 `a487f00` · #11 `6cd8560` · #12 `88e4385` — **benign 8-for-9 since the carrier**.
+- **M-NOISE DOUBLE-CARRY**: dev.pid modified in BOTH the scaffold tree (1 insertion absorbed) AND the live worktree — the reset absorbs both mechanically, no separate handling.
+- **FIRING HISTORY**: hit, hit, skip, hit, hit×2, skip, hit, skip, hit, hit, skip, hit, skip, skip, **hit** — the skip-skip ended at exactly 2. OBSERVATION, not a law (window 30's 4-for-4 was falsified in window 31): both hit-runs and skip-runs have come in lengths of 1–2 only across 15 windows. No partial firing ever observed — **all-composition 6-for-6** (#14–#23).
+- **RECIPE 3-FOR-3**: password-field extraction single-pass (username 14 B literal `x-access-token`, password 40 B, 0600, token VALID 5000/5000).
+- **HEAL SEQUENCE (all green, zero residue)**: reset --mixed to `2e5ae51` (M-noise gone, ?? restored, D×10 revealed) → git restore ×10 → porcelain=12 = exactly the ?? set, diff HEAD=0, never committed/pushed → vault rebuild (0700 · key 40 B VALID single-pass · env.sh 0600 no-literal · inventory.md 0600 names-only, counters: erasure #23 / wipe #12 / de-seed #13 / drift #38 / recurrence #12) → home copy BYTE-IDENTICAL 8123 B → seam sed `webflix2.db` → db:seed Video=27/User=3 exact.
+- **WINDOW OPEN (post-heal)**: token vault · missing=12 by-design honest · tree clean 0 deletions · rate 5000/5000 · surface #7/#8 zero-new · issues 4 / PRs 2 unchanged · main `2e5ae51` CI 3/3 · EXIT=0.
+- **HEALTH**: dev / + /api/me 200 · prod P102 battery ALL PROBES GREEN exit=0 · zero spend.
+- **OPERATOR RE-HANDOVER STILL OWED (unchanged since window 19)**: 12/13 keys — APIFY_API_KEY · COMPOSIO_API_KEY · COMPOSIO_MCP_API_KEY · E2B_API_KEY · GITHUB_PAT_FALLBACK · NEON_API_KEY_1/2/3_RATELIMIT_FALLBACK/4 · OPENROUTER_API_KEY · VERCEL_TOKEN_FALLBACK/PRIMARY.
+- **OPERATOR GATES**: unchanged — G2 open (the replay stays the operator's residential-network task) · deployment lane CLOSED (docs-only commit) · money gate ZERO · expansion frozen · product-fix freeze respected · TikTok lanes ZERO.
