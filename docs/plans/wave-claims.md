@@ -2049,3 +2049,19 @@ Base `ec66e46` both sides at close (docs-only commit; the no-deploy lane).
 - **HEALTH**: dev / + /api/me 200 · prod P102 battery ALL PROBES GREEN exit=0 · zero spend.
 - **OPERATOR RE-HANDOVER STILL OWED (unchanged since window 19)**: 12/13 keys — APIFY_API_KEY · COMPOSIO_API_KEY · COMPOSIO_MCP_API_KEY · E2B_API_KEY · GITHUB_PAT_FALLBACK · NEON_API_KEY_1/2/3_RATELIMIT_FALLBACK/4 · OPENROUTER_API_KEY · VERCEL_TOKEN_FALLBACK/PRIMARY.
 - **OPERATOR GATES**: unchanged — G2 open (the replay stays the operator's residential-network task) · deployment lane CLOSED (docs-only commit) · money gate ZERO · expansion frozen · product-fix freeze respected · TikTok lanes ZERO.
+
+## WFX2-SIG-26 (window 30, 2026-11-11) — ZERO batch firing (all five surfaces survived the window-29 full hit) but scaffold commit #10 (a487f00, BENIGN SIXTH, benign 6-for-7 since the carrier) — inspect → reset → verify with zero healing; every recorded skip directly follows a hit (never two skips in a row)
+
+Task ID: WFX2-SIG-26 (the standing "go"; inspect + reset + docs only, zero product changes, freeze respected).
+
+Base `f314f91` both sides at close (docs-only commit; the no-deploy lane).
+
+- **SCAFFOLD-SUSPICION-FIRST FIRED AS DESIGNED**: open sweep = porcelain **0** + HEAD `a487f00` (Z User, UUID `e2321d39-0f82-4733-aa20-dd18aee44607`, authored 07:26:23, **parented on `f314f91`** — the just-pushed SIG-25 ledger; scaffolds consistently land AFTER a push on the fresh origin/main) ≠ origin. The SIG-24 lesson (porcelain=0 NEVER means clean lineage) applied mechanically, no judgment call needed.
+- **FORENSICS → BENIGN SIXTH**: ls-tree exact-10 **ALL PRESENT**, diff vs origin 24-file +2015/−0. Recurrence ledger: #1 `c4f4c70` · #2 `5e025f2` · #3 `92b3f98` · #4 `297565d` (carrier) · #5 `5c70874` · #6 `268fba0` · #7 `66340c7` · #8 `5c7e17e` · #9 `8a63b6f` · #10 `a487f00` — **benign 6-for-7 since the carrier**; fires on quiet windows and batch windows alike, now confirmed to also fire immediately post-push.
+- **ZERO BATCH FIRING — FIVE SURFACES ALL ALIVE**: exact-10 worktree PRESENT · vault 0700 (key 40 B 0600 + env.sh + inventory.md at their 07:21 SIG-25-heal mtimes) · home copy 8123 B · seed Video=27/User=3 exact · seam `webflix2.db`. **No healing at all**: no restore, no vault rebuild, no seed, no seam sed — the lightest window class (inspect → reset → verify).
+- **FIRING HISTORY**: hit, hit, skip, hit, hit×2, skip, hit, skip, hit, hit, skip, hit, **skip** — every recorded skip directly follows a hit (4-for-4; never two skips in a row); hits come in runs of 1–2. Recipe hold: password-field extraction not exercised (2-for-2 stands).
+- **DISPOSITION**: reset --mixed to `f314f91` → porcelain=12 = exactly the ?? set → diff HEAD=0 → local==origin restored → `a487f00` reflog-recoverable, never pushed.
+- **WINDOW OPEN (post-reset)**: token vault · missing=12 by-design honest · tree clean 0 deletions + 12 ?? · rate 4979/5000 · surface #7/#8 zero-new · issues 4 / PRs 2 unchanged · main `f314f91` CI 3/3 · EXIT=0.
+- **HEALTH**: dev / + /api/me 200 · prod P102 battery ALL PROBES GREEN exit=0 · zero spend.
+- **OPERATOR RE-HANDOVER STILL OWED (unchanged since window 19)**: 12/13 keys — APIFY_API_KEY · COMPOSIO_API_KEY · COMPOSIO_MCP_API_KEY · E2B_API_KEY · GITHUB_PAT_FALLBACK · NEON_API_KEY_1/2/3_RATELIMIT_FALLBACK/4 · OPENROUTER_API_KEY · VERCEL_TOKEN_FALLBACK/PRIMARY.
+- **OPERATOR GATES**: unchanged — G2 open (the replay stays the operator's residential-network task) · deployment lane CLOSED (docs-only commit) · money gate ZERO · expansion frozen · product-fix freeze respected · TikTok lanes ZERO.
