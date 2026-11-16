@@ -2348,3 +2348,11 @@ Base `bb6b774` both sides at close (docs-only commit; the no-deploy lane).
 - **HEALTH**: dev / + /api/me 200 · prod P102 battery ALL PROBES GREEN exit=0 · zero spend.
 - **OPERATOR RE-HANDOVER STILL OWED (unchanged since window 19)**: 12/13 keys — APIFY_API_KEY · COMPOSIO_API_KEY · COMPOSIO_MCP_API_KEY · E2B_API_KEY · GITHUB_PAT_FALLBACK · NEON_API_KEY_1/2/3_RATELIMIT_FALLBACK/4 · OPENROUTER_API_KEY · VERCEL_TOKEN_FALLBACK/PRIMARY.
 - **OPERATOR GATES**: unchanged — G2 open (the replay stays the operator's residential-network task) · deployment lane CLOSED (docs-only commit) · money gate ZERO · expansion frozen · product-fix freeze respected · TikTok lanes ZERO.
+
+## 2026-11-16 — WFX2-SIG-44-CI-RERUN (window 48 trailing CI event)
+
+- **FIRST TEST-JOB FAILURE IN THE 16-PUSH LINEAGE**: run 43875182647 (head `7b653e4`) completed/**failure** — test battery **896 pass / 1 fail** / 4463 expect() calls / 897 tests across 46 files.
+- **THE SINGLE FAILURE IS A RUNNER-SIDE TIMING FLAKE, NOT A REGRESSION**: `GET /api/tiktok/channel/[handle] — the G21 viewerLinked stamp > the linked viewer's OWN handle answers viewerLinked: true (case-insensitive)` **timed out after 5000ms** (`this test timed out after 5000ms`); a TIMEOUT, not an assertion mismatch; the other 896 tests passed; head-vs-last-green diff is exactly the two ledger docs (+21 lines, zero product files).
+- **LOG RETRIEVAL TOOLING NOTE (honest)**: jobs-logs endpoint returned HTTP 401 on the first fetch (Authorization header forwarded to the signed blob URL and rejected) — resolved by following the redirect manually WITHOUT auth; 1977 log lines retrieved.
+- **MECHANICAL RESTORE — FIRST SUCCESSFUL RERUN IN THE LINEAGE**: POST `/actions/runs/43875182647/rerun-failed-jobs` → **201** (the window-42 zombie returned 403) → attempt 2 → completed/**success** on poll 7 → **SIG-44 stands CI 3/3 GREEN via rerun evidence**.
+- **DISPOSITION**: flake recorded, no product action, no freeze change — repeated G21 viewerLinked flakes in future windows graduate to a dedicated diagnostic finding, still under the product-fix freeze. Gates unchanged; operator re-handover still owed (12/13, unchanged since window 19).
